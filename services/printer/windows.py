@@ -76,6 +76,37 @@ def _classificar_porta(nome_porta, host_porta=""):
     return "desconhecido"
 
 
+def imprimir(nome_impressora: str, conteudo: bytes) -> None:
+    """Envia `conteudo` (bytes crus, já formatados em ESC/POS) para a fila de
+    impressão `nome_impressora`, em modo RAW (sem reprocessamento pelo driver).
+
+    Requer o pacote `pywin32` instalado (Windows apenas). Levanta `RuntimeError`
+    se a impressora não puder ser aberta ou o job falhar.
+    """
+    import pywintypes
+    import win32print
+
+    try:
+        handle = win32print.OpenPrinter(nome_impressora)
+    except pywintypes.error as erro:
+        raise RuntimeError(f"Não foi possível abrir a impressora '{nome_impressora}': {erro}") from erro
+
+    try:
+        win32print.StartDocPrinter(handle, 1, ("Pedido", None, "RAW"))
+        try:
+            win32print.StartPagePrinter(handle)
+            try:
+                win32print.WritePrinter(handle, conteudo)
+            finally:
+                win32print.EndPagePrinter(handle)
+        finally:
+            win32print.EndDocPrinter(handle)
+    except pywintypes.error as erro:
+        raise RuntimeError(f"Falha ao enviar o job para '{nome_impressora}': {erro}") from erro
+    finally:
+        win32print.ClosePrinter(handle)
+
+
 def coletar_impressoras():
     """Coleta informações das impressoras instaladas via PowerShell (Win32_Printer).
 

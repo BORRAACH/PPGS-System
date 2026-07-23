@@ -128,6 +128,31 @@ def _fabricante_e_modelo_do_ppd(caminho_ppd):
     return fabricante, modelo
 
 
+def imprimir(nome_impressora: str, conteudo: bytes) -> None:
+    """Envia `conteudo` (bytes crus, já formatados em ESC/POS) para a fila de
+    impressão `nome_impressora` via CUPS, em modo raw (`lp -o raw`, sem
+    reprocessamento pelo filtro do driver).
+
+    Requer o utilitário `lp` (pacote cups-client) disponível. Levanta
+    `RuntimeError` se o comando não existir, expirar ou a impressão falhar.
+    """
+    try:
+        resultado = subprocess.run(
+            ["lp", "-d", nome_impressora, "-o", "raw"],
+            input=conteudo,
+            capture_output=True,
+            timeout=20,
+        )
+    except FileNotFoundError as erro:
+        raise RuntimeError("Utilitário 'lp' não encontrado — o CUPS está instalado?") from erro
+    except subprocess.TimeoutExpired as erro:
+        raise RuntimeError(f"Tempo esgotado ao enviar para a impressora '{nome_impressora}'.") from erro
+
+    if resultado.returncode != 0:
+        mensagem = resultado.stderr.decode(errors="replace").strip()
+        raise RuntimeError(f"Falha ao imprimir em '{nome_impressora}': {mensagem}")
+
+
 def coletar_impressoras():
     """Coleta informações das impressoras instaladas no CUPS (lpstat + PPD).
 

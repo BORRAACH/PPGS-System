@@ -1,13 +1,12 @@
 """Serviço de impressão da comanda na impressora térmica (Bematech MP-4200 TH).
 
-Ainda não implementado: falta confirmar qual conexão física vai ser usada em
-produção (USB, serial ou compartilhamento de rede). Antes de implementar
-`imprimir`, use `services.printer.coletar_informacoes_impressoras()` para
-descobrir automaticamente nome, porta e tipo de porta das impressoras
-instaladas no sistema (Windows ou Linux) e decidir a estratégia de envio.
+O envio é feito pela fila de impressão já configurada no sistema operacional
+(Windows: win32print em modo RAW; Linux: `lp -o raw` via CUPS), não por porta
+física direta — então a impressora precisa estar instalada e com o driver
+configurado em modo RAW/genérico antes de usar este serviço.
 """
 
-from services.printer import coletar_informacoes_impressoras
+from services.printer import coletar_informacoes_impressoras, enviar_para_impressora
 
 
 class PrinterService:
@@ -35,17 +34,17 @@ class PrinterService:
         return impressoras[0] if impressoras else None
 
     def imprimir(self, conteudo: bytes) -> None:
-        """Envia `conteudo` (bytes crus, já formatados em ESC/POS) para a impressora.
+        """Envia `conteudo` (bytes crus, já formatados em ESC/POS) para a
+        impressora localizada por `localizar_impressora` (a configurada, ou a
+        padrão do sistema).
 
-        TODO: implementar o envio de fato depois que a conexão (USB, serial
-        ou rede) usada em produção for confirmada:
-        - USB/rede compartilhada no Windows: enviar via win32print (RAW) ou
-          `copy /b` para a porta/compartilhamento.
-        - Serial: abrir a porta (ex. pyserial) com baud rate compatível e
-          escrever os bytes diretamente.
-        - CUPS (Linux): `lp -d <impressora> -o raw <arquivo>` ou pycups.
+        Levanta `RuntimeError` se nenhuma impressora for encontrada, ou se o
+        envio falhar (ver `services.printer.windows`/`.linux` para detalhes).
         """
-        raise NotImplementedError(
-            "Envio para a impressora ainda não implementado — falta confirmar "
-            "se a conexão em produção será USB, serial ou rede."
-        )
+        impressora = self.localizar_impressora()
+        if impressora is None:
+            if self.nome_impressora:
+                raise RuntimeError(f"Impressora '{self.nome_impressora}' não encontrada.")
+            raise RuntimeError("Nenhuma impressora instalada foi encontrada no sistema.")
+
+        enviar_para_impressora(impressora.nome, conteudo)

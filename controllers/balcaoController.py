@@ -4,6 +4,8 @@ from datetime import datetime
 
 from PyQt6.QtCore import QObject, pyqtSlot
 
+from services.printerService import PrinterService
+
 # Separador usado em Pizzas.qml (nomesArray.join(" / ")) para pizzas meio a meio.
 # Tem espaço dos dois lados, o que o distingue de nomes como "Atum c/ Cebola".
 SEPARADOR_SABORES = " / "
@@ -63,12 +65,13 @@ class BalcaoController(QObject):
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         self.pasta_pedidos = os.path.join(base_dir, "pedidos")
         os.makedirs(self.pasta_pedidos, exist_ok=True)
+        self.printer_service = PrinterService()
 
     @pyqtSlot("QVariantMap", result=bool)
     def enviarPedido(self, dados):
-        """Gera o arquivo .txt do pedido. Retorna True em caso de sucesso,
-        False se algo falhar — a QML usa esse retorno para decidir se limpa
-        a tela para um próximo pedido."""
+        """Gera o arquivo .txt do pedido e o envia para a impressora térmica.
+        Retorna True em caso de sucesso, False se algo falhar — a QML usa
+        esse retorno para decidir se limpa a tela para um próximo pedido."""
         cliente = dados.get("cliente", "")
         itens = dados.get("itens", [])
 
@@ -88,17 +91,26 @@ class BalcaoController(QObject):
             f"Valor do pedido: R$ {valor_total:.2f}".replace(".", ","),
         ]
         conteudo = "\n".join(linhas_arquivo) + "\n"
+        # Modo binário: o texto vira bytes em cp850 e os códigos ESC/POS de
+        # negrito são preservados como estão, sem reinterpretação de encoding.
+        conteudo_bytes = conteudo.encode(CODEPAGE_IMPRESSORA, errors="replace")
 
         try:
-            # Modo binário: o texto vira bytes em cp850 e os códigos ESC/POS de
-            # negrito são preservados como estão, sem reinterpretação de encoding.
             with open(caminho_arquivo, "wb") as arquivo:
-                arquivo.write(conteudo.encode(CODEPAGE_IMPRESSORA, errors="replace"))
+                arquivo.write(conteudo_bytes)
         except OSError as erro:
             print(f"Falha ao salvar o pedido em {caminho_arquivo}: {erro}")
             return False
 
         print(f"Pedido salvo em: {caminho_arquivo}")
+
+        try:
+            self.printer_service.imprimir(conteudo_bytes)
+        except RuntimeError as erro:
+            print(f"Falha ao imprimir o pedido (arquivo já salvo em {caminho_arquivo}): {erro}")
+            return False
+
+        print("Pedido enviado para a impressora.")
         return True
 
     @staticmethod
