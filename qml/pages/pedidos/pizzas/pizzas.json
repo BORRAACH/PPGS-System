@@ -1,0 +1,146 @@
+[
+  {
+    "nome": "Marguerita",
+    "valorGrande": "49,90",
+    "valorBroto": "37,90",
+    "valorMini": "25,90"
+  },
+  {
+    "nome": "Calabresa",
+    "valorGrande": "45,00",
+    "valorBroto": "34,00",
+    "valorMini": "23,00"
+  },
+  {
+    "nome": "Quatro Queijos",
+    "valorGrande": "52,90",
+    "valorBroto": "39,90",
+    "valorMini": "27,90"
+  },
+  {
+    "nome": "Frango c/ Catupiry",
+    "valorGrande": "48,50",
+    "valorBroto": "36,50",
+    "valorMini": "25,00"
+  },
+  {
+    "nome": "Portuguesa",
+    "valorGrande": "50,00",
+    "valorBroto": "38,00",
+    "valorMini": "26,00"
+  },
+  {
+    "nome": "Pepperoni",
+    "valorGrande": "54,90",
+    "valorBroto": "41,90",
+    "valorMini": "28,90"
+  },
+  {
+    "nome": "Bacon c/ Ovos",
+    "valorGrande": "47,90",
+    "valorBroto": "35,90",
+    "valorMini": "24,50"
+  },
+  {
+    "nome": "Atum c/ Cebola",
+    "valorGrande": "46,50",
+    "valorBroto": "35,00",
+    "valorMini": "24,00"
+  },
+  {
+    "nome": "Palmito Especial",
+    "valorGrande": "51,00",
+    "valorBroto": "38,50",
+    "valorMini": "26,50"
+  },
+  {
+    "nome": "Lombo Canadense",
+    "valorGrande": "53,50",
+    "valorBroto": "40,00",
+    "valorMini": "27,50"
+  },
+  {
+    "nome": "Napolitana",
+    "valorGrande": "44,00",
+    "valorBroto": "33,00",
+    "valorMini": "22,50"
+  },
+  {
+    "nome": "Mussarela",
+    "valorGrande": "42,00",
+    "valorBroto": "31,50",
+    "valorMini": "21,00"
+  },
+  {
+    "nome": "Aliche",
+    "valorGrande": "58,00",
+    "valorBroto": "44,00",
+    "valorMini": "30,00"
+  },
+  {
+    "nome": "Vegetariana",
+    "valorGrande": "49,00",
+    "valorBroto": "37,00",
+    "valorMini": "25,50"
+  },
+  {
+    "nome": "Carne Seca c/ Cream Cheese",
+    "valorGrande": "59,90",
+    "valorBroto": "45,00",
+    "valorMini": "31,00"
+  },
+  {
+    "nome": "Toscana",
+    "valorGrande": "46,00",
+    "valorBroto": "34,50",
+    "valorMini": "23,50"
+  },
+  {
+    "nome": "Provolone c/ Alho Poró",
+    "valorGrande": "51,50",
+    "valorBroto": "38,90",
+    "valorMini": "26,90"
+  },
+  {
+    "nome": "Camarão c/ Catupiry",
+    "valorGrande": "69,90",
+    "valorBroto": "52,90",
+    "valorMini": "36,00"
+  },
+  {
+    "nome": "Stroganoff de Frango",
+    "valorGrande": "52,00",
+    "valorBroto": "39,00",
+    "valorMini": "27,00"
+  },
+  {
+    "nome": "Búfala c/ Tomate Seco",
+    "valorGrande": "56,00",
+    "valorBroto": "42,00",
+    "valorMini": "29,00"
+  },
+  {
+    "nome": "Chocolate c/ Morango",
+    "valorGrande": "45,00",
+    "valorBroto": "34,00",
+    "valorMini": "23,00"
+  },
+  {
+    "nome": "Prestígio",
+    "valorGrande": "44,50",
+    "valorBroto": "33,50",
+    "valorMini": "22,90"
+  },
+  {
+    "nome": "Romeu e Julieta",
+    "valorGrande": "42,90",
+    "valorBroto": "32,00",
+    "valorMini": "21,90"
+  },
+  {
+    "nome": "Banana c/ Canela",
+    "valorGrande": "39,90",
+    "valorBroto": "30,00",
+    "valorMini": "20,00"
+  }
+]
