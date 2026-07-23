@@ -1,3 +1,7 @@
+import preConfig
+
+preConfig.garantir_dependencias()
+
 import sys
 import os
 from PyQt6.QtCore import QObject, pyqtSlot, QVariant

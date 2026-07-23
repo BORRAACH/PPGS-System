@@ -8,3 +8,6 @@ wheels/
 
 # Virtual environments
 .venv
+
+# Pedidos gerados em tempo de execução
+pedidos/*
