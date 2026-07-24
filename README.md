@@ -1,4 +1,4 @@
-# Pizzeria System
+# PPGS System
 
 Sistema de gestão de pedidos para pizzaria: tirar pedidos no balcão e para
 entrega, montar pizzas/lanches/bebidas/outros a partir de um cardápio,
@@ -85,7 +85,7 @@ referência do que é usado por trás:
 ## Como instalar e rodar
 
 ```bash
-git clone <url-do-repositorio>
+git clone git@github.com:BORRAACH/PPGS-System.git
 cd pizzeria_system
 python main.py   # ou "python3 main.py", dependendo do sistema
 ```
