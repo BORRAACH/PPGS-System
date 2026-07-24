@@ -1,4 +1,4 @@
-# Pizzeria System
+# PPGS System
 
 Sistema de gestão de pedidos para pizzaria: tirar pedidos no balcão e para
 entrega, montar pizzas/lanches/bebidas/outros a partir de um cardápio,
