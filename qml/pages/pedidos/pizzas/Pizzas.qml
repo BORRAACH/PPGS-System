@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Controls
+import estilo 1.0
 
 Page {
     // 2. Atualiza os preços internos das pizzas já selecionadas para o novo tamanho
@@ -8,8 +9,12 @@ Page {
 
     property var onPedidoSelecionado: null
     property var pilha: null
-    // Lista para guardar os objetos das pizzas selecionadas
+    // Sabores escolhidos para a pizza que está sendo montada agora
     property var selecionados: []
+    // Pizzas já fechadas nesta visita (cada uma com seus sabores e tamanho
+    // próprios) — permite montar mais de uma pizza sem sair desta tela.
+    // Cada item: { sabores: [...], tamanho: "Grande", valorNum: 45.0 }
+    property var pizzasMontadas: []
     // Tamanho atualmente selecionado: "Grande", "Broto" ou "Mini"
     property string tamanhoSelecionado: "Grande"
     // Propriedade computada para o limite de sabores com base no tamanho
@@ -24,10 +29,42 @@ Page {
         }
         return maior;
     }
+    // Valor total do pedido: soma as pizzas já adicionadas + a pizza em
+    // andamento (mesmo antes de clicar em "Adicionar Pizza").
+    readonly property real valorTotalPedido: {
+        var soma = 0;
+        for (var i = 0; i < pizzasMontadas.length; i++) {
+            soma += pizzasMontadas[i].valorNum;
+        }
+        return soma + valorAtualMaior;
+    }
+
+    // Fecha a pizza em andamento (sabores + tamanho atuais) e a guarda em
+    // pizzasMontadas, liberando a seleção de sabores para montar a próxima
+    // pizza sem precisar reabrir esta tela.
+    function adicionarPizzaAtual() {
+        if (selecionados.length === 0)
+            return ;
+
+        var lista = pizzasMontadas.slice();
+        lista.push({
+            "sabores": selecionados.slice(),
+            "tamanho": tamanhoSelecionado,
+            "valorNum": valorAtualMaior
+        });
+        pizzasMontadas = lista;
+        selecionados = [];
+    }
+
+    function removerPizzaMontada(indice) {
+        var lista = pizzasMontadas.slice();
+        lista.splice(indice, 1);
+        pizzasMontadas = lista;
+    }
 
     function carregarPizzas() {
         var xhr = new XMLHttpRequest();
-        xhr.open("GET", Qt.resolvedUrl("pizzas.json"));
+        xhr.open("GET", Qt.resolvedUrl(raizProjeto + "data/cardapio/pizzas.json"));
         xhr.onreadystatechange = function() {
             if (xhr.readyState === XMLHttpRequest.DONE) {
                 if (xhr.status === 200 || xhr.status === 0) {
@@ -143,7 +180,8 @@ Page {
         filtrarPizzas(campoBusca.text);
     }
 
-    // Modelo base contendo os sabores, carregado do pizzas.json na mesma pasta do .qml
+    // Modelo base contendo os sabores, carregado de data/cardapio/pizzas.json
+    // (caminho absoluto a partir de "raizProjeto", exposto pelo main.py)
     ListModel {
         id: modeloPizzas
     }
@@ -167,15 +205,15 @@ Page {
 
             Text {
                 text: "🍕 Escolha até " + limiteSabores + (limiteSabores === 1 ? " Sabor" : " Sabores")
-                font.pixelSize: 22
+                font.pixelSize: Estilo.fonte.titulo
                 font.bold: true
-                color: "#e74c3c"
+                color: Estilo.cancelar.normal
             }
 
             Text {
                 text: selecionados.length === limiteSabores ? "⚠️ Limite máximo de " + limiteSabores + " sabores atingido!" : selecionados.length + " de " + limiteSabores + " sabores selecionados"
-                font.pixelSize: 14
-                color: selecionados.length === limiteSabores ? "#d32f2f" : "#7f8c8d"
+                font.pixelSize: Estilo.fonte.padrao
+                color: selecionados.length === limiteSabores ? "#d32f2f" : Estilo.cores.textoSecundario
                 font.bold: selecionados.length > 0
             }
 
@@ -187,10 +225,10 @@ Page {
                 height: 42
                 placeholderText: "🔍 Pesquisar sabor (ex: calabresa, chocolate)..."
                 placeholderTextColor: "#95a5a6"
-                font.pixelSize: 14
+                font.pixelSize: Estilo.fonte.padrao
                 leftPadding: 14
                 rightPadding: 14
-                color: "#2c3e50"
+                color: Estilo.cores.texto
                 selectByMouse: true
                 enabled: selecionados.length < limiteSabores
                 onTextChanged: {
@@ -198,9 +236,9 @@ Page {
                 }
 
                 background: Rectangle {
-                    radius: 8
+                    radius: Estilo.rounding.grande
                     color: campoBusca.enabled ? "#ffffff" : "#f0f0f0"
-                    border.color: campoBusca.activeFocus ? "#e74c3c" : "#cccccc"
+                    border.color: campoBusca.activeFocus ? Estilo.cancelar.normal : Estilo.cores.borda
                     border.width: campoBusca.activeFocus ? 2 : 1
                 }
 
@@ -211,8 +249,8 @@ Page {
                 width: parent.width
                 height: 50
                 color: "#ffffff"
-                radius: 8
-                border.color: "#cccccc"
+                radius: Estilo.rounding.grande
+                border.color: Estilo.cores.borda
 
                 Row {
                     anchors.centerIn: parent
@@ -220,9 +258,9 @@ Page {
 
                     Text {
                         text: "Tamanho:"
-                        font.pixelSize: 14
+                        font.pixelSize: Estilo.fonte.padrao
                         font.bold: true
-                        color: "#2c3e50"
+                        color: Estilo.cores.texto
                         anchors.verticalCenter: parent.verticalCenter
                     }
 
@@ -240,9 +278,9 @@ Page {
 
                         contentItem: Text {
                             text: chkGrande.text
-                            font.pixelSize: 14
+                            font.pixelSize: Estilo.fonte.padrao
                             font.bold: true
-                            color: "#2c3e50"
+                            color: Estilo.cores.texto
                             leftPadding: chkGrande.indicator.width + chkGrande.spacing
                             verticalAlignment: Text.AlignVCenter
                         }
@@ -253,9 +291,9 @@ Page {
                             x: chkGrande.leftPadding
                             y: parent.height / 2 - height / 2
                             radius: 4
-                            border.color: chkGrande.checked ? "#27ae60" : "#bdc3c7"
+                            border.color: chkGrande.checked ? Estilo.confirmar.normal : "#bdc3c7"
                             border.width: 2
-                            color: chkGrande.checked ? "#27ae60" : "transparent"
+                            color: chkGrande.checked ? Estilo.confirmar.normal : "transparent"
 
                             Text {
                                 text: "✓"
@@ -287,9 +325,9 @@ Page {
 
                         contentItem: Text {
                             text: chkBroto.text
-                            font.pixelSize: 14
+                            font.pixelSize: Estilo.fonte.padrao
                             font.bold: true
-                            color: chkBroto.enabled ? "#2c3e50" : "#bdc3c7"
+                            color: chkBroto.enabled ? Estilo.cores.texto : "#bdc3c7"
                             leftPadding: chkBroto.indicator.width + chkBroto.spacing
                             verticalAlignment: Text.AlignVCenter
                         }
@@ -300,9 +338,9 @@ Page {
                             x: chkBroto.leftPadding
                             y: parent.height / 2 - height / 2
                             radius: 4
-                            border.color: chkBroto.enabled ? (chkBroto.checked ? "#27ae60" : "#bdc3c7") : "#e0e0e0"
+                            border.color: chkBroto.enabled ? (chkBroto.checked ? Estilo.confirmar.normal : "#bdc3c7") : Estilo.cores.bordaCard
                             border.width: 2
-                            color: chkBroto.enabled ? (chkBroto.checked ? "#27ae60" : "transparent") : "#f0f0f0"
+                            color: chkBroto.enabled ? (chkBroto.checked ? Estilo.confirmar.normal : "transparent") : "#f0f0f0"
 
                             Text {
                                 text: "✓"
@@ -334,9 +372,9 @@ Page {
 
                         contentItem: Text {
                             text: chkMini.text
-                            font.pixelSize: 14
+                            font.pixelSize: Estilo.fonte.padrao
                             font.bold: true
-                            color: chkMini.enabled ? "#2c3e50" : "#bdc3c7"
+                            color: chkMini.enabled ? Estilo.cores.texto : "#bdc3c7"
                             leftPadding: chkMini.indicator.width + chkMini.spacing
                             verticalAlignment: Text.AlignVCenter
                         }
@@ -347,9 +385,9 @@ Page {
                             x: chkMini.leftPadding
                             y: parent.height / 2 - height / 2
                             radius: 4
-                            border.color: chkMini.enabled ? (chkMini.checked ? "#27ae60" : "#bdc3c7") : "#e0e0e0"
+                            border.color: chkMini.enabled ? (chkMini.checked ? Estilo.confirmar.normal : "#bdc3c7") : Estilo.cores.bordaCard
                             border.width: 2
-                            color: chkMini.enabled ? (chkMini.checked ? "#27ae60" : "transparent") : "#f0f0f0"
+                            color: chkMini.enabled ? (chkMini.checked ? Estilo.confirmar.normal : "transparent") : "#f0f0f0"
 
                             Text {
                                 text: "✓"
@@ -415,9 +453,9 @@ Page {
                             width: 20
                             height: 20
                             radius: 4
-                            border.color: btnItem.checado ? "#27ae60" : "#bdc3c7"
+                            border.color: btnItem.checado ? Estilo.confirmar.normal : "#bdc3c7"
                             border.width: 2
-                            color: btnItem.checado ? "#27ae60" : "transparent"
+                            color: btnItem.checado ? Estilo.confirmar.normal : "transparent"
                             anchors.verticalCenter: parent.verticalCenter
 
                             Text {
@@ -432,9 +470,9 @@ Page {
 
                         Text {
                             text: model.nome
-                            font.pixelSize: 14
+                            font.pixelSize: Estilo.fonte.padrao
                             font.bold: true
-                            color: "#2c3e50"
+                            color: Estilo.cores.texto
                             // Ajuste proporcional para não encostar nos preços
                             width: parent.width - 120
                             elide: Text.ElideRight
@@ -443,8 +481,8 @@ Page {
 
                         Text {
                             text: "R$ " + model.valor
-                            font.pixelSize: 14
-                            color: "#27ae60"
+                            font.pixelSize: Estilo.fonte.padrao
+                            color: Estilo.confirmar.normal
                             font.bold: true
                             anchors.verticalCenter: parent.verticalCenter
                         }
@@ -452,9 +490,9 @@ Page {
                     }
 
                     background: Rectangle {
-                        radius: 8
-                        color: btnItem.checado ? "#d5f5e3" : (btnItem.down ? "#e0e0e0" : (btnItem.hovered ? "#f1f1f1" : "#ffffff"))
-                        border.color: btnItem.checado ? "#27ae60" : "#cccccc"
+                        radius: Estilo.rounding.grande
+                        color: btnItem.checado ? "#d5f5e3" : (btnItem.down ? Estilo.cores.bordaCard : (btnItem.hovered ? "#f1f1f1" : "#ffffff"))
+                        border.color: btnItem.checado ? Estilo.confirmar.normal : Estilo.cores.borda
                         border.width: btnItem.checado ? 2 : 1
                     }
 
@@ -476,8 +514,8 @@ Page {
                 width: parent.width
                 height: 210
                 color: "#ffffff"
-                radius: 12
-                border.color: "#e0e0e0"
+                radius: Estilo.rounding.painel
+                border.color: Estilo.cores.bordaCard
 
                 Canvas {
                     id: canvasPizza
@@ -543,8 +581,8 @@ Page {
                 width: parent.width
                 height: 110
                 color: "#ffffff"
-                radius: 10
-                border.color: "#e0e0e0"
+                radius: Estilo.rounding.medio
+                border.color: Estilo.cores.bordaCard
                 clip: true
 
                 Column {
@@ -556,7 +594,7 @@ Page {
                         text: "LEGENDA (" + tamanhoSelecionado.toUpperCase() + ")"
                         font.pixelSize: 11
                         font.bold: true
-                        color: "#7f8c8d"
+                        color: Estilo.cores.textoSecundario
                     }
 
                     Text {
@@ -578,7 +616,7 @@ Page {
                                 width: 18
                                 height: 18
                                 radius: 9
-                                color: "#e74c3c"
+                                color: Estilo.cancelar.normal
                                 anchors.verticalCenter: parent.verticalCenter
 
                                 Text {
@@ -595,7 +633,7 @@ Page {
                                 text: modelData.nome
                                 font.pixelSize: 13
                                 font.bold: true
-                                color: "#2c3e50"
+                                color: Estilo.cores.texto
                                 width: parent.width - 100
                                 elide: Text.ElideRight
                                 anchors.verticalCenter: parent.verticalCenter
@@ -604,7 +642,7 @@ Page {
                             Text {
                                 text: "R$ " + modelData.valorNum.toFixed(2).replace(".", ",")
                                 font.pixelSize: 12
-                                color: "#7f8c8d"
+                                color: Estilo.cores.textoSecundario
                                 anchors.verticalCenter: parent.verticalCenter
                             }
 
@@ -616,19 +654,179 @@ Page {
 
             }
 
-            // 3. Valor Total
+            // 3. Botão para fechar a pizza atual e começar a próxima, sem
+            // sair desta tela — é isso que permite montar mais de uma pizza
+            // de uma vez.
+            Button {
+                id: btnAdicionarPizza
+
+                width: parent.width
+                height: 42
+                enabled: selecionados.length > 0
+                onClicked: adicionarPizzaAtual()
+
+                contentItem: Text {
+                    text: "➕ Adicionar Pizza (" + tamanhoSelecionado + ")"
+                    font.pixelSize: 14
+                    font.bold: true
+                    color: "#ffffff"
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                    opacity: btnAdicionarPizza.enabled ? 1 : 0.6
+                }
+
+                background: Rectangle {
+                    radius: Estilo.rounding.grande
+                    color: !btnAdicionarPizza.enabled ? "#bdc3c7" : (btnAdicionarPizza.down ? "#219150" : (btnAdicionarPizza.hovered ? Estilo.confirmar.hover : Estilo.confirmar.normal))
+                    border.color: !btnAdicionarPizza.enabled ? "#bdc3c7" : "#219150"
+                    border.width: 1
+                }
+            }
+
+            // 4. Pizzas já adicionadas ao pedido — cada uma pode ser
+            // removida individualmente antes de confirmar.
+            Rectangle {
+                width: parent.width
+                height: parent.height - 210 - 110 - 42 - 65 - 46 - (12 * 5)
+                color: "#ffffff"
+                radius: Estilo.rounding.medio
+                border.color: Estilo.cores.bordaCard
+                clip: true
+
+                Column {
+                    anchors.fill: parent
+                    anchors.margins: 10
+                    spacing: 6
+
+                    Text {
+                        text: "PIZZAS ADICIONADAS"
+                        font.pixelSize: 11
+                        font.bold: true
+                        color: Estilo.cores.textoSecundario
+                    }
+
+                    Text {
+                        text: "Nenhuma pizza adicionada ainda"
+                        font.pixelSize: 13
+                        color: "#bdc3c7"
+                        font.italic: true
+                        visible: pizzasMontadas.length === 0
+                    }
+
+                    Flickable {
+                        width: parent.width
+                        height: parent.height - 24
+                        clip: true
+                        contentHeight: colunaPizzasMontadas.height
+                        visible: pizzasMontadas.length > 0
+                        boundsBehavior: Flickable.StopAtBounds
+
+                        ScrollBar.vertical: ScrollBar {
+                            policy: ScrollBar.AsNeeded
+                        }
+
+                        Column {
+                            id: colunaPizzasMontadas
+
+                            width: parent.width
+                            spacing: 6
+
+                            Repeater {
+                                model: pizzasMontadas
+
+                                Rectangle {
+                                    width: colunaPizzasMontadas.width
+                                    height: linhaPizzaMontada.implicitHeight + 16
+                                    radius: Estilo.rounding.grande
+                                    color: Estilo.cores.fundoPagina
+                                    border.color: Estilo.cores.bordaCard
+
+                                    Row {
+                                        id: linhaPizzaMontada
+
+                                        x: 8
+                                        y: 8
+                                        spacing: 8
+                                        width: parent.width - 16
+
+                                        Rectangle {
+                                            radius: 6
+                                            width: textoBadgeTamanho.implicitWidth + 14
+                                            height: textoBadgeTamanho.implicitHeight + 6
+                                            color: Estilo.cancelar.normal
+                                            anchors.verticalCenter: parent.verticalCenter
+
+                                            Text {
+                                                id: textoBadgeTamanho
+
+                                                text: modelData.tamanho
+                                                color: "#ffffff"
+                                                font.bold: true
+                                                font.pixelSize: 10
+                                                anchors.centerIn: parent
+                                            }
+                                        }
+
+                                        Text {
+                                            text: modelData.sabores.map(function(s) {
+                                                return s.nome;
+                                            }).join(" / ")
+                                            font.pixelSize: 13
+                                            font.bold: true
+                                            color: Estilo.cores.texto
+                                            width: parent.width - 200
+                                            elide: Text.ElideRight
+                                            anchors.verticalCenter: parent.verticalCenter
+                                        }
+
+                                        Text {
+                                            text: "R$ " + modelData.valorNum.toFixed(2).replace(".", ",")
+                                            font.pixelSize: 12
+                                            color: Estilo.cores.textoSecundario
+                                            anchors.verticalCenter: parent.verticalCenter
+                                        }
+
+                                        Button {
+                                            width: 22
+                                            height: 22
+                                            padding: 0
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            onClicked: removerPizzaMontada(index)
+
+                                            contentItem: Text {
+                                                text: "×"
+                                                color: "#ffffff"
+                                                font.bold: true
+                                                horizontalAlignment: Text.AlignHCenter
+                                                verticalAlignment: Text.AlignVCenter
+                                            }
+
+                                            background: Rectangle {
+                                                radius: 6
+                                                color: parent.down ? Estilo.cancelar.pressionado : (parent.hovered ? Estilo.cancelar.hover : Estilo.cancelar.normal)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 5. Valor Total
             Rectangle {
                 width: parent.width
                 height: 65
-                color: "#2c3e50"
-                radius: 10
+                color: Estilo.cores.texto
+                radius: Estilo.rounding.medio
 
                 Column {
                     anchors.centerIn: parent
                     spacing: 2
 
                     Text {
-                        text: "VALOR TOTAL (" + tamanhoSelecionado.toUpperCase() + ")"
+                        text: "VALOR TOTAL DO PEDIDO"
                         color: "#bdc3c7"
                         font.pixelSize: 10
                         font.bold: true
@@ -636,8 +834,8 @@ Page {
                     }
 
                     Text {
-                        text: "R$ " + valorAtualMaior.toFixed(2).replace(".", ",")
-                        color: "#2ecc71"
+                        text: "R$ " + valorTotalPedido.toFixed(2).replace(".", ",")
+                        color: Estilo.confirmar.hover
                         font.pixelSize: 20
                         font.bold: true
                         anchors.horizontalCenter: parent
@@ -647,7 +845,7 @@ Page {
 
             }
 
-            // 4. Botões de Ação
+            // 6. Botões de Ação
             Row {
                 width: parent.width
                 spacing: 12
@@ -670,9 +868,9 @@ Page {
                     }
 
                     background: Rectangle {
-                        radius: 8
-                        color: btnVoltar.down ? "#c0392b" : (btnVoltar.hovered ? "#d63031" : "#e74c3c")
-                        border.color: "#c0392b"
+                        radius: Estilo.rounding.grande
+                        color: btnVoltar.down ? Estilo.voltar.pressionado : (btnVoltar.hovered ? Estilo.voltar.hover : Estilo.cancelar.normal)
+                        border.color: Estilo.voltar.pressionado
                         border.width: 1
                     }
 
@@ -684,19 +882,33 @@ Page {
 
                     width: (parent.width - parent.spacing) / 2
                     height: 46
-                    enabled: selecionados.length > 0
-                    // BOTÃO CONFIRMAR
+                    enabled: pizzasMontadas.length > 0 || selecionados.length > 0
+                    // BOTÃO CONFIRMAR: junta as pizzas já adicionadas com a
+                    // pizza em andamento (se houver) e envia tudo de uma vez.
                     onClicked: {
-                        if (selecionados.length === 0)
+                        var listaFinal = pizzasMontadas.slice();
+                        if (selecionados.length > 0) {
+                            listaFinal.push({
+                                "sabores": selecionados.slice(),
+                                "tamanho": tamanhoSelecionado,
+                                "valorNum": valorAtualMaior
+                            });
+                        }
+                        if (listaFinal.length === 0)
                             return ;
 
-                        var nomesArray = selecionados.map(function(item) {
-                            return item.nome;
+                        var itens = listaFinal.map(function(pizza) {
+                            var nomesArray = pizza.sabores.map(function(item) {
+                                return item.nome;
+                            });
+                            return {
+                                "nome": nomesArray.join(" / ") + " (" + pizza.tamanho + ")",
+                                "valor": "R$ " + pizza.valorNum.toFixed(2).replace(".", ","),
+                                "observacao": ""
+                            };
                         });
-                        var nomeFinal = nomesArray.join(" / ") + " (" + tamanhoSelecionado + ")";
-                        var valorFinal = "R$ " + valorAtualMaior.toFixed(2).replace(".", ",");
                         if (typeof onPedidoSelecionado === "function")
-                            onPedidoSelecionado(nomeFinal, valorFinal); // <-- chama o callback recebido
+                            onPedidoSelecionado(itens);
                         pilha.pop(null);
                     }
 
@@ -711,8 +923,8 @@ Page {
                     }
 
                     background: Rectangle {
-                        radius: 8
-                        color: !btnConfirmar.enabled ? "#bdc3c7" : (btnConfirmar.down ? "#219150" : (btnConfirmar.hovered ? "#2ecc71" : "#27ae60"))
+                        radius: Estilo.rounding.grande
+                        color: !btnConfirmar.enabled ? "#bdc3c7" : (btnConfirmar.down ? "#219150" : (btnConfirmar.hovered ? Estilo.confirmar.hover : Estilo.confirmar.normal))
                         border.color: !btnConfirmar.enabled ? "#bdc3c7" : "#219150"
                         border.width: 1
                     }
@@ -726,8 +938,8 @@ Page {
     }
 
     background: Rectangle {
-        color: "#f8f9fa"
-        radius: 20
+        color: Estilo.cores.fundoPagina
+        radius: Estilo.rounding.popup
     }
 
 }

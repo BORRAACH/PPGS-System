@@ -3,6 +3,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Effects
 import QtQuick.Layouts
+import estilo 1.0
 
 ApplicationWindow {
     id: root
@@ -10,7 +11,7 @@ ApplicationWindow {
     width: 600
     height: 500
     visible: true
-    color: "#0f172a"
+    color: Qt.darker(Estilo.cores.fundoPagina, 1.8)
     title: "Sistema de Pedidos"
 
     RowLayout {
@@ -32,9 +33,9 @@ ApplicationWindow {
             Layout.topMargin: 8
             Layout.bottomMargin: 8
             Layout.rightMargin: 8
-            color: "#f8f9fa" // Cor de fundo do app
-            radius: 20
-            clip: true // Garante o corte dos elementos internos
+            color: Estilo.cores.fundoPagina // Cor de fundo do app
+            radius: Estilo.rounding.popup
+            clip: true // Garante o corte dos elementos internos e da sombra
 
             StackView {
                 id: stackView
@@ -56,7 +57,7 @@ ApplicationWindow {
                                 text: "Selecione o Tipo de Atendimento"
                                 font.pixelSize: 20
                                 font.bold: true
-                                color: "#2c3e50"
+                                color: Estilo.cores.texto
                                 anchors.horizontalCenter: parent
                             }
 
@@ -81,7 +82,7 @@ ApplicationWindow {
                                         color: btnBalcao.pressed ? "#35d97706" : (btnBalcao.hovered ? "#20d97706" : "#0ad97706")
                                         border.color: btnBalcao.hovered ? "#d97706" : "#fcd34d"
                                         border.width: 2
-                                        radius: 10
+                                        radius: Estilo.rounding.medio
 
                                         MultiEffect {
                                             anchors.fill: parent
@@ -93,7 +94,6 @@ ApplicationWindow {
                                             shadowHorizontalOffset: 0
                                             z: -1
                                         }
-
                                     }
 
                                     contentItem: Column {
@@ -109,15 +109,13 @@ ApplicationWindow {
 
                                         Text {
                                             text: "Balcão"
-                                            font.pixelSize: 14
+                                            font.pixelSize: Estilo.fonte.padrao
                                             font.bold: true
                                             color: btnBalcao.pressed ? "#92400e" : "#b45309"
                                             horizontalAlignment: Text.AlignHCenter
                                             anchors.horizontalCenter: parent
                                         }
-
                                     }
-
                                 }
 
                                 // Botão Entrega
@@ -137,7 +135,7 @@ ApplicationWindow {
                                         color: btnEntrega.pressed ? "#350284c7" : (btnEntrega.hovered ? "#200284c7" : "#0a0284c7")
                                         border.color: btnEntrega.hovered ? "#0284c7" : "#7dd3fc"
                                         border.width: 2
-                                        radius: 10
+                                        radius: Estilo.rounding.medio
 
                                         MultiEffect {
                                             anchors.fill: parent
@@ -149,7 +147,6 @@ ApplicationWindow {
                                             shadowHorizontalOffset: 0
                                             z: -1
                                         }
-
                                     }
 
                                     contentItem: Column {
@@ -165,29 +162,19 @@ ApplicationWindow {
 
                                         Text {
                                             text: "Entrega"
-                                            font.pixelSize: 14
+                                            font.pixelSize: Estilo.fonte.padrao
                                             font.bold: true
                                             color: btnEntrega.pressed ? "#075985" : "#0369a1"
                                             horizontalAlignment: Text.AlignHCenter
                                             anchors.horizontalCenter: parent
                                         }
-
                                     }
-
                                 }
-
                             }
-
                         }
-
                     }
-
                 }
-
             }
-
         }
-
     }
-
 }

@@ -1,5 +1,6 @@
-"""Garante que as dependências do projeto (declaradas em pyproject.toml)
-estão instaladas antes de rodar main.py.
+"""Garante que tudo que main.py precisa para rodar — bibliotecas Python e
+programas de sistema — está instalado antes dele seguir em frente, tanto no
+Windows quanto no Linux.
 
 Só usa a biblioteca padrão do Python — não pode depender de nada que ainda
 não esteja instalado, senão vira um problema de ovo-e-galinha. Por isso
@@ -8,38 +9,134 @@ precisa ser importado e chamado ANTES de qualquer import de terceiros
 instalado, o processo já morre com ModuleNotFoundError antes deste script
 ter a chance de rodar.
 
-Mantenha a lista `_DEPENDENCIAS` abaixo em sincronia com `dependencies` em
-pyproject.toml.
+Mantenha a lista `_DEPENDENCIAS_PIP` abaixo em sincronia com `dependencies`
+em pyproject.toml.
 """
 
-import importlib.util
+import importlib
+import shutil
 import subprocess
 import sys
 
-# (nome do pacote a instalar via pip, módulo usado para checar se já está
-# instalado, valor de sys.platform exigido ou None se vale para qualquer SO)
-_DEPENDENCIAS = [
+# (nome do pacote a instalar via pip, módulo usado para checar se já
+# importa de verdade, valor de sys.platform exigido ou None se vale para
+# qualquer SO)
+_DEPENDENCIAS_PIP = [
     ("PyQt6", "PyQt6.QtCore", None),
     ("pywin32", "win32print", "win32"),
 ]
 
+# Programas de sistema (não pacotes Python) exigidos só no Linux, e o nome
+# do pacote que os instala em cada gerenciador conhecido. No Windows não há
+# equivalente: a impressão usa o spooler e o PowerShell, que já vêm com o
+# sistema operacional.
+_PROGRAMAS_LINUX = {
+    # "lp"/"lpstat" (services/printer/linux.py) — enviar e listar
+    # impressoras via CUPS.
+    "lp": {
+        "apt-get": "cups",
+        "dnf": "cups",
+        "yum": "cups",
+        "pacman": "cups",
+        "zypper": "cups",
+    },
+}
 
-def _instalada(modulo: str) -> bool:
-    return importlib.util.find_spec(modulo) is not None
+# (gerenciador, comando base de instalação não-interativa) — nessa ordem de
+# preferência; o primeiro que existir no sistema é o usado.
+_GERENCIADORES_LINUX = [
+    ("apt-get", ["sudo", "-n", "apt-get", "install", "-y"]),
+    ("dnf", ["sudo", "-n", "dnf", "install", "-y"]),
+    ("yum", ["sudo", "-n", "yum", "install", "-y"]),
+    ("pacman", ["sudo", "-n", "pacman", "-S", "--noconfirm"]),
+    ("zypper", ["sudo", "-n", "zypper", "install", "-y"]),
+]
 
 
-def _instalar(pacote: str) -> None:
-    print(f"[preConfig] Instalando dependência ausente: {pacote}...")
-    subprocess.run([sys.executable, "-m", "pip", "install", pacote], check=True)
+def _importa(modulo: str) -> bool:
+    """Tenta importar de verdade (não só checar se existe no disco) — pega
+    também instalações quebradas/parciais, não só o módulo ausente."""
+    try:
+        importlib.import_module(modulo)
+        return True
+    except ImportError:
+        return False
+
+
+def _instalar_pip(pacote: str) -> bool:
+    print(f"[preConfig] Instalando dependência Python ausente: {pacote}...")
+    try:
+        subprocess.run([sys.executable, "-m", "pip", "install", pacote], check=True)
+        return True
+    except (subprocess.CalledProcessError, OSError) as erro:
+        print(f"[preConfig] Falha ao instalar {pacote} via pip: {erro}")
+        return False
+
+
+def _garantir_modulo(pacote: str, modulo: str) -> None:
+    if _importa(modulo):
+        return
+
+    if _instalar_pip(pacote) and _importa(modulo):
+        return
+
+    print(
+        f"[preConfig] Aviso: não consegui garantir a dependência '{pacote}' "
+        f"automaticamente. Tente instalar manualmente: pip install {pacote}"
+    )
+
+
+def _instalar_programa_linux(comando: str, pacotes_por_gerenciador: dict) -> None:
+    for gerenciador, comando_base in _GERENCIADORES_LINUX:
+        pacote = pacotes_por_gerenciador.get(gerenciador)
+        if not pacote or not shutil.which(gerenciador):
+            continue
+
+        print(f"[preConfig] Instalando programa ausente '{comando}' (pacote '{pacote}' via {gerenciador})...")
+        # Comando real sem o "sudo -n" (que só existe pra não travar
+        # esperando senha aqui) — é o que sugerimos pro usuário rodar à mão.
+        comando_manual = " ".join(["sudo", *comando_base[2:], pacote])
+        try:
+            subprocess.run(comando_base + [pacote], check=True, timeout=300)
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as erro:
+            print(
+                f"[preConfig] Não consegui instalar '{comando}' automaticamente ({erro}). "
+                "Sem privilégio de root sem senha isso é esperado — o app "
+                f"funciona normalmente mesmo assim, só a impressão fica "
+                f"indisponível até '{comando}' ser instalado manualmente "
+                f"(ex: {comando_manual})."
+            )
+        return
+
+    print(
+        f"[preConfig] Não encontrei um gerenciador de pacotes conhecido para "
+        f"instalar '{comando}'. Sem isso, o app funciona normalmente, só a "
+        f"impressão fica indisponível até instalar manualmente."
+    )
+
+
+def _garantir_programas_sistema() -> None:
+    if not sys.platform.startswith("linux"):
+        return
+
+    for comando, pacotes in _PROGRAMAS_LINUX.items():
+        if shutil.which(comando):
+            continue
+        _instalar_programa_linux(comando, pacotes)
 
 
 def garantir_dependencias() -> None:
-    """Verifica cada dependência do projeto e instala a que estiver faltando."""
-    for pacote, modulo, plataforma in _DEPENDENCIAS:
+    """Verifica cada dependência Python do projeto (instalando a que
+    estiver faltando) e, no Linux, os programas de sistema exigidos pela
+    impressão — tudo best-effort: o que não conseguir resolver sozinho vira
+    um aviso claro no console em vez de deixar main.py travar mais na frente
+    com um ModuleNotFoundError sem contexto."""
+    for pacote, modulo, plataforma in _DEPENDENCIAS_PIP:
         if plataforma and sys.platform != plataforma:
             continue
-        if not _instalada(modulo):
-            _instalar(pacote)
+        _garantir_modulo(pacote, modulo)
+
+    _garantir_programas_sistema()
 
 
 if __name__ == "__main__":

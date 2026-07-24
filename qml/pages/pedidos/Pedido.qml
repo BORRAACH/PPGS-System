@@ -1,11 +1,29 @@
 import QtQuick
 import QtQuick.Controls
+import estilo 1.0
 
-Page {
-    id: telaSelecaoPedido
+Popup {
+    id: popupSelecaoPedido
 
     property var onPedidoSelecionado: null
     property var pilha: null
+
+    modal: true
+    focus: true
+    closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+    padding: 25
+    parent: Overlay.overlay
+    anchors.centerIn: parent
+
+    Overlay.modal: Rectangle {
+        color: "#99000000"
+    }
+
+    background: Rectangle {
+        radius: Estilo.rounding.popup
+        color: Estilo.cores.fundoPagina
+        border.color: Estilo.cores.bordaCard
+    }
 
     // Modelo com o caminho da página de cada categoria
     ListModel {
@@ -41,26 +59,26 @@ Page {
 
     }
 
-    Column {
-        anchors.fill: parent
-        anchors.margins: 20
+    contentItem: Column {
+        id: colunaSelecao
+
         spacing: 20
 
         Text {
             text: "Selecione a Categoria"
-            font.pixelSize: 22
+            font.pixelSize: Estilo.fonte.titulo
             font.bold: true
-            color: "#2c3e50"
+            color: Estilo.cores.texto
             anchors.horizontalCenter: parent
         }
 
         Grid {
             id: gradeCategorias
 
-            width: Math.min(parent.width, 480)
+            width: 380
             anchors.horizontalCenter: parent
             spacing: 15
-            columns: parent.width > 500 ? 4 : 2
+            columns: 4
 
             Repeater {
                 model: modeloCategorias
@@ -76,16 +94,19 @@ Page {
 
                         anchors.fill: parent
                         onClicked: {
-                            // repassa adiante
+                            // Fecha o popup e repassa a navegação adiante, para
+                            // a pilha local da tela que abriu a seleção.
+                            popupSelecaoPedido.close();
+                            if (pilha)
+                                pilha.push(model.pagina, {
+                                    "pilha": pilha,
+                                    "onPedidoSelecionado": function(nome, valor) {
+                                        if (popupSelecaoPedido.onPedidoSelecionado)
+                                            popupSelecaoPedido.onPedidoSelecionado(nome, valor);
 
-                            pilha.push(model.pagina, {
-                                "pilha": pilha,
-                                "onPedidoSelecionado": function(nome, valor) {
-                                    if (telaSelecaoPedido.onPedidoSelecionado)
-                                        telaSelecaoPedido.onPedidoSelecionado(nome, valor);
+                                    }
+                                });
 
-                                }
-                            });
                         }
 
                         contentItem: Column {
@@ -109,7 +130,7 @@ Page {
                         }
 
                         background: Rectangle {
-                            radius: 10
+                            radius: Estilo.rounding.medio
                             color: btnCategoria.down ? Qt.darker(model.cor, 1.2) : (btnCategoria.hovered ? Qt.lighter(model.cor, 1.1) : model.cor)
 
                             Behavior on color {
@@ -136,7 +157,7 @@ Page {
             padding: 10
             width: Math.min(gradeCategorias.width, 200)
             anchors.horizontalCenter: parent
-            onClicked: pilha.pop()
+            onClicked: popupSelecaoPedido.close()
 
             contentItem: Text {
                 text: btnCancelar.text
@@ -147,17 +168,12 @@ Page {
             }
 
             background: Rectangle {
-                radius: 5
-                color: parent.down ? "#7f8c8d" : (parent.hovered ? "#95a5a6" : "#7f8c8d")
+                radius: Estilo.rounding.padrao
+                color: parent.down ? Estilo.cores.textoSecundario : (parent.hovered ? "#95a5a6" : Estilo.cores.textoSecundario)
             }
 
         }
 
-    }
-
-    background: Rectangle {
-        color: "#f8f9fa"
-        radius: 20
     }
 
 }

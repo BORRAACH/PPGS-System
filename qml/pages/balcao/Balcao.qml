@@ -1,10 +1,30 @@
 import QtQuick
 import QtQuick.Controls
+import "../pedidos"
+import estilo 1.0
 
 Page {
     id: telaBalcao
 
     property string clienteNome: ""
+    // Preenche modeloPedidos ao abrir — usado pela Consulta ao reabrir uma
+    // comanda salva para edição (veja Component.onCompleted abaixo).
+    property var itensIniciais: []
+    // Preenchimento inicial da seção de pagamento — usado pela Consulta ao
+    // reabrir uma comanda salva para edição, igual a Entrega.qml.
+    property string formaPagamentoInicial: ""
+    property string trocoInicial: ""
+    property string statusPagamentoInicial: ""
+    // Formas de pagamento disponíveis para o pedido de balcão.
+    readonly property var opcoesPagamento: ["Pix", "Crédito", "Débito", "Dinheiro"]
+    // Nome do arquivo da comanda original quando esta tela foi aberta pela
+    // Consulta para editar uma comanda existente ("" = comanda nova). Ao
+    // imprimir com sucesso, o arquivo antigo é apagado para não duplicar.
+    property string arquivoOriginal: ""
+    // Índice da linha de modeloPedidos que está sendo editada pelo popup de
+    // seleção — precisa ficar fora do delegate porque o popup é um único
+    // item reaproveitado, não recriado a cada clique.
+    property int indicePedidoAtual: -1
 
     objectName: "telaBalcao"
 
@@ -13,6 +33,19 @@ Page {
         notificacao.sucesso = sucesso;
         notificacao.aberta = true;
         timerNotificacao.restart();
+    }
+
+    Component.onCompleted: {
+        if (itensIniciais && itensIniciais.length > 0) {
+            modeloPedidos.clear();
+            for (var i = 0; i < itensIniciais.length; i++) {
+                modeloPedidos.append({
+                    "pedido": itensIniciais[i].pedido || "",
+                    "observacao": itensIniciais[i].observacao || "",
+                    "valor": itensIniciais[i].valor || ""
+                });
+            }
+        }
     }
 
     // --- MODELO GLOBAL DA TELA (Agora acessível pelos Shortcuts e pela ListView) ---
@@ -66,6 +99,44 @@ Page {
         }
     }
 
+    // --- POPUP DE SELEÇÃO DE PEDIDO (categorias) ---
+    Pedido {
+        id: popupSelecaoPedido
+
+        pilha: stackViewLocal
+        onPedidoSelecionado: function(nomePedido, valorPedido) {
+            if (telaBalcao.indicePedidoAtual === -1)
+                return ;
+
+            // Quando mais de um lanche é selecionado de uma vez, Lanches.qml
+            // envia um array de itens em vez de nome/valor — a primeira
+            // linha é reaproveitada e uma nova linha é inserida para cada
+            // item extra, logo após a linha que abriu a seleção.
+            if (Array.isArray(nomePedido)) {
+                var itens = nomePedido;
+                if (itens.length === 0)
+                    return ;
+
+                modeloPedidos.setProperty(telaBalcao.indicePedidoAtual, "pedido", itens[0].nome);
+                modeloPedidos.setProperty(telaBalcao.indicePedidoAtual, "valor", itens[0].valor);
+                modeloPedidos.setProperty(telaBalcao.indicePedidoAtual, "observacao", itens[0].observacao || "");
+                for (var i = 1; i < itens.length; i++) {
+                    modeloPedidos.insert(telaBalcao.indicePedidoAtual + i, {
+                        "pedido": itens[i].nome,
+                        "observacao": itens[i].observacao || "",
+                        "valor": itens[i].valor
+                    });
+                }
+                return ;
+            }
+
+            modeloPedidos.setProperty(telaBalcao.indicePedidoAtual, "pedido", nomePedido);
+            if (valorPedido !== undefined && valorPedido !== "")
+                modeloPedidos.setProperty(telaBalcao.indicePedidoAtual, "valor", valorPedido);
+
+        }
+    }
+
     // --- ÁREA DE CONTEÚDO DINÂMICO ---
     // Sem barra lateral própria aqui: esta página já é empurrada para dentro
     // do StackView de main.qml, que fica ao lado da LateralBar permanente do
@@ -90,9 +161,9 @@ Page {
 
                 Text {
                     text: "🏢 ATENDIMENTO BALCÃO"
-                    font.pixelSize: 22
+                    font.pixelSize: Estilo.fonte.titulo
                     font.bold: true
-                    color: "#27ae60"
+                    color: Estilo.confirmar.normal
                     anchors.horizontalCenter: parent
                 }
 
@@ -110,9 +181,9 @@ Page {
                     text: clienteNome
 
                     background: Rectangle {
-                        radius: 5
+                        radius: Estilo.rounding.padrao
                         color: "#ffffff"
-                        border.color: parent.activeFocus ? "#27ae60" : "#cccccc"
+                        border.color: parent.activeFocus ? Estilo.confirmar.normal : Estilo.cores.borda
                         border.width: 1
                     }
 
@@ -128,6 +199,24 @@ Page {
                     model: modeloPedidos // Consome o modelo declarado na raiz da Page
                     spacing: 10
                     anchors.horizontalCenter: parent
+
+                    ScrollBar.vertical: ScrollBar {
+                        policy: ScrollBar.AsNeeded
+                    }
+
+                    // modeloPedidos é declarado na raiz da Page (fora deste
+                    // Component), então é o único jeito seguro de reagir a
+                    // novas linhas aqui dentro — referenciar "listaPedidos" a
+                    // partir de fora deste Component (ex: no popup de seleção
+                    // de pedido) lança ReferenceError, pois o id não é
+                    // visível fora da árvore em que foi declarado.
+                    Connections {
+                        function onCountChanged() {
+                            listaPedidos.positionViewAtEnd();
+                        }
+
+                        target: modeloPedidos
+                    }
 
                     delegate: Row {
                         id: linhaDelegate
@@ -156,27 +245,15 @@ Page {
                                 cursorShape: Qt.PointingHandCursor
                                 hoverEnabled: true
                                 onClicked: {
-                                    var indiceAtual = index;
-                                    if (typeof stackViewLocal !== "undefined")
-                                        // <-- adicionar esta linha
-
-                                        stackViewLocal.push("../pedidos/Pedido.qml", {
-                                            "pilha": stackViewLocal,
-                                            "onPedidoSelecionado": function(nomePedido, valorPedido) {
-                                                modeloPedidos.setProperty(indiceAtual, "pedido", nomePedido);
-                                                if (valorPedido !== undefined && valorPedido !== "")
-                                                    modeloPedidos.setProperty(indiceAtual, "valor", valorPedido);
-
-                                            }
-                                        });
-
+                                    telaBalcao.indicePedidoAtual = index;
+                                    popupSelecaoPedido.open();
                                 }
                             }
 
                             background: Rectangle {
-                                radius: 5
+                                radius: Estilo.rounding.padrao
                                 color: mouseAreaPedido.containsMouse ? "#f0f0f0" : "#ffffff"
-                                border.color: parent.activeFocus ? "#27ae60" : "#cccccc"
+                                border.color: parent.activeFocus ? Estilo.confirmar.normal : Estilo.cores.borda
                                 border.width: 1
                             }
 
@@ -196,9 +273,9 @@ Page {
                             onTextChanged: model.observacao = text
 
                             background: Rectangle {
-                                radius: 5
+                                radius: Estilo.rounding.padrao
                                 color: "#ffffff"
-                                border.color: parent.activeFocus ? "#27ae60" : "#cccccc"
+                                border.color: parent.activeFocus ? Estilo.confirmar.normal : Estilo.cores.borda
                                 border.width: 1
                             }
 
@@ -234,9 +311,9 @@ Page {
                             }
 
                             background: Rectangle {
-                                radius: 5
+                                radius: Estilo.rounding.padrao
                                 color: "#ffffff"
-                                border.color: parent.activeFocus ? "#27ae60" : "#cccccc"
+                                border.color: parent.activeFocus ? Estilo.confirmar.normal : Estilo.cores.borda
                                 border.width: 1
                             }
 
@@ -259,9 +336,9 @@ Page {
                             }
 
                             background: Rectangle {
-                                radius: 5
-                                color: parent.down ? "#27ae60" : (parent.hovered ? "#e0e0e0" : "#ffffff")
-                                border.color: "#cccccc"
+                                radius: Estilo.rounding.padrao
+                                color: parent.down ? Estilo.confirmar.normal : (parent.hovered ? Estilo.cores.bordaCard : "#ffffff")
+                                border.color: Estilo.cores.borda
                                 border.width: 1
                             }
 
@@ -280,12 +357,120 @@ Page {
                             }
 
                             background: Rectangle {
-                                radius: 5
-                                color: parent.down ? "#e74c3c" : (parent.hovered ? "#e0e0e0" : "#ffffff")
-                                border.color: "#cccccc"
+                                radius: Estilo.rounding.padrao
+                                color: parent.down ? Estilo.cancelar.normal : (parent.hovered ? Estilo.cores.bordaCard : "#ffffff")
+                                border.color: Estilo.cores.borda
                                 border.width: 1
                             }
 
+                        }
+
+                    }
+
+                }
+
+                // --- SEÇÃO DE PAGAMENTO ---
+                Text {
+                    text: "💳 PAGAMENTO"
+                    font.pixelSize: 16
+                    font.bold: true
+                    color: Estilo.confirmar.normal
+                    anchors.horizontalCenter: parent
+                }
+
+                Row {
+                    spacing: 10
+                    anchors.horizontalCenter: parent
+
+                    ComboBox {
+                        id: comboFormaPagamento
+
+                        width: 150
+                        model: opcoesPagamento
+                        currentIndex: Math.max(0, opcoesPagamento.indexOf(formaPagamentoInicial))
+
+                        contentItem: Text {
+                            text: comboFormaPagamento.displayText
+                            color: Estilo.cores.texto
+                            leftPadding: 10
+                            rightPadding: 10
+                            verticalAlignment: Text.AlignVCenter
+                            elide: Text.ElideRight
+                        }
+
+                        background: Rectangle {
+                            radius: Estilo.rounding.padrao
+                            color: "#ffffff"
+                            border.color: comboFormaPagamento.activeFocus ? Estilo.confirmar.normal : Estilo.cores.borda
+                            border.width: 1
+                            implicitHeight: inputTroco.implicitHeight
+                        }
+
+                    }
+
+                    // Campo Troco — só faz sentido quando o pagamento é em dinheiro.
+                    TextField {
+                        id: inputTroco
+
+                        placeholderText: "TROCO PARA"
+                        width: 150
+                        topPadding: 10
+                        bottomPadding: 10
+                        leftPadding: 10
+                        rightPadding: 10
+                        text: trocoInicial
+                        visible: comboFormaPagamento.currentText === "Dinheiro"
+                        onEditingFinished: {
+                            if (text !== "") {
+                                var numLimpo = text.replace("R$", "").replace(" ", "").replace(",", ".");
+                                var valorFloat = parseFloat(numLimpo);
+                                if (!isNaN(valorFloat))
+                                    text = "R$ " + valorFloat.toFixed(2).replace(".", ",");
+
+                            }
+                        }
+
+                        validator: DoubleValidator {
+                            bottom: 0
+                            decimals: 2
+                            notation: DoubleValidator.StandardNotation
+                        }
+
+                        background: Rectangle {
+                            radius: Estilo.rounding.padrao
+                            color: "#ffffff"
+                            border.color: parent.activeFocus ? Estilo.confirmar.normal : Estilo.cores.borda
+                            border.width: 1
+                        }
+
+                    }
+
+                    // Botão de status: alterna entre pago (PG) e não pago (NP).
+                    Button {
+                        id: btnStatusPagamento
+
+                        property bool pago: statusPagamentoInicial === "PG"
+
+                        text: pago ? "PG" : "NP"
+                        width: 60
+                        topPadding: 10
+                        bottomPadding: 10
+                        // Só faz sentido perguntar se já foi pago quando o
+                        // pagamento não é instantâneo como o Pix.
+                        visible: comboFormaPagamento.currentText !== "Pix"
+                        onClicked: pago = !pago
+
+                        contentItem: Text {
+                            text: btnStatusPagamento.text
+                            font.bold: true
+                            color: "#ffffff"
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+
+                        background: Rectangle {
+                            radius: Estilo.rounding.padrao
+                            color: btnStatusPagamento.pago ? (parent.down ? Estilo.confirmar.pressionado : (parent.hovered ? Estilo.confirmar.hover : Estilo.confirmar.normal)) : (parent.down ? Estilo.cancelar.pressionado : (parent.hovered ? Estilo.cancelar.hover : Estilo.cancelar.normal))
                         }
 
                     }
@@ -317,11 +502,18 @@ Page {
 
                             var dados = {
                                 "cliente": inputNomeCliente.text,
-                                "itens": itens
+                                "itens": itens,
+                                "formaPagamento": comboFormaPagamento.currentText,
+                                "troco": comboFormaPagamento.currentText === "Dinheiro" ? inputTroco.text : "",
+                                "statusPagamento": btnStatusPagamento.pago ? "PG" : "NP"
                             };
 
                             var sucesso = balcaoController.enviarPedido(dados);
                             if (sucesso) {
+                                if (telaBalcao.arquivoOriginal !== "") {
+                                    consultaController.apagarComanda(telaBalcao.arquivoOriginal);
+                                    telaBalcao.arquivoOriginal = "";
+                                }
                                 inputNomeCliente.text = "";
                                 modeloPedidos.clear();
                                 modeloPedidos.append({
@@ -329,6 +521,9 @@ Page {
                                     "observacao": "",
                                     "valor": ""
                                 });
+                                comboFormaPagamento.currentIndex = 0;
+                                inputTroco.text = "";
+                                btnStatusPagamento.pago = false;
                                 telaBalcao.mostrarNotificacao("✅ Pedido salvo com sucesso!", true);
                             } else {
                                 telaBalcao.mostrarNotificacao("❌ Erro ao salvar o pedido.", false);
@@ -344,9 +539,9 @@ Page {
                         }
 
                         background: Rectangle {
-                            radius: 5
-                            color: parent.down ? "#1e8449" : (parent.hovered ? "#2ecc71" : "#27ae60")
-                            border.color: "#1e8449"
+                            radius: Estilo.rounding.padrao
+                            color: parent.down ? Estilo.confirmar.pressionado : (parent.hovered ? Estilo.confirmar.hover : Estilo.confirmar.normal)
+                            border.color: Estilo.confirmar.pressionado
                             border.width: 1
                         }
 
@@ -375,9 +570,9 @@ Page {
                         }
 
                         background: Rectangle {
-                            radius: 5
-                            color: parent.down ? "#922b21" : (parent.hovered ? "#ec7063" : "#e74c3c")
-                            border.color: "#922b21"
+                            radius: Estilo.rounding.padrao
+                            color: parent.down ? Estilo.cancelar.pressionado : (parent.hovered ? Estilo.cancelar.hover : Estilo.cancelar.normal)
+                            border.color: Estilo.cancelar.pressionado
                             border.width: 1
                         }
 
@@ -400,8 +595,8 @@ Page {
         property bool aberta: false
 
         z: 1000
-        radius: 10
-        color: sucesso ? "#27ae60" : "#e74c3c"
+        radius: Estilo.rounding.medio
+        color: sucesso ? Estilo.confirmar.normal : Estilo.cancelar.normal
         width: textoNotificacao.implicitWidth + 40
         height: 50
         anchors.right: parent.right
@@ -425,7 +620,7 @@ Page {
             text: notificacao.texto
             color: "#ffffff"
             font.bold: true
-            font.pixelSize: 14
+            font.pixelSize: Estilo.fonte.padrao
             anchors.centerIn: parent
         }
 
@@ -440,8 +635,8 @@ Page {
     }
 
     background: Rectangle {
-        color: "#f8f9fa"
-        radius: 20
+        color: Estilo.cores.fundoPagina
+        radius: Estilo.rounding.popup
     }
 
 }

@@ -1,97 +1,575 @@
 import QtQuick
 import QtQuick.Controls
+import estilo 1.0
 
 Page {
     id: telaOutros
 
     property var onPedidoSelecionado: null
-
-    background: Rectangle {
-        color: "#f8f9fa"
-        radius: 20
-    }
-
-    ListModel {
-        id: modeloOutros
-        ListElement { nome: "Porção de Fritas"; valor: "28,00" }
-        ListElement { nome: "Sobremesa Pudim"; valor: "12,00" }
-        ListElement { nome: "Molho Especial Extra"; valor: "4,50" }
-        ListElement { nome: "Borda Recheada"; valor: "10,00" }
-    }
-
-    Column {
-        anchors.fill: parent
-        anchors.margins: 20
-        spacing: 15
-
-        Text {
-            text: "📦 Outros Itens"
-            font.pixelSize: 22
-            font.bold: true
-            color: "#9b59b6"
-            anchors.horizontalCenter: parent
+    property var pilha: null
+    // Lista para guardar os itens selecionados — cada entrada é única por
+    // nome e guarda a quantidade escolhida, permitindo pedir o mesmo item
+    // mais de uma vez (ex: 2 chocolates) sem reabrir esta tela.
+    property var selecionados: []
+    // Soma das quantidades de todos os itens (usado nos textos de resumo)
+    readonly property int totalItens: {
+        var soma = 0;
+        for (var i = 0; i < selecionados.length; i++) {
+            soma += selecionados[i].quantidade;
         }
+        return soma;
+    }
+    // Propriedade computada para o valor somado de todos os itens selecionados
+    readonly property real valorAtual: {
+        var soma = 0;
+        for (var i = 0; i < selecionados.length; i++) {
+            soma += selecionados[i].valorNum * selecionados[i].quantidade;
+        }
+        return soma;
+    }
 
-        ListView {
-            width: Math.min(parent.width, 400)
-            height: parent.height - 120
-            anchors.horizontalCenter: parent
-            model: modeloOutros
-            spacing: 10
-            clip: true
-
-            delegate: Button {
-                id: btnItem
-                width: parent.width
-                padding: 12
-
-                onClicked: {
-                    if (onPedidoSelecionado) {
-                        onPedidoSelecionado(model.nome, "R$ " + model.valor);
+    function carregarOutros() {
+        var xhr = new XMLHttpRequest();
+        xhr.open("GET", Qt.resolvedUrl(raizProjeto + "data/cardapio/outros.json"));
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState === XMLHttpRequest.DONE) {
+                if (xhr.status === 200 || xhr.status === 0) {
+                    try {
+                        var dados = JSON.parse(xhr.responseText);
+                        modeloOutros.clear();
+                        for (var i = 0; i < dados.length; i++) {
+                            modeloOutros.append(dados[i]);
+                        }
+                        console.log("Itens carregados:", modeloOutros.count);
+                        filtrarOutros("");
+                    } catch (e) {
+                        console.error("Erro ao interpretar JSON:", e);
                     }
+                } else {
+                    console.error("Erro ao carregar outros.json, status:", xhr.status);
+                }
+            }
+        };
+        xhr.send();
+    }
 
-                    var telaBalcao = stackView.find(function(item) {
-                        return item.objectName === "telaBalcao";
+    function filtrarOutros(texto) {
+        modeloFiltrado.clear();
+        var busca = texto ? texto.trim().toLowerCase() : "";
+        var resultados = [];
+        for (var i = 0; i < modeloOutros.count; i++) {
+            var item = modeloOutros.get(i);
+            var nomeLower = item.nome.toLowerCase();
+            if (busca === "" || nomeLower.indexOf(busca) !== -1)
+                resultados.push({
+                    "nome": item.nome,
+                    "valor": item.valor,
+                    "prioridade": nomeLower.startsWith(busca) ? 0 : 1
+                });
+        }
+        resultados.sort(function(a, b) {
+            if (a.prioridade !== b.prioridade)
+                return a.prioridade - b.prioridade;
+
+            return a.nome.localeCompare(b.nome);
+        });
+        for (var j = 0; j < resultados.length; j++) {
+            modeloFiltrado.append({
+                "nome": resultados[j].nome,
+                "valor": resultados[j].valor
+            });
+        }
+    }
+
+    function parseValor(strValor) {
+        return parseFloat(strValor.replace(",", "."));
+    }
+
+    // Quantidade atualmente escolhida de um item (0 se não selecionado)
+    function quantidadeDe(nome) {
+        for (var i = 0; i < selecionados.length; i++) {
+            if (selecionados[i].nome === nome)
+                return selecionados[i].quantidade;
+        }
+        return 0;
+    }
+
+    // Adiciona mais uma unidade do item (nova entrada se ainda não escolhido)
+    function adicionarItem(nome, valorNum) {
+        var lista = selecionados.slice();
+        for (var i = 0; i < lista.length; i++) {
+            if (lista[i].nome === nome) {
+                lista[i] = {
+                    "nome": nome,
+                    "valorNum": valorNum,
+                    "quantidade": lista[i].quantidade + 1
+                };
+                selecionados = lista;
+                return ;
+            }
+        }
+        lista.push({
+            "nome": nome,
+            "valorNum": valorNum,
+            "quantidade": 1
+        });
+        selecionados = lista;
+    }
+
+    // Remove uma unidade do item; some da lista quando a quantidade chega a zero
+    function removerItem(nome) {
+        var lista = [];
+        for (var i = 0; i < selecionados.length; i++) {
+            var item = selecionados[i];
+            if (item.nome === nome) {
+                if (item.quantidade > 1)
+                    lista.push({
+                        "nome": item.nome,
+                        "valorNum": item.valorNum,
+                        "quantidade": item.quantidade - 1
                     });
 
-                    if (telaBalcao) {
-                        stackView.pop(telaBalcao);
-                    } else {
-                        stackView.pop();
-                    }
-                }
+            } else {
+                lista.push(item);
+            }
+        }
+        selecionados = lista;
+    }
 
-                contentItem: Row {
-                    spacing: 10
-                    Text {
-                        text: model.nome
-                        font.pixelSize: 16
-                        font.bold: true
-                        color: "#2c3e50"
-                        width: btnItem.width - 120
-                        elide: Text.ElideRight
-                    }
-                    Text {
-                        text: "R$ " + model.valor
-                        font.pixelSize: 16
-                        color: "#27ae60"
-                        font.bold: true
-                    }
+    Component.onCompleted: {
+        carregarOutros();
+    }
+
+    // Modelo base contendo os itens, carregado de data/cardapio/outros.json
+    // (caminho absoluto a partir de "raizProjeto", exposto pelo main.py)
+    ListModel {
+        id: modeloOutros
+    }
+
+    // Modelo auxiliar para exibir apenas os itens filtrados
+    ListModel {
+        id: modeloFiltrado
+    }
+
+    background: Rectangle {
+        color: Estilo.cores.fundoPagina
+        radius: Estilo.rounding.popup
+    }
+
+    // Layout Principal
+    Row {
+        anchors.fill: parent
+        anchors.margins: 20
+        spacing: 20
+
+        // ================= COLUNA DA ESQUERDA (Lista e Pesquisa) =================
+        Column {
+            width: parent.width * 0.52
+            height: parent.height
+            spacing: 12
+
+            Text {
+                text: "📦 Escolha o(s) Item(ns)"
+                font.pixelSize: Estilo.fonte.titulo
+                font.bold: true
+                color: "#9b59b6"
+            }
+
+            Text {
+                text: totalItens === 0 ? "Nenhum item selecionado" : totalItens + (totalItens === 1 ? " item selecionado" : " itens selecionados")
+                font.pixelSize: Estilo.fonte.padrao
+                color: totalItens > 0 ? "#6c3483" : Estilo.cores.textoSecundario
+                font.bold: totalItens > 0
+            }
+
+            // BARRA DE PESQUISA
+            TextField {
+                id: campoBusca
+
+                width: parent.width
+                height: 42
+                placeholderText: "🔍 Pesquisar item (ex: chocolate, trufa)..."
+                placeholderTextColor: "#95a5a6"
+                font.pixelSize: Estilo.fonte.padrao
+                leftPadding: 14
+                rightPadding: 14
+                color: Estilo.cores.texto
+                selectByMouse: true
+                onTextChanged: {
+                    filtrarOutros(text);
                 }
 
                 background: Rectangle {
-                    radius: 8
-                    color: btnItem.down ? "#e0e0e0" : (btnItem.hovered ? "#f1f1f1" : "#ffffff")
-                    border.color: "#cccccc"
-                    border.width: 1
+                    radius: Estilo.rounding.grande
+                    color: "#ffffff"
+                    border.color: campoBusca.activeFocus ? "#9b59b6" : Estilo.cores.borda
+                    border.width: campoBusca.activeFocus ? 2 : 1
+                }
+            }
+
+            ListView {
+                id: listaOutrosView
+
+                width: parent.width
+                height: parent.height - 110
+                model: modeloFiltrado
+                spacing: 8
+                clip: true
+
+                ScrollBar.vertical: ScrollBar {
+                    policy: ScrollBar.AlwaysOn
+                    active: true
+                }
+
+                // Cada item da lista tem um contador próprio (+ / -) em vez de
+                // um simples toggle, para permitir escolher o mesmo item mais
+                // de uma vez sem reabrir esta tela.
+                delegate: Rectangle {
+                    id: itemRow
+
+                    property int quantidade: quantidadeDe(model.nome)
+
+                    width: listaOutrosView.width - (listaOutrosView.ScrollBar.vertical.visible ? listaOutrosView.ScrollBar.vertical.width : 0)
+                    height: 52
+                    radius: Estilo.rounding.grande
+                    color: quantidade > 0 ? "#e8daef" : "#ffffff"
+                    border.color: quantidade > 0 ? "#9b59b6" : Estilo.cores.borda
+                    border.width: quantidade > 0 ? 2 : 1
+
+                    Row {
+                        anchors.left: parent.left
+                        anchors.leftMargin: 14
+                        anchors.right: controles.left
+                        anchors.rightMargin: 10
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: 10
+
+                        Text {
+                            text: model.nome
+                            font.pixelSize: Estilo.fonte.padrao
+                            font.bold: true
+                            color: Estilo.cores.texto
+                            width: parent.width - 90
+                            elide: Text.ElideRight
+                            anchors.verticalCenter: parent.verticalCenter
+                        }
+
+                        Text {
+                            text: "R$ " + model.valor
+                            font.pixelSize: Estilo.fonte.padrao
+                            color: Estilo.confirmar.normal
+                            font.bold: true
+                            anchors.verticalCenter: parent.verticalCenter
+                        }
+                    }
+
+                    Row {
+                        id: controles
+
+                        anchors.right: parent.right
+                        anchors.rightMargin: 10
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: 6
+
+                        Button {
+                            width: 26
+                            height: 26
+                            padding: 0
+                            visible: itemRow.quantidade > 0
+                            onClicked: removerItem(model.nome)
+
+                            contentItem: Text {
+                                text: "−"
+                                color: "#ffffff"
+                                font.bold: true
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
+                            }
+
+                            background: Rectangle {
+                                radius: 6
+                                color: parent.down ? Estilo.cancelar.pressionado : (parent.hovered ? Estilo.cancelar.hover : Estilo.cancelar.normal)
+                            }
+                        }
+
+                        Text {
+                            text: itemRow.quantidade
+                            visible: itemRow.quantidade > 0
+                            font.bold: true
+                            font.pixelSize: Estilo.fonte.padrao
+                            color: Estilo.cores.texto
+                            width: 16
+                            horizontalAlignment: Text.AlignHCenter
+                            anchors.verticalCenter: parent.verticalCenter
+                        }
+
+                        Button {
+                            width: 26
+                            height: 26
+                            padding: 0
+                            onClicked: adicionarItem(model.nome, parseValor(model.valor))
+
+                            contentItem: Text {
+                                text: "+"
+                                color: "#ffffff"
+                                font.bold: true
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
+                            }
+
+                            background: Rectangle {
+                                radius: 6
+                                color: parent.down ? "#6c3483" : (parent.hovered ? "#af7ac5" : "#9b59b6")
+                            }
+                        }
+                    }
                 }
             }
         }
 
-        Button {
-            text: "Voltar"
-            anchors.horizontalCenter: parent
-            onClicked: stackView.pop()
+        // ================= COLUNA DA DIREITA (Visualização, Legenda e Total) =================
+        Column {
+            width: parent.width * 0.43
+            height: parent.height
+            spacing: 12
+            anchors.verticalCenter: parent.verticalCenter
+
+            // 1. Painel Visual
+            Rectangle {
+                width: parent.width
+                height: 210
+                color: "#ffffff"
+                radius: Estilo.rounding.painel
+                border.color: Estilo.cores.bordaCard
+
+                Column {
+                    anchors.centerIn: parent
+                    spacing: 10
+
+                    Text {
+                        text: "📦"
+                        font.pixelSize: 90
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        opacity: totalItens > 0 ? 1 : 0.35
+                    }
+
+                    Text {
+                        text: totalItens === 0 ? "Nenhum item selecionado" : (totalItens === 1 ? selecionados[0].nome : totalItens + " itens selecionados")
+                        font.pixelSize: Estilo.fonte.padrao
+                        font.bold: true
+                        color: Estilo.cores.texto
+                        anchors.horizontalCenter: parent.horizontalCenter
+                    }
+                }
+            }
+
+            // 2. Valor Total
+            Rectangle {
+                width: parent.width
+                height: 65
+                color: Estilo.cores.texto
+                radius: Estilo.rounding.medio
+
+                Column {
+                    anchors.centerIn: parent
+                    spacing: 2
+
+                    Text {
+                        text: "VALOR TOTAL"
+                        color: "#bdc3c7"
+                        font.pixelSize: 10
+                        font.bold: true
+                        anchors.horizontalCenter: parent
+                    }
+
+                    Text {
+                        text: "R$ " + valorAtual.toFixed(2).replace(".", ",")
+                        color: Estilo.confirmar.hover
+                        font.pixelSize: 20
+                        font.bold: true
+                        anchors.horizontalCenter: parent
+                    }
+                }
+            }
+
+            // 3. Pré-comanda: prévia do pedido que será enviado para
+            // Balcao.qml/Entrega.qml, no mesmo formato de cartão usado pela
+            // lista de comandas em Consulta.qml. Cada linha mostra a
+            // quantidade escolhida daquele item.
+            Rectangle {
+                width: parent.width
+                height: parent.height - 210 - 65 - 46 - (12 * 3)
+                color: "#ffffff"
+                radius: Estilo.rounding.medio
+                border.color: Estilo.cores.bordaCard
+                clip: true
+
+                Column {
+                    anchors.fill: parent
+                    anchors.margins: 10
+                    spacing: 6
+
+                    Text {
+                        text: "PRÉ-COMANDA"
+                        font.pixelSize: 11
+                        font.bold: true
+                        color: Estilo.cores.textoSecundario
+                    }
+
+                    Text {
+                        text: "Nenhum item selecionado"
+                        font.pixelSize: 13
+                        color: "#bdc3c7"
+                        font.italic: true
+                        visible: selecionados.length === 0
+                    }
+
+                    Flickable {
+                        width: parent.width
+                        height: parent.height - 24
+                        clip: true
+                        contentHeight: colunaPreComanda.height
+                        visible: selecionados.length > 0
+                        boundsBehavior: Flickable.StopAtBounds
+
+                        ScrollBar.vertical: ScrollBar {
+                            policy: ScrollBar.AsNeeded
+                        }
+
+                        Column {
+                            id: colunaPreComanda
+
+                            width: parent.width
+                            spacing: 6
+
+                            Repeater {
+                                model: selecionados
+
+                                Rectangle {
+                                    width: colunaPreComanda.width
+                                    height: linhaPreComanda.implicitHeight + 16
+                                    radius: Estilo.rounding.grande
+                                    color: Estilo.cores.fundoPagina
+                                    border.color: Estilo.cores.bordaCard
+
+                                    Row {
+                                        id: linhaPreComanda
+
+                                        x: 8
+                                        y: 8
+                                        spacing: 8
+                                        width: parent.width - 16
+
+                                        Text {
+                                            text: "×" + modelData.quantidade
+                                            font.pixelSize: 12
+                                            font.bold: true
+                                            color: "#9b59b6"
+                                            anchors.verticalCenter: parent.verticalCenter
+                                        }
+
+                                        Text {
+                                            text: modelData.nome
+                                            font.pixelSize: 13
+                                            font.bold: true
+                                            color: Estilo.cores.texto
+                                            width: parent.width - 130
+                                            elide: Text.ElideRight
+                                            anchors.verticalCenter: parent.verticalCenter
+                                        }
+
+                                        Text {
+                                            text: "R$ " + (modelData.valorNum * modelData.quantidade).toFixed(2).replace(".", ",")
+                                            font.pixelSize: 12
+                                            color: Estilo.cores.textoSecundario
+                                            anchors.verticalCenter: parent.verticalCenter
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 4. Botões de Ação
+            Row {
+                width: parent.width
+                spacing: 12
+
+                // BOTÃO VOLTAR
+                Button {
+                    id: btnVoltar
+
+                    width: (parent.width - parent.spacing) / 2
+                    height: 46
+                    onClicked: pilha.pop()
+
+                    contentItem: Text {
+                        text: "Voltar"
+                        font.pixelSize: 15
+                        font.bold: true
+                        color: "#ffffff"
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+
+                    background: Rectangle {
+                        radius: Estilo.rounding.grande
+                        color: btnVoltar.down ? Estilo.voltar.pressionado : (btnVoltar.hovered ? Estilo.voltar.hover : Estilo.cancelar.normal)
+                        border.color: Estilo.voltar.pressionado
+                        border.width: 1
+                    }
+                }
+
+                // BOTÃO CONFIRMAR
+                Button {
+                    id: btnConfirmar
+
+                    width: (parent.width - parent.spacing) / 2
+                    height: 46
+                    enabled: totalItens > 0
+                    onClicked: {
+                        if (totalItens === 0)
+                            return ;
+
+                        // Envia sempre um array de itens — uma linha de
+                        // pedido por unidade — para que Balcao/Entrega tratem
+                        // qualquer quantidade da mesma forma.
+                        var itens = [];
+                        for (var i = 0; i < selecionados.length; i++) {
+                            var item = selecionados[i];
+                            for (var q = 0; q < item.quantidade; q++) {
+                                itens.push({
+                                    "nome": item.nome,
+                                    "valor": "R$ " + item.valorNum.toFixed(2).replace(".", ","),
+                                    "observacao": ""
+                                });
+                            }
+                        }
+                        if (typeof onPedidoSelecionado === "function")
+                            onPedidoSelecionado(itens);
+                        pilha.pop(null);
+                    }
+
+                    contentItem: Text {
+                        text: "Confirmar"
+                        font.pixelSize: 15
+                        font.bold: true
+                        color: "#ffffff"
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                        opacity: btnConfirmar.enabled ? 1 : 0.6
+                    }
+
+                    background: Rectangle {
+                        radius: Estilo.rounding.grande
+                        color: !btnConfirmar.enabled ? "#bdc3c7" : (btnConfirmar.down ? "#6c3483" : (btnConfirmar.hovered ? "#af7ac5" : "#9b59b6"))
+                        border.color: !btnConfirmar.enabled ? "#bdc3c7" : "#6c3483"
+                        border.width: 1
+                    }
+                }
+            }
         }
     }
 }

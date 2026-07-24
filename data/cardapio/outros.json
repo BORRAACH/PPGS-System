@@ -1,0 +1,42 @@
+[
+  {
+    "nome": "Chocolate ao Leite",
+    "valor": "7,00"
+  },
+  {
+    "nome": "Chocolate Meio Amargo",
+    "valor": "7,50"
+  },
+  {
+    "nome": "Chiclete",
+    "valor": "2,00"
+  },
+  {
+    "nome": "Trufa",
+    "valor": "5,00"
+  },
+  {
+    "nome": "Bala",
+    "valor": "1,00"
+  },
+  {
+    "nome": "Pirulito",
+    "valor": "2,50"
+  },
+  {
+    "nome": "Porção de Fritas",
+    "valor": "28,00"
+  },
+  {
+    "nome": "Sobremesa Pudim",
+    "valor": "12,00"
+  },
+  {
+    "nome": "Molho Especial Extra",
+    "valor": "4,50"
+  },
+  {
+    "nome": "Borda Recheada",
+    "valor": "10,00"
+  }
+]

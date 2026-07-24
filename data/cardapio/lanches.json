@@ -1,0 +1,34 @@
+[
+  {
+    "nome": "X-Salada",
+    "valor": "18,00"
+  },
+  {
+    "nome": "Hambúrguer",
+    "valor": "15,00"
+  },
+  {
+    "nome": "X-Bacon",
+    "valor": "20,00"
+  },
+  {
+    "nome": "X-Egg",
+    "valor": "19,00"
+  },
+  {
+    "nome": "X-Frango",
+    "valor": "21,00"
+  },
+  {
+    "nome": "X-Burguer",
+    "valor": "17,00"
+  },
+  {
+    "nome": "X-Tudo",
+    "valor": "25,00"
+  },
+  {
+    "nome": "X-Calabresa",
+    "valor": "22,00"
+  }
+]

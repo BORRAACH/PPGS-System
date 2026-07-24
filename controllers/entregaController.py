@@ -61,7 +61,7 @@ def _valor_para_float(valor_texto):
         return 0.0
 
 
-class BalcaoController(QObject):
+class EntregaController(QObject):
     def __init__(self):
         super().__init__()
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -71,10 +71,15 @@ class BalcaoController(QObject):
 
     @pyqtSlot("QVariantMap", result=bool)
     def enviarPedido(self, dados):
-        """Gera o arquivo .txt do pedido e o envia para a impressora térmica.
-        Retorna True em caso de sucesso, False se algo falhar — a QML usa
-        esse retorno para decidir se limpa a tela para um próximo pedido."""
+        """Gera o arquivo .txt do pedido de entrega e o envia para a impressora
+        térmica. Retorna True em caso de sucesso, False se algo falhar — a QML
+        usa esse retorno para decidir se limpa a tela para um próximo pedido."""
         cliente = dados.get("cliente", "")
+        telefone = dados.get("telefone", "")
+        endereco = dados.get("endereco", "")
+        numero = dados.get("numero", "")
+        bairro = dados.get("bairro", "")
+        observacaoGeral = dados.get("observacaoGeral", "")
         itens = dados.get("itens", [])
         forma_pagamento = dados.get("formaPagamento", "")
         troco = dados.get("troco", "")
@@ -87,11 +92,16 @@ class BalcaoController(QObject):
         # Sufixo aleatório curto: com várias máquinas gravando pedidos ao
         # mesmo tempo na rede local, dois pedidos no mesmo segundo teriam o
         # mesmo nome de arquivo e um sobrescreveria o outro ao sincronizar.
-        nome_arquivo = f"pedido_{agora.strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}.txt"
+        nome_arquivo = f"entrega_{agora.strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}.txt"
         caminho_arquivo = os.path.join(self.pasta_pedidos, nome_arquivo)
+
+        endereco_completo = f"{endereco}, {numero}" if numero else endereco
 
         linhas_arquivo = [
             f"Cliente: {cliente}",
+            f"Telefone: {telefone}",
+            f"Endereço: {endereco_completo}",
+            f"Bairro: {bairro}",
             f"Data: {agora.strftime('%d/%m/%Y %H:%M:%S')}",
             "",
             "-" * 40,
@@ -101,17 +111,20 @@ class BalcaoController(QObject):
             "-" * 40,
             "",
         ]
-        if forma_pagamento:
-            linhas_arquivo.append(f"Forma de pagamento: {forma_pagamento}")
-            if forma_pagamento == "Dinheiro" and troco:
-                linhas_arquivo.append(f"Troco para: {troco}")
+        if observacaoGeral:
+            linhas_arquivo.append(f"Observação: {observacaoGeral}")
             linhas_arquivo.append("")
             linhas_arquivo.append("-" * 40)
             linhas_arquivo.append("")
-        # Status (NP/PG) logo depois do valor total, na mesma linha — não
-        # como uma linha separada acima, diferente do formato usado em
-        # EntregaController.
-        linhas_arquivo.append(f"Valor do pedido: R$ {valor_total:.2f} [{status_pagamento}]".replace(".", ","))
+        linhas_arquivo.append(f"Forma de pagamento: {forma_pagamento}")
+        if forma_pagamento == "Dinheiro" and troco:
+            linhas_arquivo.append(f"Troco para: {troco}")
+        linhas_arquivo.append(f"Status: {status_pagamento}")
+        linhas_arquivo.append("")
+        linhas_arquivo.append("-" * 40)
+        linhas_arquivo.append("")
+        linhas_arquivo.append(f"Valor do pedido: R$ {valor_total:.2f}".replace(".", ","))
+
         conteudo = "\n".join(linhas_arquivo) + "\n"
         # Modo binário: o texto vira bytes em cp850 e os códigos ESC/POS de
         # negrito são preservados como estão, sem reinterpretação de encoding.
