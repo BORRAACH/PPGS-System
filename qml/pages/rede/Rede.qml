@@ -12,6 +12,11 @@ Page {
     objectName: "telaRede"
 
     property var _todosPeers: []
+    // Dados da impressora que esta máquina usaria agora (ver
+    // BalcaoController.consultarImpressoraAtual/infoImpressoraPronta) — {}
+    // antes da primeira resposta, e enquanto carregandoImpressora for true.
+    property var infoImpressora: ({})
+    property bool carregandoImpressora: false
 
     function carregarPeers() {
         telaRede._todosPeers = redeController.listarPeers();
@@ -19,6 +24,14 @@ Page {
         for (var i = 0; i < telaRede._todosPeers.length; i++) {
             modeloPeers.append(telaRede._todosPeers[i]);
         }
+    }
+
+    // Só dispara a busca (services/printer/* roda lpstat/PowerShell, que
+    // pode levar alguns segundos) — não bloqueia esta chamada. O resultado
+    // chega depois pelo sinal infoImpressoraPronta, conectado abaixo.
+    function carregarImpressora() {
+        telaRede.carregandoImpressora = true;
+        balcaoController.consultarImpressoraAtual();
     }
 
     // "3600" -> "1h 0min"; usado tanto na lista quanto atualizado a cada
@@ -35,10 +48,21 @@ Page {
     }
 
     Component.onCompleted: {
+        // A lista de peers já é local (sem I/O externo) — carrega e mostra
+        // a página na hora. A impressora só é buscada depois, em thread,
+        // pra não atrasar a abertura da tela.
         carregarPeers();
         redeController.peersMudaram.connect(carregarPeers);
+        balcaoController.infoImpressoraPronta.connect(function (info) {
+            telaRede.infoImpressora = info;
+            telaRede.carregandoImpressora = false;
+        });
+        carregarImpressora();
     }
-    StackView.onActivated: carregarPeers()
+    StackView.onActivated: {
+        carregarPeers();
+        carregarImpressora();
+    }
 
     // Só para as durações ("conectado há...") avançarem sozinhas na tela,
     // sem precisar reconsultar a rede a cada segundo.
@@ -88,7 +112,10 @@ Page {
 
                 text: "🔄 Atualizar"
                 padding: 8
-                onClicked: telaRede.carregarPeers()
+                onClicked: {
+                    telaRede.carregarPeers();
+                    telaRede.carregarImpressora();
+                }
 
                 contentItem: Text {
                     text: btnAtualizarRede.text
@@ -144,79 +171,195 @@ Page {
             }
         }
 
-        Text {
-            text: "Máquinas conectadas (" + modeloPeers.count + ")"
-            font.pixelSize: Estilo.fonte.padrao
-            font.bold: true
-            color: Estilo.cores.textoSecundario
-        }
-
-        // --- LISTA DE PEERS ---
-        ListView {
+        // --- MÁQUINAS CONECTADAS (esquerda) + IMPRESSORA DESTA MÁQUINA (direita) ---
+        RowLayout {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            clip: true
-            spacing: 8
-            model: modeloPeers
+            spacing: 15
 
-            ScrollBar.vertical: ScrollBar {
-                policy: ScrollBar.AsNeeded
-            }
+            ColumnLayout {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                spacing: 8
 
-            // Estado vazio: nenhuma outra instância do app foi encontrada
-            // ainda na rede local (pode levar alguns segundos após abrir).
-            Text {
-                anchors.centerIn: parent
-                visible: modeloPeers.count === 0
-                text: "Nenhuma outra máquina conectada ainda.\nAbra o sistema nas outras máquinas da rede local para elas aparecerem aqui."
-                horizontalAlignment: Text.AlignHCenter
-                color: Estilo.cores.textoSecundario
-                font.pixelSize: Estilo.fonte.padrao
-            }
+                Text {
+                    text: "Máquinas conectadas (" + modeloPeers.count + ")"
+                    font.pixelSize: Estilo.fonte.padrao
+                    font.bold: true
+                    color: Estilo.cores.textoSecundario
+                }
 
-            delegate: Rectangle {
-                width: ListView.view.width - (ListView.view.ScrollBar.vertical.visible ? ListView.view.ScrollBar.vertical.width : 0)
-                height: colunaPeer.implicitHeight + 20
-                radius: Estilo.rounding.grande
-                color: "#ffffff"
-                border.color: Estilo.cores.bordaCard
-                border.width: 1
+                ListView {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    clip: true
+                    spacing: 8
+                    model: modeloPeers
 
-                RowLayout {
-                    id: colunaPeer
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    anchors.verticalCenter: parent.verticalCenter
-                    anchors.margins: 10
-                    spacing: 10
-
-                    Text {
-                        text: "🖥️"
-                        font.pixelSize: Estilo.fonte.titulo
+                    ScrollBar.vertical: ScrollBar {
+                        policy: ScrollBar.AsNeeded
                     }
+
+                    // Estado vazio: nenhuma outra instância do app foi
+                    // encontrada ainda na rede local (pode levar alguns
+                    // segundos após abrir).
+                    Text {
+                        anchors.centerIn: parent
+                        visible: modeloPeers.count === 0
+                        text: "Nenhuma outra máquina conectada ainda.\nAbra o sistema nas outras máquinas da rede local para elas aparecerem aqui."
+                        horizontalAlignment: Text.AlignHCenter
+                        color: Estilo.cores.textoSecundario
+                        font.pixelSize: Estilo.fonte.padrao
+                    }
+
+                    delegate: Rectangle {
+                        width: ListView.view.width - (ListView.view.ScrollBar.vertical.visible ? ListView.view.ScrollBar.vertical.width : 0)
+                        height: colunaPeer.implicitHeight + 20
+                        radius: Estilo.rounding.grande
+                        color: "#ffffff"
+                        border.color: Estilo.cores.bordaCard
+                        border.width: 1
+
+                        RowLayout {
+                            id: colunaPeer
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.verticalCenter: parent.verticalCenter
+                            anchors.margins: 10
+                            spacing: 10
+
+                            Text {
+                                text: "🖥️"
+                                font.pixelSize: Estilo.fonte.titulo
+                            }
+
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                spacing: 2
+
+                                Text {
+                                    text: model.nome
+                                    font.bold: true
+                                    font.pixelSize: Estilo.fonte.padrao
+                                    color: Estilo.cores.texto
+                                }
+
+                                Text {
+                                    text: model.endereco
+                                    font.pixelSize: 11
+                                    color: Estilo.cores.textoSecundario
+                                }
+                            }
+
+                            Text {
+                                text: "conectado há " + telaRede.formatarDuracao(relogio.agora / 1000 - model.conectadoEm)
+                                font.pixelSize: 11
+                                color: Estilo.cores.textoSecundario
+                            }
+                        }
+                    }
+                }
+            }
+
+            // --- IMPRESSORA DESTA MÁQUINA ---
+            ColumnLayout {
+                Layout.preferredWidth: 240
+                Layout.alignment: Qt.AlignTop
+                spacing: 8
+
+                Text {
+                    text: "Impressora desta máquina"
+                    font.pixelSize: Estilo.fonte.padrao
+                    font.bold: true
+                    color: Estilo.cores.textoSecundario
+                }
+
+                Rectangle {
+                    Layout.fillWidth: true
+                    implicitHeight: colunaImpressora.implicitHeight + 20
+                    radius: Estilo.rounding.grande
+                    color: "#ffffff"
+                    border.color: Estilo.cores.bordaCard
+                    border.width: 1
 
                     ColumnLayout {
-                        Layout.fillWidth: true
-                        spacing: 2
+                        id: colunaImpressora
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.top: parent.top
+                        anchors.margins: 10
+                        spacing: 6
 
-                        Text {
-                            text: model.nome
-                            font.bold: true
-                            font.pixelSize: Estilo.fonte.padrao
-                            color: Estilo.cores.texto
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 8
+
+                            Text {
+                                text: telaRede.carregandoImpressora ? "⏳" : (telaRede.infoImpressora.encontrada ? "🖨️" : "🚫")
+                                font.pixelSize: Estilo.fonte.titulo
+                            }
+
+                            Text {
+                                Layout.fillWidth: true
+                                text: telaRede.carregandoImpressora ? "Verificando..." : (telaRede.infoImpressora.encontrada ? telaRede.infoImpressora.nome : "Nenhuma impressora encontrada")
+                                font.bold: true
+                                font.pixelSize: Estilo.fonte.padrao
+                                color: Estilo.cores.texto
+                                wrapMode: Text.WordWrap
+                            }
+                        }
+
+                        // Detalhes só fazem sentido quando alguma impressora
+                        // foi encontrada — ver BalcaoController.consultarImpressoraAtual.
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            visible: !!telaRede.infoImpressora.encontrada
+                            spacing: 2
+
+                            Text {
+                                Layout.fillWidth: true
+                                visible: !!telaRede.infoImpressora.fabricante
+                                text: telaRede.infoImpressora.fabricante + (telaRede.infoImpressora.modelo ? " · " + telaRede.infoImpressora.modelo : "")
+                                font.pixelSize: 11
+                                color: Estilo.cores.textoSecundario
+                                wrapMode: Text.WordWrap
+                            }
+
+                            Text {
+                                Layout.fillWidth: true
+                                visible: !!telaRede.infoImpressora.porta
+                                text: "Porta: " + telaRede.infoImpressora.porta + (telaRede.infoImpressora.tipoPorta ? " (" + telaRede.infoImpressora.tipoPorta + ")" : "")
+                                font.pixelSize: 11
+                                color: Estilo.cores.textoSecundario
+                                wrapMode: Text.WordWrap
+                            }
+
+                            Text {
+                                Layout.fillWidth: true
+                                visible: !!telaRede.infoImpressora.status
+                                text: "Status: " + telaRede.infoImpressora.status
+                                font.pixelSize: 11
+                                color: Estilo.cores.textoSecundario
+                                wrapMode: Text.WordWrap
+                            }
+
+                            Text {
+                                visible: !!telaRede.infoImpressora.padrao
+                                text: "Impressora padrão do sistema"
+                                font.pixelSize: 11
+                                font.italic: true
+                                color: Estilo.cores.textoSecundario
+                            }
                         }
 
                         Text {
-                            text: model.endereco
+                            Layout.fillWidth: true
+                            visible: !telaRede.carregandoImpressora && !telaRede.infoImpressora.encontrada
+                            text: "Os pedidos continuam sendo salvos normalmente — só a impressão fica indisponível."
                             font.pixelSize: 11
                             color: Estilo.cores.textoSecundario
+                            wrapMode: Text.WordWrap
                         }
-                    }
-
-                    Text {
-                        text: "conectado há " + telaRede.formatarDuracao(relogio.agora / 1000 - model.conectadoEm)
-                        font.pixelSize: 11
-                        color: Estilo.cores.textoSecundario
                     }
                 }
             }

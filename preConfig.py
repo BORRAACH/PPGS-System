@@ -14,6 +14,7 @@ em pyproject.toml.
 """
 
 import importlib
+import os
 import shutil
 import subprocess
 import sys
@@ -115,6 +116,24 @@ def _instalar_programa_linux(comando: str, pacotes_por_gerenciador: dict) -> Non
     )
 
 
+def _configurar_estilo_qt_quick() -> None:
+    """Evita o estilo *nativo* do QtQuick Controls (ex: "Windows" no
+    Windows), que carrega um plugin em DLL/so específico da plataforma
+    (`qtquickcontrols2windowsstyleimplplugin` etc.) — se essa DLL não
+    conseguir carregar (falta o runtime do Visual C++, instalação do Qt
+    incompleta/corrompida, antivírus bloqueando...), toda tela com
+    TextField/ComboBox/etc. para de abrir com
+    "QQmlComponent: Component is not ready" / "Type TextField unavailable".
+
+    "Fusion" é implementado em C++/QML puro, sem plugin nativo por
+    plataforma, e fica igual em qualquer sistema — evita esse problema de
+    vez, em vez de depender do usuário instalar o runtime que falta.
+
+    Só define se QT_QUICK_CONTROLS_STYLE não estiver configurada no
+    ambiente (respeita a escolha de quem já tiver setado a variável)."""
+    os.environ.setdefault("QT_QUICK_CONTROLS_STYLE", "Fusion")
+
+
 def _garantir_programas_sistema() -> None:
     if not sys.platform.startswith("linux"):
         return
@@ -127,10 +146,13 @@ def _garantir_programas_sistema() -> None:
 
 def garantir_dependencias() -> None:
     """Verifica cada dependência Python do projeto (instalando a que
-    estiver faltando) e, no Linux, os programas de sistema exigidos pela
-    impressão — tudo best-effort: o que não conseguir resolver sozinho vira
-    um aviso claro no console em vez de deixar main.py travar mais na frente
-    com um ModuleNotFoundError sem contexto."""
+    estiver faltando), configura o ambiente Qt para evitar plugins nativos
+    problemáticos e, no Linux, garante os programas de sistema exigidos
+    pela impressão — tudo best-effort: o que não conseguir resolver sozinho
+    vira um aviso claro no console em vez de deixar main.py travar mais na
+    frente com um erro sem contexto."""
+    _configurar_estilo_qt_quick()
+
     for pacote, modulo, plataforma in _DEPENDENCIAS_PIP:
         if plataforma and sys.platform != plataforma:
             continue

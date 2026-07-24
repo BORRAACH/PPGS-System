@@ -1,9 +1,10 @@
 import os
 import re
+import threading
 import uuid
 from datetime import datetime
 
-from PyQt6.QtCore import QObject, pyqtSlot
+from PyQt6.QtCore import QObject, pyqtSignal, pyqtSlot
 
 from services.printerService import PrinterService
 from services.redeService import rede
@@ -62,6 +63,11 @@ def _valor_para_float(valor_texto):
 
 
 class BalcaoController(QObject):
+    # Emitido quando a consulta disparada por consultarImpressoraAtual()
+    # termina (ver o método) — carrega o mesmo formato de dict que
+    # infoImpressoraAtual() devolvia antes de virar assíncrono.
+    infoImpressoraPronta = pyqtSignal("QVariantMap")
+
     def __init__(self):
         super().__init__()
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -135,6 +141,48 @@ class BalcaoController(QObject):
 
         print("Pedido enviado para a impressora.")
         return True
+
+    @pyqtSlot()
+    def consultarImpressoraAtual(self):
+        """Dispara em segundo plano a busca pela impressora que esta
+        máquina usaria para imprimir agora (a configurada em
+        PrinterService, ou a padrão do sistema) — usado por Rede.qml para
+        mostrar a que impressora esta máquina está conectada.
+
+        A busca em si (services/printer/*) roda comandos externos
+        (lpstat/PowerShell) que podem levar até alguns segundos; rodar numa
+        thread evita travar a interface (e a própria abertura da tela
+        Rede.qml) enquanto isso. O resultado chega pelo sinal
+        infoImpressoraPronta, emitido de dentro da thread — o Qt entrega o
+        sinal de volta na thread principal automaticamente."""
+        threading.Thread(target=self._consultarImpressoraEmThread, daemon=True).start()
+
+    def _consultarImpressoraEmThread(self):
+        try:
+            impressora = self.printer_service.localizar_impressora()
+        except Exception as erro:
+            # Qualquer falha aqui (SO não suportado, PowerShell/CUPS com
+            # saída inesperada, etc.) precisa virar "não encontrada" em vez
+            # de propagar — isto roda fora da thread principal, e uma
+            # exceção Python sem tratamento aqui derrubaria o app inteiro.
+            print(f"[balcaoController] Falha ao consultar a impressora: {erro}")
+            self.infoImpressoraPronta.emit({"encontrada": False, "erro": str(erro)})
+            return
+
+        if impressora is None:
+            self.infoImpressoraPronta.emit({"encontrada": False, "erro": ""})
+            return
+
+        self.infoImpressoraPronta.emit({
+            "encontrada": True,
+            "nome": impressora.nome,
+            "modelo": impressora.modelo,
+            "fabricante": impressora.fabricante,
+            "porta": impressora.porta,
+            "tipoPorta": impressora.tipo_porta,
+            "status": impressora.status,
+            "padrao": impressora.padrao,
+        })
 
     @staticmethod
     def _montarGrupos(itens):

@@ -1,146 +1,578 @@
 [
   {
-    "nome": "Marguerita",
-    "valorGrande": "49,90",
-    "valorBroto": "37,90",
-    "valorMini": "25,90"
+    "id": 1,
+    "nome": "À Moda do Dani",
+    "ingredientes": "Molho, mussarela, lombo, calabresa, catupiry, cebola e bacon",
+    "valorMini": "24,90",
+    "valorBroto": "34,90",
+    "valorGrande": "54,90"
   },
   {
-    "nome": "Calabresa",
-    "valorGrande": "45,00",
-    "valorBroto": "34,00",
-    "valorMini": "23,00"
+    "id": 2,
+    "nome": "À Moda da Casa",
+    "ingredientes": "Molho, mussarela, calabresa, palmito e provolone",
+    "valorMini": "24,90",
+    "valorBroto": "34,90",
+    "valorGrande": "54,90"
   },
   {
-    "nome": "Quatro Queijos",
-    "valorGrande": "52,90",
+    "id": 3,
+    "nome": "À Moda do Primo Mineiro",
+    "ingredientes": "Molho, mussarela, calabresa, bacon, ovo, presunto, catupiry e provolone",
+    "valorMini": "29,90",
     "valorBroto": "39,90",
-    "valorMini": "27,90"
+    "valorGrande": "59,90"
   },
   {
-    "nome": "Frango c/ Catupiry",
-    "valorGrande": "48,50",
-    "valorBroto": "36,50",
-    "valorMini": "25,00"
+    "id": 4,
+    "nome": "À Moda do Pizzaiolo",
+    "ingredientes": "Molho, mussarela, peito de peru, brócolis, catupiry, manjericão, e alho frito",
+    "valorMini": "29,90",
+    "valorBroto": "39,90",
+    "valorGrande": "59,90"
   },
   {
-    "nome": "Portuguesa",
-    "valorGrande": "50,00",
-    "valorBroto": "38,00",
-    "valorMini": "26,00"
+    "id": 5,
+    "nome": "Frango Bacon",
+    "ingredientes": "Molho, mussarela, frango, catupiry e bacon",
+    "valorMini": "29,90",
+    "valorBroto": "39,90",
+    "valorGrande": "59,90"
   },
   {
-    "nome": "Pepperoni",
-    "valorGrande": "54,90",
-    "valorBroto": "41,90",
-    "valorMini": "28,90"
+    "id": 6,
+    "nome": "À Moda do Isaías",
+    "ingredientes": "Molho, mussarela, lombo canadense, champion e bacon",
+    "valorMini": "29,90",
+    "valorBroto": "39,90",
+    "valorGrande": "59,90"
   },
   {
-    "nome": "Bacon c/ Ovos",
-    "valorGrande": "47,90",
-    "valorBroto": "35,90",
-    "valorMini": "24,50"
+    "id": 7,
+    "nome": "À Moda do Primo Jacó",
+    "ingredientes": "Molho, mussarela, strogonoff de frango, champion, cheddar e batata palha",
+    "valorMini": "24,90",
+    "valorBroto": "34,90",
+    "valorGrande": "54,90"
   },
   {
-    "nome": "Atum c/ Cebola",
-    "valorGrande": "46,50",
-    "valorBroto": "35,00",
-    "valorMini": "24,00"
+    "id": 8,
+    "nome": "Bambina do Dedé",
+    "ingredientes": "Molho, mussarela, presunto, catupiry, milho e batata palha",
+    "valorMini": "29,90",
+    "valorBroto": "39,90",
+    "valorGrande": "59,90"
   },
   {
-    "nome": "Palmito Especial",
-    "valorGrande": "51,00",
-    "valorBroto": "38,50",
-    "valorMini": "26,50"
+    "id": 9,
+    "nome": "À Moda do Jura",
+    "ingredientes": "Molho, mussarela, frango, catupiry, champion e bacon",
+    "valorMini": "29,90",
+    "valorBroto": "39,90",
+    "valorGrande": "59,90"
   },
   {
-    "nome": "Lombo Canadense",
-    "valorGrande": "53,50",
-    "valorBroto": "40,00",
-    "valorMini": "27,50"
+    "id": 10,
+    "nome": "À Moda Paulistinha",
+    "ingredientes": "Molho, mussarela, calabresa, ovos, cebola, presunto, catupiry e tomate",
+    "valorMini": "29,90",
+    "valorBroto": "39,90",
+    "valorGrande": "59,90"
   },
   {
-    "nome": "Napolitana",
-    "valorGrande": "44,00",
-    "valorBroto": "33,00",
-    "valorMini": "22,50"
+    "id": 11,
+    "nome": "Palmito",
+    "ingredientes": "Molho, mussarela, palmito e tomate",
+    "valorMini": "24,90",
+    "valorBroto": "34,90",
+    "valorGrande": "54,90"
   },
   {
-    "nome": "Mussarela",
-    "valorGrande": "42,00",
-    "valorBroto": "31,50",
-    "valorMini": "21,00"
+    "id": 12,
+    "nome": "Carbonara",
+    "ingredientes": "Molho, mussarela, tomate, lombo canadense, ovos e provolone",
+    "valorMini": "29,90",
+    "valorBroto": "39,90",
+    "valorGrande": "59,90"
   },
   {
-    "nome": "Aliche",
-    "valorGrande": "58,00",
-    "valorBroto": "44,00",
-    "valorMini": "30,00"
-  },
-  {
+    "id": 13,
     "nome": "Vegetariana",
-    "valorGrande": "49,00",
-    "valorBroto": "37,00",
-    "valorMini": "25,50"
+    "ingredientes": "Molho, mussarela, brócolis, milho, champion, tomate, cebola, tomate seco e palmito",
+    "valorMini": "29,90",
+    "valorBroto": "39,90",
+    "valorGrande": "59,90"
   },
   {
-    "nome": "Carne Seca c/ Cream Cheese",
-    "valorGrande": "59,90",
-    "valorBroto": "45,00",
-    "valorMini": "31,00"
+    "id": 14,
+    "nome": "Do Chefe",
+    "ingredientes": "Molho, mussarela, calabresa, tomate, bacon e cebola",
+    "valorMini": "29,90",
+    "valorBroto": "39,90",
+    "valorGrande": "59,90"
   },
   {
-    "nome": "Toscana",
-    "valorGrande": "46,00",
-    "valorBroto": "34,50",
-    "valorMini": "23,50"
+    "id": 15,
+    "nome": "Portuguesa",
+    "ingredientes": "Molho, mussarela, presunto, ovos e cebola",
+    "valorMini": "24,90",
+    "valorBroto": "34,90",
+    "valorGrande": "54,90"
   },
   {
-    "nome": "Provolone c/ Alho Poró",
-    "valorGrande": "51,50",
-    "valorBroto": "38,90",
-    "valorMini": "26,90"
+    "id": 16,
+    "nome": "Portuguesa Especial",
+    "ingredientes": "Molho, mussarela, presunto, ovos, cebola, calabresa e palmito",
+    "valorMini": "29,90",
+    "valorBroto": "39,90",
+    "valorGrande": "59,90"
   },
   {
-    "nome": "Camarão c/ Catupiry",
-    "valorGrande": "69,90",
-    "valorBroto": "52,90",
-    "valorMini": "36,00"
+    "id": 17,
+    "nome": "Siciliana",
+    "ingredientes": "Molho, mussarela, tomate, bacon e champion",
+    "valorMini": "29,90",
+    "valorBroto": "39,90",
+    "valorGrande": "59,90"
   },
   {
-    "nome": "Stroganoff de Frango",
-    "valorGrande": "52,00",
-    "valorBroto": "39,00",
-    "valorMini": "27,00"
+    "id": 18,
+    "nome": "Rúcula",
+    "ingredientes": "Molho, mussarela, rúcula e tomate seco",
+    "valorMini": "29,90",
+    "valorBroto": "39,90",
+    "valorGrande": "59,90"
   },
   {
-    "nome": "Búfala c/ Tomate Seco",
-    "valorGrande": "56,00",
-    "valorBroto": "42,00",
-    "valorMini": "29,00"
+    "id": 19,
+    "nome": "Gorgonzola",
+    "ingredientes": "Molho, mussarela e gorgonzola",
+    "valorMini": "29,90",
+    "valorBroto": "39,90",
+    "valorGrande": "59,90"
   },
   {
-    "nome": "Chocolate c/ Morango",
-    "valorGrande": "45,00",
-    "valorBroto": "34,00",
-    "valorMini": "23,00"
+    "id": 20,
+    "nome": "Strogonoff de Frango",
+    "ingredientes": "Molho, mussarela, strogonoff de frango e batata palha",
+    "valorMini": "24,90",
+    "valorBroto": "34,90",
+    "valorGrande": "54,90"
   },
   {
+    "id": 21,
+    "nome": "Strogonoff de Carne",
+    "ingredientes": "Molho, mussarela, strogonoff de carne e batata palha",
+    "valorMini": "29,90",
+    "valorBroto": "39,90",
+    "valorGrande": "59,90"
+  },
+  {
+    "id": 22,
+    "nome": "Camarão",
+    "ingredientes": "Molho, mussarela, camarão e champion",
+    "valorMini": null,
+    "valorBroto": "50,90",
+    "valorGrande": "74,90"
+  },
+  {
+    "id": 23,
+    "nome": "Dois Queijos",
+    "ingredientes": "Molho, mussarela e catupiry",
+    "valorMini": "24,90",
+    "valorBroto": "34,90",
+    "valorGrande": "54,90"
+  },
+  {
+    "id": 24,
+    "nome": "Três Queijos",
+    "ingredientes": "Molho, mussarela, parmesão e catupiry",
+    "valorMini": "24,90",
+    "valorBroto": "34,90",
+    "valorGrande": "54,90"
+  },
+  {
+    "id": 25,
+    "nome": "Quatro Queijos",
+    "ingredientes": "Molho, mussarela, provolone, parmesão e catupiry",
+    "valorMini": "29,90",
+    "valorBroto": "39,90",
+    "valorGrande": "59,90"
+  },
+  {
+    "id": 26,
+    "nome": "Cinco Queijos",
+    "ingredientes": "Molho, mussarela, provolone, parmesão, catupiry e gorgonzola",
+    "valorMini": "29,90",
+    "valorBroto": "39,90",
+    "valorGrande": "59,90"
+  },
+  {
+    "id": 27,
+    "nome": "Peperoni",
+    "ingredientes": "Molho, mussarela e peperoni",
+    "valorMini": "29,90",
+    "valorBroto": "39,90",
+    "valorGrande": "59,90"
+  },
+  {
+    "id": 28,
+    "nome": "Frango Especial",
+    "ingredientes": "Molho, mussarela, frango e catupiry",
+    "valorMini": "24,90",
+    "valorBroto": "34,90",
+    "valorGrande": "54,90"
+  },
+  {
+    "id": 29,
+    "nome": "Brócolis Especial",
+    "ingredientes": "Molho, mussarela, brócolis, catupiry, bacon e alho",
+    "valorMini": "24,90",
+    "valorBroto": "34,90",
+    "valorGrande": "54,90"
+  },
+  {
+    "id": 30,
+    "nome": "Gênova",
+    "ingredientes": "Molho, mussarela, tomate, ovo e bacon",
+    "valorMini": "24,90",
+    "valorBroto": "34,90",
+    "valorGrande": "54,90"
+  },
+  {
+    "id": 31,
+    "nome": "Veneza",
+    "ingredientes": "Molho, mussarela, peito de peru, catupiry e tomate",
+    "valorMini": "24,90",
+    "valorBroto": "34,90",
+    "valorGrande": "54,90"
+  },
+  {
+    "id": 32,
+    "nome": "Calabresa",
+    "ingredientes": "Molho, calabresa e cebola",
+    "valorMini": "24,90",
+    "valorBroto": "34,90",
+    "valorGrande": "54,90"
+  },
+  {
+    "id": 33,
+    "nome": "Calabresa Coberta",
+    "ingredientes": "Molho, mussarela, calabresa e cebola",
+    "valorMini": "24,90",
+    "valorBroto": "34,90",
+    "valorGrande": "54,90"
+  },
+  {
+    "id": 34,
+    "nome": "Bacon",
+    "ingredientes": "Molho, mussarela e bacon",
+    "valorMini": "24,90",
+    "valorBroto": "34,90",
+    "valorGrande": "54,90"
+  },
+  {
+    "id": 35,
+    "nome": "Marguerita",
+    "ingredientes": "Molho, mussarela, parmesão, tomate e manjericão",
+    "valorMini": "29,90",
+    "valorBroto": "39,90",
+    "valorGrande": "59,90"
+  },
+  {
+    "id": 36,
+    "nome": "Napolitana",
+    "ingredientes": "Molho, mussarela, parmesão e tomate",
+    "valorMini": "24,90",
+    "valorBroto": "34,90",
+    "valorGrande": "54,90"
+  },
+  {
+    "id": 37,
+    "nome": "Mussarela",
+    "ingredientes": "Molho e mussarela",
+    "valorMini": "24,90",
+    "valorBroto": "34,90",
+    "valorGrande": "54,90"
+  },
+  {
+    "id": 38,
+    "nome": "Alho e Óleo",
+    "ingredientes": "Molho, mussarela, tomate, alho e óleo",
+    "valorMini": "24,90",
+    "valorBroto": "34,90",
+    "valorGrande": "54,90"
+  },
+  {
+    "id": 39,
+    "nome": "Mista",
+    "ingredientes": "Molho, mussarela e presunto",
+    "valorMini": "24,90",
+    "valorBroto": "34,90",
+    "valorGrande": "54,90"
+  },
+  {
+    "id": 40,
+    "nome": "Champion",
+    "ingredientes": "Molho, mussarela e champion",
+    "valorMini": "24,90",
+    "valorBroto": "34,90",
+    "valorGrande": "54,90"
+  },
+  {
+    "id": 41,
+    "nome": "Escarola",
+    "ingredientes": "Molho, mussarela, escarola, parmesão e bacon",
+    "valorMini": "29,90",
+    "valorBroto": "39,90",
+    "valorGrande": "59,90"
+  },
+  {
+    "id": 42,
+    "nome": "Caipira",
+    "ingredientes": "Molho, mussarela, catupiry, frango e milho",
+    "valorMini": "24,90",
+    "valorBroto": "34,90",
+    "valorGrande": "54,90"
+  },
+  {
+    "id": 43,
+    "nome": "À Moda da Carmen",
+    "ingredientes": "Molho, mussarela, catupiry, tomate e cebola",
+    "valorMini": "24,90",
+    "valorBroto": "34,90",
+    "valorGrande": "54,90"
+  },
+  {
+    "id": 44,
+    "nome": "Catu Frango",
+    "ingredientes": "Molho, catupiry e frango",
+    "valorMini": "24,90",
+    "valorBroto": "34,90",
+    "valorGrande": "54,90"
+  },
+  {
+    "id": 45,
+    "nome": "Catu Brócolis",
+    "ingredientes": "Molho, catupiry, brócolis, bacon e alho",
+    "valorMini": "24,90",
+    "valorBroto": "34,90",
+    "valorGrande": "54,90"
+  },
+  {
+    "id": 46,
+    "nome": "Atum",
+    "ingredientes": "Molho, atum, cebola e tomate",
+    "valorMini": "24,90",
+    "valorBroto": "34,90",
+    "valorGrande": "54,90"
+  },
+  {
+    "id": 47,
+    "nome": "Atum Coberto",
+    "ingredientes": "Molho, mussarela, atum, cebola e tomate",
+    "valorMini": "29,90",
+    "valorBroto": "39,90",
+    "valorGrande": "59,90"
+  },
+  {
+    "id": 48,
+    "nome": "Milho Verde",
+    "ingredientes": "Molho, mussarela, catupiry e milho",
+    "valorMini": "19,90",
+    "valorBroto": "29,90",
+    "valorGrande": "49,90"
+  },
+  {
+    "id": 49,
+    "nome": "Lombinho Catu",
+    "ingredientes": "Molho, catupiry e lombo canadense",
+    "valorMini": "24,90",
+    "valorBroto": "34,90",
+    "valorGrande": "54,90"
+  },
+  {
+    "id": 50,
+    "nome": "Lombinho Mussarela",
+    "ingredientes": "Molho, mussarela e lombo canadense",
+    "valorMini": "24,90",
+    "valorBroto": "34,90",
+    "valorGrande": "54,90"
+  },
+  {
+    "id": 51,
+    "nome": "Bolonhesa",
+    "ingredientes": "Molho a bolonhesa, presunto, catupiry, mussarela e parmesão",
+    "valorMini": null,
+    "valorBroto": "39,90",
+    "valorGrande": "59,90"
+  },
+  {
+    "id": 52,
+    "nome": "Lagarto",
+    "ingredientes": "Molho, lagarto desfiado, cebola, tomate e mussarela",
+    "valorMini": null,
+    "valorBroto": "39,90",
+    "valorGrande": "59,90"
+  },
+  {
+    "id": 53,
+    "nome": "Lagarto Barbecue",
+    "ingredientes": "Molho, lagarto desfiado, catupiry, bacon, mussarela e barbecue",
+    "valorMini": null,
+    "valorBroto": "34,90",
+    "valorGrande": "54,90"
+  },
+  {
+    "id": 54,
+    "nome": "Frango Barbecue",
+    "ingredientes": "Molho, frango, mussarela, bacon, catupiry e barbecue",
+    "valorMini": null,
+    "valorBroto": "34,90",
+    "valorGrande": "54,90"
+  },
+  {
+    "id": 55,
+    "nome": "Batata do Chefe",
+    "ingredientes": "Molho, batata frita, mussarela, cheddar e bacon",
+    "valorMini": null,
+    "valorBroto": "34,90",
+    "valorGrande": "54,90"
+  },
+  {
+    "id": 56,
+    "nome": "Copa Lombo",
+    "ingredientes": "Molho, mussarela, copa lombo, catupiry e cebola",
+    "valorMini": null,
+    "valorBroto": "34,90",
+    "valorGrande": "54,90"
+  },
+  {
+    "id": 57,
+    "nome": "Costelinha",
+    "ingredientes": "Molho, mussarela, costelinha e cebola",
+    "valorMini": null,
+    "valorBroto": "34,90",
+    "valorGrande": "54,90"
+  },
+  {
+    "id": 58,
+    "nome": "Baiana",
+    "ingredientes": "Molho, mussarela, calabresa, cebola e molho de pimenta",
+    "valorMini": null,
+    "valorBroto": "34,90",
+    "valorGrande": "54,90"
+  },
+  {
+    "id": 59,
+    "nome": "Pão de Alho",
+    "ingredientes": "Molho, mussarela, pão de alho, catupiry, pasta de alho e alho frito",
+    "valorMini": null,
+    "valorBroto": "34,90",
+    "valorGrande": "54,90"
+  },
+  {
+    "id": 60,
+    "nome": "Charge",
+    "ingredientes": "Chocolate, amendoim e doce de leite",
+    "valorMini": "24,90",
+    "valorBroto": "34,90",
+    "valorGrande": "54,90"
+  },
+  {
+    "id": 61,
+    "nome": "Stikadidinho",
+    "ingredientes": "Chocolate, creme de morango e stikadidinho",
+    "valorMini": "24,90",
+    "valorBroto": "34,90",
+    "valorGrande": "54,90"
+  },
+  {
+    "id": 62,
+    "nome": "Ovomaltine ou Chocoball",
+    "ingredientes": "Chocolate ao leite ou chocolate branco e ovomaltine ou chocoball",
+    "valorMini": "24,90",
+    "valorBroto": "34,90",
+    "valorGrande": "54,90"
+  },
+  {
+    "id": 63,
+    "nome": "Califórnia",
+    "ingredientes": "Mussarela, presunto, frutas que são pêssego, abacaxi e figo em calda",
+    "valorMini": null,
+    "valorBroto": "39,90",
+    "valorGrande": "59,90"
+  },
+  {
+    "id": 64,
+    "nome": "Banana",
+    "ingredientes": "Mussarela, banana, leite condensado e canela",
+    "valorMini": "24,90",
+    "valorBroto": "34,90",
+    "valorGrande": "54,90"
+  },
+  {
+    "id": 65,
+    "nome": "Brigadeiro",
+    "ingredientes": "Chocolate ao leite ou chocolate branco e granulado",
+    "valorMini": "24,90",
+    "valorBroto": "34,90",
+    "valorGrande": "54,90"
+  },
+  {
+    "id": 66,
+    "nome": "Chocolate com Fruta",
+    "ingredientes": "Chocolate ao leite, com morango ou banana",
+    "valorMini": "24,90",
+    "valorBroto": "34,90",
+    "valorGrande": "54,90"
+  },
+  {
+    "id": 67,
+    "nome": "Confete",
+    "ingredientes": "Chocolate ao leite, com confete",
+    "valorMini": "24,90",
+    "valorBroto": "34,90",
+    "valorGrande": "54,90"
+  },
+  {
+    "id": 68,
     "nome": "Prestígio",
-    "valorGrande": "44,50",
-    "valorBroto": "33,50",
-    "valorMini": "22,90"
+    "ingredientes": "Chocolate ao leite, com coco ralado",
+    "valorMini": "24,90",
+    "valorBroto": "34,90",
+    "valorGrande": "54,90"
   },
   {
+    "id": 69,
     "nome": "Romeu e Julieta",
-    "valorGrande": "42,90",
-    "valorBroto": "32,00",
-    "valorMini": "21,90"
+    "ingredientes": "Mussarela, goiabada e leite condensado",
+    "valorMini": "24,90",
+    "valorBroto": "34,90",
+    "valorGrande": "54,90"
   },
   {
-    "nome": "Banana c/ Canela",
-    "valorGrande": "39,90",
-    "valorBroto": "30,00",
-    "valorMini": "20,00"
+    "id": 70,
+    "nome": "Queijadinha",
+    "ingredientes": "Mussarela, leite condensado e coco ralado",
+    "valorMini": "24,90",
+    "valorBroto": "34,90",
+    "valorGrande": "54,90"
+  },
+  {
+    "id": 71,
+    "nome": "Doritos",
+    "ingredientes": "Molho a bolonhesa, cheddar, mussarela e doritos",
+    "valorMini": null,
+    "valorBroto": "39,90",
+    "valorGrande": "59,90"
+  },
+  {
+    "id": 72,
+    "nome": "Nordestina",
+    "ingredientes": "Molho, carne seca desfiado, cebola, tomate e mussarela",
+    "valorMini": null,
+    "valorBroto": "39,90",
+    "valorGrande": "59,90"
   }
 ]
