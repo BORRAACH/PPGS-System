@@ -11,6 +11,7 @@ ApplicationWindow {
     width: 600
     height: 500
     visible: true
+    visibility: Window.Maximized
     color: Qt.darker(Estilo.cores.fundoPagina, 1.8)
     title: "Sistema de Pedidos"
 
