@@ -38,6 +38,20 @@ def _raiz_projeto():
 
 
 def _rodar_git(*args):
+    # Sem isso, um "git fetch" contra um remoto SSH sem a chave já
+    # destravada no agente trava esperando a senha da chave (via askpass) —
+    # e como main.py roda essa checagem toda vez que abre (inclusive a cada
+    # reinício automático do dev_watch.py durante o desenvolvimento), isso
+    # interromperia a abertura do app com um prompt de senha o tempo todo.
+    # BatchMode=yes faz o ssh falhar rápido em vez de perguntar; o
+    # resultado (retorno != 0) já cai no mesmo fallback usado para "sem
+    # internet".
+    env = {
+        **os.environ,
+        "GIT_TERMINAL_PROMPT": "0",
+        "GIT_SSH_COMMAND": os.environ.get("GIT_SSH_COMMAND", "ssh") + " -o BatchMode=yes -o ConnectTimeout=10",
+    }
+
     try:
         resultado = subprocess.run(
             ["git", *args],
@@ -45,6 +59,7 @@ def _rodar_git(*args):
             capture_output=True,
             text=True,
             timeout=_TIMEOUT_GIT,
+            env=env,
         )
     except (FileNotFoundError, subprocess.TimeoutExpired) as erro:
         print(f"[atualizador] Falha ao rodar 'git {' '.join(args)}': {erro}")
