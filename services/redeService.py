@@ -44,23 +44,30 @@ class RedeService(QObject):
     # Emitido quando o resultado de um pedido de impressão é conhecido
     # (sucesso, nome da máquina que imprimiu ou motivo da falha).
     impressaoResultado = pyqtSignal(bool, str)
+    # Emitido sempre que a máquina eleita pra imprimir (ou os dados da
+    # impressora dela) pode ter mudado — Rede.qml usa pra reconsultar
+    # impressoraPrincipal() e atualizar o painel sozinho.
+    impressoraPrincipalMudou = pyqtSignal()
     # Uso interno: repassa o resultado da checagem da impressora local (rodada
     # numa thread, porque PrinterService.localizar_impressora() executa
     # lpstat/PowerShell) de volta pra thread principal — mesmo padrão de
     # BalcaoController.infoImpressoraPronta.
-    _impressoraLocalVerificada = pyqtSignal(bool)
+    _impressoraLocalVerificada = pyqtSignal(bool, object)
 
     def __init__(self):
         super().__init__()
         self._id = uuid.uuid4().hex
         self._nome_local = platform.node() or "Máquina desconhecida"
         self._peers = {}  # id da instância -> QTcpSocket
-        self._info_peers = {}  # id da instância -> {"nome", "endereco", "conectadoEm", "temImpressora"}
+        self._info_peers = {}  # id da instância -> {"nome", "endereco", "conectadoEm", "temImpressora", "infoImpressora"}
         self._buffers = {}  # QTcpSocket -> bytearray (linhas JSON incompletas)
         self._iniciado = False
 
         self._printer_service = PrinterService()
         self._tem_impressora = False
+        # {"nome", "modelo", "fabricante", "tipoPorta", "porta"} da
+        # impressora local, ou None — só preenchido quando _tem_impressora.
+        self._info_impressora_local = None
         # Id da máquina (pode ser self._id) escolhida pra receber comandas de
         # impressão; None = nenhuma máquina conhecida tem impressora agora.
         self._id_maquina_impressora = None
@@ -163,7 +170,13 @@ class RedeService(QObject):
             self._preparar_socket(socket)
 
     def _mensagem_identificar(self):
-        return {"tipo": "identificar", "id": self._id, "nome": self._nome_local, "temImpressora": self._tem_impressora}
+        return {
+            "tipo": "identificar",
+            "id": self._id,
+            "nome": self._nome_local,
+            "temImpressora": self._tem_impressora,
+            "infoImpressora": self._info_impressora_local,
+        }
 
     def _preparar_socket(self, socket: QTcpSocket):
         self._buffers[socket] = bytearray()
@@ -247,6 +260,7 @@ class RedeService(QObject):
                 "endereco": socket.peerAddress().toString(),
                 "conectadoEm": time.time(),
                 "temImpressora": bool(mensagem.get("temImpressora")),
+                "infoImpressora": mensagem.get("infoImpressora"),
             }
             self.peersMudaram.emit(len(self._peers))
             self._recalcular_maquina_impressora()
@@ -290,6 +304,7 @@ class RedeService(QObject):
             id_remoto = self._id_do_socket(socket)
             if id_remoto is not None and id_remoto in self._info_peers:
                 self._info_peers[id_remoto]["temImpressora"] = bool(mensagem.get("temImpressora"))
+                self._info_peers[id_remoto]["infoImpressora"] = mensagem.get("infoImpressora")
                 self._recalcular_maquina_impressora()
 
         elif tipo == "imprimir":
@@ -349,14 +364,25 @@ class RedeService(QObject):
         tem_impressora_valida = impressora is not None and impressora.tipo_porta != "desconhecido"
         if impressora is not None and not tem_impressora_valida:
             print(f"[RedeService] Impressora local '{impressora.nome}' encontrada, mas com porta não identificada (tipo_porta='{impressora.tipo_porta}') — não conta pra eleição de rede.")
-        self._impressoraLocalVerificada.emit(tem_impressora_valida)
 
-    def _ao_verificar_impressora_local(self, tem_impressora: bool):
-        if tem_impressora == self._tem_impressora:
+        info = None
+        if tem_impressora_valida:
+            info = {
+                "nome": impressora.nome,
+                "modelo": impressora.modelo,
+                "fabricante": impressora.fabricante,
+                "tipoPorta": impressora.tipo_porta,
+                "porta": impressora.porta,
+            }
+        self._impressoraLocalVerificada.emit(tem_impressora_valida, info)
+
+    def _ao_verificar_impressora_local(self, tem_impressora: bool, info):
+        if tem_impressora == self._tem_impressora and info == self._info_impressora_local:
             return
         self._tem_impressora = tem_impressora
+        self._info_impressora_local = info
         self._recalcular_maquina_impressora()
-        mensagem = {"tipo": "status_impressora", "temImpressora": self._tem_impressora}
+        mensagem = {"tipo": "status_impressora", "temImpressora": self._tem_impressora, "infoImpressora": info}
         for socket in self._peers.values():
             self._enviar(socket, mensagem)
 
@@ -392,6 +418,40 @@ class RedeService(QObject):
         # forma determinística pelo id — toda máquina da malha vê o mesmo
         # conjunto de candidatos e chega à mesma conclusão.
         self._id_maquina_impressora = min(candidatos) if candidatos else None
+        self.impressoraPrincipalMudou.emit()
+
+    @pyqtSlot(result="QVariantMap")
+    def impressoraPrincipal(self):
+        """Info da impressora que a malha está usando pra imprimir agora (a
+        máquina eleita por _recalcular_maquina_impressora) — pra exibir em
+        Rede.qml. Devolve {} se nenhuma máquina conhecida tem impressora."""
+        if self._id_maquina_impressora is None:
+            return {}
+
+        if self._id_maquina_impressora == self._id:
+            nome_maquina = self._nome_local
+            info = self._info_impressora_local
+            local = True
+        else:
+            peer = self._info_peers.get(self._id_maquina_impressora)
+            if not peer:
+                return {}
+            nome_maquina = peer.get("nome") or "Máquina desconhecida"
+            info = peer.get("infoImpressora")
+            local = False
+
+        if not info:
+            return {}
+
+        return {
+            "maquina": nome_maquina,
+            "local": local,
+            "nome": info.get("nome", ""),
+            "modelo": info.get("modelo", ""),
+            "fabricante": info.get("fabricante", ""),
+            "tipoPorta": info.get("tipoPorta", ""),
+            "porta": info.get("porta", ""),
+        }
 
     def _tentar_imprimir_localmente(self, conteudo_bytes: bytes):
         try:

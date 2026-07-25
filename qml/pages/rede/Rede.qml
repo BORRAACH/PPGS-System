@@ -18,6 +18,11 @@ Page {
     // antes da primeira resposta, e enquanto carregandoImpressora for true.
     property var infoImpressora: ({})
     property bool carregandoImpressora: false
+    // Dados da impressora que a malha está de fato usando pra imprimir as
+    // comandas agora (ver RedeService.impressoraPrincipal/
+    // _recalcular_maquina_impressora) — pode ser esta máquina ou outra;
+    // {} enquanto nenhuma máquina conhecida tem impressora.
+    property var infoImpressoraPrincipal: ({})
 
     function carregarPeers() {
         telaRede._todosPeers = redeController.listarPeers();
@@ -25,6 +30,12 @@ Page {
         for (var i = 0; i < telaRede._todosPeers.length; i++) {
             modeloPeers.append(telaRede._todosPeers[i]);
         }
+    }
+
+    // Local, sem I/O externo (RedeService já mantém a eleição pronta) —
+    // pode ser chamada direto, sem precisar de thread nem sinal de retorno.
+    function carregarImpressoraPrincipal() {
+        telaRede.infoImpressoraPrincipal = redeController.impressoraPrincipal();
     }
 
     // Só dispara a busca (services/printer/* roda lpstat/PowerShell, que
@@ -59,10 +70,14 @@ Page {
             telaRede.carregandoImpressora = false;
         });
         carregarImpressora();
+
+        carregarImpressoraPrincipal();
+        redeController.impressoraPrincipalMudou.connect(carregarImpressoraPrincipal);
     }
     StackView.onActivated: {
         carregarPeers();
         carregarImpressora();
+        carregarImpressoraPrincipal();
     }
 
     // Só para as durações ("conectado há...") avançarem sozinhas na tela,
@@ -277,6 +292,96 @@ Page {
                 Layout.preferredWidth: 240
                 Layout.alignment: Qt.AlignTop
                 spacing: 8
+
+                // --- IMPRESSORA PRINCIPAL (a que a malha está usando pra
+                // imprimir agora — ver RedeService.impressoraPrincipal) ---
+                Text {
+                    text: "Impressora principal"
+                    font.pixelSize: Estilo.fonte.padrao
+                    font.bold: true
+                    color: Estilo.cores.textoSecundario
+                }
+
+                Rectangle {
+                    Layout.fillWidth: true
+                    implicitHeight: colunaImpressoraPrincipal.implicitHeight + 20
+                    radius: Estilo.rounding.grande
+                    color: "#ffffff"
+                    border.color: Estilo.cores.bordaCard
+                    border.width: 1
+
+                    ColumnLayout {
+                        id: colunaImpressoraPrincipal
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.top: parent.top
+                        anchors.margins: 10
+                        spacing: 6
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 8
+
+                            Icone {
+                                nome: telaRede.infoImpressoraPrincipal.nome ? "fa6s.print" : "fa6s.ban"
+                                cor: telaRede.infoImpressoraPrincipal.nome ? Estilo.cores.texto : Estilo.cores.textoSecundario
+                                tamanho: Estilo.fonte.titulo
+                            }
+
+                            Text {
+                                Layout.fillWidth: true
+                                text: telaRede.infoImpressoraPrincipal.nome ? telaRede.infoImpressoraPrincipal.nome : "Nenhuma impressora disponível na rede"
+                                font.bold: true
+                                font.pixelSize: Estilo.fonte.padrao
+                                color: Estilo.cores.texto
+                                wrapMode: Text.WordWrap
+                            }
+                        }
+
+                        // Detalhes só fazem sentido quando alguma máquina da
+                        // malha está de fato servindo de impressora agora.
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            visible: !!telaRede.infoImpressoraPrincipal.nome
+                            spacing: 2
+
+                            Text {
+                                Layout.fillWidth: true
+                                text: telaRede.infoImpressoraPrincipal.local ? "Conectada nesta máquina" : ("Conectada na máquina " + telaRede.infoImpressoraPrincipal.maquina)
+                                font.pixelSize: 11
+                                color: Estilo.cores.textoSecundario
+                                wrapMode: Text.WordWrap
+                            }
+
+                            Text {
+                                Layout.fillWidth: true
+                                visible: !!telaRede.infoImpressoraPrincipal.fabricante
+                                text: telaRede.infoImpressoraPrincipal.fabricante + (telaRede.infoImpressoraPrincipal.modelo ? " · " + telaRede.infoImpressoraPrincipal.modelo : "")
+                                font.pixelSize: 11
+                                color: Estilo.cores.textoSecundario
+                                wrapMode: Text.WordWrap
+                            }
+
+                            Text {
+                                Layout.fillWidth: true
+                                visible: !!telaRede.infoImpressoraPrincipal.tipoPorta
+                                text: "Porta: " + telaRede.infoImpressoraPrincipal.porta + " (" + telaRede.infoImpressoraPrincipal.tipoPorta + ")"
+                                font.pixelSize: 11
+                                color: Estilo.cores.textoSecundario
+                                wrapMode: Text.WordWrap
+                            }
+                        }
+
+                        Text {
+                            Layout.fillWidth: true
+                            visible: !telaRede.infoImpressoraPrincipal.nome
+                            text: "Os pedidos continuam sendo salvos normalmente — só a impressão fica indisponível até alguma máquina da rede ter uma impressora conectada."
+                            font.pixelSize: 11
+                            color: Estilo.cores.textoSecundario
+                            wrapMode: Text.WordWrap
+                        }
+                    }
+                }
 
                 Text {
                     text: "Impressora desta máquina"
