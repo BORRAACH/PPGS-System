@@ -2,6 +2,16 @@ from Config import preConfig
 
 preConfig.garantir_dependencias()
 
+from Config import atualizador
+
+# Roda antes dos imports do resto do app (logo abaixo): se o usuário aceitar
+# atualizar, o `git merge --ff-only` já deixa os arquivos novos no disco a
+# tempo desses imports pegarem o código atualizado, sem precisar reiniciar
+# o processo. Devolve a QApplication criada pra perguntar (se alguma foi
+# criada) pra reaproveitar mais abaixo — só é possível existir uma por
+# processo.
+_app_atualizador = atualizador.verificar_atualizacoes()
+
 import sys
 import os
 
@@ -37,7 +47,7 @@ except ModuleNotFoundError as erro:
 os.environ["QML_XHR_ALLOW_FILE_READ"] = "1"
 
 if __name__ == "__main__":
-    app = QGuiApplication(sys.argv)
+    app = _app_atualizador or QGuiApplication(sys.argv)
     engine = QQmlApplicationEngine()
 
     # Diretório onde o script está sendo executado
