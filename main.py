@@ -1,4 +1,4 @@
-import preConfig
+from Config import preConfig
 
 preConfig.garantir_dependencias()
 

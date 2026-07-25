@@ -94,7 +94,7 @@ python main.py   # ou "python3 main.py", dependendo do sistema
 ```
 
 Não precisa instalar nada manualmente antes: ao rodar `main.py`, o
-`preConfig.py` roda primeiro e:
+`Config/preConfig.py` roda primeiro e:
 1. Confirma que `PyQt6` (e, no Windows, `pywin32`) importam de verdade; se
    não, instala via `pip install` automaticamente.
 2. No Linux, confirma que `lp`/`lpstat` (CUPS) existem; se não, tenta
@@ -133,13 +133,13 @@ python dev_watch.py
 ## Estrutura do projeto
 
 ```
+Config/            Dependências (preConfig.py) e setup de impressora (Linux)
 controllers/       Ponte QML ↔ Python (Balcão, Entrega, Consulta)
-data/cardapio/      Catálogo de pizzas/lanches/bebidas/outros (JSON)
-docker/             Ambiente de teste da rede local com múltiplas instâncias
-pedidos/            Comandas salvas (.txt), geradas em tempo de execução
-qml/                Interface: componentes, páginas e o tema (qml/estilo/)
-services/           Impressão (services/printer/) e rede local (redeService.py)
-architecture/       Notas de arquitetura (ex: protocolo da rede local)
-main.py             Ponto de entrada
-preConfig.py         Garante as dependências antes de tudo o mais
+data/cardapio/     Catálogo de pizzas/lanches/bebidas/outros (JSON)
+docker/            Ambiente de teste da rede local com múltiplas instâncias
+pedidos/           Comandas salvas (.txt), geradas em tempo de execução
+qml/               Interface: componentes, páginas e o tema (qml/estilo/)
+services/          Impressão (services/printer/) e rede local (redeService.py)
+architecture/      Notas de arquitetura (ex: protocolo da rede local)
+main.py            Ponto de entrada
 ```

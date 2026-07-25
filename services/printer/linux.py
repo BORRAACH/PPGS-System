@@ -20,7 +20,11 @@ def _executar(comando):
             timeout=10,
         )
         return resultado.stdout
-    except (FileNotFoundError, subprocess.TimeoutExpired):
+    except FileNotFoundError:
+        print(f"[printer/linux] Comando '{comando[0]}' não encontrado (CUPS/cups-client instalado?).")
+        return ""
+    except subprocess.TimeoutExpired:
+        print(f"[printer/linux] Comando {comando} expirou (timeout de 10s).")
         return ""
 
 
@@ -136,6 +140,7 @@ def imprimir(nome_impressora: str, conteudo: bytes) -> None:
     Requer o utilitário `lp` (pacote cups-client) disponível. Levanta
     `RuntimeError` se o comando não existir, expirar ou a impressão falhar.
     """
+    print(f"[printer/linux] Enviando {len(conteudo)} bytes para '{nome_impressora}' via 'lp -d {nome_impressora} -o raw'...")
     try:
         resultado = subprocess.run(
             ["lp", "-d", nome_impressora, "-o", "raw"],
@@ -144,13 +149,33 @@ def imprimir(nome_impressora: str, conteudo: bytes) -> None:
             timeout=20,
         )
     except FileNotFoundError as erro:
+        print("[printer/linux] Utilitário 'lp' não encontrado — o CUPS está instalado?")
         raise RuntimeError("Utilitário 'lp' não encontrado — o CUPS está instalado?") from erro
     except subprocess.TimeoutExpired as erro:
+        print(f"[printer/linux] Tempo esgotado (20s) ao enviar para '{nome_impressora}'.")
         raise RuntimeError(f"Tempo esgotado ao enviar para a impressora '{nome_impressora}'.") from erro
 
+    saida = resultado.stdout.decode(errors="replace").strip()
+    mensagem = resultado.stderr.decode(errors="replace").strip()
+    print(
+        f"[printer/linux] 'lp' terminou com returncode={resultado.returncode}"
+        + (f" stdout='{saida}'" if saida else "")
+        + (f" stderr='{mensagem}'" if mensagem else "")
+    )
+
     if resultado.returncode != 0:
-        mensagem = resultado.stderr.decode(errors="replace").strip()
         raise RuntimeError(f"Falha ao imprimir em '{nome_impressora}': {mensagem}")
+
+    print(f"[printer/linux] Job aceito pela fila '{nome_impressora}' (id: {saida or 'desconhecido'}).")
+
+    # 'lp' só confirma que o CUPS aceitou o job na fila — o envio de fato ao
+    # backend (usb/socket/smb) acontece depois, de forma assíncrona. Se o
+    # backend falhar (ex: credencial SMB inválida, impressora desligada), o
+    # job fica preso como "pending"/"processing" sem que 'lp' veja isso; daí
+    # a checagem abaixo logo em seguida, pra dar uma pista imediata.
+    status_fila = _executar(["lpstat", "-o", nome_impressora])
+    if status_fila.strip():
+        print(f"[printer/linux] Fila '{nome_impressora}' logo após o envio:\n{status_fila.strip()}")
 
 
 def coletar_impressoras():
@@ -161,14 +186,20 @@ def coletar_impressoras():
     Se o CUPS não estiver rodando, retorna lista vazia.
     """
     nomes = _nomes_impressoras()
+    if not nomes:
+        print("[printer/linux] 'lpstat -p' não retornou nenhuma impressora instalada (CUPS rodando? impressora cadastrada?).")
+        return []
+
     dispositivos = _dispositivos_por_impressora()
     padrao = _destino_padrao()
+    print(f"[printer/linux] {len(nomes)} impressora(s) encontrada(s) via CUPS: {', '.join(nomes)} (padrão: {padrao or 'nenhuma'}).")
 
     impressoras = []
     for nome in nomes:
         uri_dispositivo = dispositivos.get(nome, "")
         descricao, status, caminho_ppd = _descricao_e_status(nome)
         fabricante, modelo_ppd = _fabricante_e_modelo_do_ppd(caminho_ppd)
+        print(f"[printer/linux] '{nome}': device-uri='{uri_dispositivo}' status='{status}'")
 
         impressoras.append(
             InfoImpressora(

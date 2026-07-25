@@ -24,14 +24,22 @@ class PrinterService:
         if self.nome_impressora:
             for impressora in impressoras:
                 if impressora.nome == self.nome_impressora:
+                    print(f"[PrinterService] Impressora configurada '{self.nome_impressora}' localizada (porta: {impressora.porta}, status: {impressora.status}).")
                     return impressora
+            print(f"[PrinterService] Impressora configurada '{self.nome_impressora}' NÃO está entre as instaladas: {[i.nome for i in impressoras]}")
             return None
 
         for impressora in impressoras:
             if impressora.padrao:
+                print(f"[PrinterService] Nenhuma impressora configurada — usando a padrão do sistema: '{impressora.nome}'.")
                 return impressora
 
-        return impressoras[0] if impressoras else None
+        if impressoras:
+            print(f"[PrinterService] Nenhuma impressora configurada nem padrão — usando a primeira encontrada: '{impressoras[0].nome}'.")
+            return impressoras[0]
+
+        print("[PrinterService] Nenhuma impressora instalada foi encontrada no sistema.")
+        return None
 
     def imprimir(self, conteudo: bytes) -> None:
         """Envia `conteudo` (bytes crus, já formatados em ESC/POS) para a
@@ -47,4 +55,5 @@ class PrinterService:
                 raise RuntimeError(f"Impressora '{self.nome_impressora}' não encontrada.")
             raise RuntimeError("Nenhuma impressora instalada foi encontrada no sistema.")
 
+        print(f"[PrinterService] Repassando pedido para '{impressora.nome}' (tipo de porta: {impressora.tipo_porta}, porta: {impressora.porta}).")
         enviar_para_impressora(impressora.nome, conteudo)
