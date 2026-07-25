@@ -156,6 +156,48 @@ Page {
         Item {
             anchors.fill: parent
 
+            // Precisam ficar aqui dentro do Component, não na raiz da Page:
+            // os campos que elas leem (inputNomeCliente, comboFormaPagamento
+            // etc.) só existem dentro desta árvore instanciada — uma função
+            // declarada na Page não os enxerga (ReferenceError em runtime,
+            // só aparece quando a função é chamada, não no carregamento).
+            function coletarDadosPedido() {
+                var itens = [];
+                for (var i = 0; i < modeloPedidos.count; i++) {
+                    var item = modeloPedidos.get(i);
+                    itens.push({
+                        "pedido": item.pedido,
+                        "observacao": item.observacao,
+                        "valor": item.valor
+                    });
+                }
+
+                return {
+                    "cliente": inputNomeCliente.text,
+                    "itens": itens,
+                    "formaPagamento": comboFormaPagamento.currentText,
+                    "troco": comboFormaPagamento.currentText === "Dinheiro" ? inputTroco.text : "",
+                    "statusPagamento": btnStatusPagamento.pago ? "PG" : "NP"
+                };
+            }
+
+            function limparFormularioPedido() {
+                if (telaBalcao.arquivoOriginal !== "") {
+                    consultaController.apagarComanda(telaBalcao.arquivoOriginal);
+                    telaBalcao.arquivoOriginal = "";
+                }
+                inputNomeCliente.text = "";
+                modeloPedidos.clear();
+                modeloPedidos.append({
+                    "pedido": "",
+                    "observacao": "",
+                    "valor": ""
+                });
+                comboFormaPagamento.currentIndex = 0;
+                inputTroco.text = "";
+                btnStatusPagamento.pago = false;
+            }
+
             Column {
                 anchors.centerIn: parent
                 spacing: 20
@@ -500,40 +542,10 @@ Page {
                         padding: 10
                         width: 200
                         onClicked: {
-                            var itens = [];
-                            for (var i = 0; i < modeloPedidos.count; i++) {
-                                var item = modeloPedidos.get(i);
-                                itens.push({
-                                    "pedido": item.pedido,
-                                    "observacao": item.observacao,
-                                    "valor": item.valor
-                                });
-                            }
-
-                            var dados = {
-                                "cliente": inputNomeCliente.text,
-                                "itens": itens,
-                                "formaPagamento": comboFormaPagamento.currentText,
-                                "troco": comboFormaPagamento.currentText === "Dinheiro" ? inputTroco.text : "",
-                                "statusPagamento": btnStatusPagamento.pago ? "PG" : "NP"
-                            };
-
+                            var dados = coletarDadosPedido();
                             var sucesso = balcaoController.enviarPedido(dados);
                             if (sucesso) {
-                                if (telaBalcao.arquivoOriginal !== "") {
-                                    consultaController.apagarComanda(telaBalcao.arquivoOriginal);
-                                    telaBalcao.arquivoOriginal = "";
-                                }
-                                inputNomeCliente.text = "";
-                                modeloPedidos.clear();
-                                modeloPedidos.append({
-                                    "pedido": "",
-                                    "observacao": "",
-                                    "valor": ""
-                                });
-                                comboFormaPagamento.currentIndex = 0;
-                                inputTroco.text = "";
-                                btnStatusPagamento.pago = false;
+                                limparFormularioPedido();
                                 telaBalcao.mostrarNotificacao("Pedido salvo com sucesso!", true);
                             } else {
                                 telaBalcao.mostrarNotificacao("Erro ao salvar o pedido.", false);
@@ -556,6 +568,45 @@ Page {
                             radius: Estilo.rounding.padrao
                             color: parent.down ? Estilo.confirmar.pressionado : (parent.hovered ? Estilo.confirmar.hover : Estilo.confirmar.normal)
                             border.color: Estilo.confirmar.pressionado
+                            border.width: 1
+                        }
+
+                    }
+
+                    // Botão Lançar — só salva o .txt da comanda (aparece em
+                    // Consulta.qml) e propaga pela rede local, sem imprimir.
+                    Button {
+                        id: btnLancar
+
+                        padding: 10
+                        width: 200
+                        onClicked: {
+                            var dados = coletarDadosPedido();
+                            var sucesso = balcaoController.lancarPedido(dados);
+                            if (sucesso) {
+                                limparFormularioPedido();
+                                telaBalcao.mostrarNotificacao("Comanda lançada com sucesso!", true);
+                            } else {
+                                telaBalcao.mostrarNotificacao("Erro ao lançar a comanda.", false);
+                            }
+                        }
+
+                        contentItem: Row {
+                            spacing: 6
+                            anchors.centerIn: parent
+                            Icone { nome: "fa6s.floppy-disk"; cor: "#ffffff"; tamanho: Estilo.fonte.padrao; anchors.verticalCenter: parent.verticalCenter }
+                            Text {
+                                text: "Lançar"
+                                font.bold: true
+                                color: "#ffffff"
+                                anchors.verticalCenter: parent.verticalCenter
+                            }
+                        }
+
+                        background: Rectangle {
+                            radius: Estilo.rounding.padrao
+                            color: parent.down ? "#1d4ed8" : (parent.hovered ? "#1e40af" : "#2563eb")
+                            border.color: "#1d4ed8"
                             border.width: 1
                         }
 

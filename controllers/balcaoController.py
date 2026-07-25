@@ -75,11 +75,11 @@ class BalcaoController(QObject):
         os.makedirs(self.pasta_pedidos, exist_ok=True)
         self.printer_service = PrinterService()
 
-    @pyqtSlot("QVariantMap", result=bool)
-    def enviarPedido(self, dados):
-        """Gera o arquivo .txt do pedido e o envia para a impressora térmica.
-        Retorna True em caso de sucesso, False se algo falhar — a QML usa
-        esse retorno para decidir se limpa a tela para um próximo pedido."""
+    def _salvarComanda(self, dados):
+        """Monta o texto da comanda, grava o .txt e propaga para a rede
+        local. Não imprime nada — usado tanto por enviarPedido() quanto por
+        lancarPedido(). Retorna (sucesso, conteudo_bytes); conteudo_bytes
+        vem vazio quando sucesso é False."""
         cliente = dados.get("cliente", "")
         itens = dados.get("itens", [])
         forma_pagamento = dados.get("formaPagamento", "")
@@ -131,19 +131,38 @@ class BalcaoController(QObject):
                 arquivo.write(conteudo_bytes)
         except OSError as erro:
             print(f"Falha ao salvar o pedido em {caminho_arquivo}: {erro}")
-            return False
+            return False, b""
 
         print(f"Pedido salvo em: {caminho_arquivo}")
         rede.transmitir_pedido(nome_arquivo, conteudo_bytes)
 
-        try:
-            self.printer_service.imprimir(conteudo_bytes)
-        except RuntimeError as erro:
-            print(f"Falha ao imprimir o pedido (arquivo já salvo em {caminho_arquivo}): {erro}")
+        return True, conteudo_bytes
+
+    @pyqtSlot("QVariantMap", result=bool)
+    def enviarPedido(self, dados):
+        """Gera o arquivo .txt do pedido e pede a impressão pela malha local.
+        Retorna True assim que o arquivo é salvo — a QML usa esse retorno
+        para decidir se limpa a tela para um próximo pedido; a confirmação
+        da impressão em si chega depois, separadamente (ver
+        rede.impressaoResultado)."""
+        sucesso, conteudo_bytes = self._salvarComanda(dados)
+        if not sucesso:
             return False
 
-        print("Pedido enviado para a impressora.")
+        # A impressão em si não acontece mais aqui: é pedida pela malha
+        # local (rede.solicitar_impressao), que roteia pra máquina que
+        # estiver com a impressora conectada — pode ser esta ou outra. O
+        # resultado chega depois, de forma assíncrona, pelo sinal
+        # rede.impressaoResultado.
+        rede.solicitar_impressao(conteudo_bytes)
         return True
+
+    @pyqtSlot("QVariantMap", result=bool)
+    def lancarPedido(self, dados):
+        """Igual a enviarPedido, mas nunca tenta imprimir — usado pelo botão
+        'Lançar', que só grava o .txt e propaga para a rede local."""
+        sucesso, _conteudo_bytes = self._salvarComanda(dados)
+        return sucesso
 
     @pyqtSlot()
     def consultarImpressoraAtual(self):

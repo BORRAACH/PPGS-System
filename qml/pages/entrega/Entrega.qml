@@ -18,6 +18,7 @@ Page {
     property string formaPagamentoInicial: ""
     property string trocoInicial: ""
     property string statusPagamentoInicial: ""
+    property string taxaEntregaInicial: ""
     property var itensIniciais: []
     // Formas de pagamento disponíveis para o pedido de entrega.
     readonly property var opcoesPagamento: ["Pix", "Crédito", "Débito", "Dinheiro"]
@@ -158,6 +159,60 @@ Page {
 
         Item {
             anchors.fill: parent
+
+            // Precisam ficar aqui dentro do Component, não na raiz da Page:
+            // os campos que elas leem (inputNomeCliente, inputTaxaEntrega
+            // etc.) só existem dentro desta árvore instanciada — uma função
+            // declarada na Page não os enxerga (ReferenceError em runtime,
+            // só aparece quando a função é chamada, não no carregamento).
+            function coletarDadosPedido() {
+                var itens = [];
+                for (var i = 0; i < modeloPedidos.count; i++) {
+                    var item = modeloPedidos.get(i);
+                    itens.push({
+                        "pedido": item.pedido,
+                        "observacao": item.observacao,
+                        "valor": item.valor
+                    });
+                }
+
+                return {
+                    "cliente": inputNomeCliente.text,
+                    "telefone": inputTelefone.text,
+                    "endereco": inputEndereco.text,
+                    "numero": inputNumero.text,
+                    "bairro": inputBairro.text,
+                    "observacaoGeral": inputObservacao.text,
+                    "itens": itens,
+                    "formaPagamento": comboFormaPagamento.currentText,
+                    "troco": comboFormaPagamento.currentText === "Dinheiro" ? inputTroco.text : "",
+                    "statusPagamento": btnStatusPagamento.pago ? "PG" : "NP",
+                    "taxaEntrega": inputTaxaEntrega.text
+                };
+            }
+
+            function limparFormularioPedido() {
+                if (telaEntrega.arquivoOriginal !== "") {
+                    consultaController.apagarComanda(telaEntrega.arquivoOriginal);
+                    telaEntrega.arquivoOriginal = "";
+                }
+                inputNomeCliente.text = "";
+                inputTelefone.text = "";
+                inputEndereco.text = "";
+                inputNumero.text = "";
+                inputBairro.text = "";
+                inputObservacao.text = "";
+                modeloPedidos.clear();
+                modeloPedidos.append({
+                    "pedido": "",
+                    "observacao": "",
+                    "valor": ""
+                });
+                comboFormaPagamento.currentIndex = 0;
+                inputTroco.text = "";
+                inputTaxaEntrega.text = "";
+                btnStatusPagamento.pago = false;
+            }
 
             Column {
                 anchors.centerIn: parent
@@ -623,6 +678,42 @@ Page {
 
                     }
 
+                    // Campo Taxa de entrega — soma ao valor total do pedido.
+                    TextField {
+                        id: inputTaxaEntrega
+
+                        placeholderText: "TAXA DE ENTREGA"
+                        width: 150
+                        topPadding: 10
+                        bottomPadding: 10
+                        leftPadding: 10
+                        rightPadding: 10
+                        text: taxaEntregaInicial
+                        onEditingFinished: {
+                            if (text !== "") {
+                                var numLimpo = text.replace("R$", "").replace(" ", "").replace(",", ".");
+                                var valorFloat = parseFloat(numLimpo);
+                                if (!isNaN(valorFloat))
+                                    text = "R$ " + valorFloat.toFixed(2).replace(".", ",");
+
+                            }
+                        }
+
+                        validator: DoubleValidator {
+                            bottom: 0
+                            decimals: 2
+                            notation: DoubleValidator.StandardNotation
+                        }
+
+                        background: Rectangle {
+                            radius: Estilo.rounding.padrao
+                            color: "#ffffff"
+                            border.color: parent.activeFocus ? "#e67e22" : Estilo.cores.borda
+                            border.width: 1
+                        }
+
+                    }
+
                     // Botão de status: alterna entre pago (PG) e não pago (NP).
                     Button {
                         id: btnStatusPagamento
@@ -667,50 +758,10 @@ Page {
                         padding: 10
                         width: 200
                         onClicked: {
-                            var itens = [];
-                            for (var i = 0; i < modeloPedidos.count; i++) {
-                                var item = modeloPedidos.get(i);
-                                itens.push({
-                                    "pedido": item.pedido,
-                                    "observacao": item.observacao,
-                                    "valor": item.valor
-                                });
-                            }
-
-                            var dados = {
-                                "cliente": inputNomeCliente.text,
-                                "telefone": inputTelefone.text,
-                                "endereco": inputEndereco.text,
-                                "numero": inputNumero.text,
-                                "bairro": inputBairro.text,
-                                "observacaoGeral": inputObservacao.text,
-                                "itens": itens,
-                                "formaPagamento": comboFormaPagamento.currentText,
-                                "troco": comboFormaPagamento.currentText === "Dinheiro" ? inputTroco.text : "",
-                                "statusPagamento": btnStatusPagamento.pago ? "PG" : "NP"
-                            };
-
+                            var dados = coletarDadosPedido();
                             var sucesso = entregaController.enviarPedido(dados);
                             if (sucesso) {
-                                if (telaEntrega.arquivoOriginal !== "") {
-                                    consultaController.apagarComanda(telaEntrega.arquivoOriginal);
-                                    telaEntrega.arquivoOriginal = "";
-                                }
-                                inputNomeCliente.text = "";
-                                inputTelefone.text = "";
-                                inputEndereco.text = "";
-                                inputNumero.text = "";
-                                inputBairro.text = "";
-                                inputObservacao.text = "";
-                                modeloPedidos.clear();
-                                modeloPedidos.append({
-                                    "pedido": "",
-                                    "observacao": "",
-                                    "valor": ""
-                                });
-                                comboFormaPagamento.currentIndex = 0;
-                                inputTroco.text = "";
-                                btnStatusPagamento.pago = false;
+                                limparFormularioPedido();
                                 telaEntrega.mostrarNotificacao("Pedido salvo com sucesso!", true);
                             } else {
                                 telaEntrega.mostrarNotificacao("Erro ao salvar o pedido.", false);
@@ -733,6 +784,45 @@ Page {
                             radius: Estilo.rounding.padrao
                             color: parent.down ? Estilo.confirmar.pressionado : (parent.hovered ? Estilo.confirmar.hover : Estilo.confirmar.normal)
                             border.color: Estilo.confirmar.pressionado
+                            border.width: 1
+                        }
+
+                    }
+
+                    // Botão Lançar — só salva o .txt da comanda (aparece em
+                    // Consulta.qml) e propaga pela rede local, sem imprimir.
+                    Button {
+                        id: btnLancar
+
+                        padding: 10
+                        width: 200
+                        onClicked: {
+                            var dados = coletarDadosPedido();
+                            var sucesso = entregaController.lancarPedido(dados);
+                            if (sucesso) {
+                                limparFormularioPedido();
+                                telaEntrega.mostrarNotificacao("Comanda lançada com sucesso!", true);
+                            } else {
+                                telaEntrega.mostrarNotificacao("Erro ao lançar a comanda.", false);
+                            }
+                        }
+
+                        contentItem: Row {
+                            spacing: 6
+                            anchors.centerIn: parent
+                            Icone { nome: "fa6s.floppy-disk"; cor: "#ffffff"; tamanho: Estilo.fonte.padrao; anchors.verticalCenter: parent.verticalCenter }
+                            Text {
+                                text: "Lançar"
+                                font.bold: true
+                                color: "#ffffff"
+                                anchors.verticalCenter: parent.verticalCenter
+                            }
+                        }
+
+                        background: Rectangle {
+                            radius: Estilo.rounding.padrao
+                            color: parent.down ? "#1d4ed8" : (parent.hovered ? "#1e40af" : "#2563eb")
+                            border.color: "#1d4ed8"
                             border.width: 1
                         }
 

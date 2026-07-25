@@ -27,6 +27,7 @@ _PADRAO_BAIRRO = re.compile(r"^Bairro:[ \t]*(.*)$", re.MULTILINE)
 _PADRAO_OBSERVACAO_GERAL = re.compile(r"^Observação:[ \t]*(.*)$", re.MULTILINE)
 _PADRAO_FORMA_PAGAMENTO = re.compile(r"^Forma de pagamento:[ \t]*(.*)$", re.MULTILINE)
 _PADRAO_TROCO = re.compile(r"^Troco para:[ \t]*(.*)$", re.MULTILINE)
+_PADRAO_TAXA_ENTREGA = re.compile(r"^Taxa de entrega:[ \t]*(.*)$", re.MULTILINE)
 _PADRAO_STATUS_PAGAMENTO = re.compile(r"^Status:[ \t]*(.*)$", re.MULTILINE)
 # balcaoController imprime o status colado no fim da linha do valor total
 # (ex: "Valor do pedido: R$ 45,00 [PG]") em vez de uma linha "Status:"
@@ -236,6 +237,7 @@ class ConsultaController(QObject):
             "observacaoGeral": _extrair_campo(_PADRAO_OBSERVACAO_GERAL, conteudo),
             "formaPagamento": _extrair_campo(_PADRAO_FORMA_PAGAMENTO, conteudo),
             "troco": _extrair_campo(_PADRAO_TROCO, conteudo),
+            "taxaEntrega": _extrair_campo(_PADRAO_TAXA_ENTREGA, conteudo),
             "statusPagamento": _extrair_status_pagamento(conteudo),
             "itens": _reconstruir_itens(linhas_tabela),
         }

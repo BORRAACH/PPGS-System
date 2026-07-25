@@ -131,6 +131,7 @@ Page {
                 "formaPagamentoInicial": dados.formaPagamento,
                 "trocoInicial": dados.troco,
                 "statusPagamentoInicial": dados.statusPagamento,
+                "taxaEntregaInicial": dados.taxaEntrega,
                 "itensIniciais": dados.itens,
                 "arquivoOriginal": nomeArquivo
             });
