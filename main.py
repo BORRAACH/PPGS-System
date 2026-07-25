@@ -25,6 +25,7 @@ try:
     from controllers.consultaController import ConsultaController
     from services.redeService import rede
     from services.iconProvider import IconProvider
+    from services.comandaEstiloService import ComandaEstiloController
 except ModuleNotFoundError as erro:
     # preConfig.garantir_dependencias() já tentou instalar tudo sozinho —
     # se mesmo assim algo continua faltando (sem internet, sem permissão
@@ -69,6 +70,8 @@ if __name__ == "__main__":
     engine.rootContext().setContextProperty("entregaController", entregaController)
     consultaController = ConsultaController()
     engine.rootContext().setContextProperty("consultaController", consultaController)
+    comandaEstiloController = ComandaEstiloController()
+    engine.rootContext().setContextProperty("comandaEstiloController", comandaEstiloController)
 
     # Compartilha pedidos com outras instâncias deste app na mesma rede
     # local (ver architecture/EXPLAIN.md). Os sinais entram pelo

@@ -15,3 +15,9 @@ pedidos/*
 # Versão instalada nessa máquina, gerada automaticamente a cada execução
 # (informativo, não usado pra decidir nada) — ver Config/atualizador.py
 Config/.versao
+
+# Preferências de estilo da comanda impressa (negrito/sublinhado/fundo
+# preto/fonte grande por campo, espaçamento) — editado pela tela
+# Configurações, específico de cada máquina/impressora, não código-fonte.
+# Ver services/comandaEstiloService.py.
+Config/estilo_impressao.json

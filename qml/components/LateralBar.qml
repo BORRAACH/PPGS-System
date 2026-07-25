@@ -123,6 +123,8 @@ Rectangle {
 
         // --- CÁPSULA INFERIOR (Atalhos/Rodapé estilo Imagem) ---
         Rectangle {
+            id: capsulaRodape
+
             Layout.fillWidth: true
             implicitHeight: colFooter.implicitHeight + Estilo.preenchimento.pequeno * 2
             color: Qt.lighter(sideBar.color, 108)
@@ -132,29 +134,54 @@ Rectangle {
                 id: colFooter
                 anchors.centerIn: parent
                 width: parent.width - Estilo.preenchimento.pequeno * 2
-                spacing: Estilo.espacamento.menor
+                spacing: Estilo.espacamento.menor 
 
-                Item {
+                // Ícone de engrenagem — abre a tela de Configurações (estilo
+                // da comanda impressa: negrito/sublinhado/fundo preto/fonte
+                // grande por campo, espaçamento). Mesmo padrão de clique dos
+                // itens de modeloNavegacao acima, só que fora do Repeater
+                // por ser um atalho único no rodapé, não parte da lista.
+                Button {
+                    id: btnConfiguracoes
+
                     Layout.fillWidth: true
-                    implicitHeight: iconRaio.tamanho
-                    Icone {
-                        id: iconRaio
-                        nome: "fa6s.bolt"
-                        cor: Estilo.cores.texto
-                        tamanho: 22
-                        anchors.centerIn: parent
+                    implicitHeight: 24 + Estilo.preenchimento.normal * 2
+
+                    background: Rectangle {
+                        color: btnConfiguracoes.hovered ? Qt.darker(capsulaRodape.color, 1.4) : "transparent"
+                        radius: Estilo.rounding.cheio
                     }
-                }
 
-                Item {
-                    Layout.fillWidth: true
-                    implicitHeight: iconEngrenagem.tamanho
-                    Icone {
-                        id: iconEngrenagem
-                        nome: "fa6s.gear"
-                        cor: Estilo.cores.texto
-                        tamanho: 22
-                        anchors.centerIn: parent
+                    ToolTip {
+                        text: "Configurações"
+                        visible: btnConfiguracoes.hovered
+                        delay: 400
+                        padding: Estilo.preenchimento.normal
+                        x: btnConfiguracoes.width + Estilo.espacamento.pequeno
+                        y: (btnConfiguracoes.height - height) / 2
+
+                        background: Rectangle {
+                            radius: Estilo.rounding.popup
+                            color: capsulaRodape.color
+                            border.color: Estilo.cores.bordaCard
+                            border.width: 1
+                        }
+                    }
+
+                    contentItem: Item {
+                        anchors.fill: parent
+                        Icone {
+                            nome: "fa6s.gear"
+                            cor: Estilo.cores.texto
+                            tamanho: 22
+                            anchors.centerIn: parent
+                        }
+                    }
+
+                    onClicked: {
+                        if (sideBar.stackView && sideBar.stackView.currentItem && sideBar.stackView.currentItem.objectName !== "telaConfiguracoes") {
+                            sideBar.stackView.push("../pages/configuracoes/Configuracoes.qml", {}, StackView.Immediate);
+                        }
                     }
                 }
             }

@@ -6,6 +6,7 @@ from datetime import datetime
 
 from PyQt6.QtCore import QObject, pyqtSignal, pyqtSlot
 
+from services import comandaEstiloService as estilo
 from services.printerService import PrinterService
 from services.redeService import rede
 
@@ -13,22 +14,9 @@ from services.redeService import rede
 # Tem espaço dos dois lados, o que o distingue de nomes como "Atum c/ Cebola".
 SEPARADOR_SABORES = " / "
 
-# Comandos ESC/POS para negrito. A Bematech MP-4200 TH entende esses comandos
-# quando configurada em modo de emulação ESC/POS (padrão em impressoras térmicas
-# de cupom). O arquivo precisa ser enviado à impressora em modo RAW (bytes puros),
-# não impresso via um editor de texto comum, senão esses códigos não são interpretados.
-ESC = "\x1b"
-NEGRITO_LIGA = ESC + "E" + "\x01"
-NEGRITO_DESLIGA = ESC + "E" + "\x00"
-
 # Codepage que a Bematech usa para acentuação (ç, ã, é...) em modo ESC/POS.
 # Não é UTF-8: se salvar como UTF-8, os acentos saem corrompidos no cupom impresso.
 CODEPAGE_IMPRESSORA = "cp850"
-
-
-def _negrito(texto):
-    """Envolve o texto com os códigos ESC/POS de negrito ligado/desligado."""
-    return f"{NEGRITO_LIGA}{texto}{NEGRITO_DESLIGA}"
 
 
 def _dividir_sabores(pedido_texto):
@@ -97,30 +85,35 @@ class BalcaoController(QObject):
         caminho_arquivo = os.path.join(self.pasta_pedidos, nome_arquivo)
 
         linhas_arquivo = [
-            f"Cliente: {cliente}",
-            f"Data: {agora.strftime('%d/%m/%Y %H:%M:%S')}",
-            "",
+            f"Cliente: {estilo.formatar_campo(cliente, 'cliente')}",
+            f"Data: {estilo.formatar_campo(agora.strftime('%d/%m/%Y %H:%M:%S'), 'data')}",
+            *estilo.linhas_espacamento_secoes(),
             "-" * 40,
-            "",
+            *estilo.linhas_espacamento_secoes(),
             *self._formatarTabela(grupos),
-            "",
+            *estilo.linhas_espacamento_secoes(),
             "-" * 40,
-            "",
+            *estilo.linhas_espacamento_secoes(),
         ]
         if forma_pagamento:
-            linhas_arquivo.append(f"Forma de pagamento: {forma_pagamento}")
+            linhas_arquivo.append(f"Forma de pagamento: {estilo.formatar_campo(forma_pagamento, 'forma_pagamento')}")
             if forma_pagamento == "Dinheiro" and troco:
-                linhas_arquivo.append(f"Troco para: {troco}")
-            linhas_arquivo.append("")
+                linhas_arquivo.append(f"Troco para: {estilo.formatar_campo(troco, 'troco_para')}")
+            linhas_arquivo.extend(estilo.linhas_espacamento_secoes())
             linhas_arquivo.append("-" * 40)
-            linhas_arquivo.append("")
+            linhas_arquivo.extend(estilo.linhas_espacamento_secoes())
         # Status (NP/PG) logo depois do valor total, na mesma linha — não
         # como uma linha separada acima, diferente do formato usado em
         # EntregaController.
-        linhas_arquivo.append(f"Valor do pedido: R$ {valor_total:.2f} [{status_pagamento}]".replace(".", ","))
+        valor_total_formatado = f"R$ {valor_total:.2f}".replace(".", ",")
+        linhas_arquivo.append(
+            f"Valor do pedido: {estilo.formatar_campo(valor_total_formatado, 'valor_total')} "
+            f"[{estilo.formatar_campo(status_pagamento, 'status')}]"
+        )
         if forma_pagamento == "Dinheiro" and troco:
             troco_a_dar = _valor_para_float(troco) - valor_total
-            linhas_arquivo.append(f"Troco a dar: R$ {troco_a_dar:.2f}".replace(".", ","))
+            troco_a_dar_formatado = f"R$ {troco_a_dar:.2f}".replace(".", ",")
+            linhas_arquivo.append(f"Troco a dar: {estilo.formatar_campo(troco_a_dar_formatado, 'troco_a_dar')}")
         conteudo = "\n".join(linhas_arquivo) + "\n"
         # Modo binário: o texto vira bytes em cp850 e os códigos ESC/POS de
         # negrito são preservados como estão, sem reinterpretação de encoding.
@@ -245,9 +238,11 @@ class BalcaoController(QObject):
     def _formatarTabela(grupos):
         """Alinha pedido e valor em uma coluna "|" e separa cada grupo com uma
         linha em branco. A observação (quando houver) vai numa linha própria,
-        recuada e em negrito, depois de TODAS as frações do grupo — mesmo
-        numa pizza meio a meio (ou dividida em mais partes), a observação sai
-        só ao final, abaixo do nome completo, nunca entre uma fração e outra."""
+        recuada e com o estilo configurado para o campo "observacao_item" (ver
+        services/comandaEstiloService.py), depois de TODAS as frações do
+        grupo — mesmo numa pizza meio a meio (ou dividida em mais partes), a
+        observação sai só ao final, abaixo do nome completo, nunca entre uma
+        fração e outra."""
         linhas = [linha for grupo in grupos for linha in grupo]
         if not linhas:
             return []
@@ -261,15 +256,15 @@ class BalcaoController(QObject):
 
             observacao_grupo = ""
             for coluna_pedido, observacao, valor in grupo:
-                # Alinha primeiro com o texto puro, e só então aplica os
-                # códigos de negrito — assim os bytes de controle (invisíveis
+                # Alinha primeiro com o texto puro, e só então aplica o
+                # estilo configurado — assim os bytes de controle (invisíveis
                 # na impressão) não contam como largura na coluna.
-                coluna_pedido_fmt = _negrito(coluna_pedido.ljust(largura_pedido))
+                coluna_pedido_fmt = estilo.formatar_campo(coluna_pedido.ljust(largura_pedido), "pedido")
                 texto_linhas.append(f"{coluna_pedido_fmt} | {valor}")
                 if observacao:
                     observacao_grupo = observacao
 
             if observacao_grupo:
-                texto_linhas.append(f"  {_negrito(observacao_grupo)}")
+                texto_linhas.append(f"  {estilo.formatar_campo(observacao_grupo, 'observacao_item')}")
 
         return texto_linhas

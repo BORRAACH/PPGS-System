@@ -1,0 +1,263 @@
+import QtQuick
+import QtQuick.Controls
+import estilo 1.0
+import "../../../components"
+
+// Popup com as alterações de estilo disponíveis para um único campo da
+// comanda (negrito, sublinhado, fundo preto, tamanho de fonte) — aberto ao
+// clicar num item da lista em EstiloImpressora.qml (abrirPara()).
+//
+// Reaproveitado para os 14 campos (um popup só, não um por campo): por isso
+// os controles (checkboxes e o campo de tamanho de fonte) NÃO usam "checked:
+// expressão"/"text: expressão" — o próprio Qt Quick Controls atribui um
+// valor literal a essas propriedades ao reagir ao clique/edição do usuário,
+// o que quebra a ligação com a expressão original pra sempre (comportamento
+// padrão do QML: atribuir a uma propriedade remove o binding dela). Depois
+// disso o controle nunca mais refletiria o campo de outra linha aberta em
+// seguida. Em vez disso, os valores são lidos e atribuídos explicitamente em
+// abrirPara(), toda vez que o popup é aberto.
+Popup {
+    id: popup
+
+    property var controlador
+    property string campoChave: ""
+    property string campoRotulo: ""
+
+    function abrirPara(chave, rotulo) {
+        campoChave = chave;
+        campoRotulo = rotulo;
+        chkNegrito.checked = controlador.obterAtributo(chave, "negrito");
+        chkSublinhado.checked = controlador.obterAtributo(chave, "sublinhado");
+        chkFundoPreto.checked = controlador.obterAtributo(chave, "fundo_preto");
+        campoTamanhoFonte.text = String(controlador.obterTamanhoFonte(chave));
+        open();
+    }
+
+    modal: true
+    focus: true
+    closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+    padding: 25
+    // Fixada explicitamente: sem isso, o Popup calcula sua largura a partir
+    // do implicitWidth do contentItem, que os filhos (Row largura:
+    // parent.width) não alimentam de volta a tempo — resultado observado:
+    // o popup nascia bem mais estreito que os 320px pedidos no Column
+    // abaixo, cortando o título do campo.
+    width: 320 + leftPadding + rightPadding
+    parent: Overlay.overlay
+    anchors.centerIn: parent
+
+    Overlay.modal: Rectangle {
+        color: "#99000000"
+    }
+
+    background: Rectangle {
+        radius: 16
+        color: Estilo.cores.fundoPagina
+        border.color: Estilo.cores.bordaCard
+    }
+
+    contentItem: Column {
+        spacing: 20
+        width: 320
+
+        Row {
+            spacing: 8
+            width: parent.width
+
+            Icone { nome: "fa6s.pen"; cor: "#475569"; tamanho: 17; anchors.verticalCenter: parent.verticalCenter }
+            Text {
+                text: popup.campoRotulo
+                font.pixelSize: 17
+                font.bold: true
+                color: Estilo.cores.texto
+                elide: Text.ElideRight
+                width: parent.width - 30
+                anchors.verticalCenter: parent.verticalCenter
+            }
+        }
+
+        Rectangle { width: parent.width; height: 1; color: Estilo.cores.bordaCard }
+
+        // --- Atributos booleanos ---
+        Column {
+            width: parent.width
+            spacing: 14
+
+            Row {
+                spacing: 12
+
+                CheckBox {
+                    id: chkNegrito
+
+                    anchors.verticalCenter: parent.verticalCenter
+                    onClicked: popup.controlador.definirAtributoLocal(popup.campoChave, "negrito", checked)
+
+                    contentItem: Item {}
+                    indicator: Rectangle {
+                        implicitWidth: 22
+                        implicitHeight: 22
+                        radius: 4
+                        border.color: chkNegrito.checked ? "#475569" : "#bdc3c7"
+                        border.width: 2
+                        color: chkNegrito.checked ? "#475569" : "transparent"
+
+                        Icone {
+                            nome: "fa6s.check"
+                            cor: "white"
+                            tamanho: 13
+                            anchors.centerIn: parent
+                            visible: chkNegrito.checked
+                        }
+                    }
+                }
+
+                Text {
+                    text: "Negrito"
+                    font.pixelSize: 14
+                    color: Estilo.cores.texto
+                    anchors.verticalCenter: parent.verticalCenter
+                }
+            }
+
+            Row {
+                spacing: 12
+
+                CheckBox {
+                    id: chkSublinhado
+
+                    anchors.verticalCenter: parent.verticalCenter
+                    onClicked: popup.controlador.definirAtributoLocal(popup.campoChave, "sublinhado", checked)
+
+                    contentItem: Item {}
+                    indicator: Rectangle {
+                        implicitWidth: 22
+                        implicitHeight: 22
+                        radius: 4
+                        border.color: chkSublinhado.checked ? "#475569" : "#bdc3c7"
+                        border.width: 2
+                        color: chkSublinhado.checked ? "#475569" : "transparent"
+
+                        Icone {
+                            nome: "fa6s.check"
+                            cor: "white"
+                            tamanho: 13
+                            anchors.centerIn: parent
+                            visible: chkSublinhado.checked
+                        }
+                    }
+                }
+
+                Text {
+                    text: "Sublinhado"
+                    font.pixelSize: 14
+                    color: Estilo.cores.texto
+                    anchors.verticalCenter: parent.verticalCenter
+                }
+            }
+
+            Row {
+                spacing: 12
+
+                CheckBox {
+                    id: chkFundoPreto
+
+                    anchors.verticalCenter: parent.verticalCenter
+                    onClicked: popup.controlador.definirAtributoLocal(popup.campoChave, "fundo_preto", checked)
+
+                    contentItem: Item {}
+                    indicator: Rectangle {
+                        implicitWidth: 22
+                        implicitHeight: 22
+                        radius: 4
+                        border.color: chkFundoPreto.checked ? "#475569" : "#bdc3c7"
+                        border.width: 2
+                        color: chkFundoPreto.checked ? "#475569" : "transparent"
+
+                        Icone {
+                            nome: "fa6s.check"
+                            cor: "white"
+                            tamanho: 13
+                            anchors.centerIn: parent
+                            visible: chkFundoPreto.checked
+                        }
+                    }
+                }
+
+                Text {
+                    text: "Fundo preto"
+                    font.pixelSize: 14
+                    color: Estilo.cores.texto
+                    anchors.verticalCenter: parent.verticalCenter
+                }
+            }
+        }
+
+        Rectangle { width: parent.width; height: 1; color: Estilo.cores.bordaCard }
+
+        // --- Tamanho da fonte ---
+        Item {
+            width: parent.width
+            height: campoTamanhoFonte.height
+
+            Text {
+                text: "Tamanho da fonte (px)"
+                font.pixelSize: 14
+                color: Estilo.cores.texto
+                anchors.left: parent.left
+                anchors.verticalCenter: parent.verticalCenter
+            }
+
+            TextField {
+                id: campoTamanhoFonte
+
+                anchors.right: parent.right
+                width: 70
+                horizontalAlignment: Text.AlignHCenter
+                topPadding: 6
+                bottomPadding: 6
+                validator: IntValidator { bottom: 1; top: 999 }
+                onEditingFinished: {
+                    var valor = parseInt(text, 10);
+                    if (isNaN(valor) || valor < 1)
+                        valor = popup.controlador.tamanhoFontePadrao;
+
+                    text = String(valor);
+                    popup.controlador.definirTamanhoFonteLocal(popup.campoChave, valor);
+                }
+
+                background: Rectangle {
+                    radius: Estilo.rounding.padrao
+                    color: "#ffffff"
+                    border.color: campoTamanhoFonte.activeFocus ? "#475569" : Estilo.cores.borda
+                    border.width: 1
+                }
+            }
+        }
+
+        // --- Fechar ---
+        Row {
+            anchors.right: parent.right
+
+            Button {
+                id: btnFechar
+
+                text: "Fechar"
+                padding: 10
+                onClicked: popup.close()
+
+                contentItem: Text {
+                    text: btnFechar.text
+                    font.bold: true
+                    color: "#ffffff"
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+
+                background: Rectangle {
+                    radius: Estilo.rounding.padrao
+                    color: parent.down ? "#334155" : (parent.hovered ? "#64748b" : "#475569")
+                }
+            }
+        }
+    }
+}

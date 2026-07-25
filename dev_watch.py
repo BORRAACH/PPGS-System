@@ -36,6 +36,16 @@ INTERVALO_ESPERAR_JANELA = 0.2
 IGNORAR_DIRS = {".venv", ".git", "__pycache__", "pedidos", ".claude"}
 # Só observa extensões relevantes ao código/recursos do app.
 EXTENSOES_OBSERVADAS = {".py", ".qml", ".json", ".qmldir"}
+# Arquivos de estado/preferência gerados pelo próprio app em tempo de
+# execução (não código) — ficam dentro de Config/, que por sua vez PRECISA
+# continuar sendo observada (tem .py de verdade). Sem essa lista, salvar uma
+# preferência (ex: marcar um checkbox em Configurações) reiniciaria o app a
+# cada clique, porque o arquivo .json muda de mtime igual a um arquivo de
+# código editado. Caminho relativo a partir de BASE_DIR.
+ARQUIVOS_IGNORADOS = {
+    os.path.join("Config", "estilo_impressao.json"),
+    os.path.join("Config", ".versao"),
+}
 
 INTERVALO_POLL = 0.5  # segundos entre verificações
 
@@ -46,12 +56,15 @@ def _arquivos_observados():
     for raiz, dirs, arquivos in os.walk(BASE_DIR):
         dirs[:] = [d for d in dirs if d not in IGNORAR_DIRS]
         for nome in arquivos:
-            if os.path.splitext(nome)[1] in EXTENSOES_OBSERVADAS:
-                caminho = os.path.join(raiz, nome)
-                try:
-                    estado[caminho] = os.path.getmtime(caminho)
-                except OSError:
-                    pass
+            if os.path.splitext(nome)[1] not in EXTENSOES_OBSERVADAS:
+                continue
+            caminho = os.path.join(raiz, nome)
+            if os.path.relpath(caminho, BASE_DIR) in ARQUIVOS_IGNORADOS:
+                continue
+            try:
+                estado[caminho] = os.path.getmtime(caminho)
+            except OSError:
+                pass
     return estado
 
 
