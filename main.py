@@ -2,7 +2,7 @@ from Config import preConfig
 
 preConfig.garantir_dependencias()
 
-from Config import atualizador
+from Config import atualizador, impressoraWindows
 
 # Roda antes dos imports do resto do app (logo abaixo): se o usuário aceitar
 # atualizar, o `git merge --ff-only` já deixa os arquivos novos no disco a
@@ -11,6 +11,14 @@ from Config import atualizador
 # criada) pra reaproveitar mais abaixo — só é possível existir uma por
 # processo.
 _app_atualizador = atualizador.verificar_atualizacoes()
+
+# Só faz algo no Windows (ver Config/impressoraWindows.py) — acha a
+# Bematech MP-4200 TH nas portas USB e garante que existe uma fila de
+# impressão apontando pra ela, já que o Windows não cria essa fila
+# sozinho mesmo reconhecendo o hardware. Melhor esforço: se não achar
+# impressora nenhuma, ou a configuração falhar por qualquer motivo, só
+# loga um aviso e o app continua normalmente sem impressora configurada.
+impressoraWindows.garantir_impressora_bematech()
 
 import sys
 import os

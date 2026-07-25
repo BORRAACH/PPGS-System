@@ -6,6 +6,7 @@ from datetime import datetime
 
 from PyQt6.QtCore import QObject, pyqtSignal, pyqtSlot
 
+from Config import impressoraWindows
 from services import comandaEstiloService as estilo
 from services.printerService import PrinterService
 from services.redeService import rede
@@ -173,6 +174,13 @@ class BalcaoController(QObject):
         threading.Thread(target=self._consultarImpressoraEmThread, daemon=True).start()
 
     def _consultarImpressoraEmThread(self):
+        # Repete aqui (não só uma vez no início do app, em main.py) pra
+        # cobrir o caso de a Bematech ser conectada DEPOIS do app já estar
+        # aberto — como isto já roda fora da thread principal, a tela
+        # Rede.qml continua respondendo normalmente enquanto isso (ver
+        # Config/impressoraWindows.py; não faz nada fora do Windows).
+        impressoraWindows.garantir_impressora_bematech()
+
         try:
             impressora = self.printer_service.localizar_impressora()
         except Exception as erro:
