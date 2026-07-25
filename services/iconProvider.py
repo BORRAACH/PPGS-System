@@ -16,6 +16,14 @@ from PyQt6.QtQuick import QQuickImageProvider
 
 _TAMANHO_PADRAO = 64
 
+# QML pede o ícone no tamanho LÓGICO (ex: 14px), mas em telas com escala
+# >100% (HiDPI) isso corresponde a mais pixels físicos — sem isso, o Qt
+# fica esticando esse bitmap pequeno pra cobrir a tela real, borrando e
+# distorcendo o ícone. Renderiza numa resolução maior (supersampling) e
+# marca o devicePixelRatio correspondente, pra o Qt reduzir de volta ao
+# tamanho lógico com qualidade em vez de esticar um bitmap pequeno.
+_FATOR_SUPERAMOSTRAGEM = 3
+
 # O qtawesome calcula o tamanho da fonte só a partir da ALTURA do canvas
 # pedido (ver iconic_font.py: draw_size = 0.875 * rect.height() * scale_factor)
 # e desenha o glifo centralizado — pra ícones "deitados" (mais largos que
@@ -48,7 +56,8 @@ class IconProvider(QQuickImageProvider):
         try:
             opcoes = [{"scale_factor": _ESCALA_GLIFO}]
             icone = qta.icon(nome, color=cor, options=opcoes) if cor else qta.icon(nome, options=opcoes)
-            pixmap = icone.pixmap(largura, altura)
+            pixmap = icone.pixmap(largura * _FATOR_SUPERAMOSTRAGEM, altura * _FATOR_SUPERAMOSTRAGEM)
+            pixmap.setDevicePixelRatio(_FATOR_SUPERAMOSTRAGEM)
         except Exception as erro:
             # Nome de ícone inválido/inexistente não pode derrubar o app —
             # mostra uma imagem transparente do tamanho pedido no lugar.
