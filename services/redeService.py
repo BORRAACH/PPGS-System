@@ -338,7 +338,18 @@ class RedeService(QObject):
             # propagar — isto roda fora da thread principal.
             print(f"[RedeService] Falha ao checar impressora local: {erro}")
             impressora = None
-        self._impressoraLocalVerificada.emit(impressora is not None)
+
+        # Só conta pra eleição de rede se for uma porta física/de rede de
+        # verdade (usb/serial/rede) — "desconhecido" cobre impressoras
+        # virtuais do Windows (Microsoft Print to PDF, Fax etc.) que
+        # aparecem como "salvas"/padrão mas não são a térmica de verdade.
+        # PrinterService/Rede.qml continuam mostrando qualquer impressora
+        # encontrada normalmente; esse filtro vale só pra decidir quem
+        # recebe os pedidos de impressão da malha.
+        tem_impressora_valida = impressora is not None and impressora.tipo_porta != "desconhecido"
+        if impressora is not None and not tem_impressora_valida:
+            print(f"[RedeService] Impressora local '{impressora.nome}' encontrada, mas com porta não identificada (tipo_porta='{impressora.tipo_porta}') — não conta pra eleição de rede.")
+        self._impressoraLocalVerificada.emit(tem_impressora_valida)
 
     def _ao_verificar_impressora_local(self, tem_impressora: bool):
         if tem_impressora == self._tem_impressora:
@@ -349,15 +360,37 @@ class RedeService(QObject):
         for socket in self._peers.values():
             self._enviar(socket, mensagem)
 
+    def _maquina_impressora_valida(self, id_maquina):
+        """Se `id_maquina` ainda é uma candidata legítima agora (continua
+        conectada — ou é esta máquina — e continua anunciando impressora)."""
+        if id_maquina == self._id:
+            return self._tem_impressora
+        info = self._info_peers.get(id_maquina)
+        return bool(info and info.get("temImpressora"))
+
     def _recalcular_maquina_impressora(self):
-        """Prioriza esta máquina se ela tiver impressora; senão, entre os
-        peers que anunciaram ter, escolhe sempre o de menor id — assim toda
-        máquina da malha calcula, de forma independente, a mesma resposta
-        pra "quem imprime agora", sem precisar de coordenador."""
-        if self._tem_impressora:
-            self._id_maquina_impressora = self._id
+        """Eleição "sticky": quem já está eleito continua sendo a
+        prioridade mesmo que outra máquina passe a anunciar impressora
+        depois (inclusive esta própria máquina) — só reelege quando a
+        atual eleita perde a impressora ou desconecta da malha. Sem isso,
+        uma impressora "salva" (padrão do Windows, por exemplo, mas não
+        necessariamente a que está fisicamente conectada e em uso) que
+        aparece depois roubaria a prioridade de quem já estava servindo —
+        exatamente o cenário que esse "sticky" evita: a primeira máquina a
+        entrar na malha já com a impressora conectada continua sendo pra
+        quem tudo é mandado imprimir, mesmo que outras máquinas cheguem
+        depois também "com impressora"."""
+        if self._id_maquina_impressora is not None and self._maquina_impressora_valida(self._id_maquina_impressora):
             return
-        candidatos = [id_peer for id_peer, info in self._info_peers.items() if info.get("temImpressora")]
+
+        candidatos = []
+        if self._tem_impressora:
+            candidatos.append(self._id)
+        candidatos.extend(id_peer for id_peer, info in self._info_peers.items() if info.get("temImpressora"))
+        # Empate (ex: duas máquinas anunciam impressora praticamente ao
+        # mesmo tempo, antes de qualquer uma virar a eleita) é resolvido de
+        # forma determinística pelo id — toda máquina da malha vê o mesmo
+        # conjunto de candidatos e chega à mesma conclusão.
         self._id_maquina_impressora = min(candidatos) if candidatos else None
 
     def _tentar_imprimir_localmente(self, conteudo_bytes: bytes):
