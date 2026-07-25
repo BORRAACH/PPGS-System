@@ -1,3 +1,11 @@
+from Config import logConfig
+
+# O mais cedo possível — antes até do preConfig, senão os prints dele
+# escapam do log. Redireciona stdout/stderr para logs/app.log (além do
+# console, quando existir um) sem precisar tocar nos vários print() já
+# espalhados pelo código (ver Config/logConfig.py).
+logConfig.configurar_logging()
+
 from Config import preConfig
 
 preConfig.garantir_dependencias()

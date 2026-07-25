@@ -21,3 +21,7 @@ Config/.versao
 # Configurações, específico de cada máquina/impressora, não código-fonte.
 # Ver services/comandaEstiloService.py.
 Config/estilo_impressao.json
+
+# Log de diagnóstico (stdout/stderr redirecionados + rotação) — gerado em
+# tempo de execução, específico de cada máquina. Ver Config/logConfig.py.
+logs/

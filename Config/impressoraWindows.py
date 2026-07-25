@@ -26,6 +26,17 @@ fila de impressão Windows apontando pra ela, usando o driver "Generic /
 Text Only" que já vem embutido no Windows (nenhum arquivo de driver novo
 precisa ser baixado/instalado — só registrado no spooler de impressão).
 
+Depois disso, ainda configura os parâmetros seriais da porta COM (baud,
+paridade, controle de fluxo — ver _configurar_porta_serial()). Isso é
+necessário mesmo sendo uma porta USB "virtual": se o Windows deixar
+controle de fluxo por hardware ligado por padrão (o comum) e a impressora
+nunca assinalar CTS de volta (comum em conversores USB-serial simples),
+a escrita fica represada no driver da porta — sem erro nenhum visível pro
+app — e é exatamente o sintoma de "impressora reconhecida/instalada, mas
+nada sai no papel". Mesmo baud usado no script equivalente pro Linux
+(configurar_impressora_bematech.py: 9600, também sensível a isso por
+outros motivos).
+
 Melhor esforço, silencioso e nunca fatal: se a impressora não for
 encontrada, se faltar permissão (criar impressora/porta local costuma
 exigir Administrador), ou qualquer outro passo falhar, apenas loga um
@@ -180,6 +191,47 @@ def _logar_resultado(dados: dict) -> None:
         _log(f"{NOME_IMPRESSORA} já estava configurada corretamente em {porta}.")
 
 
+def _configurar_porta_serial(porta_com: str) -> None:
+    """Configura baud/paridade/bits/controle-de-fluxo da porta COM virtual
+    via `mode` (utilitário padrão do Windows, sem precisar do módulo
+    PrintManagement nem de permissão elevada). "octs=off" ignora CTS
+    (controle de fluxo por hardware de entrada) e "rts=on"/"dtr=on" mantêm
+    essas linhas sempre "ligadas" — sem isso, se o Windows decidir esperar
+    a impressora assinalar CTS antes de liberar a escrita (e ela nunca
+    assinalar, por ser uma porta serial virtual sem handshake de verdade),
+    os bytes ficam represados no driver de porta e nunca chegam na
+    impressora. Roda mesmo se a criação da fila acima falhou por
+    permissão — configurar a porta em si normalmente não exige
+    Administrador."""
+    try:
+        resultado = subprocess.run(
+            [
+                "mode",
+                f"{porta_com}:",
+                "baud=9600",
+                "parity=n",
+                "data=8",
+                "stop=1",
+                "xon=off",
+                "octs=off",
+                "dtr=on",
+                "rts=on",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except (OSError, subprocess.TimeoutExpired) as erro:
+        _log(f"Falha ao rodar 'mode' para configurar {porta_com}: {erro}")
+        return
+
+    if resultado.returncode != 0:
+        _log(f"'mode' retornou erro ao configurar {porta_com}: {resultado.stderr.strip() or resultado.stdout.strip()}")
+        return
+
+    _log(f"Porta {porta_com} configurada em 9600 8N1, sem controle de fluxo por hardware.")
+
+
 def garantir_impressora_bematech() -> None:
     """Localiza a Bematech MP-4200 TH nas portas USB e garante que existe
     uma fila de impressão Windows configurada pra ela. Não faz nada fora
@@ -218,6 +270,10 @@ def garantir_impressora_bematech() -> None:
         return
 
     _logar_resultado(dados)
+
+    porta = dados.get("portaCom")
+    if porta:
+        _configurar_porta_serial(porta)
 
 
 if __name__ == "__main__":
