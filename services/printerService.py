@@ -8,6 +8,7 @@ configurado em modo RAW/genérico antes de usar este serviço.
 
 import re
 
+from services import comandaEstiloService as estilo
 from services.printer import coletar_informacoes_impressoras, enviar_para_impressora
 
 # ESC/POS "GS V 0" — corte total do papel. A Bematech MP-4200 TH entende
@@ -15,6 +16,25 @@ from services.printer import coletar_informacoes_impressoras, enviar_para_impres
 # impressoras térmicas de cupom); testado manualmente e confirmado que
 # corta o papel de verdade.
 _COMANDO_CORTE = b"\x1d\x56\x00"
+
+# ESC/POS "ESC t 2" — seleciona a tabela de caracteres PC850 (Multilingual)
+# na própria impressora. O texto já é codificado em cp850 antes de chegar
+# aqui (ver CODEPAGE_IMPRESSORA em balcaoController.py/entregaController.py),
+# mas sem mandar a impressora usar essa MESMA tabela para interpretar os
+# bytes 0x80-0xFF, ela usa a tabela padrão de fábrica (normalmente PC437 —
+# EUA), que mapeia esses bytes para caracteres diferentes. Resultado sem
+# este comando: "ç", "ã", "õ", "á" etc saem trocados/corrompidos no cupom,
+# mesmo com o texto certo sendo enviado.
+_COMANDO_CODEPAGE_CP850 = b"\x1b\x74\x02"
+
+# A quantidade de linhas em branco inseridas antes do corte é configurável
+# (tela Configurações, ver services/comandaEstiloService.py) — sem elas, o
+# corte acontece rente à última linha impressa (ex: "Troco a dar"), antes do
+# papel avançar de verdade para além da lâmina. Resultado observado: a
+# comanda não é cortada de fato, o texto final fica preso sob o cabeçote, e
+# só "aparece" (sem corte) quando a PRÓXIMA comanda empurra esse trecho pra
+# fora — dando a impressão de que informações de uma comanda vazaram para a
+# outra.
 
 
 def _eh_bematech_mp4200th(impressora):
@@ -80,8 +100,10 @@ class PrinterService:
 
         print(f"[PrinterService] Repassando pedido para '{impressora.nome}' (tipo de porta: {impressora.tipo_porta}, porta: {impressora.porta}).")
 
+        conteudo = _COMANDO_CODEPAGE_CP850 + conteudo
+
         if _eh_bematech_mp4200th(impressora):
-            print(f"[PrinterService] '{impressora.nome}' identificada como Bematech MP-4200 TH — anexando corte automático do papel.")
-            conteudo = conteudo + _COMANDO_CORTE
+            print(f"[PrinterService] '{impressora.nome}' identificada como Bematech MP-4200 TH — anexando espaçamento e corte automático do papel.")
+            conteudo = conteudo + (b"\n" * estilo.linhas_espacamento_corte()) + _COMANDO_CORTE
 
         enviar_para_impressora(impressora.nome, conteudo)
