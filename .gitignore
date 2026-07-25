@@ -12,6 +12,6 @@ wheels/
 # Pedidos gerados em tempo de execução
 pedidos/*
 
-# Marca local (por máquina) de que esse checkout é uma instância de deploy;
-# nunca deve ser versionada — ver Config/atualizador.py
+# Versão instalada nessa máquina, gerada automaticamente a cada execução
+# (informativo, não usado pra decidir nada) — ver Config/atualizador.py
 Config/.versao

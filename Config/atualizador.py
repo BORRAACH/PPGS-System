@@ -14,20 +14,16 @@ upstream configurado; qualquer outra coisa (sem `.git`, sem internet, sem
 desistir silenciosamente (só um log no console) e o app abre normalmente
 com a versão atual — nunca trava a abertura por causa disso.
 
-Também nunca faz nada (nem checa, nem pergunta) se não existir o arquivo
-Config/.versao — é o que identifica uma instância de deploy (máquina da
-pizzaria). O checkout de desenvolvimento não tem esse arquivo, então nunca
-se auto-atualiza nem pergunta nada.
-
-Por que um arquivo local (fora do git) em vez de comparar a branch com
-"master": a atualização usa `git merge --ff-only`, então uma máquina de
-deploy nunca tem commits próprios — ela só avança até ficar com o mesmo
-conteúdo que já existiu em algum commit de master. Ou seja, qualquer
-arquivo *versionado* (VERSION, pyproject.toml etc.) acaba tendo o mesmo
-valor em master e no deploy depois de atualizar, então não serviria pra
-distinguir os dois. Config/.versao é criado manualmente uma vez em cada
-máquina da pizzaria na hora da instalação (está no .gitignore) e nunca é
-tocado pelo merge.
+Roda em QUALQUER checkout, incluindo o de desenvolvimento — não existe
+mais distinção entre "máquina de deploy" e "máquina de dev": se o checkout
+está atrás do upstream, pergunta se quer atualizar, seja lá onde estiver
+rodando. Antes disso era gateado por um arquivo Config/.versao criado à
+mão em cada máquina da pizzaria, mas isso exigia um passo manual fácil de
+esquecer; agora Config/.versao é só informativo (guarda a versão do commit
+atual, tipo `git describe`), reescrito sozinho a cada execução — não é
+usado pra decidir nada, só pra você conferir a versão instalada olhando o
+arquivo. Continua fora do git (.gitignore) porque o valor é específico de
+cada máquina/commit.
 """
 
 import os
@@ -65,17 +61,24 @@ def _eh_repositorio_git():
     return os.path.isdir(os.path.join(_raiz_projeto(), ".git"))
 
 
-def _versao_instalada():
-    """Devolve o conteúdo de Config/.versao (a versão dessa instância de
-    deploy), ou None se o arquivo não existir — nesse caso é o checkout de
-    desenvolvimento, e verificar_atualizacoes() não faz nada."""
+def _versao_atual():
+    """Deriva um identificador de versão a partir do commit atual (`git
+    describe`) — hash curto, ou a tag mais próxima + distância se o
+    repositório tiver tags no futuro. None se não for possível (ex: git não
+    instalado)."""
+    return _rodar_git("describe", "--tags", "--always", "--dirty")
+
+
+def _gravar_arquivo_versao(versao):
+    """Reescreve Config/.versao com `versao` — só informativo (não gateia
+    nada em verificar_atualizacoes()), pra quem olhar a pasta conseguir
+    conferir qual commit está instalado nessa máquina sem rodar git."""
     caminho = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".versao")
     try:
-        with open(caminho, "r", encoding="utf-8") as arquivo:
-            conteudo = arquivo.read().strip()
-    except FileNotFoundError:
-        return None
-    return conteudo or None
+        with open(caminho, "w", encoding="utf-8") as arquivo:
+            arquivo.write(versao + "\n")
+    except OSError as erro:
+        print(f"[atualizador] Falha ao gravar Config/.versao: {erro}")
 
 
 def _branch_atual():
@@ -113,17 +116,18 @@ def verificar_atualizacoes():
     if not _eh_repositorio_git():
         return None
 
-    versao = _versao_instalada()
-    if not versao:
-        print("[atualizador] Config/.versao ausente (checkout de desenvolvimento) — pulando checagem de atualização.")
-        return None
-
     branch = _branch_atual()
     if not branch:
         print("[atualizador] HEAD solto (sem branch) — nada para checar.")
         return None
 
-    print(f"[atualizador] Instância de deploy na versão '{versao}'. Checando atualizações no repositório...")
+    versao = _versao_atual()
+    if versao:
+        _gravar_arquivo_versao(versao)
+        print(f"[atualizador] Versão instalada: {versao}. Checando atualizações no repositório...")
+    else:
+        print("[atualizador] Checando atualizações no repositório...")
+
     if _rodar_git("fetch", "--quiet") is None:
         print("[atualizador] Não foi possível checar o remoto (sem internet/git?) — seguindo com a versão atual.")
         return None
@@ -193,6 +197,10 @@ def _atualizar(branch, upstream):
         return
 
     print("[atualizador] Atualizado com sucesso — usando o código novo a partir daqui.")
+
+    versao_nova = _versao_atual()
+    if versao_nova:
+        _gravar_arquivo_versao(versao_nova)
 
 
 if __name__ == "__main__":
