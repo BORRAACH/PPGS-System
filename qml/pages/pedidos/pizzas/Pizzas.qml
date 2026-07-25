@@ -26,7 +26,6 @@ Page {
         for (var i = 0; i < selecionados.length; i++) {
             if (selecionados[i].valorNum > maior)
                 maior = selecionados[i].valorNum;
-
         }
         return maior;
     }
@@ -45,7 +44,7 @@ Page {
     // pizza sem precisar reabrir esta tela.
     function adicionarPizzaAtual() {
         if (selecionados.length === 0)
-            return ;
+            return;
 
         var lista = pizzasMontadas.slice();
         lista.push({
@@ -66,7 +65,7 @@ Page {
     function carregarPizzas() {
         var xhr = new XMLHttpRequest();
         xhr.open("GET", Qt.resolvedUrl(raizProjeto + "data/cardapio/pizzas.json"));
-        xhr.onreadystatechange = function() {
+        xhr.onreadystatechange = function () {
             if (xhr.readyState === XMLHttpRequest.DONE) {
                 if (xhr.status === 200 || xhr.status === 0) {
                     try {
@@ -115,9 +114,8 @@ Page {
                     "valor": valorExibicao,
                     "prioridade": nomeLower.startsWith(busca) ? 0 : 1
                 });
-
         }
-        resultados.sort(function(a, b) {
+        resultados.sort(function (a, b) {
             if (a.prioridade !== b.prioridade)
                 return a.prioridade - b.prioridade;
 
@@ -160,7 +158,7 @@ Page {
     }
 
     function isSelecionado(nome) {
-        return selecionados.some(function(item) {
+        return selecionados.some(function (item) {
             return item.nome === nome;
         });
     }
@@ -206,7 +204,12 @@ Page {
 
             Row {
                 spacing: 8
-                Icone { nome: "fa6s.pizza-slice"; cor: Estilo.cancelar.normal; tamanho: Estilo.fonte.titulo; anchors.verticalCenter: parent.verticalCenter }
+                Icone {
+                    nome: "fa6s.pizza-slice"
+                    cor: Estilo.cancelar.normal
+                    tamanho: Estilo.fonte.titulo
+                    anchors.verticalCenter: parent.verticalCenter
+                }
                 Text {
                     text: "Escolha até " + limiteSabores + (limiteSabores === 1 ? " Sabor" : " Sabores")
                     font.pixelSize: Estilo.fonte.titulo
@@ -258,7 +261,6 @@ Page {
                     border.color: campoBusca.activeFocus ? Estilo.cancelar.normal : Estilo.cores.borda
                     border.width: campoBusca.activeFocus ? 2 : 1
                 }
-
             }
 
             // SELEÇÃO DE TAMANHO (3 Opções Exclusivas com fallback para Grande)
@@ -319,9 +321,7 @@ Page {
                                 anchors.centerIn: parent
                                 visible: chkGrande.checked
                             }
-
                         }
-
                     }
 
                     // --- CHECKBOX BROTO ---
@@ -365,9 +365,7 @@ Page {
                                 anchors.centerIn: parent
                                 visible: chkBroto.checked
                             }
-
                         }
-
                     }
 
                     // --- CHECKBOX MINI ---
@@ -411,13 +409,9 @@ Page {
                                 anchors.centerIn: parent
                                 visible: chkMini.checked
                             }
-
                         }
-
                     }
-
                 }
-
             }
 
             ListView {
@@ -446,7 +440,7 @@ Page {
                     onClicked: {
                         var listaTemp = selecionados.slice();
                         if (checado) {
-                            listaTemp = listaTemp.filter(function(item) {
+                            listaTemp = listaTemp.filter(function (item) {
                                 return item.nome !== model.nome;
                             });
                         } else {
@@ -455,7 +449,6 @@ Page {
                                     "nome": model.nome,
                                     "valorNum": parseValor(model.valor)
                                 });
-
                         }
                         selecionados = listaTemp;
                     }
@@ -479,7 +472,6 @@ Page {
                                 anchors.centerIn: parent
                                 visible: btnItem.checado
                             }
-
                         }
 
                         Text {
@@ -500,7 +492,6 @@ Page {
                             font.bold: true
                             anchors.verticalCenter: parent.verticalCenter
                         }
-
                     }
 
                     background: Rectangle {
@@ -509,11 +500,8 @@ Page {
                         border.color: btnItem.checado ? Estilo.confirmar.normal : Estilo.cores.borda
                         border.width: btnItem.checado ? 2 : 1
                     }
-
                 }
-
             }
-
         }
 
         // ================= COLUNA DA DIREITA (Visualização, Legenda e Total) =================
@@ -553,7 +541,7 @@ Page {
                         ctx.stroke();
                         var qtd = selecionados.length;
                         if (qtd === 0)
-                            return ;
+                            return;
 
                         var anguloFatia = (2 * Math.PI) / qtd;
                         for (var i = 0; i < qtd; i++) {
@@ -585,9 +573,7 @@ Page {
 
                         target: telaPizzas
                     }
-
                 }
-
             }
 
             // 2. Legenda dos Sabores
@@ -640,7 +626,6 @@ Page {
                                     font.bold: true
                                     anchors.centerIn: parent
                                 }
-
                             }
 
                             Text {
@@ -659,13 +644,9 @@ Page {
                                 color: Estilo.cores.textoSecundario
                                 anchors.verticalCenter: parent.verticalCenter
                             }
-
                         }
-
                     }
-
                 }
-
             }
 
             // 3. Botão para fechar a pizza atual e começar a próxima, sem
@@ -684,7 +665,12 @@ Page {
                     anchors.centerIn: parent
                     opacity: btnAdicionarPizza.enabled ? 1 : 0.6
 
-                    Icone { nome: "fa6s.plus"; cor: "#ffffff"; tamanho: 14; anchors.verticalCenter: parent.verticalCenter }
+                    Icone {
+                        nome: "fa6s.plus"
+                        cor: "#ffffff"
+                        tamanho: 14
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
                     Text {
                         text: "Adicionar Pizza (" + tamanhoSelecionado + ")"
                         font.pixelSize: 14
@@ -753,78 +739,94 @@ Page {
                             Repeater {
                                 model: pizzasMontadas
 
+                                // Badge do tamanho e sabores ficam à esquerda; valor e botão de
+                                // remover são ancorados na borda direita do cartão (posição
+                                // fixa), em vez de entrarem num Row somado aos sabores — assim
+                                // eles nunca "vazam" para fora do retângulo, e o texto dos
+                                // sabores ocupa exatamente o espaço que sobra entre o badge e o
+                                // valor (mesmo padrão usado em Lanches.qml).
                                 Rectangle {
+                                    id: itemPizzaMontada
+
                                     width: colunaPizzasMontadas.width
-                                    height: linhaPizzaMontada.implicitHeight + 16
+                                    height: 40
                                     radius: Estilo.rounding.grande
                                     color: Estilo.cores.fundoPagina
                                     border.color: Estilo.cores.bordaCard
+                                    clip: true
 
-                                    Row {
-                                        id: linhaPizzaMontada
+                                    Rectangle {
+                                        id: badgeTamanhoPizzaMontada
 
-                                        x: 8
-                                        y: 8
-                                        spacing: 8
-                                        width: parent.width - 16
-
-                                        Rectangle {
-                                            radius: 6
-                                            width: textoBadgeTamanho.implicitWidth + 14
-                                            height: textoBadgeTamanho.implicitHeight + 6
-                                            color: Estilo.cancelar.normal
-                                            anchors.verticalCenter: parent.verticalCenter
-
-                                            Text {
-                                                id: textoBadgeTamanho
-
-                                                text: modelData.tamanho
-                                                color: "#ffffff"
-                                                font.bold: true
-                                                font.pixelSize: 10
-                                                anchors.centerIn: parent
-                                            }
-                                        }
+                                        radius: 6
+                                        width: textoBadgeTamanho.implicitWidth + 14
+                                        height: textoBadgeTamanho.implicitHeight + 6
+                                        color: Estilo.cancelar.normal
+                                        anchors.left: parent.left
+                                        anchors.leftMargin: 8
+                                        anchors.verticalCenter: parent.verticalCenter
 
                                         Text {
-                                            text: modelData.sabores.map(function(s) {
-                                                return s.nome;
-                                            }).join(" / ")
-                                            font.pixelSize: 13
+                                            id: textoBadgeTamanho
+
+                                            text: modelData.tamanho
+                                            color: "#ffffff"
                                             font.bold: true
-                                            color: Estilo.cores.texto
-                                            width: parent.width - 200
-                                            elide: Text.ElideRight
-                                            anchors.verticalCenter: parent.verticalCenter
+                                            font.pixelSize: 10
+                                            anchors.centerIn: parent
+                                        }
+                                    }
+
+                                    // Remove só esta pizza montada.
+                                    Button {
+                                        id: btnRemoverPizzaMontada
+
+                                        width: 22
+                                        height: 22
+                                        padding: 0
+                                        anchors.right: parent.right
+                                        anchors.rightMargin: 5
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        onClicked: removerPizzaMontada(index)
+
+                                        contentItem: Text {
+                                            text: "×"
+                                            color: "#ffffff"
+                                            font.bold: true
+                                            horizontalAlignment: Text.AlignHCenter
+                                            verticalAlignment: Text.AlignVCenter
                                         }
 
-                                        Text {
-                                            text: "R$ " + modelData.valorNum.toFixed(2).replace(".", ",")
-                                            font.pixelSize: 12
-                                            color: Estilo.cores.textoSecundario
-                                            anchors.verticalCenter: parent.verticalCenter
+                                        background: Rectangle {
+                                            radius: 6
+                                            color: parent.down ? Estilo.cancelar.pressionado : (parent.hovered ? Estilo.cancelar.hover : Estilo.cancelar.normal)
                                         }
+                                    }
 
-                                        Button {
-                                            width: 22
-                                            height: 22
-                                            padding: 0
-                                            anchors.verticalCenter: parent.verticalCenter
-                                            onClicked: removerPizzaMontada(index)
+                                    Text {
+                                        id: textoValorPizzaMontada
 
-                                            contentItem: Text {
-                                                text: "×"
-                                                color: "#ffffff"
-                                                font.bold: true
-                                                horizontalAlignment: Text.AlignHCenter
-                                                verticalAlignment: Text.AlignVCenter
-                                            }
+                                        text: "R$ " + modelData.valorNum.toFixed(2).replace(".", ",")
+                                        font.pixelSize: 12
+                                        color: Estilo.cores.textoSecundario
+                                        anchors.right: btnRemoverPizzaMontada.left
+                                        anchors.rightMargin: 8
+                                        anchors.verticalCenter: parent.verticalCenter
+                                    }
 
-                                            background: Rectangle {
-                                                radius: 6
-                                                color: parent.down ? Estilo.cancelar.pressionado : (parent.hovered ? Estilo.cancelar.hover : Estilo.cancelar.normal)
-                                            }
-                                        }
+                                    Text {
+                                        text: modelData.sabores.map(function (s) {
+                                            return s.nome;
+                                        }).join(" / ")
+                                        font.pixelSize: 13
+                                        font.bold: true
+                                        color: Estilo.cores.texto
+                                        anchors.left: badgeTamanhoPizzaMontada.right
+                                        anchors.leftMargin: 8
+                                        anchors.right: textoValorPizzaMontada.left
+                                        anchors.rightMargin: 8
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        elide: Text.ElideRight
                                     }
                                 }
                             }
@@ -859,9 +861,7 @@ Page {
                         font.bold: true
                         anchors.horizontalCenter: parent
                     }
-
                 }
-
             }
 
             // 6. Botões de Ação
@@ -892,7 +892,6 @@ Page {
                         border.color: Estilo.voltar.pressionado
                         border.width: 1
                     }
-
                 }
 
                 // BOTÃO CONFIRMAR
@@ -914,10 +913,10 @@ Page {
                             });
                         }
                         if (listaFinal.length === 0)
-                            return ;
+                            return;
 
-                        var itens = listaFinal.map(function(pizza) {
-                            var nomesArray = pizza.sabores.map(function(item) {
+                        var itens = listaFinal.map(function (pizza) {
+                            var nomesArray = pizza.sabores.map(function (item) {
                                 return item.nome;
                             });
                             return {
@@ -947,18 +946,13 @@ Page {
                         border.color: !btnConfirmar.enabled ? "#bdc3c7" : "#219150"
                         border.width: 1
                     }
-
                 }
-
             }
-
         }
-
     }
 
     background: Rectangle {
         color: Estilo.cores.fundoPagina
         radius: Estilo.rounding.popup
     }
-
 }
