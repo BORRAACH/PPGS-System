@@ -214,291 +214,66 @@ Page {
                 btnStatusPagamento.pago = false;
             }
 
-            Column {
+            Row {
                 anchors.centerIn: parent
-                spacing: 20
+                spacing: 30
 
-                Row {
-                    spacing: 10
-                    anchors.horizontalCenter: parent
-                    Icone { nome: "fa6s.motorcycle"; cor: "#e67e22"; tamanho: Estilo.fonte.titulo; anchors.verticalCenter: parent.verticalCenter }
-                    Text {
-                        text: "PEDIDO DE ENTREGA"
-                        font.pixelSize: Estilo.fonte.titulo
-                        font.bold: true
-                        color: "#e67e22"
-                        anchors.verticalCenter: parent.verticalCenter
-                    }
-                }
+                Column {
+                    anchors.verticalCenter: parent.verticalCenter
+                    spacing: 20
 
-                // Campos Telefone e Nome do Cliente
-                Row {
-                    spacing: 10
-                    anchors.horizontalCenter: parent
-
-                    TextField {
-                        id: inputTelefone
-
-                        // Evita recursão: reformatar o texto abaixo dispara
-                        // onTextChanged de novo, então ignoramos essa segunda
-                        // chamada enquanto a primeira ainda está ajustando o texto.
-                        property bool reformatando: false
-
-                        placeholderText: "TELEFONE"
-                        width: 190
-                        topPadding: 10
-                        bottomPadding: 10
-                        leftPadding: 10
-                        rightPadding: 10
-                        text: telefoneInicial
-                        inputMethodHints: Qt.ImhDigitsOnly
-                        onTextChanged: {
-                            if (reformatando)
-                                return ;
-
-                            reformatando = true;
-                            // Mantém só os dígitos e formata como "(DD)NNNNNNNNN"
-                            // conforme o usuário digita.
-                            var digitos = text.replace(/\D/g, "").slice(0, 11);
-                            var formatado = "";
-                            if (digitos.length > 0) {
-                                formatado = "(" + digitos.slice(0, 2);
-                                if (digitos.length >= 2)
-                                    formatado += ")" + digitos.slice(2);
-
-                            }
-                            text = formatado;
-                            reformatando = false;
+                    Row {
+                        spacing: 10
+                        anchors.horizontalCenter: parent
+                        Icone { nome: "fa6s.motorcycle"; cor: "#e67e22"; tamanho: Estilo.fonte.titulo; anchors.verticalCenter: parent.verticalCenter }
+                        Text {
+                            text: "PEDIDO DE ENTREGA"
+                            font.pixelSize: Estilo.fonte.titulo
+                            font.bold: true
+                            color: "#e67e22"
+                            anchors.verticalCenter: parent.verticalCenter
                         }
-
-                        background: Rectangle {
-                            radius: Estilo.rounding.padrao
-                            color: "#ffffff"
-                            border.color: parent.activeFocus ? "#e67e22" : Estilo.cores.borda
-                            border.width: 1
-                        }
-
                     }
 
-                    TextField {
-                        id: inputNomeCliente
-
-                        placeholderText: "NOME DO CLIENTE"
-                        width: 220
-                        topPadding: 10
-                        bottomPadding: 10
-                        leftPadding: 10
-                        rightPadding: 10
-                        text: clienteNome
-
-                        background: Rectangle {
-                            radius: Estilo.rounding.padrao
-                            color: "#ffffff"
-                            border.color: parent.activeFocus ? "#e67e22" : Estilo.cores.borda
-                            border.width: 1
-                        }
-
-                    }
-
-                }
-
-                // Campos Endereço e Número
-                Row {
-                    spacing: 10
-                    anchors.horizontalCenter: parent
-
-                    TextField {
-                        id: inputEndereco
-
-                        placeholderText: "ENDEREÇO"
-                        width: 320
-                        topPadding: 10
-                        bottomPadding: 10
-                        leftPadding: 10
-                        rightPadding: 10
-                        text: enderecoInicial
-
-                        background: Rectangle {
-                            radius: Estilo.rounding.padrao
-                            color: "#ffffff"
-                            border.color: parent.activeFocus ? "#e67e22" : Estilo.cores.borda
-                            border.width: 1
-                        }
-
-                    }
-
-                    TextField {
-                        id: inputNumero
-
-                        placeholderText: "NÚMERO"
-                        width: 90
-                        topPadding: 10
-                        bottomPadding: 10
-                        leftPadding: 10
-                        rightPadding: 10
-                        text: numeroInicial
-                        inputMethodHints: Qt.ImhDigitsOnly
-
-                        validator: RegularExpressionValidator {
-                            regularExpression: /^[0-9]*$/
-                        }
-
-                        background: Rectangle {
-                            radius: Estilo.rounding.padrao
-                            color: "#ffffff"
-                            border.color: parent.activeFocus ? "#e67e22" : Estilo.cores.borda
-                            border.width: 1
-                        }
-
-                    }
-
-                }
-
-                // Campo Bairro
-                TextField {
-                    id: inputBairro
-
-                    placeholderText: "BAIRRO"
-                    width: 420
-                    topPadding: 10
-                    bottomPadding: 10
-                    leftPadding: 10
-                    rightPadding: 10
-                    anchors.horizontalCenter: parent
-                    text: bairroInicial
-
-                    background: Rectangle {
-                        radius: Estilo.rounding.padrao
-                        color: "#ffffff"
-                        border.color: parent.activeFocus ? "#e67e22" : Estilo.cores.borda
-                        border.width: 1
-                    }
-
-                }
-
-                // Campo Observação (geral da entrega)
-                TextField {
-                    id: inputObservacao
-
-                    placeholderText: "OBSERVAÇÃO"
-                    width: 420
-                    topPadding: 10
-                    bottomPadding: 10
-                    leftPadding: 10
-                    rightPadding: 10
-                    anchors.horizontalCenter: parent
-                    text: observacaoInicial
-
-                    background: Rectangle {
-                        radius: Estilo.rounding.padrao
-                        color: "#ffffff"
-                        border.color: parent.activeFocus ? "#e67e22" : Estilo.cores.borda
-                        border.width: 1
-                    }
-
-                }
-
-                // Espaçador extra para separar os dados do cliente/entrega da seção de pedido
-                Item {
-                    width: 1
-                    height: 20
-                }
-
-                Row {
-                    spacing: 8
-                    anchors.horizontalCenter: parent
-                    Icone { nome: "fa6s.pizza-slice"; cor: "#e67e22"; tamanho: 16; anchors.verticalCenter: parent.verticalCenter }
-                    Text {
-                        text: "ITENS DO PEDIDO"
-                        font.pixelSize: 16
-                        font.bold: true
-                        color: "#e67e22"
-                        anchors.verticalCenter: parent.verticalCenter
-                    }
-                }
-
-                // --- LISTA DINÂMICA DE PEDIDOS ---
-                ListView {
-                    id: listaPedidos
-
-                    width: 690
-                    height: Math.min(count * 60, 240)
-                    clip: true
-                    model: modeloPedidos // Consome o modelo declarado na raiz da Page
-                    spacing: 10
-                    anchors.horizontalCenter: parent
-
-                    ScrollBar.vertical: ScrollBar {
-                        policy: ScrollBar.AsNeeded
-                    }
-
-                    // modeloPedidos é declarado na raiz da Page (fora deste
-                    // Component), então é o único jeito seguro de reagir a
-                    // novas linhas aqui dentro — referenciar "listaPedidos" a
-                    // partir de fora deste Component (ex: no popup de seleção
-                    // de pedido) lança ReferenceError, pois o id não é
-                    // visível fora da árvore em que foi declarado.
-                    Connections {
-                        function onCountChanged() {
-                            listaPedidos.positionViewAtEnd();
-                        }
-
-                        target: modeloPedidos
-                    }
-
-                    delegate: Row {
-                        id: linhaDelegate
-
+                    // Campos Telefone e Nome do Cliente
+                    Row {
                         spacing: 10
                         anchors.horizontalCenter: parent
 
-                        // Campo Pedido
                         TextField {
-                            id: campoPedido
+                            id: inputTelefone
 
-                            placeholderText: "SELECIONAR PEDIDO"
-                            width: 200
+                            // Evita recursão: reformatar o texto abaixo dispara
+                            // onTextChanged de novo, então ignoramos essa segunda
+                            // chamada enquanto a primeira ainda está ajustando o texto.
+                            property bool reformatando: false
+
+                            placeholderText: "TELEFONE"
+                            width: 190
                             topPadding: 10
                             bottomPadding: 10
                             leftPadding: 10
                             rightPadding: 10
-                            text: model.pedido
-                            readOnly: true
-                            hoverEnabled: true
+                            text: telefoneInicial
+                            inputMethodHints: Qt.ImhDigitsOnly
+                            onTextChanged: {
+                                if (reformatando)
+                                    return ;
 
-                            MouseArea {
-                                id: mouseAreaPedido
+                                reformatando = true;
+                                // Mantém só os dígitos e formata como "(DD)NNNNNNNNN"
+                                // conforme o usuário digita.
+                                var digitos = text.replace(/\D/g, "").slice(0, 11);
+                                var formatado = "";
+                                if (digitos.length > 0) {
+                                    formatado = "(" + digitos.slice(0, 2);
+                                    if (digitos.length >= 2)
+                                        formatado += ")" + digitos.slice(2);
 
-                                anchors.fill: parent
-                                cursorShape: Qt.PointingHandCursor
-                                hoverEnabled: true
-                                onClicked: {
-                                    telaEntrega.indicePedidoAtual = index;
-                                    popupSelecaoPedido.open();
                                 }
+                                text = formatado;
+                                reformatando = false;
                             }
-
-                            background: Rectangle {
-                                radius: Estilo.rounding.padrao
-                                color: mouseAreaPedido.containsMouse ? "#f0f0f0" : "#ffffff"
-                                border.color: parent.activeFocus ? "#e67e22" : Estilo.cores.borda
-                                border.width: 1
-                            }
-
-                        }
-
-                        // Campo Observação
-                        TextField {
-                            id: campoObservacao
-
-                            placeholderText: "OBSERVAÇÃO"
-                            width: 180
-                            topPadding: 10
-                            bottomPadding: 10
-                            leftPadding: 10
-                            rightPadding: 10
-                            text: model.observacao
-                            onTextChanged: model.observacao = text
 
                             background: Rectangle {
                                 radius: Estilo.rounding.padrao
@@ -509,26 +284,386 @@ Page {
 
                         }
 
-                        // Campo Valor
                         TextField {
-                            id: campoValor
+                            id: inputNomeCliente
 
-                            placeholderText: "R$ 0,00"
-                            width: 110
+                            placeholderText: "NOME DO CLIENTE"
+                            width: 220
                             topPadding: 10
                             bottomPadding: 10
                             leftPadding: 10
                             rightPadding: 10
-                            text: model.valor
+                            text: clienteNome
+
+                            background: Rectangle {
+                                radius: Estilo.rounding.padrao
+                                color: "#ffffff"
+                                border.color: parent.activeFocus ? "#e67e22" : Estilo.cores.borda
+                                border.width: 1
+                            }
+
+                        }
+
+                    }
+
+                    // Campos Endereço e Número
+                    Row {
+                        spacing: 10
+                        anchors.horizontalCenter: parent
+
+                        TextField {
+                            id: inputEndereco
+
+                            placeholderText: "ENDEREÇO"
+                            width: 320
+                            topPadding: 10
+                            bottomPadding: 10
+                            leftPadding: 10
+                            rightPadding: 10
+                            text: enderecoInicial
+
+                            background: Rectangle {
+                                radius: Estilo.rounding.padrao
+                                color: "#ffffff"
+                                border.color: parent.activeFocus ? "#e67e22" : Estilo.cores.borda
+                                border.width: 1
+                            }
+
+                        }
+
+                        TextField {
+                            id: inputNumero
+
+                            placeholderText: "NÚMERO"
+                            width: 90
+                            topPadding: 10
+                            bottomPadding: 10
+                            leftPadding: 10
+                            rightPadding: 10
+                            text: numeroInicial
+                            inputMethodHints: Qt.ImhDigitsOnly
+
+                            validator: RegularExpressionValidator {
+                                regularExpression: /^[0-9]*$/
+                            }
+
+                            background: Rectangle {
+                                radius: Estilo.rounding.padrao
+                                color: "#ffffff"
+                                border.color: parent.activeFocus ? "#e67e22" : Estilo.cores.borda
+                                border.width: 1
+                            }
+
+                        }
+
+                    }
+
+                    // Campo Bairro
+                    TextField {
+                        id: inputBairro
+
+                        placeholderText: "BAIRRO"
+                        width: 420
+                        topPadding: 10
+                        bottomPadding: 10
+                        leftPadding: 10
+                        rightPadding: 10
+                        anchors.horizontalCenter: parent
+                        text: bairroInicial
+
+                        background: Rectangle {
+                            radius: Estilo.rounding.padrao
+                            color: "#ffffff"
+                            border.color: parent.activeFocus ? "#e67e22" : Estilo.cores.borda
+                            border.width: 1
+                        }
+
+                    }
+
+                    // Campo Observação (geral da entrega)
+                    TextField {
+                        id: inputObservacao
+
+                        placeholderText: "OBSERVAÇÃO"
+                        width: 420
+                        topPadding: 10
+                        bottomPadding: 10
+                        leftPadding: 10
+                        rightPadding: 10
+                        anchors.horizontalCenter: parent
+                        text: observacaoInicial
+
+                        background: Rectangle {
+                            radius: Estilo.rounding.padrao
+                            color: "#ffffff"
+                            border.color: parent.activeFocus ? "#e67e22" : Estilo.cores.borda
+                            border.width: 1
+                        }
+
+                    }
+
+                    // Espaçador extra para separar os dados do cliente/entrega da seção de pedido
+                    Item {
+                        width: 1
+                        height: 20
+                    }
+
+                    Row {
+                        spacing: 8
+                        anchors.horizontalCenter: parent
+                        Icone { nome: "fa6s.pizza-slice"; cor: "#e67e22"; tamanho: 16; anchors.verticalCenter: parent.verticalCenter }
+                        Text {
+                            text: "ITENS DO PEDIDO"
+                            font.pixelSize: 16
+                            font.bold: true
+                            color: "#e67e22"
+                            anchors.verticalCenter: parent.verticalCenter
+                        }
+                    }
+
+                    // --- LISTA DINÂMICA DE PEDIDOS ---
+                    ListView {
+                        id: listaPedidos
+
+                        width: 690
+                        height: Math.min(count * 60, 240)
+                        clip: true
+                        model: modeloPedidos // Consome o modelo declarado na raiz da Page
+                        spacing: 10
+                        anchors.horizontalCenter: parent
+
+                        ScrollBar.vertical: ScrollBar {
+                            policy: ScrollBar.AsNeeded
+                        }
+
+                        // modeloPedidos é declarado na raiz da Page (fora deste
+                        // Component), então é o único jeito seguro de reagir a
+                        // novas linhas aqui dentro — referenciar "listaPedidos" a
+                        // partir de fora deste Component (ex: no popup de seleção
+                        // de pedido) lança ReferenceError, pois o id não é
+                        // visível fora da árvore em que foi declarado.
+                        Connections {
+                            function onCountChanged() {
+                                listaPedidos.positionViewAtEnd();
+                            }
+
+                            target: modeloPedidos
+                        }
+
+                        delegate: Row {
+                            id: linhaDelegate
+
+                            spacing: 10
+                            anchors.horizontalCenter: parent
+
+                            // Campo Pedido
+                            TextField {
+                                id: campoPedido
+
+                                placeholderText: "SELECIONAR PEDIDO"
+                                width: 200
+                                topPadding: 10
+                                bottomPadding: 10
+                                leftPadding: 10
+                                rightPadding: 10
+                                text: model.pedido
+                                readOnly: true
+                                hoverEnabled: true
+
+                                MouseArea {
+                                    id: mouseAreaPedido
+
+                                    anchors.fill: parent
+                                    cursorShape: Qt.PointingHandCursor
+                                    hoverEnabled: true
+                                    onClicked: {
+                                        telaEntrega.indicePedidoAtual = index;
+                                        popupSelecaoPedido.open();
+                                    }
+                                }
+
+                                background: Rectangle {
+                                    radius: Estilo.rounding.padrao
+                                    color: mouseAreaPedido.containsMouse ? "#f0f0f0" : "#ffffff"
+                                    border.color: parent.activeFocus ? "#e67e22" : Estilo.cores.borda
+                                    border.width: 1
+                                }
+
+                            }
+
+                            // Campo Observação
+                            TextField {
+                                id: campoObservacao
+
+                                placeholderText: "OBSERVAÇÃO"
+                                width: 180
+                                topPadding: 10
+                                bottomPadding: 10
+                                leftPadding: 10
+                                rightPadding: 10
+                                text: model.observacao
+                                onTextChanged: model.observacao = text
+
+                                background: Rectangle {
+                                    radius: Estilo.rounding.padrao
+                                    color: "#ffffff"
+                                    border.color: parent.activeFocus ? "#e67e22" : Estilo.cores.borda
+                                    border.width: 1
+                                }
+
+                            }
+
+                            // Campo Valor
+                            TextField {
+                                id: campoValor
+
+                                placeholderText: "R$ 0,00"
+                                width: 110
+                                topPadding: 10
+                                bottomPadding: 10
+                                leftPadding: 10
+                                rightPadding: 10
+                                text: model.valor
+                                onEditingFinished: {
+                                    if (text !== "") {
+                                        var numLimpo = text.replace("R$", "").replace(" ", "").replace(",", ".");
+                                        var valorFloat = parseFloat(numLimpo);
+                                        if (!isNaN(valorFloat)) {
+                                            var formatado = "R$ " + valorFloat.toFixed(2).replace(".", ",");
+                                            model.valor = formatado;
+                                            text = formatado;
+                                        }
+                                    }
+                                }
+
+                                validator: DoubleValidator {
+                                    bottom: 0
+                                    decimals: 2
+                                    notation: DoubleValidator.StandardNotation
+                                }
+
+                                background: Rectangle {
+                                    radius: Estilo.rounding.padrao
+                                    color: "#ffffff"
+                                    border.color: parent.activeFocus ? "#e67e22" : Estilo.cores.borda
+                                    border.width: 1
+                                }
+
+                            }
+
+                            // Botão "+"
+                            Button {
+                                text: "+"
+                                padding: 10
+                                height: campoPedido.implicitHeight
+                                width: height
+                                anchors.verticalCenter: parent.verticalCenter
+                                visible: index === (modeloPedidos.count - 1)
+                                onClicked: {
+                                    modeloPedidos.append({
+                                        "pedido": "",
+                                        "observacao": "",
+                                        "valor": ""
+                                    });
+                                }
+
+                                background: Rectangle {
+                                    radius: Estilo.rounding.padrao
+                                    color: parent.down ? "#e67e22" : (parent.hovered ? Estilo.cores.bordaCard : "#ffffff")
+                                    border.color: Estilo.cores.borda
+                                    border.width: 1
+                                }
+
+                            }
+
+                            // Botão "-"
+                            Button {
+                                text: "-"
+                                padding: 10
+                                height: campoPedido.implicitHeight
+                                width: height
+                                anchors.verticalCenter: parent.verticalCenter
+                                visible: modeloPedidos.count > 1
+                                onClicked: {
+                                    modeloPedidos.remove(index);
+                                }
+
+                                background: Rectangle {
+                                    radius: Estilo.rounding.padrao
+                                    color: parent.down ? Estilo.cancelar.normal : (parent.hovered ? Estilo.cores.bordaCard : "#ffffff")
+                                    border.color: Estilo.cores.borda
+                                    border.width: 1
+                                }
+
+                            }
+
+                        }
+
+                    }
+
+                    // --- SEÇÃO DE PAGAMENTO ---
+                    Row {
+                        spacing: 8
+                        anchors.horizontalCenter: parent
+                        Icone { nome: "fa6s.credit-card"; cor: "#e67e22"; tamanho: 16; anchors.verticalCenter: parent.verticalCenter }
+                        Text {
+                            text: "PAGAMENTO"
+                            font.pixelSize: 16
+                            font.bold: true
+                            color: "#e67e22"
+                            anchors.verticalCenter: parent.verticalCenter
+                        }
+                    }
+
+                    Row {
+                        spacing: 10
+                        anchors.horizontalCenter: parent
+
+                        ComboBox {
+                            id: comboFormaPagamento
+
+                            width: 150
+                            model: opcoesPagamento
+                            currentIndex: Math.max(0, opcoesPagamento.indexOf(formaPagamentoInicial))
+
+                            contentItem: Text {
+                                text: comboFormaPagamento.displayText
+                                color: Estilo.cores.texto
+                                leftPadding: 10
+                                rightPadding: 10
+                                verticalAlignment: Text.AlignVCenter
+                                elide: Text.ElideRight
+                            }
+
+                            background: Rectangle {
+                                radius: Estilo.rounding.padrao
+                                color: "#ffffff"
+                                border.color: comboFormaPagamento.activeFocus ? "#e67e22" : Estilo.cores.borda
+                                border.width: 1
+                                implicitHeight: inputTroco.implicitHeight
+                            }
+
+                        }
+
+                        // Campo Troco — só faz sentido quando o pagamento é em dinheiro.
+                        TextField {
+                            id: inputTroco
+
+                            placeholderText: "TROCO PARA"
+                            width: 150
+                            topPadding: 10
+                            bottomPadding: 10
+                            leftPadding: 10
+                            rightPadding: 10
+                            text: trocoInicial
+                            visible: comboFormaPagamento.currentText === "Dinheiro"
                             onEditingFinished: {
                                 if (text !== "") {
                                     var numLimpo = text.replace("R$", "").replace(" ", "").replace(",", ".");
                                     var valorFloat = parseFloat(numLimpo);
-                                    if (!isNaN(valorFloat)) {
-                                        var formatado = "R$ " + valorFloat.toFixed(2).replace(".", ",");
-                                        model.valor = formatado;
-                                        text = formatado;
-                                    }
+                                    if (!isNaN(valorFloat))
+                                        text = "R$ " + valorFloat.toFixed(2).replace(".", ",");
+
                                 }
                             }
 
@@ -547,321 +682,203 @@ Page {
 
                         }
 
-                        // Botão "+"
-                        Button {
-                            text: "+"
-                            padding: 10
-                            height: campoPedido.implicitHeight
-                            width: height
-                            anchors.verticalCenter: parent.verticalCenter
-                            visible: index === (modeloPedidos.count - 1)
-                            onClicked: {
-                                modeloPedidos.append({
-                                    "pedido": "",
-                                    "observacao": "",
-                                    "valor": ""
-                                });
-                            }
+                        // Campo Taxa de entrega — soma ao valor total do pedido.
+                        TextField {
+                            id: inputTaxaEntrega
 
-                            background: Rectangle {
-                                radius: Estilo.rounding.padrao
-                                color: parent.down ? "#e67e22" : (parent.hovered ? Estilo.cores.bordaCard : "#ffffff")
-                                border.color: Estilo.cores.borda
-                                border.width: 1
-                            }
-
-                        }
-
-                        // Botão "-"
-                        Button {
-                            text: "-"
-                            padding: 10
-                            height: campoPedido.implicitHeight
-                            width: height
-                            anchors.verticalCenter: parent.verticalCenter
-                            visible: modeloPedidos.count > 1
-                            onClicked: {
-                                modeloPedidos.remove(index);
-                            }
-
-                            background: Rectangle {
-                                radius: Estilo.rounding.padrao
-                                color: parent.down ? Estilo.cancelar.normal : (parent.hovered ? Estilo.cores.bordaCard : "#ffffff")
-                                border.color: Estilo.cores.borda
-                                border.width: 1
-                            }
-
-                        }
-
-                    }
-
-                }
-
-                // --- SEÇÃO DE PAGAMENTO ---
-                Row {
-                    spacing: 8
-                    anchors.horizontalCenter: parent
-                    Icone { nome: "fa6s.credit-card"; cor: "#e67e22"; tamanho: 16; anchors.verticalCenter: parent.verticalCenter }
-                    Text {
-                        text: "PAGAMENTO"
-                        font.pixelSize: 16
-                        font.bold: true
-                        color: "#e67e22"
-                        anchors.verticalCenter: parent.verticalCenter
-                    }
-                }
-
-                Row {
-                    spacing: 10
-                    anchors.horizontalCenter: parent
-
-                    ComboBox {
-                        id: comboFormaPagamento
-
-                        width: 150
-                        model: opcoesPagamento
-                        currentIndex: Math.max(0, opcoesPagamento.indexOf(formaPagamentoInicial))
-
-                        contentItem: Text {
-                            text: comboFormaPagamento.displayText
-                            color: Estilo.cores.texto
+                            placeholderText: "TAXA DE ENTREGA"
+                            width: 150
+                            topPadding: 10
+                            bottomPadding: 10
                             leftPadding: 10
                             rightPadding: 10
-                            verticalAlignment: Text.AlignVCenter
-                            elide: Text.ElideRight
-                        }
+                            text: taxaEntregaInicial
+                            onEditingFinished: {
+                                if (text !== "") {
+                                    var numLimpo = text.replace("R$", "").replace(" ", "").replace(",", ".");
+                                    var valorFloat = parseFloat(numLimpo);
+                                    if (!isNaN(valorFloat))
+                                        text = "R$ " + valorFloat.toFixed(2).replace(".", ",");
 
-                        background: Rectangle {
-                            radius: Estilo.rounding.padrao
-                            color: "#ffffff"
-                            border.color: comboFormaPagamento.activeFocus ? "#e67e22" : Estilo.cores.borda
-                            border.width: 1
-                            implicitHeight: inputTroco.implicitHeight
-                        }
-
-                    }
-
-                    // Campo Troco — só faz sentido quando o pagamento é em dinheiro.
-                    TextField {
-                        id: inputTroco
-
-                        placeholderText: "TROCO PARA"
-                        width: 150
-                        topPadding: 10
-                        bottomPadding: 10
-                        leftPadding: 10
-                        rightPadding: 10
-                        text: trocoInicial
-                        visible: comboFormaPagamento.currentText === "Dinheiro"
-                        onEditingFinished: {
-                            if (text !== "") {
-                                var numLimpo = text.replace("R$", "").replace(" ", "").replace(",", ".");
-                                var valorFloat = parseFloat(numLimpo);
-                                if (!isNaN(valorFloat))
-                                    text = "R$ " + valorFloat.toFixed(2).replace(".", ",");
-
+                                }
                             }
-                        }
 
-                        validator: DoubleValidator {
-                            bottom: 0
-                            decimals: 2
-                            notation: DoubleValidator.StandardNotation
-                        }
-
-                        background: Rectangle {
-                            radius: Estilo.rounding.padrao
-                            color: "#ffffff"
-                            border.color: parent.activeFocus ? "#e67e22" : Estilo.cores.borda
-                            border.width: 1
-                        }
-
-                    }
-
-                    // Campo Taxa de entrega — soma ao valor total do pedido.
-                    TextField {
-                        id: inputTaxaEntrega
-
-                        placeholderText: "TAXA DE ENTREGA"
-                        width: 150
-                        topPadding: 10
-                        bottomPadding: 10
-                        leftPadding: 10
-                        rightPadding: 10
-                        text: taxaEntregaInicial
-                        onEditingFinished: {
-                            if (text !== "") {
-                                var numLimpo = text.replace("R$", "").replace(" ", "").replace(",", ".");
-                                var valorFloat = parseFloat(numLimpo);
-                                if (!isNaN(valorFloat))
-                                    text = "R$ " + valorFloat.toFixed(2).replace(".", ",");
-
+                            validator: DoubleValidator {
+                                bottom: 0
+                                decimals: 2
+                                notation: DoubleValidator.StandardNotation
                             }
+
+                            background: Rectangle {
+                                radius: Estilo.rounding.padrao
+                                color: "#ffffff"
+                                border.color: parent.activeFocus ? "#e67e22" : Estilo.cores.borda
+                                border.width: 1
+                            }
+
                         }
 
-                        validator: DoubleValidator {
-                            bottom: 0
-                            decimals: 2
-                            notation: DoubleValidator.StandardNotation
-                        }
+                        // Botão de status: alterna entre pago (PG) e não pago (NP).
+                        Button {
+                            id: btnStatusPagamento
 
-                        background: Rectangle {
-                            radius: Estilo.rounding.padrao
-                            color: "#ffffff"
-                            border.color: parent.activeFocus ? "#e67e22" : Estilo.cores.borda
-                            border.width: 1
+                            property bool pago: statusPagamentoInicial === "PG"
+
+                            text: pago ? "PG" : "NP"
+                            width: 60
+                            topPadding: 10
+                            bottomPadding: 10
+                            // Só faz sentido perguntar se já foi pago quando o
+                            // pagamento não é instantâneo como o Pix.
+                            visible: comboFormaPagamento.currentText !== "Pix"
+                            onClicked: pago = !pago
+
+                            contentItem: Text {
+                                text: btnStatusPagamento.text
+                                font.bold: true
+                                color: "#ffffff"
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
+                            }
+
+                            background: Rectangle {
+                                radius: Estilo.rounding.padrao
+                                color: btnStatusPagamento.pago ? (parent.down ? Estilo.confirmar.pressionado : (parent.hovered ? Estilo.confirmar.hover : Estilo.confirmar.normal)) : (parent.down ? Estilo.cancelar.pressionado : (parent.hovered ? Estilo.cancelar.hover : Estilo.cancelar.normal))
+                            }
+
                         }
 
                     }
 
-                    // Botão de status: alterna entre pago (PG) e não pago (NP).
-                    Button {
-                        id: btnStatusPagamento
+                    // --- BOTÕES DE AÇÃO INFERIORES ---
+                    Row {
+                        spacing: 15
+                        anchors.horizontalCenter: parent
 
-                        property bool pago: statusPagamentoInicial === "PG"
+                        // Botão Imprimir
+                        Button {
+                            id: btnImprimir
 
-                        text: pago ? "PG" : "NP"
-                        width: 60
-                        topPadding: 10
-                        bottomPadding: 10
-                        // Só faz sentido perguntar se já foi pago quando o
-                        // pagamento não é instantâneo como o Pix.
-                        visible: comboFormaPagamento.currentText !== "Pix"
-                        onClicked: pago = !pago
+                            padding: 10
+                            width: 200
+                            onClicked: {
+                                var dados = coletarDadosPedido();
+                                var sucesso = entregaController.enviarPedido(dados);
+                                if (sucesso) {
+                                    limparFormularioPedido();
+                                    telaEntrega.mostrarNotificacao("Pedido salvo com sucesso!", true);
+                                } else {
+                                    telaEntrega.mostrarNotificacao("Erro ao salvar o pedido.", false);
+                                }
+                            }
 
-                        contentItem: Text {
-                            text: btnStatusPagamento.text
-                            font.bold: true
-                            color: "#ffffff"
-                            horizontalAlignment: Text.AlignHCenter
-                            verticalAlignment: Text.AlignVCenter
+                            contentItem: Row {
+                                spacing: 6
+                                anchors.centerIn: parent
+                                Icone { nome: "fa6s.print"; cor: "#ffffff"; tamanho: Estilo.fonte.padrao; anchors.verticalCenter: parent.verticalCenter }
+                                Text {
+                                    text: "Imprimir"
+                                    font.bold: true
+                                    color: "#ffffff"
+                                    anchors.verticalCenter: parent.verticalCenter
+                                }
+                            }
+
+                            background: Rectangle {
+                                radius: Estilo.rounding.padrao
+                                color: parent.down ? Estilo.confirmar.pressionado : (parent.hovered ? Estilo.confirmar.hover : Estilo.confirmar.normal)
+                                border.color: Estilo.confirmar.pressionado
+                                border.width: 1
+                            }
+
                         }
 
-                        background: Rectangle {
-                            radius: Estilo.rounding.padrao
-                            color: btnStatusPagamento.pago ? (parent.down ? Estilo.confirmar.pressionado : (parent.hovered ? Estilo.confirmar.hover : Estilo.confirmar.normal)) : (parent.down ? Estilo.cancelar.pressionado : (parent.hovered ? Estilo.cancelar.hover : Estilo.cancelar.normal))
+                        // Botão Lançar — só salva o .txt da comanda (aparece em
+                        // Consulta.qml) e propaga pela rede local, sem imprimir.
+                        Button {
+                            id: btnLancar
+
+                            padding: 10
+                            width: 200
+                            onClicked: {
+                                var dados = coletarDadosPedido();
+                                var sucesso = entregaController.lancarPedido(dados);
+                                if (sucesso) {
+                                    limparFormularioPedido();
+                                    telaEntrega.mostrarNotificacao("Comanda lançada com sucesso!", true);
+                                } else {
+                                    telaEntrega.mostrarNotificacao("Erro ao lançar a comanda.", false);
+                                }
+                            }
+
+                            contentItem: Row {
+                                spacing: 6
+                                anchors.centerIn: parent
+                                Icone { nome: "fa6s.floppy-disk"; cor: "#ffffff"; tamanho: Estilo.fonte.padrao; anchors.verticalCenter: parent.verticalCenter }
+                                Text {
+                                    text: "Lançar"
+                                    font.bold: true
+                                    color: "#ffffff"
+                                    anchors.verticalCenter: parent.verticalCenter
+                                }
+                            }
+
+                            background: Rectangle {
+                                radius: Estilo.rounding.padrao
+                                color: parent.down ? "#1d4ed8" : (parent.hovered ? "#1e40af" : "#2563eb")
+                                border.color: "#1d4ed8"
+                                border.width: 1
+                            }
+
+                        }
+
+                        // Botão Voltar
+                        Button {
+                            id: btnVoltar
+
+                            padding: 10
+                            width: 200
+                            onClicked: {
+                                if (stackViewLocal.depth > 1)
+                                    stackViewLocal.pop();
+                                else if (telaEntrega.StackView.view)
+                                    telaEntrega.StackView.view.pop();
+                            }
+
+                            contentItem: Row {
+                                spacing: 6
+                                anchors.centerIn: parent
+                                Icone { nome: "fa6s.arrow-left"; cor: "#ffffff"; tamanho: Estilo.fonte.padrao; anchors.verticalCenter: parent.verticalCenter }
+                                Text {
+                                    text: "Voltar para o Menu"
+                                    font.bold: true
+                                    color: "#ffffff"
+                                    anchors.verticalCenter: parent.verticalCenter
+                                }
+                            }
+
+                            background: Rectangle {
+                                radius: Estilo.rounding.padrao
+                                color: parent.down ? Estilo.cancelar.pressionado : (parent.hovered ? Estilo.cancelar.hover : Estilo.cancelar.normal)
+                                border.color: Estilo.cancelar.pressionado
+                                border.width: 1
+                            }
+
                         }
 
                     }
 
                 }
 
-                // --- BOTÕES DE AÇÃO INFERIORES ---
-                Row {
-                    spacing: 15
-                    anchors.horizontalCenter: parent
-
-                    // Botão Imprimir
-                    Button {
-                        id: btnImprimir
-
-                        padding: 10
-                        width: 200
-                        onClicked: {
-                            var dados = coletarDadosPedido();
-                            var sucesso = entregaController.enviarPedido(dados);
-                            if (sucesso) {
-                                limparFormularioPedido();
-                                telaEntrega.mostrarNotificacao("Pedido salvo com sucesso!", true);
-                            } else {
-                                telaEntrega.mostrarNotificacao("Erro ao salvar o pedido.", false);
-                            }
-                        }
-
-                        contentItem: Row {
-                            spacing: 6
-                            anchors.centerIn: parent
-                            Icone { nome: "fa6s.print"; cor: "#ffffff"; tamanho: Estilo.fonte.padrao; anchors.verticalCenter: parent.verticalCenter }
-                            Text {
-                                text: "Imprimir"
-                                font.bold: true
-                                color: "#ffffff"
-                                anchors.verticalCenter: parent.verticalCenter
-                            }
-                        }
-
-                        background: Rectangle {
-                            radius: Estilo.rounding.padrao
-                            color: parent.down ? Estilo.confirmar.pressionado : (parent.hovered ? Estilo.confirmar.hover : Estilo.confirmar.normal)
-                            border.color: Estilo.confirmar.pressionado
-                            border.width: 1
-                        }
-
-                    }
-
-                    // Botão Lançar — só salva o .txt da comanda (aparece em
-                    // Consulta.qml) e propaga pela rede local, sem imprimir.
-                    Button {
-                        id: btnLancar
-
-                        padding: 10
-                        width: 200
-                        onClicked: {
-                            var dados = coletarDadosPedido();
-                            var sucesso = entregaController.lancarPedido(dados);
-                            if (sucesso) {
-                                limparFormularioPedido();
-                                telaEntrega.mostrarNotificacao("Comanda lançada com sucesso!", true);
-                            } else {
-                                telaEntrega.mostrarNotificacao("Erro ao lançar a comanda.", false);
-                            }
-                        }
-
-                        contentItem: Row {
-                            spacing: 6
-                            anchors.centerIn: parent
-                            Icone { nome: "fa6s.floppy-disk"; cor: "#ffffff"; tamanho: Estilo.fonte.padrao; anchors.verticalCenter: parent.verticalCenter }
-                            Text {
-                                text: "Lançar"
-                                font.bold: true
-                                color: "#ffffff"
-                                anchors.verticalCenter: parent.verticalCenter
-                            }
-                        }
-
-                        background: Rectangle {
-                            radius: Estilo.rounding.padrao
-                            color: parent.down ? "#1d4ed8" : (parent.hovered ? "#1e40af" : "#2563eb")
-                            border.color: "#1d4ed8"
-                            border.width: 1
-                        }
-
-                    }
-
-                    // Botão Voltar
-                    Button {
-                        id: btnVoltar
-
-                        padding: 10
-                        width: 200
-                        onClicked: {
-                            if (stackViewLocal.depth > 1)
-                                stackViewLocal.pop();
-                            else if (telaEntrega.StackView.view)
-                                telaEntrega.StackView.view.pop();
-                        }
-
-                        contentItem: Row {
-                            spacing: 6
-                            anchors.centerIn: parent
-                            Icone { nome: "fa6s.arrow-left"; cor: "#ffffff"; tamanho: Estilo.fonte.padrao; anchors.verticalCenter: parent.verticalCenter }
-                            Text {
-                                text: "Voltar para o Menu"
-                                font.bold: true
-                                color: "#ffffff"
-                                anchors.verticalCenter: parent.verticalCenter
-                            }
-                        }
-
-                        background: Rectangle {
-                            radius: Estilo.rounding.padrao
-                            color: parent.down ? Estilo.cancelar.pressionado : (parent.hovered ? Estilo.cancelar.hover : Estilo.cancelar.normal)
-                            border.color: Estilo.cancelar.pressionado
-                            border.width: 1
-                        }
-
-                    }
-
+                ResumoComanda {
+                    anchors.verticalCenter: parent.verticalCenter
+                    itens: modeloPedidos
+                    corDestaque: "#e67e22"
+                    formaPagamento: comboFormaPagamento.currentText
+                    troco: comboFormaPagamento.currentText === "Dinheiro" ? inputTroco.text : ""
+                    pago: btnStatusPagamento.pago
+                    taxaEntrega: inputTaxaEntrega.text
+                    mostrarTaxaEntrega: true
                 }
 
             }
