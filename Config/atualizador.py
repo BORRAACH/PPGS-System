@@ -14,10 +14,20 @@ upstream configurado; qualquer outra coisa (sem `.git`, sem internet, sem
 desistir silenciosamente (só um log no console) e o app abre normalmente
 com a versão atual — nunca trava a abertura por causa disso.
 
-Também nunca faz nada (nem checa, nem pergunta) se a branch local for
-"master" — é o checkout de desenvolvimento, onde o código é escrito e
-commitado; só instâncias rodando em outra branch (o deploy nas máquinas da
-pizzaria) passam pela checagem de verdade.
+Também nunca faz nada (nem checa, nem pergunta) se não existir o arquivo
+Config/.versao — é o que identifica uma instância de deploy (máquina da
+pizzaria). O checkout de desenvolvimento não tem esse arquivo, então nunca
+se auto-atualiza nem pergunta nada.
+
+Por que um arquivo local (fora do git) em vez de comparar a branch com
+"master": a atualização usa `git merge --ff-only`, então uma máquina de
+deploy nunca tem commits próprios — ela só avança até ficar com o mesmo
+conteúdo que já existiu em algum commit de master. Ou seja, qualquer
+arquivo *versionado* (VERSION, pyproject.toml etc.) acaba tendo o mesmo
+valor em master e no deploy depois de atualizar, então não serviria pra
+distinguir os dois. Config/.versao é criado manualmente uma vez em cada
+máquina da pizzaria na hora da instalação (está no .gitignore) e nunca é
+tocado pelo merge.
 """
 
 import os
@@ -55,6 +65,19 @@ def _eh_repositorio_git():
     return os.path.isdir(os.path.join(_raiz_projeto(), ".git"))
 
 
+def _versao_instalada():
+    """Devolve o conteúdo de Config/.versao (a versão dessa instância de
+    deploy), ou None se o arquivo não existir — nesse caso é o checkout de
+    desenvolvimento, e verificar_atualizacoes() não faz nada."""
+    caminho = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".versao")
+    try:
+        with open(caminho, "r", encoding="utf-8") as arquivo:
+            conteudo = arquivo.read().strip()
+    except FileNotFoundError:
+        return None
+    return conteudo or None
+
+
 def _branch_atual():
     """Devolve o nome da branch local, ou None se for HEAD solto (detached
     — ex: checkout de uma tag/commit específico), onde não faz sentido
@@ -90,19 +113,17 @@ def verificar_atualizacoes():
     if not _eh_repositorio_git():
         return None
 
+    versao = _versao_instalada()
+    if not versao:
+        print("[atualizador] Config/.versao ausente (checkout de desenvolvimento) — pulando checagem de atualização.")
+        return None
+
     branch = _branch_atual()
     if not branch:
         print("[atualizador] HEAD solto (sem branch) — nada para checar.")
         return None
 
-    # "master" é o checkout de desenvolvimento — nunca se auto-atualiza nem
-    # pergunta nada; só instâncias rodando em outra branch (deploy) passam
-    # daqui pra frente.
-    if branch == "master":
-        print("[atualizador] Branch local é 'master' (checkout de desenvolvimento) — pulando checagem de atualização.")
-        return None
-
-    print("[atualizador] Checando atualizações no repositório...")
+    print(f"[atualizador] Instância de deploy na versão '{versao}'. Checando atualizações no repositório...")
     if _rodar_git("fetch", "--quiet") is None:
         print("[atualizador] Não foi possível checar o remoto (sem internet/git?) — seguindo com a versão atual.")
         return None

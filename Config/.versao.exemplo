@@ -1,0 +1,7 @@
+Este arquivo é um exemplo. Em cada máquina de deploy (pizzaria), copie-o
+para "Config/.versao" (sem o ".exemplo") e escreva a versão instalada,
+ex: 1.0.0
+
+O checkout de desenvolvimento (onde o código é escrito) NÃO deve ter um
+arquivo Config/.versao — a ausência dele é o que faz Config/atualizador.py
+pular a checagem de atualização nessa máquina.
