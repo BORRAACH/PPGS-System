@@ -30,10 +30,7 @@ Page {
     objectName: "telaBalcao"
 
     function mostrarNotificacao(mensagem, sucesso) {
-        notificacao.texto = mensagem;
-        notificacao.sucesso = sucesso;
-        notificacao.aberta = true;
-        timerNotificacao.restart();
+        filaNotificacoes.notificar(mensagem, sucesso);
     }
 
     Component.onCompleted: {
@@ -47,6 +44,17 @@ Page {
                 });
             }
         }
+
+        // O resultado de enviarPedido() só confirma que o .txt foi salvo —
+        // o resultado de verdade da impressão (que pode acontecer em outra
+        // máquina da rede) chega depois, de forma assíncrona, por este
+        // sinal (ver services/redeService.py:solicitar_impressao).
+        redeController.impressaoResultado.connect(function (sucesso, mensagem) {
+            telaBalcao.mostrarNotificacao(
+                sucesso ? ("Comanda impressa (" + mensagem + ")") : ("Falha ao imprimir: " + mensagem),
+                sucesso
+            );
+        });
     }
 
     // --- MODELO GLOBAL DA TELA (Agora acessível pelos Shortcuts e pela ListView) ---
@@ -669,64 +677,9 @@ Page {
 
     }
 
-    // --- NOTIFICAÇÃO TEMPORÁRIA (SUCESSO/ERRO AO SALVAR O PEDIDO) ---
-    Rectangle {
-        id: notificacao
-
-        property string texto: ""
-        property bool sucesso: true
-        property bool aberta: false
-
-        z: 1000
-        radius: Estilo.rounding.medio
-        color: sucesso ? Estilo.confirmar.normal : Estilo.cancelar.normal
-        width: linhaNotificacao.implicitWidth + 40
-        height: 50
-        anchors.right: parent.right
-        anchors.rightMargin: 20
-        anchors.bottom: parent.bottom
-        // Fora da tela (abaixo da borda inferior) quando fechada; sobe para a
-        // margem de 20px quando aberta — o Behavior anima essa transição.
-        anchors.bottomMargin: aberta ? 20 : -(height + 20)
-
-        Behavior on anchors.bottomMargin {
-            NumberAnimation {
-                duration: 300
-                easing.type: Easing.OutCubic
-            }
-
-        }
-
-        Row {
-            id: linhaNotificacao
-
-            spacing: 8
-            anchors.centerIn: parent
-
-            Icone {
-                nome: notificacao.sucesso ? "fa6s.circle-check" : "fa6s.circle-xmark"
-                cor: "#ffffff"
-                tamanho: Estilo.fonte.padrao
-                anchors.verticalCenter: parent.verticalCenter
-            }
-
-            Text {
-                text: notificacao.texto
-                color: "#ffffff"
-                font.bold: true
-                font.pixelSize: Estilo.fonte.padrao
-                anchors.verticalCenter: parent.verticalCenter
-            }
-        }
-
-    }
-
-    Timer {
-        id: timerNotificacao
-
-        interval: 2000
-        repeat: false
-        onTriggered: notificacao.aberta = false
+    // --- NOTIFICAÇÕES TEMPORÁRIAS (SALVAR/LANÇAR O PEDIDO, RESULTADO DA IMPRESSÃO) ---
+    FilaNotificacoes {
+        id: filaNotificacoes
     }
 
     background: Rectangle {
