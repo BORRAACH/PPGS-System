@@ -177,4 +177,76 @@ ApplicationWindow {
             }
         }
     }
+
+    // --- NOTIFICAÇÃO GLOBAL DO RESULTADO DA IMPRESSÃO ---
+    // Vive na janela raiz (não dentro de Balcao.qml/Entrega.qml) porque o
+    // resultado de rede.solicitar_impressao (ver services/redeService.py)
+    // chega de forma assíncrona — às vezes segundos depois, via a máquina
+    // que realmente tem a impressora — e o usuário já pode ter navegado
+    // para outra tela nesse meio-tempo. Mesmo padrão visual (Rectangle
+    // deslizante + Timer de auto-fechar) usado em Balcao.qml/Entrega.qml.
+    Rectangle {
+        id: notificacaoImpressao
+
+        property string texto: ""
+        property bool sucesso: true
+        property bool aberta: false
+
+        z: 2000
+        radius: Estilo.rounding.medio
+        color: sucesso ? Estilo.confirmar.normal : Estilo.cancelar.normal
+        width: linhaNotificacaoImpressao.implicitWidth + 40
+        height: 50
+        anchors.right: parent.right
+        anchors.rightMargin: 20
+        anchors.bottom: parent.bottom
+        anchors.bottomMargin: aberta ? 20 : -(height + 20)
+
+        Behavior on anchors.bottomMargin {
+            NumberAnimation {
+                duration: 300
+                easing.type: Easing.OutCubic
+            }
+        }
+
+        Row {
+            id: linhaNotificacaoImpressao
+
+            spacing: 8
+            anchors.centerIn: parent
+
+            Icone {
+                nome: notificacaoImpressao.sucesso ? "fa6s.print" : "fa6s.circle-xmark"
+                cor: "#ffffff"
+                tamanho: Estilo.fonte.padrao
+                anchors.verticalCenter: parent.verticalCenter
+            }
+
+            Text {
+                text: notificacaoImpressao.texto
+                color: "#ffffff"
+                font.bold: true
+                font.pixelSize: Estilo.fonte.padrao
+                anchors.verticalCenter: parent.verticalCenter
+            }
+        }
+    }
+
+    Timer {
+        id: timerNotificacaoImpressao
+
+        interval: 4000
+        repeat: false
+        onTriggered: notificacaoImpressao.aberta = false
+    }
+
+    Connections {
+        target: redeController
+        function onImpressaoResultado(sucesso, detalhe) {
+            notificacaoImpressao.texto = sucesso ? ("Comanda impressa em " + detalhe) : ("Falha ao imprimir: " + detalhe);
+            notificacaoImpressao.sucesso = sucesso;
+            notificacaoImpressao.aberta = true;
+            timerNotificacaoImpressao.restart();
+        }
+    }
 }

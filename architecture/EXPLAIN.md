@@ -38,7 +38,8 @@ usando só `PyQt6.QtNetwork` (já vem com o PyQt6 — nenhuma dependência nova 
 3. Ao receber um datagrama de outra instância que ainda não é peer, só o lado
    com o `id` "menor" (comparação de string) inicia a conexão TCP — evita
    conexão dupla entre o mesmo par.
-4. Nova conexão TCP → troca de handshake (`{"tipo": "identificar", "id": ...}`)
+4. Nova conexão TCP → troca de handshake
+   (`{"tipo": "identificar", "id": ..., "nome": ..., "temImpressora": bool}`)
    e, em seguida, cada lado manda `{"tipo": "meus_arquivos", "arquivos": [...]}`
    (lista de nomes de arquivo em `pedidos/`). Quem recebe compara com a
    própria pasta e pede (`{"tipo": "pedir_arquivo", "arquivo": ...}`) o que
@@ -46,11 +47,44 @@ usando só `PyQt6.QtNetwork` (já vem com o PyQt6 — nenhuma dependência nova 
 5. Mensagens (JSON + `"\n"`, um por linha, num buffer por socket):
    - `pedido` — `{"tipo": "pedido", "arquivo": nome, "conteudo_b64": ...}`
    - `apagar` — `{"tipo": "apagar", "arquivo": nome}`
+   - `status_impressora` — `{"tipo": "status_impressora", "temImpressora": bool}`,
+     mandada pra todos os peers sempre que a checagem periódica da
+     impressora local (a cada 30s, além de uma vez ao abrir) muda de
+     resultado — ver "Impressão pela rede" abaixo.
+   - `imprimir` — `{"tipo": "imprimir", "job_id": ..., "conteudo_b64": ...}`,
+     mandada só pra máquina eleita pra imprimir (nunca em broadcast).
+   - `imprimir_resultado` — `{"tipo": "imprimir_resultado", "job_id": ..., "sucesso": bool, "erro": str, "maquina": nome}`,
+     resposta ao `imprimir`, sempre pro mesmo socket de onde veio o pedido.
    - Como é malha completa, **não há retransmissão**: quem cria/apaga um
      pedido manda a mensagem direto para todos os peers conectados; quem
      recebe só aplica local (grava/apaga o arquivo), nunca repassa adiante.
 6. Ao desconectar um peer, ele só é removido de `_peers` — a redescoberta via
-   broadcast periódico cuida da reconexão automática quando ele voltar.
+   broadcast periódico cuida da reconexão automática quando ele voltar. Se o
+   peer removido era a máquina eleita pra imprimir, a eleição é recalculada
+   na hora.
+
+### Impressão pela rede
+
+Cada instância tenta detectar sua própria impressora local ao iniciar (e a
+cada 30s depois, numa thread — `PrinterService.localizar_impressora()` roda
+`lpstat`/PowerShell) e anuncia o resultado (`temImpressora`) tanto no
+handshake `identificar` quanto, se mudar depois, via `status_impressora`.
+
+Toda instância calcula, sozinha e de forma determinística — sem nenhuma
+mensagem de "eleição" própria —, qual máquina deve receber os pedidos de
+impressão (`RedeService._recalcular_maquina_impressora`): a própria máquina,
+se tiver impressora; senão, entre os peers conhecidos que anunciaram ter,
+o de menor `id`. Como todo mundo vê o mesmo conjunto de anúncios, todo mundo
+chega à mesma conclusão sem precisar de coordenador central.
+
+`RedeService.solicitar_impressao(conteudo_bytes)` (chamada pelos
+controllers em vez de `PrinterService.imprimir()` direto) manda `imprimir`
+só pra essa máquina eleita (local ou remota) e aguarda `imprimir_resultado`
+com um timeout de 10s. O resultado final chega pra quem pediu via o sinal
+`impressaoResultado(sucesso, detalhe)`, exposto ao QML como
+`redeController.impressaoResultado` — `main.qml` mostra uma notificação
+global com o resultado, já que pode chegar segundos depois e o usuário pode
+já ter saído da tela onde pediu a impressão.
 
 ### Arquivo novo: `services/redeService.py`
 
@@ -67,6 +101,8 @@ usando só `PyQt6.QtNetwork` (já vem com o PyQt6 — nenhuma dependência nova 
     `engine = QQmlApplicationEngine()`).
   - `transmitir_pedido(nome_arquivo: str, conteudo_bytes: bytes)` e
     `transmitir_exclusao(nome_arquivo: str)` — chamadas pelos controllers.
+  - `solicitar_impressao(conteudo_bytes: bytes)` e `pyqtSignal impressaoResultado(bool, str)`
+    — ver seção "Impressão pela rede" acima.
 
 ### Mudanças nos controllers existentes
 
@@ -121,7 +157,8 @@ rede.iniciar()
   na mesma LAN entra automaticamente, conforme pedido pelo usuário.
 - Sem migração do formato de arquivo (`.txt` com códigos ESC/POS) para
   JSON/SQLite — a réplica é feita nos bytes crus do arquivo, mantendo o
-  formato atual intacto (inclusive para impressão, que continua só local).
+  formato atual intacto. (A impressão em si passou a ser roteada pela rede —
+  ver "Impressão pela rede" acima — mas o formato do arquivo não mudou.)
 - Firewall do SO pode pedir liberação de rede na primeira execução em cada
   máquina (normal, principalmente no Windows) — não é algo a resolver em
   código.
