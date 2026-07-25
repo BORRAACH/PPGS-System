@@ -50,11 +50,11 @@ Rectangle {
             // objectName da tela para evitar push duplicado da mesma página.
             ListModel {
                 id: modeloNavegacao
-                ListElement { icone: "🏠"; textoTooltip: "Início"; pagina: ""; nomeTela: "" }
-                ListElement { icone: "🛍️"; textoTooltip: "Balcão"; pagina: "../pages/balcao/Balcao.qml"; nomeTela: "telaBalcao" }
-                ListElement { icone: "🛵"; textoTooltip: "Entrega"; pagina: "../pages/entrega/Entrega.qml"; nomeTela: "telaEntrega" }
-                ListElement { icone: "🔍"; textoTooltip: "Consulta"; pagina: "../pages/consulta/Consulta.qml"; nomeTela: "telaConsulta" }
-                ListElement { icone: "🌐"; textoTooltip: "Rede"; pagina: "../pages/rede/Rede.qml"; nomeTela: "telaRede" }
+                ListElement { icone: "fa6s.house"; textoTooltip: "Início"; pagina: ""; nomeTela: "" }
+                ListElement { icone: "fa6s.bag-shopping"; textoTooltip: "Balcão"; pagina: "../pages/balcao/Balcao.qml"; nomeTela: "telaBalcao" }
+                ListElement { icone: "fa6s.motorcycle"; textoTooltip: "Entrega"; pagina: "../pages/entrega/Entrega.qml"; nomeTela: "telaEntrega" }
+                ListElement { icone: "fa6s.magnifying-glass"; textoTooltip: "Consulta"; pagina: "../pages/consulta/Consulta.qml"; nomeTela: "telaConsulta" }
+                ListElement { icone: "fa6s.globe"; textoTooltip: "Rede"; pagina: "../pages/rede/Rede.qml"; nomeTela: "telaRede" }
             }
 
             ColumnLayout {
@@ -95,9 +95,10 @@ Rectangle {
 
                         contentItem: Item {
                             anchors.fill: parent
-                            Text {
-                                text: icone
-                                font.pixelSize: 24
+                            Icone {
+                                nome: icone
+                                cor: Estilo.cores.texto
+                                tamanho: 22
                                 anchors.centerIn: parent
                             }
                         }
@@ -135,22 +136,24 @@ Rectangle {
 
                 Item {
                     Layout.fillWidth: true
-                    implicitHeight: iconRaio.implicitHeight
-                    Text {
+                    implicitHeight: iconRaio.tamanho
+                    Icone {
                         id: iconRaio
-                        text: "⚡"
-                        font.pixelSize: 24
+                        nome: "fa6s.bolt"
+                        cor: Estilo.cores.texto
+                        tamanho: 22
                         anchors.centerIn: parent
                     }
                 }
 
                 Item {
                     Layout.fillWidth: true
-                    implicitHeight: iconEngrenagem.implicitHeight
-                    Text {
+                    implicitHeight: iconEngrenagem.tamanho
+                    Icone {
                         id: iconEngrenagem
-                        text: "⚙️"
-                        font.pixelSize: 24
+                        nome: "fa6s.gear"
+                        cor: Estilo.cores.texto
+                        tamanho: 22
                         anchors.centerIn: parent
                     }
                 }

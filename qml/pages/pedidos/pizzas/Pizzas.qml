@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import estilo 1.0
+import "../../../components"
 
 Page {
     // 2. Atualiza os preços internos das pizzas já selecionadas para o novo tamanho
@@ -203,18 +204,34 @@ Page {
             height: parent.height
             spacing: 12
 
-            Text {
-                text: "🍕 Escolha até " + limiteSabores + (limiteSabores === 1 ? " Sabor" : " Sabores")
-                font.pixelSize: Estilo.fonte.titulo
-                font.bold: true
-                color: Estilo.cancelar.normal
+            Row {
+                spacing: 8
+                Icone { nome: "fa6s.pizza-slice"; cor: Estilo.cancelar.normal; tamanho: Estilo.fonte.titulo; anchors.verticalCenter: parent.verticalCenter }
+                Text {
+                    text: "Escolha até " + limiteSabores + (limiteSabores === 1 ? " Sabor" : " Sabores")
+                    font.pixelSize: Estilo.fonte.titulo
+                    font.bold: true
+                    color: Estilo.cancelar.normal
+                    anchors.verticalCenter: parent.verticalCenter
+                }
             }
 
-            Text {
-                text: selecionados.length === limiteSabores ? "⚠️ Limite máximo de " + limiteSabores + " sabores atingido!" : selecionados.length + " de " + limiteSabores + " sabores selecionados"
-                font.pixelSize: Estilo.fonte.padrao
-                color: selecionados.length === limiteSabores ? "#d32f2f" : Estilo.cores.textoSecundario
-                font.bold: selecionados.length > 0
+            Row {
+                spacing: 6
+                Icone {
+                    nome: "fa6s.triangle-exclamation"
+                    cor: "#d32f2f"
+                    tamanho: Estilo.fonte.padrao
+                    visible: selecionados.length === limiteSabores
+                    anchors.verticalCenter: parent.verticalCenter
+                }
+                Text {
+                    text: selecionados.length === limiteSabores ? "Limite máximo de " + limiteSabores + " sabores atingido!" : selecionados.length + " de " + limiteSabores + " sabores selecionados"
+                    font.pixelSize: Estilo.fonte.padrao
+                    color: selecionados.length === limiteSabores ? "#d32f2f" : Estilo.cores.textoSecundario
+                    font.bold: selecionados.length > 0
+                    anchors.verticalCenter: parent.verticalCenter
+                }
             }
 
             // BARRA DE PESQUISA
@@ -223,7 +240,7 @@ Page {
 
                 width: parent.width
                 height: 42
-                placeholderText: "🔍 Pesquisar sabor (ex: calabresa, chocolate)..."
+                placeholderText: "Pesquisar sabor (ex: calabresa, chocolate)..."
                 placeholderTextColor: "#95a5a6"
                 font.pixelSize: Estilo.fonte.padrao
                 leftPadding: 14
@@ -295,11 +312,10 @@ Page {
                             border.width: 2
                             color: chkGrande.checked ? Estilo.confirmar.normal : "transparent"
 
-                            Text {
-                                text: "✓"
-                                color: "white"
-                                font.bold: true
-                                font.pixelSize: 12
+                            Icone {
+                                nome: "fa6s.check"
+                                cor: "white"
+                                tamanho: 12
                                 anchors.centerIn: parent
                                 visible: chkGrande.checked
                             }
@@ -342,11 +358,10 @@ Page {
                             border.width: 2
                             color: chkBroto.enabled ? (chkBroto.checked ? Estilo.confirmar.normal : "transparent") : "#f0f0f0"
 
-                            Text {
-                                text: "✓"
-                                color: "white"
-                                font.bold: true
-                                font.pixelSize: 12
+                            Icone {
+                                nome: "fa6s.check"
+                                cor: "white"
+                                tamanho: 12
                                 anchors.centerIn: parent
                                 visible: chkBroto.checked
                             }
@@ -389,11 +404,10 @@ Page {
                             border.width: 2
                             color: chkMini.enabled ? (chkMini.checked ? Estilo.confirmar.normal : "transparent") : "#f0f0f0"
 
-                            Text {
-                                text: "✓"
-                                color: "white"
-                                font.bold: true
-                                font.pixelSize: 12
+                            Icone {
+                                nome: "fa6s.check"
+                                cor: "white"
+                                tamanho: 12
                                 anchors.centerIn: parent
                                 visible: chkMini.checked
                             }
@@ -458,10 +472,10 @@ Page {
                             color: btnItem.checado ? Estilo.confirmar.normal : "transparent"
                             anchors.verticalCenter: parent.verticalCenter
 
-                            Text {
-                                text: "✓"
-                                color: "white"
-                                font.bold: true
+                            Icone {
+                                nome: "fa6s.check"
+                                cor: "white"
+                                tamanho: 12
                                 anchors.centerIn: parent
                                 visible: btnItem.checado
                             }
@@ -665,14 +679,19 @@ Page {
                 enabled: selecionados.length > 0
                 onClicked: adicionarPizzaAtual()
 
-                contentItem: Text {
-                    text: "➕ Adicionar Pizza (" + tamanhoSelecionado + ")"
-                    font.pixelSize: 14
-                    font.bold: true
-                    color: "#ffffff"
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
+                contentItem: Row {
+                    spacing: 6
+                    anchors.centerIn: parent
                     opacity: btnAdicionarPizza.enabled ? 1 : 0.6
+
+                    Icone { nome: "fa6s.plus"; cor: "#ffffff"; tamanho: 14; anchors.verticalCenter: parent.verticalCenter }
+                    Text {
+                        text: "Adicionar Pizza (" + tamanhoSelecionado + ")"
+                        font.pixelSize: 14
+                        font.bold: true
+                        color: "#ffffff"
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
                 }
 
                 background: Rectangle {

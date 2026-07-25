@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import estilo 1.0
+import "../../components"
 
 // Um item da lista de comandas em ColunaEsquerda.qml: mostra o resumo
 // (tipo + cliente/hora), serve de atalho no botão direito para o botão
@@ -18,7 +19,7 @@ Rectangle {
 
     // Emitido no clique com o botão direito — ColunaEsquerda.qml conecta a
     // este sinal para alternar o modo de edição, mesma ação do botão
-    // "✏️ Editar" ao lado da barra de pesquisa.
+    // "Editar" ao lado da barra de pesquisa.
     signal alternarModoEdicao
 
     width: ListView.view.width - (ListView.view.ScrollBar.vertical.visible ? ListView.view.ScrollBar.vertical.width : 0)
@@ -69,11 +70,11 @@ Rectangle {
             padding: 0
             onClicked: pagina.editarComanda(model.arquivo)
 
-            contentItem: Text {
-                text: "✏️"
-                font.pixelSize: Estilo.fonte.padrao
-                horizontalAlignment: Text.AlignHCenter
-                verticalAlignment: Text.AlignVCenter
+            contentItem: Icone {
+                nome: "fa6s.pen"
+                cor: "#ffffff"
+                tamanho: Estilo.fonte.padrao
+                anchors.centerIn: parent
             }
 
             background: Rectangle {
@@ -90,11 +91,11 @@ Rectangle {
             padding: 0
             onClicked: popupExclusao.abrirPara(model.arquivo, pagina.tituloComanda(model))
 
-            contentItem: Text {
-                text: "🗑️"
-                font.pixelSize: Estilo.fonte.padrao
-                horizontalAlignment: Text.AlignHCenter
-                verticalAlignment: Text.AlignVCenter
+            contentItem: Icone {
+                nome: "fa6s.trash-can"
+                cor: "#ffffff"
+                tamanho: Estilo.fonte.padrao
+                anchors.centerIn: parent
             }
 
             background: Rectangle {

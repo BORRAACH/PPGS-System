@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import estilo 1.0
+import "../../components"
 
 // Popup de confirmação de exclusão, compartilhado por todos os itens da
 // lista em ColunaEsquerda.qml/ItemComandaDelegate.qml (evita instanciar um
@@ -39,11 +40,16 @@ Popup {
     contentItem: Column {
         spacing: 20
 
-        Text {
-            text: "🗑️ Apagar esta comanda?"
-            font.pixelSize: 17
-            font.bold: true
-            color: Estilo.cores.texto
+        Row {
+            spacing: 8
+            Icone { nome: "fa6s.trash-can"; cor: Estilo.cores.texto; tamanho: 17; anchors.verticalCenter: parent.verticalCenter }
+            Text {
+                text: "Apagar esta comanda?"
+                font.pixelSize: 17
+                font.bold: true
+                color: Estilo.cores.texto
+                anchors.verticalCenter: parent.verticalCenter
+            }
         }
 
         Text {
@@ -82,7 +88,6 @@ Popup {
             Button {
                 id: btnConfirmarExclusao
 
-                text: "🗑️ Apagar"
                 padding: 10
                 onClicked: {
                     consultaController.apagarComanda(popupConfirmarExclusao.arquivoAlvo);
@@ -90,12 +95,16 @@ Popup {
                     popupConfirmarExclusao.comandaApagada();
                 }
 
-                contentItem: Text {
-                    text: btnConfirmarExclusao.text
-                    font.bold: true
-                    color: "#ffffff"
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
+                contentItem: Row {
+                    spacing: 6
+                    anchors.centerIn: parent
+                    Icone { nome: "fa6s.trash-can"; cor: "#ffffff"; tamanho: Estilo.fonte.padrao; anchors.verticalCenter: parent.verticalCenter }
+                    Text {
+                        text: "Apagar"
+                        font.bold: true
+                        color: "#ffffff"
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
                 }
 
                 background: Rectangle {

@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import estilo 1.0
+import "../../../components"
 
 Page {
     id: telaOutros
@@ -168,11 +169,16 @@ Page {
             height: parent.height
             spacing: 12
 
-            Text {
-                text: "📦 Escolha o(s) Item(ns)"
-                font.pixelSize: Estilo.fonte.titulo
-                font.bold: true
-                color: "#9b59b6"
+            Row {
+                spacing: 8
+                Icone { nome: "fa6s.box"; cor: "#9b59b6"; tamanho: Estilo.fonte.titulo; anchors.verticalCenter: parent.verticalCenter }
+                Text {
+                    text: "Escolha o(s) Item(ns)"
+                    font.pixelSize: Estilo.fonte.titulo
+                    font.bold: true
+                    color: "#9b59b6"
+                    anchors.verticalCenter: parent.verticalCenter
+                }
             }
 
             Text {
@@ -188,7 +194,7 @@ Page {
 
                 width: parent.width
                 height: 42
-                placeholderText: "🔍 Pesquisar item (ex: chocolate, trufa)..."
+                placeholderText: "Pesquisar item (ex: chocolate, trufa)..."
                 placeholderTextColor: "#95a5a6"
                 font.pixelSize: Estilo.fonte.padrao
                 leftPadding: 14
@@ -346,9 +352,10 @@ Page {
                     anchors.centerIn: parent
                     spacing: 10
 
-                    Text {
-                        text: "📦"
-                        font.pixelSize: 90
+                    Icone {
+                        nome: "fa6s.box"
+                        cor: "#9b59b6"
+                        tamanho: 90
                         anchors.horizontalCenter: parent.horizontalCenter
                         opacity: totalItens > 0 ? 1 : 0.35
                     }

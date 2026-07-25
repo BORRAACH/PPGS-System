@@ -25,6 +25,9 @@ import sys
 _DEPENDENCIAS_PIP = [
     ("PyQt6", "PyQt6.QtCore", None),
     ("pywin32", "win32print", "win32"),
+    # Ícones (Font Awesome, Material Design Icons...) expostos ao QML por
+    # services/iconProvider.py — ver qml/components/Icone.qml.
+    ("qtawesome", "qtawesome", None),
 ]
 
 # Programas de sistema (não pacotes Python) exigidos só no Linux, e o nome
@@ -70,7 +73,21 @@ def _instalar_pip(pacote: str) -> bool:
         subprocess.run([sys.executable, "-m", "pip", "install", pacote], check=True)
         return True
     except (subprocess.CalledProcessError, OSError) as erro:
-        print(f"[preConfig] Falha ao instalar {pacote} via pip: {erro}")
+        print(f"[preConfig] pip indisponível/falhou ({erro}); tentando via uv...")
+
+    # venvs criados com "uv venv" (ver .venv/pyvenv.cfg: "uv = ...") não
+    # vêm com o módulo pip instalado de propósito — o uv espera "uv pip
+    # install" no lugar de "python -m pip". Só entra aqui se o pip acima
+    # não deu certo, e só se o uv estiver disponível no PATH.
+    uv = shutil.which("uv")
+    if not uv:
+        return False
+
+    try:
+        subprocess.run([uv, "pip", "install", "--python", sys.executable, pacote], check=True)
+        return True
+    except (subprocess.CalledProcessError, OSError) as erro:
+        print(f"[preConfig] Falha ao instalar {pacote} via uv: {erro}")
         return False
 
 
@@ -144,19 +161,37 @@ def _garantir_programas_sistema() -> None:
         _instalar_programa_linux(comando, pacotes)
 
 
+def _dependencias_aplicaveis():
+    """_DEPENDENCIAS_PIP filtrada pela plataforma atual (ex: pywin32 só
+    entra na lista se sys.platform == "win32")."""
+    return [
+        (pacote, modulo)
+        for pacote, modulo, plataforma in _DEPENDENCIAS_PIP
+        if not plataforma or sys.platform == plataforma
+    ]
+
+
 def garantir_dependencias() -> None:
-    """Verifica cada dependência Python do projeto (instalando a que
-    estiver faltando), configura o ambiente Qt para evitar plugins nativos
+    """Primeiro checa se as dependências Python já estão todas instaladas —
+    se estiverem, não mexe em nada e devolve o controle pra main.py seguir
+    direto pra rodar o programa. Só quando falta algo é que instala (best-
+    effort: o que não conseguir resolver sozinho vira um aviso claro no
+    console em vez de deixar main.py travar mais na frente com um erro sem
+    contexto). Também configura o ambiente Qt para evitar plugins nativos
     problemáticos e, no Linux, garante os programas de sistema exigidos
-    pela impressão — tudo best-effort: o que não conseguir resolver sozinho
-    vira um aviso claro no console em vez de deixar main.py travar mais na
-    frente com um erro sem contexto."""
+    pela impressão."""
     _configurar_estilo_qt_quick()
 
-    for pacote, modulo, plataforma in _DEPENDENCIAS_PIP:
-        if plataforma and sys.platform != plataforma:
-            continue
-        _garantir_modulo(pacote, modulo)
+    dependencias = _dependencias_aplicaveis()
+    faltando = [(pacote, modulo) for pacote, modulo in dependencias if not _importa(modulo)]
+
+    if not faltando:
+        print("[preConfig] Todas as dependências Python já estão instaladas — nada para fazer, iniciando o app.")
+    else:
+        nomes = ", ".join(pacote for pacote, _ in faltando)
+        print(f"[preConfig] Dependência(s) ausente(s): {nomes}. Instalando...")
+        for pacote, modulo in faltando:
+            _garantir_modulo(pacote, modulo)
 
     _garantir_programas_sistema()
 

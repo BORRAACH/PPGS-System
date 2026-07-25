@@ -60,6 +60,9 @@ referência do que é usado por trás:
 - Python ≥ 3.14
 - [`PyQt6`](https://pypi.org/project/PyQt6/) (interface QML) — instalado
   via pip automaticamente.
+- [`qtawesome`](https://pypi.org/project/QtAwesome/) (ícones — Font
+  Awesome, Material Design Icons etc., ver `qml/components/Icone.qml`) —
+  instalado via pip automaticamente.
 
 **Windows**
 - [`pywin32`](https://pypi.org/project/pywin32/) (acesso ao spooler de

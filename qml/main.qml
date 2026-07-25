@@ -100,10 +100,10 @@ ApplicationWindow {
                                         anchors.centerIn: parent
                                         spacing: 8
 
-                                        Text {
-                                            text: "🛍️"
-                                            font.pixelSize: 36
-                                            horizontalAlignment: Text.AlignHCenter
+                                        Icone {
+                                            nome: "fa6s.bag-shopping"
+                                            cor: "#d97706"
+                                            tamanho: 36
                                             anchors.horizontalCenter: parent
                                         }
 
@@ -153,10 +153,10 @@ ApplicationWindow {
                                         anchors.centerIn: parent
                                         spacing: 8
 
-                                        Text {
-                                            text: "🛵"
-                                            font.pixelSize: 36
-                                            horizontalAlignment: Text.AlignHCenter
+                                        Icone {
+                                            nome: "fa6s.motorcycle"
+                                            cor: "#0284c7"
+                                            tamanho: 36
                                             anchors.horizontalCenter: parent
                                         }
 

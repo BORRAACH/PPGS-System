@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import estilo 1.0
+import "../../../components"
 
 Page {
     id: telaLanches
@@ -19,20 +20,20 @@ Page {
     readonly property var tiposPao: [
         {
             "nome": "Pão de Hambúrguer",
-            "icone": "🍔",
+            "icone": "fa6s.burger",
             "cor": "#e67e22",
             // Pão padrão do lanche: não aparece no nome do pedido.
             "resumo": ""
         },
         {
             "nome": "Pão Francês",
-            "icone": "🥖",
+            "icone": "fa6s.bread-slice",
             "cor": "#8e44ad",
             "resumo": "frances"
         },
         {
             "nome": "Pão Baby",
-            "icone": "🍞",
+            "icone": "fa6s.bread-slice",
             "cor": "#16a085",
             "resumo": "baby"
         }
@@ -229,13 +230,17 @@ Page {
                         height: 46
                         onClicked: confirmarPao(modelData.nome)
 
-                        contentItem: Text {
-                            text: modelData.icone + "  " + modelData.nome
-                            font.pixelSize: 15
-                            font.bold: true
-                            color: "#ffffff"
-                            horizontalAlignment: Text.AlignHCenter
-                            verticalAlignment: Text.AlignVCenter
+                        contentItem: Row {
+                            spacing: 8
+                            anchors.centerIn: parent
+                            Icone { nome: modelData.icone; cor: "#ffffff"; tamanho: 15; anchors.verticalCenter: parent.verticalCenter }
+                            Text {
+                                text: modelData.nome
+                                font.pixelSize: 15
+                                font.bold: true
+                                color: "#ffffff"
+                                anchors.verticalCenter: parent.verticalCenter
+                            }
                         }
 
                         background: Rectangle {
@@ -294,11 +299,16 @@ Page {
             height: parent.height
             spacing: 12
 
-            Text {
-                text: "🍔 Escolha o(s) Lanche(s)"
-                font.pixelSize: Estilo.fonte.titulo
-                font.bold: true
-                color: "#e67e22"
+            Row {
+                spacing: 8
+                Icone { nome: "fa6s.burger"; cor: "#e67e22"; tamanho: Estilo.fonte.titulo; anchors.verticalCenter: parent.verticalCenter }
+                Text {
+                    text: "Escolha o(s) Lanche(s)"
+                    font.pixelSize: Estilo.fonte.titulo
+                    font.bold: true
+                    color: "#e67e22"
+                    anchors.verticalCenter: parent.verticalCenter
+                }
             }
 
             Text {
@@ -314,7 +324,7 @@ Page {
 
                 width: parent.width
                 height: 42
-                placeholderText: "🔍 Pesquisar lanche (ex: bacon, salada)..."
+                placeholderText: "Pesquisar lanche (ex: bacon, salada)..."
                 placeholderTextColor: "#95a5a6"
                 font.pixelSize: Estilo.fonte.padrao
                 leftPadding: 14
@@ -437,9 +447,10 @@ Page {
                     anchors.centerIn: parent
                     spacing: 10
 
-                    Text {
-                        text: "🍔"
-                        font.pixelSize: 90
+                    Icone {
+                        nome: "fa6s.burger"
+                        cor: "#e67e22"
+                        tamanho: 90
                         anchors.horizontalCenter: parent.horizontalCenter
                         opacity: selecionados.length > 0 ? 1 : 0.35
                     }

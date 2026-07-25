@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import estilo 1.0
+import "../../components"
 
 Page {
     id: telaConsulta
@@ -178,36 +179,48 @@ Page {
             Layout.fillWidth: true
             spacing: 15
 
-            Text {
-                text: "🔍 CONSULTA DE COMANDAS"
-                font.pixelSize: Estilo.fonte.titulo
-                font.bold: true
-                color: "#7c3aed"
+            Row {
+                spacing: 8
+                Icone { nome: "fa6s.magnifying-glass"; cor: "#7c3aed"; tamanho: Estilo.fonte.titulo; anchors.verticalCenter: parent.verticalCenter }
+                Text {
+                    text: "CONSULTA DE COMANDAS"
+                    font.pixelSize: Estilo.fonte.titulo
+                    font.bold: true
+                    color: "#7c3aed"
+                    anchors.verticalCenter: parent.verticalCenter
+                }
             }
 
             Item {
                 Layout.fillWidth: true
             }
 
-            Text {
-                text: "🌐 " + redeController.quantidadeConectados + " conectado(s)"
-                font.pixelSize: Estilo.fonte.padrao
-                color: Estilo.cores.textoSecundario
+            Row {
+                spacing: 6
+                Icone { nome: "fa6s.globe"; cor: Estilo.cores.textoSecundario; tamanho: Estilo.fonte.padrao; anchors.verticalCenter: parent.verticalCenter }
+                Text {
+                    text: redeController.quantidadeConectados + " conectado(s)"
+                    font.pixelSize: Estilo.fonte.padrao
+                    color: Estilo.cores.textoSecundario
+                    anchors.verticalCenter: parent.verticalCenter
+                }
             }
 
             Button {
                 id: btnAtualizar
 
-                text: "🔄 Atualizar"
                 padding: 8
                 onClicked: telaConsulta.carregarComandas()
 
-                contentItem: Text {
-                    text: btnAtualizar.text
-                    font.bold: true
-                    color: "#ffffff"
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
+                contentItem: Row {
+                    spacing: 6
+                    Icone { nome: "fa6s.arrows-rotate"; cor: "#ffffff"; tamanho: Estilo.fonte.padrao; anchors.verticalCenter: parent.verticalCenter }
+                    Text {
+                        text: "Atualizar"
+                        font.bold: true
+                        color: "#ffffff"
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
                 }
 
                 background: Rectangle {
@@ -229,7 +242,6 @@ Page {
         Button {
             id: btnVoltar
 
-            text: "← Voltar para o Menu"
             padding: 10
             Layout.alignment: Qt.AlignHCenter
             Layout.preferredWidth: 200
@@ -238,12 +250,16 @@ Page {
                     telaConsulta.StackView.view.pop();
             }
 
-            contentItem: Text {
-                text: btnVoltar.text
-                font.bold: true
-                color: "#ffffff"
-                horizontalAlignment: Text.AlignHCenter
-                verticalAlignment: Text.AlignVCenter
+            contentItem: Row {
+                spacing: 6
+                anchors.centerIn: parent
+                Icone { nome: "fa6s.arrow-left"; cor: "#ffffff"; tamanho: Estilo.fonte.padrao; anchors.verticalCenter: parent.verticalCenter }
+                Text {
+                    text: "Voltar para o Menu"
+                    font.bold: true
+                    color: "#ffffff"
+                    anchors.verticalCenter: parent.verticalCenter
+                }
             }
 
             background: Rectangle {

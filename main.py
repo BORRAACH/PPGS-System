@@ -14,6 +14,7 @@ try:
     from controllers.entregaController import EntregaController
     from controllers.consultaController import ConsultaController
     from services.redeService import rede
+    from services.iconProvider import IconProvider
 except ModuleNotFoundError as erro:
     # preConfig.garantir_dependencias() já tentou instalar tudo sozinho —
     # se mesmo assim algo continua faltando (sem internet, sem permissão
@@ -47,6 +48,10 @@ if __name__ == "__main__":
     # a partir da raiz do projeto, em vez de caminhos relativos "../../../.."
     # que quebram se um arquivo .qml mudar de pasta.
     engine.rootContext().setContextProperty("raizProjeto", QUrl.fromLocalFile(base_dir + os.sep))
+
+    # Ícones (qml/components/Icone.qml) via "image://qtaicon/<nome>" — ver
+    # services/iconProvider.py.
+    engine.addImageProvider("qtaicon", IconProvider())
 
     controller = BalcaoController()
     engine.rootContext().setContextProperty("balcaoController", controller)

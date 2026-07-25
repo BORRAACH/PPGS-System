@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import estilo 1.0
+import "../../components"
 
 // Mostra as máquinas atualmente conectadas na malha local (ver
 // services/redeService.py) — quem está compartilhando pedidos com esta
@@ -96,11 +97,16 @@ Page {
             Layout.fillWidth: true
             spacing: 15
 
-            Text {
-                text: "🌐 REDE LOCAL"
-                font.pixelSize: Estilo.fonte.titulo
-                font.bold: true
-                color: "#0ea5e9"
+            Row {
+                spacing: 8
+                Icone { nome: "fa6s.globe"; cor: "#0ea5e9"; tamanho: Estilo.fonte.titulo; anchors.verticalCenter: parent.verticalCenter }
+                Text {
+                    text: "REDE LOCAL"
+                    font.pixelSize: Estilo.fonte.titulo
+                    font.bold: true
+                    color: "#0ea5e9"
+                    anchors.verticalCenter: parent.verticalCenter
+                }
             }
 
             Item {
@@ -110,19 +116,22 @@ Page {
             Button {
                 id: btnAtualizarRede
 
-                text: "🔄 Atualizar"
                 padding: 8
                 onClicked: {
                     telaRede.carregarPeers();
                     telaRede.carregarImpressora();
                 }
 
-                contentItem: Text {
-                    text: btnAtualizarRede.text
-                    font.bold: true
-                    color: "#ffffff"
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
+                contentItem: Row {
+                    spacing: 6
+                    Icone { nome: "fa6s.arrows-rotate"; cor: "#ffffff"; tamanho: Estilo.fonte.padrao; anchors.verticalCenter: parent.verticalCenter }
+                    Text {
+                        text: "Atualizar"
+                        font.bold: true
+                        color: "#ffffff"
+                        verticalAlignment: Text.AlignVCenter
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
                 }
 
                 background: Rectangle {
@@ -147,9 +156,10 @@ Page {
                 anchors.margins: 10
                 spacing: 10
 
-                Text {
-                    text: "🖥️"
-                    font.pixelSize: Estilo.fonte.titulo
+                Icone {
+                    nome: "fa6s.desktop"
+                    cor: Estilo.cores.texto
+                    tamanho: Estilo.fonte.titulo
                 }
 
                 ColumnLayout {
@@ -228,9 +238,10 @@ Page {
                             anchors.margins: 10
                             spacing: 10
 
-                            Text {
-                                text: "🖥️"
-                                font.pixelSize: Estilo.fonte.titulo
+                            Icone {
+                                nome: "fa6s.desktop"
+                                cor: Estilo.cores.texto
+                                tamanho: Estilo.fonte.titulo
                             }
 
                             ColumnLayout {
@@ -294,9 +305,10 @@ Page {
                             Layout.fillWidth: true
                             spacing: 8
 
-                            Text {
-                                text: telaRede.carregandoImpressora ? "⏳" : (telaRede.infoImpressora.encontrada ? "🖨️" : "🚫")
-                                font.pixelSize: Estilo.fonte.titulo
+                            Icone {
+                                nome: telaRede.carregandoImpressora ? "fa6s.hourglass-half" : (telaRede.infoImpressora.encontrada ? "fa6s.print" : "fa6s.ban")
+                                cor: telaRede.infoImpressora.encontrada ? Estilo.cores.texto : Estilo.cores.textoSecundario
+                                tamanho: Estilo.fonte.titulo
                             }
 
                             Text {

@@ -124,6 +124,9 @@ class EntregaController(QObject):
         linhas_arquivo.append("-" * 40)
         linhas_arquivo.append("")
         linhas_arquivo.append(f"Valor do pedido: R$ {valor_total:.2f}".replace(".", ","))
+        if forma_pagamento == "Dinheiro" and troco:
+            troco_a_dar = _valor_para_float(troco) - valor_total
+            linhas_arquivo.append(f"Troco a dar: R$ {troco_a_dar:.2f}".replace(".", ","))
 
         conteudo = "\n".join(linhas_arquivo) + "\n"
         # Modo binário: o texto vira bytes em cp850 e os códigos ESC/POS de

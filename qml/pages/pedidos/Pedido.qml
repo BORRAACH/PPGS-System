@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import estilo 1.0
+import "../../components"
 
 Popup {
     id: popupSelecaoPedido
@@ -31,28 +32,28 @@ Popup {
 
         ListElement {
             nome: "Pizza"
-            icone: "🍕"
+            icone: "fa6s.pizza-slice"
             cor: "#e74c3c"
             pagina: "pizzas/Pizzas.qml"
         }
 
         ListElement {
             nome: "Lanche"
-            icone: "🍔"
+            icone: "fa6s.burger"
             cor: "#e67e22"
             pagina: "lanches/Lanches.qml"
         }
 
         ListElement {
             nome: "Bebidas"
-            icone: "🥤"
+            icone: "fa6s.glass-water"
             cor: "#3498db"
             pagina: "bebidas/Bebidas.qml"
         }
 
         ListElement {
             nome: "Outros"
-            icone: "📦"
+            icone: "fa6s.box"
             cor: "#9b59b6"
             pagina: "outros/Outros.qml"
         }
@@ -113,9 +114,10 @@ Popup {
                             anchors.centerIn: parent
                             spacing: 8
 
-                            Text {
-                                text: model.icone
-                                font.pixelSize: btnCategoria.width * 0.35
+                            Icone {
+                                nome: model.icone
+                                cor: "#ffffff"
+                                tamanho: btnCategoria.width * 0.35
                                 anchors.horizontalCenter: parent
                             }
 

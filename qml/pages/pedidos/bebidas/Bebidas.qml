@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import estilo 1.0
+import "../../../components"
 
 Page {
     id: telaBebidas
@@ -168,11 +169,16 @@ Page {
             height: parent.height
             spacing: 12
 
-            Text {
-                text: "🥤 Escolha a(s) Bebida(s)"
-                font.pixelSize: Estilo.fonte.titulo
-                font.bold: true
-                color: "#3498db"
+            Row {
+                spacing: 8
+                Icone { nome: "fa6s.glass-water"; cor: "#3498db"; tamanho: Estilo.fonte.titulo; anchors.verticalCenter: parent.verticalCenter }
+                Text {
+                    text: "Escolha a(s) Bebida(s)"
+                    font.pixelSize: Estilo.fonte.titulo
+                    font.bold: true
+                    color: "#3498db"
+                    anchors.verticalCenter: parent.verticalCenter
+                }
             }
 
             Text {
@@ -188,7 +194,7 @@ Page {
 
                 width: parent.width
                 height: 42
-                placeholderText: "🔍 Pesquisar bebida (ex: coca, suco)..."
+                placeholderText: "Pesquisar bebida (ex: coca, suco)..."
                 placeholderTextColor: "#95a5a6"
                 font.pixelSize: Estilo.fonte.padrao
                 leftPadding: 14
@@ -346,9 +352,10 @@ Page {
                     anchors.centerIn: parent
                     spacing: 10
 
-                    Text {
-                        text: "🥤"
-                        font.pixelSize: 90
+                    Icone {
+                        nome: "fa6s.glass-water"
+                        cor: "#3498db"
+                        tamanho: 90
                         anchors.horizontalCenter: parent.horizontalCenter
                         opacity: totalItens > 0 ? 1 : 0.35
                     }

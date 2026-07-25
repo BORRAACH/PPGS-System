@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import "../pedidos"
+import "../../components"
 import estilo 1.0
 
 Page {
@@ -159,12 +160,17 @@ Page {
                 anchors.centerIn: parent
                 spacing: 20
 
-                Text {
-                    text: "🏢 ATENDIMENTO BALCÃO"
-                    font.pixelSize: Estilo.fonte.titulo
-                    font.bold: true
-                    color: Estilo.confirmar.normal
+                Row {
+                    spacing: 10
                     anchors.horizontalCenter: parent
+                    Icone { nome: "fa6s.building"; cor: Estilo.confirmar.normal; tamanho: Estilo.fonte.titulo; anchors.verticalCenter: parent.verticalCenter }
+                    Text {
+                        text: "ATENDIMENTO BALCÃO"
+                        font.pixelSize: Estilo.fonte.titulo
+                        font.bold: true
+                        color: Estilo.confirmar.normal
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
                 }
 
                 // Campo Nome do Cliente
@@ -370,12 +376,17 @@ Page {
                 }
 
                 // --- SEÇÃO DE PAGAMENTO ---
-                Text {
-                    text: "💳 PAGAMENTO"
-                    font.pixelSize: 16
-                    font.bold: true
-                    color: Estilo.confirmar.normal
+                Row {
+                    spacing: 8
                     anchors.horizontalCenter: parent
+                    Icone { nome: "fa6s.credit-card"; cor: Estilo.confirmar.normal; tamanho: 16; anchors.verticalCenter: parent.verticalCenter }
+                    Text {
+                        text: "PAGAMENTO"
+                        font.pixelSize: 16
+                        font.bold: true
+                        color: Estilo.confirmar.normal
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
                 }
 
                 Row {
@@ -486,7 +497,6 @@ Page {
                     Button {
                         id: btnImprimir
 
-                        text: "🖨️ Imprimir"
                         padding: 10
                         width: 200
                         onClicked: {
@@ -524,18 +534,22 @@ Page {
                                 comboFormaPagamento.currentIndex = 0;
                                 inputTroco.text = "";
                                 btnStatusPagamento.pago = false;
-                                telaBalcao.mostrarNotificacao("✅ Pedido salvo com sucesso!", true);
+                                telaBalcao.mostrarNotificacao("Pedido salvo com sucesso!", true);
                             } else {
-                                telaBalcao.mostrarNotificacao("❌ Erro ao salvar o pedido.", false);
+                                telaBalcao.mostrarNotificacao("Erro ao salvar o pedido.", false);
                             }
                         }
 
-                        contentItem: Text {
-                            text: btnImprimir.text
-                            font.bold: true
-                            color: "#ffffff"
-                            horizontalAlignment: Text.AlignHCenter
-                            verticalAlignment: Text.AlignVCenter
+                        contentItem: Row {
+                            spacing: 6
+                            anchors.centerIn: parent
+                            Icone { nome: "fa6s.print"; cor: "#ffffff"; tamanho: Estilo.fonte.padrao; anchors.verticalCenter: parent.verticalCenter }
+                            Text {
+                                text: "Imprimir"
+                                font.bold: true
+                                color: "#ffffff"
+                                anchors.verticalCenter: parent.verticalCenter
+                            }
                         }
 
                         background: Rectangle {
@@ -551,7 +565,6 @@ Page {
                     Button {
                         id: btnVoltar
 
-                        text: "← Voltar para o Menu"
                         padding: 10
                         width: 200
                         onClicked: {
@@ -561,12 +574,16 @@ Page {
                                 telaBalcao.StackView.view.pop();
                         }
 
-                        contentItem: Text {
-                            text: btnVoltar.text
-                            font.bold: true
-                            color: "#ffffff"
-                            horizontalAlignment: Text.AlignHCenter
-                            verticalAlignment: Text.AlignVCenter
+                        contentItem: Row {
+                            spacing: 6
+                            anchors.centerIn: parent
+                            Icone { nome: "fa6s.arrow-left"; cor: "#ffffff"; tamanho: Estilo.fonte.padrao; anchors.verticalCenter: parent.verticalCenter }
+                            Text {
+                                text: "Voltar para o Menu"
+                                font.bold: true
+                                color: "#ffffff"
+                                anchors.verticalCenter: parent.verticalCenter
+                            }
                         }
 
                         background: Rectangle {
@@ -597,7 +614,7 @@ Page {
         z: 1000
         radius: Estilo.rounding.medio
         color: sucesso ? Estilo.confirmar.normal : Estilo.cancelar.normal
-        width: textoNotificacao.implicitWidth + 40
+        width: linhaNotificacao.implicitWidth + 40
         height: 50
         anchors.right: parent.right
         anchors.rightMargin: 20
@@ -614,14 +631,26 @@ Page {
 
         }
 
-        Text {
-            id: textoNotificacao
+        Row {
+            id: linhaNotificacao
 
-            text: notificacao.texto
-            color: "#ffffff"
-            font.bold: true
-            font.pixelSize: Estilo.fonte.padrao
+            spacing: 8
             anchors.centerIn: parent
+
+            Icone {
+                nome: notificacao.sucesso ? "fa6s.circle-check" : "fa6s.circle-xmark"
+                cor: "#ffffff"
+                tamanho: Estilo.fonte.padrao
+                anchors.verticalCenter: parent.verticalCenter
+            }
+
+            Text {
+                text: notificacao.texto
+                color: "#ffffff"
+                font.bold: true
+                font.pixelSize: Estilo.fonte.padrao
+                anchors.verticalCenter: parent.verticalCenter
+            }
         }
 
     }

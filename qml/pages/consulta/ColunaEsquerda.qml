@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import estilo 1.0
+import "../../components"
 
 // Coluna esquerda de Consulta.qml: contador de comandas, barra de busca,
 // botão de alternância do modo de edição rápida e a lista de comandas.
@@ -40,7 +41,7 @@ Column {
 
             width: parent.width - btnModoEdicao.width - linhaBusca.spacing
             height: 42
-            placeholderText: "🔍 Pesquisar por cliente ou conteúdo..."
+            placeholderText: "Pesquisar por cliente ou conteúdo..."
             placeholderTextColor: "#95a5a6"
             font.pixelSize: Estilo.fonte.padrao
             leftPadding: 14
@@ -65,15 +66,23 @@ Column {
 
             height: 42
             padding: 10
-            text: colunaEsquerda.modoEdicao ? "✖️  Concluir" : "✏️  Editar"
             onClicked: colunaEsquerda.modoEdicao = !colunaEsquerda.modoEdicao
 
-            contentItem: Text {
-                text: btnModoEdicao.text
-                font.bold: true
-                color: "#ffffff"
-                horizontalAlignment: Text.AlignHCenter
-                verticalAlignment: Text.AlignVCenter
+            contentItem: Row {
+                spacing: 6
+                anchors.centerIn: parent
+                Icone {
+                    nome: colunaEsquerda.modoEdicao ? "fa6s.xmark" : "fa6s.pen"
+                    cor: "#ffffff"
+                    tamanho: Estilo.fonte.padrao
+                    anchors.verticalCenter: parent.verticalCenter
+                }
+                Text {
+                    text: colunaEsquerda.modoEdicao ? "Concluir" : "Editar"
+                    font.bold: true
+                    color: "#ffffff"
+                    anchors.verticalCenter: parent.verticalCenter
+                }
             }
 
             background: Rectangle {
