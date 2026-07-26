@@ -14,6 +14,10 @@ Column {
     property var popupExclusao
     property alias model: listaComandas.model
     property alias totalComandas: listaComandas.count
+    // Exposto para Consulta.qml poder focar a busca e já entrar com o
+    // caractere digitado, sem precisar clicar antes no campo (ver
+    // Consulta.qml Keys.onPressed).
+    property alias campoBusca: campoBusca
 
     // Estado local: só a própria lista precisa saber se os botões rápidos
     // de editar/apagar estão visíveis.
@@ -36,29 +40,46 @@ Column {
         height: 42
         spacing: 8
 
-        TextField {
+        Search {
             id: campoBusca
 
             width: parent.width - btnModoEdicao.width - linhaBusca.spacing
-            height: 42
+            corDestaque: "#7c3aed"
             placeholderText: "Pesquisar por cliente ou conteúdo..."
-            placeholderTextColor: "#95a5a6"
-            font.pixelSize: Estilo.fonte.padrao
-            leftPadding: 14
-            rightPadding: 14
-            color: Estilo.cores.texto
-            selectByMouse: true
+            // Só reordena/exibe depois que o usuário para de digitar (ver
+            // debounceBusca abaixo) — reprocessar a lista inteira a cada
+            // tecla é o que travava em CPUs fracas conforme a lista de
+            // comandas cresce.
             onTextChanged: {
                 colunaEsquerda.pagina.buscaAtual = text;
+                debounceBusca.restart();
+            }
+            // Enter age na hora (não espera o debounce): já reordena, se
+            // ainda não reordenou, e seleciona a comanda mais próxima (topo
+            // da lista, ver Consulta.qml aplicarFiltro) — não existe
+            // "resultado único" aqui porque a busca reordena em vez de
+            // esconder comandas.
+            onAccepted: {
+                debounceBusca.stop();
                 colunaEsquerda.pagina.aplicarFiltro();
+                if (colunaEsquerda.pagina.buscaAtual.trim() !== "" && listaComandas.count > 0) {
+                    colunaEsquerda.pagina.selecionarComanda(listaComandas.model.get(0));
+                    campoBusca.text = "";
+                }
             }
+        }
 
-            background: Rectangle {
-                radius: Estilo.rounding.grande
-                color: "#ffffff"
-                border.color: campoBusca.activeFocus ? "#7c3aed" : Estilo.cores.borda
-                border.width: campoBusca.activeFocus ? 2 : 1
-            }
+        // Debounce: espera uma pequena pausa na digitação antes de reordenar
+        // a lista, em vez de fazer isso a cada tecla. 200ms é imperceptível
+        // para quem digita, mas evita recalcular a pontuação de todas as
+        // comandas (e o sort) a cada letra numa lista que só cresce com o
+        // tempo.
+        Timer {
+            id: debounceBusca
+
+            interval: 200
+            repeat: false
+            onTriggered: colunaEsquerda.pagina.aplicarFiltro()
         }
 
         Button {

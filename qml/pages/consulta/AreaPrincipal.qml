@@ -10,6 +10,9 @@ Row {
     // para os dois filhos.
     property var pagina
     property var popupExclusao
+    // Repassado de ColunaEsquerda.qml para Consulta.qml poder focar a busca
+    // ao digitar sem clicar (ver Consulta.qml Keys.onPressed).
+    property alias campoBusca: colunaEsquerda.campoBusca
 
     spacing: 20
 

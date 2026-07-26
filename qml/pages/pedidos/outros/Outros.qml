@@ -2,9 +2,16 @@ import QtQuick
 import QtQuick.Controls
 import estilo 1.0
 import "../../../components"
+import "../../../components/Texto.js" as Texto
 
 Page {
     id: telaOutros
+
+    focus: true
+    // "focus: true" sozinho não é suficiente: StackView assume o controle do
+    // foco ao trocar de página, então é preciso pedir foco de novo quando
+    // esta página vira a atual (senão digitar sem clicar antes não funciona).
+    StackView.onActivated: forceActiveFocus()
 
     property var onPedidoSelecionado: null
     property var pilha: null
@@ -56,11 +63,11 @@ Page {
 
     function filtrarOutros(texto) {
         modeloFiltrado.clear();
-        var busca = texto ? texto.trim().toLowerCase() : "";
+        var busca = texto ? Texto.normalizar(texto.trim()) : "";
         var resultados = [];
         for (var i = 0; i < modeloOutros.count; i++) {
             var item = modeloOutros.get(i);
-            var nomeLower = item.nome.toLowerCase();
+            var nomeLower = Texto.normalizar(item.nome);
             if (busca === "" || nomeLower.indexOf(busca) !== -1)
                 resultados.push({
                     "nome": item.nome,
@@ -137,6 +144,17 @@ Page {
         selecionados = lista;
     }
 
+    // Permite digitar direto na tela para pesquisar, sem precisar clicar
+    // antes na barra de busca — qualquer tecla "imprimível" (letras,
+    // números, acentos) foca a barra e já entra com o caractere digitado.
+    Keys.onPressed: function (event) {
+        if (!campoBusca.activeFocus && event.key >= Qt.Key_Space && event.key <= Qt.Key_ydiaeresis) {
+            campoBusca.forceActiveFocus();
+            campoBusca.text += event.text;
+            event.accepted = true;
+        }
+    }
+
     Component.onCompleted: {
         carregarOutros();
     }
@@ -189,27 +207,23 @@ Page {
             }
 
             // BARRA DE PESQUISA
-            TextField {
+            Search {
                 id: campoBusca
 
                 width: parent.width
-                height: 42
+                corDestaque: "#9b59b6"
                 placeholderText: "Pesquisar item (ex: chocolate, trufa)..."
-                placeholderTextColor: "#95a5a6"
-                font.pixelSize: Estilo.fonte.padrao
-                leftPadding: 14
-                rightPadding: 14
-                color: Estilo.cores.texto
-                selectByMouse: true
                 onTextChanged: {
                     filtrarOutros(text);
                 }
-
-                background: Rectangle {
-                    radius: Estilo.rounding.grande
-                    color: "#ffffff"
-                    border.color: campoBusca.activeFocus ? "#9b59b6" : Estilo.cores.borda
-                    border.width: campoBusca.activeFocus ? 2 : 1
+                // Enter com um só resultado na busca já adiciona esse item
+                // (mesmo efeito do botão "+") e limpa a busca.
+                onAccepted: {
+                    if (modeloFiltrado.count === 1) {
+                        var item = modeloFiltrado.get(0);
+                        adicionarItem(item.nome, parseValor(item.valor));
+                        campoBusca.text = "";
+                    }
                 }
             }
 

@@ -15,7 +15,7 @@ Rectangle {
     property var pagina
     property var popupExclusao
     property bool modoEdicao: false
-    property bool selecionado: pagina ? index === pagina.indiceSelecionado : false
+    property bool selecionado: pagina ? model.arquivo === pagina.arquivoSelecionado : false
 
     // Emitido no clique com o botão direito — ColunaEsquerda.qml conecta a
     // este sinal para alternar o modo de edição, mesma ação do botão
@@ -41,14 +41,7 @@ Rectangle {
                 itemComanda.alternarModoEdicao();
                 return;
             }
-            pagina.indiceSelecionado = index;
-            pagina.comandaSelecionada = {
-                "tipo": model.tipo,
-                "arquivo": model.arquivo,
-                "conteudo": model.conteudo,
-                "cliente": model.cliente,
-                "dataHora": model.dataHora
-            };
+            pagina.selecionarComanda(model);
         }
     }
 

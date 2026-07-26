@@ -3,16 +3,23 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import estilo 1.0
 import "../../components"
+import "../../components/Texto.js" as Texto
 
 Page {
     id: telaConsulta
 
     objectName: "telaConsulta"
 
+    focus: true
+
     // Comanda atualmente exibida no painel da direita (objeto simples com
     // tipo/arquivo/conteudo). null enquanto nada foi selecionado ainda.
     property var comandaSelecionada: null
-    property int indiceSelecionado: -1
+    // Identifica a comanda destacada na lista pelo nome do arquivo (chave
+    // estável), não pelo índice — a busca reordena a lista a qualquer
+    // momento (inclusive ao ser limpa pelo Enter), o que deixaria um índice
+    // guardado apontando para a comanda errada.
+    property string arquivoSelecionado: ""
     // Lista bruta (mais recente primeiro), como veio do controller — a busca
     // reordena a partir dela sem precisar reconsultar o disco a cada tecla.
     property var _todasComandas: []
@@ -30,46 +37,20 @@ Page {
         return item.dataHora ? cliente + " - " + item.dataHora : cliente;
     }
 
-    // Distância de edição clássica (Levenshtein) — usada como medida de
-    // "proximidade" para textos que não contêm a busca como substring.
-    function distanciaLevenshtein(a, b) {
-        var m = a.length;
-        var n = b.length;
-        if (m === 0)
-            return n;
-
-        if (n === 0)
-            return m;
-
-        var linhaAnterior = [];
-        for (var j = 0; j <= n; j++) {
-            linhaAnterior.push(j);
-        }
-        for (var i = 1; i <= m; i++) {
-            var linhaAtual = [i];
-            for (var k = 1; k <= n; k++) {
-                var custo = a[i - 1] === b[k - 1] ? 0 : 1;
-                linhaAtual.push(Math.min(linhaAnterior[k] + 1, linhaAtual[k - 1] + 1, linhaAnterior[k - 1] + custo));
-            }
-            linhaAnterior = linhaAtual;
-        }
-        return linhaAnterior[n];
-    }
-
     // Quanto menor, mais "perto" da busca: substring encontrada pontua pela
-    // posição do match (aparecer logo no início vale mais que no meio);
-    // sem substring, cai para distância de edição — sempre pior que
-    // qualquer substring encontrada, mas ainda ordena por proximidade.
+    // posição do match (aparecer logo no início vale mais que no meio).
+    // Sem substring, entra num "balde" de pontuação fixa (sem calcular
+    // distância de edição contra o conteúdo inteiro do cupom, que seria
+    // O(tamanho do texto x tamanho da busca) por comanda — caro demais para
+    // rodar a cada tecla numa lista que só cresce). indexOf sozinho é
+    // O(tamanho do texto), suficiente para ordenar por relevância.
     function pontuarTexto(texto, busca) {
         if (busca === "")
             return 0;
 
-        var t = (texto || "").toLowerCase();
+        var t = Texto.normalizar(texto);
         var posicao = t.indexOf(busca);
-        if (posicao !== -1)
-            return posicao;
-
-        return 100000 + telaConsulta.distanciaLevenshtein(t, busca);
+        return posicao !== -1 ? posicao : 100000;
     }
 
     // Combina o nome exibido (cliente + horário) e o conteúdo do cupom,
@@ -87,24 +68,52 @@ Page {
     // Reordena _todasComandas pela proximidade com o texto pesquisado (sem
     // esconder nenhuma comanda) e repopula o modelo exibido na lista.
     function aplicarFiltro() {
-        var busca = telaConsulta.buscaAtual.trim().toLowerCase();
-        var lista = telaConsulta._todasComandas.slice();
+        var busca = Texto.normalizar(telaConsulta.buscaAtual.trim());
+        var lista = telaConsulta._todasComandas;
         if (busca !== "") {
-            lista.sort(function (a, b) {
-                return telaConsulta.pontuarComanda(a, busca) - telaConsulta.pontuarComanda(b, busca);
+            // Calcula a pontuação de cada comanda uma única vez — O(n) — em
+            // vez de deixar o comparador do sort recalculá-la a cada
+            // comparação, o que custaria O(n log n) avaliações de pontuação.
+            var comPontuacao = [];
+            for (var i = 0; i < lista.length; i++) {
+                comPontuacao.push({
+                    "item": lista[i],
+                    "pontuacao": telaConsulta.pontuarComanda(lista[i], busca)
+                });
+            }
+            comPontuacao.sort(function (a, b) {
+                return a.pontuacao - b.pontuacao;
+            });
+            lista = comPontuacao.map(function (par) {
+                return par.item;
             });
         }
         modeloComandas.clear();
-        for (var i = 0; i < lista.length; i++) {
-            modeloComandas.append(lista[i]);
+        for (var j = 0; j < lista.length; j++) {
+            modeloComandas.append(lista[j]);
         }
     }
 
     function carregarComandas() {
         telaConsulta._todasComandas = consultaController.listarComandas();
         telaConsulta.comandaSelecionada = null;
-        telaConsulta.indiceSelecionado = -1;
+        telaConsulta.arquivoSelecionado = "";
         telaConsulta.aplicarFiltro();
+    }
+
+    // Marca a comanda dada como selecionada (pelo nome do arquivo, não pela
+    // posição na lista), preenchendo o painel de detalhe à direita — usado
+    // tanto pelo clique num item (ItemComandaDelegate.qml) quanto pelo Enter
+    // na busca, que seleciona o melhor match (ver ColunaEsquerda.qml).
+    function selecionarComanda(item) {
+        telaConsulta.arquivoSelecionado = item.arquivo;
+        telaConsulta.comandaSelecionada = {
+            "tipo": item.tipo,
+            "arquivo": item.arquivo,
+            "conteudo": item.conteudo,
+            "cliente": item.cliente,
+            "dataHora": item.dataHora
+        };
     }
 
     // Reabre a comanda no formulário de Balcão ou Entrega (conforme o tipo
@@ -147,13 +156,32 @@ Page {
         }
     }
 
+    // Permite digitar direto na tela para pesquisar, sem precisar clicar
+    // antes na barra de busca — qualquer tecla "imprimível" (letras,
+    // números, acentos) foca a barra (dentro de AreaPrincipal/ColunaEsquerda)
+    // e já entra com o caractere digitado.
+    Keys.onPressed: function (event) {
+        var campoBusca = areaPrincipal.campoBusca;
+        if (campoBusca && !campoBusca.activeFocus && event.key >= Qt.Key_Space && event.key <= Qt.Key_ydiaeresis) {
+            campoBusca.forceActiveFocus();
+            campoBusca.text += event.text;
+            event.accepted = true;
+        }
+    }
+
     Component.onCompleted: {
         carregarComandas();
         // Recarrega sozinho quando um pedido de outra máquina da rede
         // chega/some (ver redeController/consultaController.aplicarPedidoRemoto).
         consultaController.comandasAtualizadas.connect(carregarComandas);
     }
-    StackView.onActivated: carregarComandas()
+    // "focus: true" sozinho não é suficiente: StackView assume o controle do
+    // foco ao trocar de página, então é preciso pedir foco de novo quando
+    // esta página vira a atual (senão digitar sem clicar antes não funciona).
+    StackView.onActivated: {
+        carregarComandas();
+        forceActiveFocus();
+    }
 
     background: Rectangle {
         color: Estilo.cores.fundoPagina
@@ -233,6 +261,8 @@ Page {
 
         // --- ÁREA PRINCIPAL: LISTA (ESQUERDA) + DETALHE (DIREITA) ---
         AreaPrincipal {
+            id: areaPrincipal
+
             Layout.fillWidth: true
             Layout.fillHeight: true
             pagina: telaConsulta

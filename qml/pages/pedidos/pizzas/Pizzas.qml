@@ -2,11 +2,18 @@ import QtQuick
 import QtQuick.Controls
 import estilo 1.0
 import "../../../components"
+import "../../../components/Texto.js" as Texto
 
 Page {
     // 2. Atualiza os preços internos das pizzas já selecionadas para o novo tamanho
 
     id: telaPizzas
+
+    focus: true
+    // "focus: true" sozinho não é suficiente: StackView assume o controle do
+    // foco ao trocar de página, então é preciso pedir foco de novo quando
+    // esta página vira a atual (senão digitar sem clicar antes não funciona).
+    StackView.onActivated: forceActiveFocus()
 
     property var onPedidoSelecionado: null
     property var pilha: null
@@ -89,13 +96,13 @@ Page {
 
     function filtrarPizzas(texto) {
         modeloFiltrado.clear();
-        var busca = texto ? texto.trim().toLowerCase() : "";
+        var busca = texto ? Texto.normalizar(texto.trim()) : "";
         // Verifica rigorosamente se a quantidade atual atingiu o limite permitido pelo tamanho
         var limiteAtingido = (selecionados.length >= limiteSabores);
         var resultados = [];
         for (var i = 0; i < modeloPizzas.count; i++) {
             var item = modeloPizzas.get(i);
-            var nomeLower = item.nome.toLowerCase();
+            var nomeLower = Texto.normalizar(item.nome);
             var selecionado = isSelecionado(item.nome);
             // Se o limite foi atingido, exibe APENAS os itens já selecionados.
             // Se ainda HÁ ESPAÇO (ex: 2 selecionados num limite de 3), exibe todos os disponíveis!
@@ -161,6 +168,17 @@ Page {
         return selecionados.some(function (item) {
             return item.nome === nome;
         });
+    }
+
+    // Permite digitar direto na tela para pesquisar, sem precisar clicar
+    // antes na barra de busca — qualquer tecla "imprimível" (letras,
+    // números, acentos) foca a barra e já entra com o caractere digitado.
+    Keys.onPressed: function (event) {
+        if (!campoBusca.activeFocus && event.key >= Qt.Key_Space && event.key <= Qt.Key_ydiaeresis) {
+            campoBusca.forceActiveFocus();
+            campoBusca.text += event.text;
+            event.accepted = true;
+        }
     }
 
     Component.onCompleted: {
@@ -238,28 +256,31 @@ Page {
             }
 
             // BARRA DE PESQUISA
-            TextField {
+            Search {
                 id: campoBusca
 
                 width: parent.width
-                height: 42
+                corDestaque: Estilo.cancelar.normal
                 placeholderText: "Pesquisar sabor (ex: calabresa, chocolate)..."
-                placeholderTextColor: "#95a5a6"
-                font.pixelSize: Estilo.fonte.padrao
-                leftPadding: 14
-                rightPadding: 14
-                color: Estilo.cores.texto
-                selectByMouse: true
                 enabled: selecionados.length < limiteSabores
                 onTextChanged: {
                     filtrarPizzas(text);
                 }
-
-                background: Rectangle {
-                    radius: Estilo.rounding.grande
-                    color: campoBusca.enabled ? "#ffffff" : "#f0f0f0"
-                    border.color: campoBusca.activeFocus ? Estilo.cancelar.normal : Estilo.cores.borda
-                    border.width: campoBusca.activeFocus ? 2 : 1
+                // Enter com um só resultado na busca já seleciona esse sabor
+                // (mesmo efeito de um clique) e limpa a busca.
+                onAccepted: {
+                    if (modeloFiltrado.count === 1) {
+                        var item = modeloFiltrado.get(0);
+                        if (!isSelecionado(item.nome) && selecionados.length < limiteSabores) {
+                            var lista = selecionados.slice();
+                            lista.push({
+                                "nome": item.nome,
+                                "valorNum": parseValor(item.valor)
+                            });
+                            selecionados = lista;
+                        }
+                        campoBusca.text = "";
+                    }
                 }
             }
 
