@@ -366,31 +366,66 @@ class RedeService(QObject):
         info = self._info_peers.get(id_maquina)
         return bool(info and info.get("temImpressora"))
 
-    def _recalcular_maquina_impressora(self):
-        """Eleição "sticky": quem já está eleito continua sendo a
-        prioridade mesmo que outra máquina passe a anunciar impressora
-        depois (inclusive esta própria máquina) — só reelege quando a
-        atual eleita perde a impressora ou desconecta da malha. Sem isso,
-        uma impressora "salva" (padrão do Windows, por exemplo, mas não
-        necessariamente a que está fisicamente conectada e em uso) que
-        aparece depois roubaria a prioridade de quem já estava servindo —
-        exatamente o cenário que esse "sticky" evita: a primeira máquina a
-        entrar na malha já com a impressora conectada continua sendo pra
-        quem tudo é mandado imprimir, mesmo que outras máquinas cheguem
-        depois também "com impressora"."""
-        if self._id_maquina_impressora is not None and self._maquina_impressora_valida(self._id_maquina_impressora):
-            return
+    # Prioridade da eleição por tipo de porta — número menor vence. usb/
+    # serial é a impressora fisicamente ligada nesta máquina; "rede" cobre
+    # impressoras salvas/compartilhadas (ex: a mesma Bematech instalada
+    # como impressora de rede/padrão em outra máquina, apontando de volta
+    # pra quem tem ela na USB). "desconhecido" nem chega a virar candidata
+    # (ver _detectar_impressora_em_thread), então não precisa de entrada
+    # aqui — o .get() abaixo cai no default.
+    _PRIORIDADE_TIPO_PORTA = {"usb": 0, "serial": 0, "rede": 1}
 
+    def _prioridade_candidato(self, id_maquina):
+        if id_maquina == self._id:
+            info = self._info_impressora_local
+        else:
+            peer = self._info_peers.get(id_maquina)
+            info = peer.get("infoImpressora") if peer else None
+        tipo_porta = (info or {}).get("tipoPorta", "")
+        return self._PRIORIDADE_TIPO_PORTA.get(tipo_porta, 1)
+
+    def _recalcular_maquina_impressora(self):
+        """Eleição "sticky com prioridade": entre máquinas do mesmo nível de
+        prioridade, quem já está eleito continua sendo a prioridade mesmo
+        que outra máquina do mesmo nível passe a anunciar impressora depois
+        — evita uma impressora "salva" instável roubando a vaga toda hora.
+
+        Mas usb/serial (impressora fisicamente conectada) sempre tem
+        prioridade sobre rede: se a eleita atual só tem impressora de rede
+        e uma candidata usb/serial aparece — inclusive a própria máquina
+        que tinha a impressora antes, voltando pra malha depois de
+        desconectar — a eleição troca na hora. Sem essa checagem de
+        prioridade, a máquina com a impressora física de verdade nunca
+        reassumia depois de reconectar: ela virava só mais uma candidata do
+        mesmo desempate por id, perdendo pro sticky de quem já estava
+        eleito."""
         candidatos = []
         if self._tem_impressora:
             candidatos.append(self._id)
         candidatos.extend(id_peer for id_peer, info in self._info_peers.items() if info.get("temImpressora"))
-        # Empate (ex: duas máquinas anunciam impressora praticamente ao
-        # mesmo tempo, antes de qualquer uma virar a eleita) é resolvido de
-        # forma determinística pelo id — toda máquina da malha vê o mesmo
-        # conjunto de candidatos e chega à mesma conclusão.
-        self._id_maquina_impressora = min(candidatos) if candidatos else None
-        self.impressoraPrincipalMudou.emit()
+
+        if not candidatos:
+            if self._id_maquina_impressora is not None:
+                self._id_maquina_impressora = None
+                self.impressoraPrincipalMudou.emit()
+            return
+
+        # Empate (mesma prioridade) é resolvido de forma determinística pelo
+        # id — toda máquina da malha vê o mesmo conjunto de candidatos e
+        # infoImpressora (gossiped por "identificar"/"status_impressora"),
+        # então chega à mesma conclusão.
+        melhor_candidato = min(candidatos, key=lambda id_maquina: (self._prioridade_candidato(id_maquina), id_maquina))
+
+        if (
+            self._id_maquina_impressora is not None
+            and self._maquina_impressora_valida(self._id_maquina_impressora)
+            and self._prioridade_candidato(self._id_maquina_impressora) <= self._prioridade_candidato(melhor_candidato)
+        ):
+            return
+
+        if melhor_candidato != self._id_maquina_impressora:
+            self._id_maquina_impressora = melhor_candidato
+            self.impressoraPrincipalMudou.emit()
 
     @pyqtSlot(result="QVariantMap")
     def impressoraPrincipal(self):
