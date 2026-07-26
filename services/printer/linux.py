@@ -90,9 +90,16 @@ def _descricao_e_status(nome_impressora):
     status = ""
     caminho_ppd = ""
 
-    m = re.search(r"^printer \S+ (.+?)\.\s*(enabled|disabled)", saida, re.MULTILINE)
+    # O texto muda de formato conforme o estado: uma fila habilitada tem um
+    # motivo antes ("is idle.  enabled since ..."), mas uma desabilitada
+    # não ("disabled since ..." — sem nada antes do "disabled"). O grupo
+    # do motivo é opcional pra cobrir os dois formatos; sem isso, uma fila
+    # desabilitada não batia com a regex nenhuma e o status ficava vazio
+    # (escondendo justamente o estado que mais importa diagnosticar).
+    m = re.search(r"^printer \S+ (?:(.+?)\.\s*)?(enabled|disabled)", saida, re.MULTILINE)
     if m:
-        status = f"{m.group(1).strip()} ({m.group(2)})"
+        motivo = m.group(1)
+        status = f"{motivo.strip()} ({m.group(2)})" if motivo else m.group(2)
 
     m = re.search(r"Description:\s*(.+)", saida)
     if m:
@@ -132,6 +139,35 @@ def _fabricante_e_modelo_do_ppd(caminho_ppd):
     return fabricante, modelo
 
 
+def _garantir_fila_habilitada(nome_impressora: str) -> None:
+    """Reabilita `nome_impressora` se o CUPS a tiver desabilitado (pausada)
+    — normalmente por causa de uma falha transitória do backend (ex: a
+    porta serial não existia por um instante durante o boot ou um replug
+    da USB, "Unable to open serial port"). O CUPS desabilita a fila
+    sozinho após uma falha do tipo, mas NUNCA a reabilita sozinho mesmo
+    com o problema já resolvido — sem isso, os jobs continuam sendo
+    aceitos e enfileirados normalmente (`lp` retorna sucesso, o app "acha"
+    que imprimiu), mas nunca chegam a sair no papel, ficando presos na
+    fila pra sempre. Melhor esforço: se `cupsenable` falhar por qualquer
+    motivo (ex: sem permissão), só loga um aviso — quem chama segue com o
+    envio do job do mesmo jeito, exatamente como já fazia antes."""
+    saida = _executar(["lpstat", "-p", nome_impressora])
+    if not re.search(r"\bdisabled\b", saida):
+        return
+
+    print(f"[printer/linux] Fila '{nome_impressora}' está desabilitada — tentando reabilitar (cupsenable)...")
+    try:
+        resultado = subprocess.run(["cupsenable", nome_impressora], capture_output=True, text=True, timeout=10)
+    except (FileNotFoundError, subprocess.TimeoutExpired) as erro:
+        print(f"[printer/linux] Falha ao rodar 'cupsenable {nome_impressora}': {erro}")
+        return
+
+    if resultado.returncode == 0:
+        print(f"[printer/linux] Fila '{nome_impressora}' reabilitada com sucesso.")
+    else:
+        print(f"[printer/linux] 'cupsenable {nome_impressora}' falhou: {resultado.stderr.strip()}")
+
+
 def imprimir(nome_impressora: str, conteudo: bytes) -> None:
     """Envia `conteudo` (bytes crus, já formatados em ESC/POS) para a fila de
     impressão `nome_impressora` via CUPS, em modo raw (`lp -o raw`, sem
@@ -140,6 +176,8 @@ def imprimir(nome_impressora: str, conteudo: bytes) -> None:
     Requer o utilitário `lp` (pacote cups-client) disponível. Levanta
     `RuntimeError` se o comando não existir, expirar ou a impressão falhar.
     """
+    _garantir_fila_habilitada(nome_impressora)
+
     print(f"[printer/linux] Enviando {len(conteudo)} bytes para '{nome_impressora}' via 'lp -d {nome_impressora} -o raw'...")
     try:
         resultado = subprocess.run(
