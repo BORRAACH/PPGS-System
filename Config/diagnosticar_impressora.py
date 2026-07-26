@@ -52,8 +52,11 @@ def _payload_teste() -> bytes:
     return conteudo
 
 
-def _listar_impressoras():
-    log("1/4 — Listando impressoras instaladas no sistema operacional...")
+def listar_impressoras():
+    """Loga cada impressora instalada no sistema operacional (nome, porta,
+    tipo_porta...) — chamado tanto por main() (CLI) quanto por main.py na
+    inicialização do app, para o diagnóstico de porta aparecer no console/
+    logs/app.log sem precisar rodar este script à parte."""
     impressoras = coletar_informacoes_impressoras()
     if not impressoras:
         log("Nenhuma impressora instalada foi encontrada pelo sistema operacional.")
@@ -130,7 +133,8 @@ def main() -> None:
     logConfig.configurar_logging()
 
     log("=== Diagnóstico de impressão iniciado ===")
-    _listar_impressoras()
+    log("1/4 — Listando impressoras instaladas no sistema operacional...")
+    listar_impressoras()
 
     servico = PrinterService(args.impressora)
 

@@ -42,6 +42,8 @@ try:
     from services.rede import rede
     from services.iconProvider import IconProvider
     from services.comandaEstiloService import ComandaEstiloController
+    from services.cardapioService import CardapioController
+    from Config import diagnosticar_impressora
 except ImportError as erro:
     # preConfig.garantir_dependencias() já tentou instalar tudo sozinho —
     # se mesmo assim algo continua faltando (sem internet, sem permissão
@@ -76,6 +78,15 @@ except ImportError as erro:
     print(f"[main] Alternativa: pip install {pacote}")
     sys.exit(1)
 
+# Loga nome/porta/tipo_porta de cada impressora instalada (ver
+# Config/diagnosticar_impressora.py) — mesma info que services/printer/
+# windows.py/redeService.py já usam pra decidir a máquina que imprime na
+# rede, só que aqui aparece sempre, de forma explícita, no console/
+# logs/app.log, sem precisar rodar o diagnóstico à parte pra descobrir por
+# que uma porta caiu como "desconhecido" (ver
+# redeService._detectar_impressora_em_thread).
+diagnosticar_impressora.listar_impressoras()
+
 # codigo perigoso
 os.environ["QML_XHR_ALLOW_FILE_READ"] = "1"
 
@@ -104,6 +115,11 @@ if __name__ == "__main__":
     engine.rootContext().setContextProperty("consultaController", consultaController)
     comandaEstiloController = ComandaEstiloController()
     engine.rootContext().setContextProperty("comandaEstiloController", comandaEstiloController)
+    # Edição de data/cardapio/*.json pela tela Cardápio — as telas de pedido
+    # continuam lendo esses arquivos direto por XMLHttpRequest; o controller
+    # só existe porque o QML não grava arquivo.
+    cardapioController = CardapioController()
+    engine.rootContext().setContextProperty("cardapioController", cardapioController)
 
     # Compartilha pedidos com outras instâncias deste app na mesma rede
     # local (ver architecture/EXPLAIN.md). Os sinais entram pelo
