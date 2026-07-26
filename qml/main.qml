@@ -43,6 +43,18 @@ ApplicationWindow {
 
                 anchors.fill: parent
 
+                // Sem animação de transição entre páginas — o app roda em
+                // computadores fracos, e o slide padrão do StackView (dois
+                // Item full-screen renderizando ao mesmo tempo durante a
+                // animação) pesa demais neles. Troca instantânea em vez de
+                // deslizar.
+                pushEnter: Transition {}
+                pushExit: Transition {}
+                popEnter: Transition {}
+                popExit: Transition {}
+                replaceEnter: Transition {}
+                replaceExit: Transition {}
+
                 initialItem: Component {
                     Item {
                         objectName: "pageHome"

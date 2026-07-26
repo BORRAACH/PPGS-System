@@ -170,6 +170,13 @@ Page {
         id: stackViewLocal
 
         anchors.fill: parent
+        // Sem animação de transição — ver o mesmo ajuste em qml/main.qml.
+        pushEnter: Transition {}
+        pushExit: Transition {}
+        popEnter: Transition {}
+        popExit: Transition {}
+        replaceEnter: Transition {}
+        replaceExit: Transition {}
         initialItem: conteudoEntregaComponent
     }
 
