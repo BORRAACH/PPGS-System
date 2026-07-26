@@ -7,6 +7,8 @@ import estilo 1.0
 Page {
     id: telaEntrega
 
+    focus: true
+
     property string clienteNome: ""
     // Preenchimento inicial dos campos de entrega e de modeloPedidos — usado
     // pela Consulta ao reabrir uma comanda salva para edição.
@@ -150,6 +152,16 @@ Page {
         }
     }
 
+    // Foca o primeiro campo assim que esta página vira a atual no StackView
+    // de main.qml, para já dar para navegar só com o teclado
+    // (Tab/Shift+Tab/Enter) sem precisar clicar em nada antes.
+    // "focus: true" sozinho não é suficiente: o StackView assume o controle
+    // do foco ao trocar de página, então é preciso pedir foco de novo aqui.
+    StackView.onActivated: {
+        if (stackViewLocal.currentItem)
+            stackViewLocal.currentItem.inputTelefone.forceActiveFocus();
+    }
+
     // --- ÁREA DE CONTEÚDO DINÂMICO ---
     // Sem barra lateral própria aqui: esta página já é empurrada para dentro
     // do StackView de main.qml, que fica ao lado da LateralBar permanente do
@@ -167,6 +179,12 @@ Page {
 
         Item {
             anchors.fill: parent
+
+            // Exposto para telaEntrega.StackView.onActivated poder focar o
+            // primeiro campo assim que a tela vira a atual (ver comentário
+            // lá — Component.onCompleted sozinho é cedo demais: o StackView
+            // externo ainda assume o foco de volta ao concluir a transição).
+            property alias inputTelefone: inputTelefone
 
             // Precisam ficar aqui dentro do Component, não na raiz da Page:
             // os campos que elas leem (inputNomeCliente, inputTaxaEntrega
@@ -197,6 +215,39 @@ Page {
                     "statusPagamento": btnStatusPagamento.pago ? "PG" : "NP",
                     "taxaEntrega": inputTaxaEntrega.text
                 };
+            }
+
+            // Verifica se a comanda tem pelo menos um campo preenchido (dados
+            // do cliente/entrega, troco, taxa de entrega ou algum item do
+            // pedido) — evita lançar/imprimir uma comanda completamente
+            // vazia. formaPagamento/statusPagamento não contam: sempre têm
+            // um valor padrão (Pix/NP), não refletem preenchimento do usuário.
+            function comandaVazia(dados) {
+                if (dados.cliente.trim() !== "" || dados.telefone !== "" || dados.endereco.trim() !== "" || dados.numero !== "" || dados.bairro.trim() !== "" || dados.observacaoGeral.trim() !== "" || dados.troco !== "" || dados.taxaEntrega !== "")
+                    return false;
+
+                for (var i = 0; i < dados.itens.length; i++) {
+                    var item = dados.itens[i];
+                    if (item.pedido !== "" || item.observacao.trim() !== "" || item.valor !== "")
+                        return false;
+                }
+
+                return true;
+            }
+
+            // Campo de destino do Tab/Enter ao entrar/sair da lista de
+            // pedidos — usados tanto pelo campo fora da lista (observação
+            // geral) quanto pelas próprias linhas (ver
+            // campoPedidoAnterior/campoPedidoProximo no delegate), já que o
+            // número de linhas muda em tempo de execução.
+            function primeiroCampoPedido() {
+                var linha = listaPedidos.itemAtIndex(0);
+                return linha ? linha.campoPedido : inputObservacao;
+            }
+
+            function ultimoCampoValor() {
+                var linha = listaPedidos.itemAtIndex(listaPedidos.count - 1);
+                return linha ? linha.campoValor : inputObservacao;
             }
 
             function limparFormularioPedido() {
@@ -264,6 +315,10 @@ Page {
                             rightPadding: 10
                             text: telefoneInicial
                             inputMethodHints: Qt.ImhDigitsOnly
+                            focus: true
+                            KeyNavigation.tab: inputNomeCliente
+                            KeyNavigation.backtab: btnVoltar
+                            Keys.onReturnPressed: inputNomeCliente.forceActiveFocus()
                             onTextChanged: {
                                 if (reformatando)
                                     return ;
@@ -302,6 +357,9 @@ Page {
                             leftPadding: 10
                             rightPadding: 10
                             text: clienteNome
+                            KeyNavigation.tab: inputEndereco
+                            KeyNavigation.backtab: inputTelefone
+                            Keys.onReturnPressed: inputEndereco.forceActiveFocus()
 
                             background: Rectangle {
                                 radius: Estilo.rounding.padrao
@@ -329,6 +387,9 @@ Page {
                             leftPadding: 10
                             rightPadding: 10
                             text: enderecoInicial
+                            KeyNavigation.tab: inputNumero
+                            KeyNavigation.backtab: inputNomeCliente
+                            Keys.onReturnPressed: inputNumero.forceActiveFocus()
 
                             background: Rectangle {
                                 radius: Estilo.rounding.padrao
@@ -350,6 +411,9 @@ Page {
                             rightPadding: 10
                             text: numeroInicial
                             inputMethodHints: Qt.ImhDigitsOnly
+                            KeyNavigation.tab: inputBairro
+                            KeyNavigation.backtab: inputEndereco
+                            Keys.onReturnPressed: inputBairro.forceActiveFocus()
 
                             validator: RegularExpressionValidator {
                                 regularExpression: /^[0-9]*$/
@@ -378,6 +442,9 @@ Page {
                         rightPadding: 10
                         anchors.horizontalCenter: parent
                         text: bairroInicial
+                        KeyNavigation.tab: inputObservacao
+                        KeyNavigation.backtab: inputNumero
+                        Keys.onReturnPressed: inputObservacao.forceActiveFocus()
 
                         background: Rectangle {
                             radius: Estilo.rounding.padrao
@@ -400,6 +467,13 @@ Page {
                         rightPadding: 10
                         anchors.horizontalCenter: parent
                         text: observacaoInicial
+                        KeyNavigation.backtab: inputBairro
+                        // Tab/Enter chamam primeiroCampoPedido() na hora (não
+                        // usam "KeyNavigation.tab: ..."): esse binding seria
+                        // avaliado só uma vez, cedo demais — antes do primeiro
+                        // delegate da lista existir — e nunca mais reavaliado.
+                        Keys.onTabPressed: primeiroCampoPedido().forceActiveFocus()
+                        Keys.onReturnPressed: primeiroCampoPedido().forceActiveFocus()
 
                         background: Rectangle {
                             radius: Estilo.rounding.padrao
@@ -464,6 +538,33 @@ Page {
                             spacing: 10
                             anchors.horizontalCenter: parent
 
+                            property alias campoPedido: campoPedido
+                            property alias campoObservacao: campoObservacao
+                            property alias campoValor: campoValor
+
+                            // Vizinhos dinâmicos: cada linha é uma instância
+                            // separada do mesmo delegate, então não dá pra
+                            // referenciar "a linha de baixo" por id — o
+                            // número de linhas muda em tempo de execução, daí
+                            // o lookup por índice via ListView.view.
+                            function campoPedidoAnterior() {
+                                if (index > 0) {
+                                    var linha = ListView.view.itemAtIndex(index - 1);
+                                    if (linha)
+                                        return linha.campoValor;
+                                }
+                                return inputObservacao;
+                            }
+
+                            function campoPedidoProximo() {
+                                if (index + 1 < ListView.view.count) {
+                                    var linha = ListView.view.itemAtIndex(index + 1);
+                                    if (linha)
+                                        return linha.campoPedido;
+                                }
+                                return comboFormaPagamento;
+                            }
+
                             // Campo Pedido
                             TextField {
                                 id: campoPedido
@@ -477,6 +578,18 @@ Page {
                                 text: model.pedido
                                 readOnly: true
                                 hoverEnabled: true
+                                KeyNavigation.tab: campoObservacao
+                                // Backtab chama campoPedidoAnterior() na hora, não
+                                // como "KeyNavigation.backtab: ..." — ver o
+                                // comentário em inputObservacao sobre por que um
+                                // binding com itemAtIndex() fica preso.
+                                Keys.onBacktabPressed: linhaDelegate.campoPedidoAnterior().forceActiveFocus()
+                                // Enter abre o popup de seleção — mesmo efeito do
+                                // clique do mouse, já que o campo é somente leitura.
+                                Keys.onReturnPressed: {
+                                    telaEntrega.indicePedidoAtual = index;
+                                    popupSelecaoPedido.open();
+                                }
 
                                 MouseArea {
                                     id: mouseAreaPedido
@@ -511,6 +624,9 @@ Page {
                                 rightPadding: 10
                                 text: model.observacao
                                 onTextChanged: model.observacao = text
+                                KeyNavigation.tab: campoValor
+                                KeyNavigation.backtab: campoPedido
+                                Keys.onReturnPressed: campoValor.forceActiveFocus()
 
                                 background: Rectangle {
                                     radius: Estilo.rounding.padrao
@@ -532,6 +648,13 @@ Page {
                                 leftPadding: 10
                                 rightPadding: 10
                                 text: model.valor
+                                KeyNavigation.backtab: campoObservacao
+                                // Tab chama campoPedidoProximo() na hora, não como
+                                // "KeyNavigation.tab: ..." — ver o comentário em
+                                // inputObservacao sobre por que um binding com
+                                // itemAtIndex() fica preso.
+                                Keys.onTabPressed: linhaDelegate.campoPedidoProximo().forceActiveFocus()
+                                Keys.onReturnPressed: linhaDelegate.campoPedidoProximo().forceActiveFocus()
                                 onEditingFinished: {
                                     if (text !== "") {
                                         var numLimpo = text.replace("R$", "").replace(" ", "").replace(",", ".");
@@ -633,6 +756,12 @@ Page {
                             width: 150
                             model: opcoesPagamento
                             currentIndex: Math.max(0, opcoesPagamento.indexOf(formaPagamentoInicial))
+                            KeyNavigation.tab: inputTroco.visible ? inputTroco : inputTaxaEntrega
+                            // Backtab chama ultimoCampoValor() na hora, não como
+                            // "KeyNavigation.backtab: ..." — ver o comentário em
+                            // inputObservacao sobre por que um binding com
+                            // itemAtIndex() fica preso.
+                            Keys.onBacktabPressed: ultimoCampoValor().forceActiveFocus()
 
                             contentItem: Text {
                                 text: comboFormaPagamento.displayText
@@ -665,6 +794,9 @@ Page {
                             rightPadding: 10
                             text: trocoInicial
                             visible: comboFormaPagamento.currentText === "Dinheiro"
+                            KeyNavigation.tab: inputTaxaEntrega
+                            KeyNavigation.backtab: comboFormaPagamento
+                            Keys.onReturnPressed: inputTaxaEntrega.forceActiveFocus()
                             onEditingFinished: {
                                 if (text !== "") {
                                     var numLimpo = text.replace("R$", "").replace(" ", "").replace(",", ".");
@@ -701,6 +833,9 @@ Page {
                             leftPadding: 10
                             rightPadding: 10
                             text: taxaEntregaInicial
+                            KeyNavigation.tab: btnStatusPagamento.visible ? btnStatusPagamento : btnImprimir
+                            KeyNavigation.backtab: inputTroco.visible ? inputTroco : comboFormaPagamento
+                            Keys.onReturnPressed: (btnStatusPagamento.visible ? btnStatusPagamento : btnImprimir).forceActiveFocus()
                             onEditingFinished: {
                                 if (text !== "") {
                                     var numLimpo = text.replace("R$", "").replace(" ", "").replace(",", ".");
@@ -739,6 +874,10 @@ Page {
                             // Só faz sentido perguntar se já foi pago quando o
                             // pagamento não é instantâneo como o Pix.
                             visible: comboFormaPagamento.currentText !== "Pix"
+                            focusPolicy: Qt.StrongFocus
+                            KeyNavigation.tab: btnImprimir
+                            KeyNavigation.backtab: inputTaxaEntrega
+                            Keys.onReturnPressed: clicked()
                             onClicked: pago = !pago
 
                             contentItem: Text {
@@ -752,6 +891,11 @@ Page {
                             background: Rectangle {
                                 radius: Estilo.rounding.padrao
                                 color: btnStatusPagamento.pago ? (parent.down ? Estilo.confirmar.pressionado : (parent.hovered ? Estilo.confirmar.hover : Estilo.confirmar.normal)) : (parent.down ? Estilo.cancelar.pressionado : (parent.hovered ? Estilo.cancelar.hover : Estilo.cancelar.normal))
+                                // Anel de foco: só aparece navegando por teclado —
+                                // sem isso, Tab chegava ao botão sem nenhum sinal
+                                // visual de onde o foco estava.
+                                border.color: Estilo.cores.texto
+                                border.width: parent.activeFocus ? 3 : 0
                             }
 
                         }
@@ -769,8 +913,16 @@ Page {
 
                             padding: 10
                             width: 200
+                            focusPolicy: Qt.StrongFocus
+                            KeyNavigation.tab: btnLancar
+                            KeyNavigation.backtab: btnStatusPagamento.visible ? btnStatusPagamento : inputTaxaEntrega
+                            Keys.onReturnPressed: clicked()
                             onClicked: {
                                 var dados = coletarDadosPedido();
+                                if (comandaVazia(dados)) {
+                                    telaEntrega.mostrarNotificacao("Preencha ao menos um campo antes de imprimir.", false);
+                                    return ;
+                                }
                                 var sucesso = entregaController.enviarPedido(dados);
                                 if (sucesso) {
                                     limparFormularioPedido();
@@ -795,8 +947,10 @@ Page {
                             background: Rectangle {
                                 radius: Estilo.rounding.padrao
                                 color: parent.down ? Estilo.confirmar.pressionado : (parent.hovered ? Estilo.confirmar.hover : Estilo.confirmar.normal)
-                                border.color: Estilo.confirmar.pressionado
-                                border.width: 1
+                                // Anel de foco mais grosso: só aparece navegando
+                                // por teclado, para dar pra ver onde o Tab chegou.
+                                border.color: parent.activeFocus ? Estilo.cores.texto : Estilo.confirmar.pressionado
+                                border.width: parent.activeFocus ? 3 : 1
                             }
 
                         }
@@ -808,8 +962,16 @@ Page {
 
                             padding: 10
                             width: 200
+                            focusPolicy: Qt.StrongFocus
+                            KeyNavigation.tab: btnVoltar
+                            KeyNavigation.backtab: btnImprimir
+                            Keys.onReturnPressed: clicked()
                             onClicked: {
                                 var dados = coletarDadosPedido();
+                                if (comandaVazia(dados)) {
+                                    telaEntrega.mostrarNotificacao("Preencha ao menos um campo antes de lançar a comanda.", false);
+                                    return ;
+                                }
                                 var sucesso = entregaController.lancarPedido(dados);
                                 if (sucesso) {
                                     limparFormularioPedido();
@@ -834,8 +996,10 @@ Page {
                             background: Rectangle {
                                 radius: Estilo.rounding.padrao
                                 color: parent.down ? "#1d4ed8" : (parent.hovered ? "#1e40af" : "#2563eb")
-                                border.color: "#1d4ed8"
-                                border.width: 1
+                                // Anel de foco mais grosso: só aparece navegando
+                                // por teclado, para dar pra ver onde o Tab chegou.
+                                border.color: parent.activeFocus ? Estilo.cores.texto : "#1d4ed8"
+                                border.width: parent.activeFocus ? 3 : 1
                             }
 
                         }
@@ -846,6 +1010,10 @@ Page {
 
                             padding: 10
                             width: 200
+                            focusPolicy: Qt.StrongFocus
+                            KeyNavigation.tab: inputTelefone
+                            KeyNavigation.backtab: btnLancar
+                            Keys.onReturnPressed: clicked()
                             onClicked: {
                                 if (stackViewLocal.depth > 1)
                                     stackViewLocal.pop();
@@ -868,8 +1036,10 @@ Page {
                             background: Rectangle {
                                 radius: Estilo.rounding.padrao
                                 color: parent.down ? Estilo.cancelar.pressionado : (parent.hovered ? Estilo.cancelar.hover : Estilo.cancelar.normal)
-                                border.color: Estilo.cancelar.pressionado
-                                border.width: 1
+                                // Anel de foco mais grosso: só aparece navegando
+                                // por teclado, para dar pra ver onde o Tab chegou.
+                                border.color: parent.activeFocus ? Estilo.cores.texto : Estilo.cancelar.pressionado
+                                border.width: parent.activeFocus ? 3 : 1
                             }
 
                         }
