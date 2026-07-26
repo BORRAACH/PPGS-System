@@ -1,6 +1,6 @@
 # Sobe 4 containers (4 "máquinas" de verdade, cada uma com sua própria pilha
 # de rede) na mesma rede Docker, todas rodando o app de verdade em modo
-# offscreen — serve só para confirmar que a malha (services/redeService.py)
+# offscreen — serve só para confirmar que a malha (services/rede/redeService.py)
 # realmente descobre as outras instâncias e sincroniza os pedidos entre elas.
 #
 # Uso (a partir da raiz do projeto):

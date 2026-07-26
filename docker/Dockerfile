@@ -1,9 +1,9 @@
-# Imagem só para TESTAR a malha de rede local (services/redeService.py) com
+# Imagem só para TESTAR a malha de rede local (services/rede/redeService.py) com
 # várias "máquinas" de verdade (containers em namespaces de rede separados,
 # na mesma rede Docker) — não é para rodar o sistema em produção.
 #
 # Roda a interface em modo offscreen (sem servidor X): não dá pra ver a
-# janela, mas todo o resto (salvar pedido, descoberta UDP, malha TCP,
+# janela, mas todo o resto (salvar pedido, descoberta mDNS, malha TCP,
 # sincronização) é o código de verdade, sem nenhuma adaptação.
 FROM python:3.14-slim
 

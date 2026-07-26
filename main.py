@@ -39,7 +39,7 @@ try:
     from controllers.balcaoController import BalcaoController
     from controllers.entregaController import EntregaController
     from controllers.consultaController import ConsultaController
-    from services.redeService import rede
+    from services.rede import rede
     from services.iconProvider import IconProvider
     from services.comandaEstiloService import ComandaEstiloController
 except ImportError as erro:

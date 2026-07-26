@@ -48,7 +48,7 @@ Page {
         // O resultado de enviarPedido() só confirma que o .txt foi salvo —
         // o resultado de verdade da impressão (que pode acontecer em outra
         // máquina da rede) chega depois, de forma assíncrona, por este
-        // sinal (ver services/redeService.py:solicitar_impressao).
+        // sinal (ver services/rede/redeService.py:solicitar_impressao).
         redeController.impressaoResultado.connect(function (sucesso, mensagem) {
             telaBalcao.mostrarNotificacao(
                 sucesso ? ("Comanda impressa (" + mensagem + ")") : ("Falha ao imprimir: " + mensagem),

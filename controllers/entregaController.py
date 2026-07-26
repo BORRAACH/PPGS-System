@@ -6,7 +6,7 @@ from datetime import datetime
 from PyQt6.QtCore import QObject, pyqtSlot
 
 from services import comandaEstiloService as estilo
-from services.redeService import rede
+from services.rede import rede
 
 # Separador usado em Pizzas.qml (nomesArray.join(" / ")) para pizzas meio a meio.
 # Tem espaço dos dois lados, o que o distingue de nomes como "Atum c/ Cebola".

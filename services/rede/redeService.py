@@ -7,16 +7,11 @@ import time
 import uuid
 
 from PyQt6.QtCore import QObject, QByteArray, QTimer, pyqtProperty, pyqtSignal, pyqtSlot
-from PyQt6.QtNetwork import QHostAddress, QTcpServer, QTcpSocket, QUdpSocket
+from PyQt6.QtNetwork import QHostAddress, QTcpServer, QTcpSocket
 
 from services.printerService import PrinterService
+from services.rede.descoberta import criar_descoberta
 
-# Assinatura embutida em todo datagrama de descoberta: só instâncias deste
-# app respondem a ela, então o resto do tráfego broadcast da rede local
-# (outros dispositivos, outros programas) é ignorado.
-_ASSINATURA = "PIZZARIA_REDE_V1"
-_PORTA_DESCOBERTA = 45551
-_INTERVALO_BROADCAST_MS = 5000
 _INTERVALO_CHECAGEM_IMPRESSORA_MS = 30000
 _TIMEOUT_IMPRESSAO_MS = 10000
 
@@ -26,9 +21,10 @@ class RedeService(QObject):
     elege/anuncia qual máquina da malha imprime as comandas.
 
     Topologia em malha completa: como há no máximo poucas máquinas (4), cada
-    instância se conecta diretamente a todas as outras que descobrir via
-    broadcast UDP, então uma mensagem nunca precisa ser retransmitida — quem
-    cria/apaga um pedido manda direto pra cada peer conectado.
+    instância se conecta diretamente a todas as outras que descobrir na rede
+    (ver services/rede/descoberta.py), então uma mensagem nunca precisa ser
+    retransmitida — quem cria/apaga um pedido manda direto pra cada peer
+    conectado.
 
     Além de bytes entrando e saindo (quem grava/apaga os .txt em disco são os
     sinais conectados pelos controllers, ver main.py), esta classe também
@@ -73,12 +69,12 @@ class RedeService(QObject):
         self._id_maquina_impressora = None
         self._jobs_impressao = {}  # job_id -> {"timer": QTimer, "concluido": bool}
 
-        self._udp = QUdpSocket(self)
         self._tcp_server = QTcpServer(self)
-        self._timer_broadcast = QTimer(self)
         self._timer_impressora = QTimer(self)
+        self._descoberta = criar_descoberta(self)
 
         self._impressoraLocalVerificada.connect(self._ao_verificar_impressora_local)
+        self._descoberta.peerDescoberto.connect(self._ao_descobrir_peer)
 
     @pyqtProperty(int, notify=peersMudaram)
     def quantidadeConectados(self):
@@ -102,20 +98,14 @@ class RedeService(QObject):
             return
         self._iniciado = True
 
-        self._udp.bind(
-            _PORTA_DESCOBERTA,
-            QUdpSocket.BindFlag.ShareAddress | QUdpSocket.BindFlag.ReuseAddressHint,
-        )
-        self._udp.readyRead.connect(self._ao_receber_datagrama)
-
         self._tcp_server.newConnection.connect(self._ao_conectar_entrada)
         if not self._tcp_server.listen(QHostAddress.SpecialAddress.Any, 0):
             print("RedeService: falha ao abrir porta TCP para a malha local")
             return
 
-        self._timer_broadcast.timeout.connect(self._anunciar)
-        self._timer_broadcast.start(_INTERVALO_BROADCAST_MS)
-        self._anunciar()
+        # A porta TCP é sorteada pelo sistema (listen na porta 0), então só
+        # dá pra anunciá-la depois que o servidor está de pé.
+        self._descoberta.iniciar(self._id, self._tcp_server.serverPort())
 
         # Detecta a impressora local uma vez já ao iniciar, e depois
         # periodicamente — cobre o caso de a impressora ser plugada com o
@@ -126,36 +116,18 @@ class RedeService(QObject):
 
     # ---------- Descoberta ----------
 
-    def _anunciar(self):
-        mensagem = json.dumps({
-            "assinatura": _ASSINATURA,
-            "id": self._id,
-            "porta_tcp": self._tcp_server.serverPort(),
-        }).encode("utf-8")
-        self._udp.writeDatagram(mensagem, QHostAddress(QHostAddress.SpecialAddress.Broadcast), _PORTA_DESCOBERTA)
+    def _ao_descobrir_peer(self, id_remoto: str, endereco: str, porta_tcp: int):
+        """Uma instância apareceu na rede (ver services/rede/descoberta.py).
+        A descoberta avisa de tudo que encontra, inclusive desta própria
+        máquina e de peers repetidos — filtrar é aqui, que é quem sabe com
+        quem já existe conexão aberta."""
+        if id_remoto == self._id or id_remoto in self._peers:
+            return
 
-    def _ao_receber_datagrama(self):
-        while self._udp.hasPendingDatagrams():
-            datagrama, endereco, _porta = self._udp.readDatagram(self._udp.pendingDatagramSize())
-            try:
-                dados = json.loads(bytes(datagrama).decode("utf-8"))
-            except (ValueError, UnicodeDecodeError):
-                continue
-
-            if dados.get("assinatura") != _ASSINATURA:
-                continue
-
-            id_remoto = dados.get("id")
-            porta_tcp = dados.get("porta_tcp")
-            if not id_remoto or not porta_tcp or id_remoto == self._id:
-                continue
-            if id_remoto in self._peers:
-                continue
-
-            # Só quem tem o id "menor" disca — evita os dois lados abrirem
-            # conexão um pro outro ao mesmo tempo.
-            if self._id < id_remoto:
-                self._conectar_a(endereco, porta_tcp)
+        # Só quem tem o id "menor" disca — evita os dois lados abrirem
+        # conexão um pro outro ao mesmo tempo.
+        if self._id < id_remoto:
+            self._conectar_a(QHostAddress(endereco), porta_tcp)
 
     # ---------- Conexões TCP (malha) ----------
 

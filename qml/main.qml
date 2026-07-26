@@ -181,7 +181,7 @@ ApplicationWindow {
 
     // --- NOTIFICAÇÃO GLOBAL DO RESULTADO DA IMPRESSÃO ---
     // Vive na janela raiz (não dentro de Balcao.qml/Entrega.qml) porque o
-    // resultado de rede.solicitar_impressao (ver services/redeService.py)
+    // resultado de rede.solicitar_impressao (ver services/rede/redeService.py)
     // chega de forma assíncrona — às vezes segundos depois, via a máquina
     // que realmente tem a impressora — e o usuário já pode ter navegado
     // para outra tela nesse meio-tempo. Mesmo padrão visual (Rectangle

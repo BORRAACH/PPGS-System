@@ -30,10 +30,11 @@ na mesma rede local (sem servidor central).
   no Linux ou `win32print`/PowerShell (`Win32_Printer`) no Windows. Se
   nenhuma impressora for encontrada, o pedido continua salvo em
   `pedidos/` mesmo assim — só a impressão falha, sem derrubar o app.
-- **Rede local entre máquinas** (`services/redeService.py`): ao abrir, cada
-  instância do app anuncia e descobre as outras na mesma rede local (UDP
-  broadcast) e forma uma malha completa entre elas (TCP), sem nenhuma
-  precisar ser "servidor". Pedidos criados/apagados em uma máquina são
+- **Rede local entre máquinas** (`services/rede/`): ao abrir, cada
+  instância do app anuncia e descobre as outras na mesma rede local
+  (mDNS/DNS-SD, via `zeroconf` — o mesmo mecanismo pelo qual impressoras e
+  Chromecasts aparecem sozinhos) e forma uma malha completa entre elas
+  (TCP), sem nenhuma precisar ser "servidor". Pedidos criados/apagados em uma máquina são
   transmitidos direto para todas as outras conectadas, e quem estava
   offline recebe o que faltar assim que reconecta. A tela **Rede**
   (`qml/pages/rede/Rede.qml`) mostra quais máquinas estão conectadas agora;
@@ -63,6 +64,10 @@ referência do que é usado por trás:
 - [`qtawesome`](https://pypi.org/project/QtAwesome/) (ícones — Font
   Awesome, Material Design Icons etc., ver `qml/components/Icone.qml`) —
   instalado via pip automaticamente.
+- [`zeroconf`](https://pypi.org/project/zeroconf/) (mDNS/DNS-SD: é como
+  cada máquina acha as outras na rede local, ver
+  `services/rede/descoberta.py`) — instalado via pip automaticamente. Sem
+  ele o app ainda abre, e a descoberta cai num broadcast UDP de reserva.
 
 **Windows**
 - [`pywin32`](https://pypi.org/project/pywin32/) (acesso ao spooler de
@@ -139,7 +144,7 @@ data/cardapio/     Catálogo de pizzas/lanches/bebidas/outros (JSON)
 docker/            Ambiente de teste da rede local com múltiplas instâncias
 pedidos/           Comandas salvas (.txt), geradas em tempo de execução
 qml/               Interface: componentes, páginas e o tema (qml/estilo/)
-services/          Impressão (services/printer/) e rede local (redeService.py)
+services/          Impressão (services/printer/) e rede local (services/rede/)
 architecture/      Notas de arquitetura (ex: protocolo da rede local)
 main.py            Ponto de entrada
 ```

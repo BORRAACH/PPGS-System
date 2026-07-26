@@ -22,7 +22,7 @@ from PyQt6.QtCore import QTimer
 from PyQt6.QtGui import QGuiApplication
 
 from controllers.balcaoController import BalcaoController
-from services.redeService import rede
+from services.rede import rede
 
 app = QGuiApplication(sys.argv)
 rede.iniciar()
@@ -41,7 +41,7 @@ def criar_pedido():
     print("Pedido criado:", ok)
 
 
-# Dá tempo da descoberta UDP + handshake TCP terminarem antes de criar o
+# Dá tempo da descoberta na rede + handshake TCP terminarem antes de criar o
 # pedido (senão ele só chega às outras máquinas depois, via catch-up, e não
 # na hora); e continua rodando mais um pouco depois pra garantir que os
 # bytes realmente saem pela rede antes do processo morrer.

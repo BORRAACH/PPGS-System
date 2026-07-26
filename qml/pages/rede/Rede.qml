@@ -5,7 +5,7 @@ import estilo 1.0
 import "../../components"
 
 // Mostra as máquinas atualmente conectadas na malha local (ver
-// services/redeService.py) — quem está compartilhando pedidos com esta
+// services/rede/redeService.py) — quem está compartilhando pedidos com esta
 // instância agora, desde quando, e o endereço de cada uma.
 Page {
     id: telaRede

@@ -1,5 +1,5 @@
 """Mostra quais outras "máquinas" (containers) esta instância enxerga na
-malha local, depois de dar um tempo para a descoberta UDP + handshake TCP
+malha local, depois de dar um tempo para a descoberta na rede + handshake TCP
 terminarem.
 
 Uso: `python3 docker/listar_peers_teste.py`
@@ -14,7 +14,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PyQt6.QtCore import QTimer
 from PyQt6.QtGui import QGuiApplication
 
-from services.redeService import rede
+from services.rede import rede
 
 app = QGuiApplication(sys.argv)
 rede.iniciar()

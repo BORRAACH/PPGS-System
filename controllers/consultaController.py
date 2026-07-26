@@ -3,7 +3,7 @@ import re
 
 from PyQt6.QtCore import QByteArray, QObject, pyqtSignal, pyqtSlot
 
-from services.redeService import rede
+from services.rede import rede
 
 # Mesma codepage usada por balcaoController/entregaController para salvar os
 # .txt das comandas — precisa decodificar com o mesmo codec, senão os

@@ -45,6 +45,11 @@ _DEPENDENCIAS_PIP = [
     # Ícones (Font Awesome, Material Design Icons...) expostos ao QML por
     # services/iconProvider.py — ver qml/components/Icone.qml.
     ("qtawesome", ("qtawesome",), None),
+    # Descoberta das outras máquinas na rede local via mDNS/DNS-SD — ver
+    # services/rede/descoberta.py. Sem ela o app ainda abre e a rede cai no
+    # broadcast UDP de reserva, então continua sendo melhor esforço como o
+    # resto desta lista.
+    ("zeroconf", ("zeroconf",), None),
 ]
 
 # Programas de sistema (não pacotes Python) exigidos só no Linux, e o nome

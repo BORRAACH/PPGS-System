@@ -9,7 +9,7 @@ from PyQt6.QtCore import QObject, pyqtSignal, pyqtSlot
 from Config import impressoraWindows
 from services import comandaEstiloService as estilo
 from services.printerService import PrinterService
-from services.redeService import rede
+from services.rede import rede
 
 # Separador usado em Pizzas.qml (nomesArray.join(" / ")) para pizzas meio a meio.
 # Tem espaço dos dois lados, o que o distingue de nomes como "Atum c/ Cebola".

@@ -7,7 +7,7 @@ Por quê: no Windows, quando o app roda "clicando duas vezes" no ícone
 (sem console aberto), tudo que é escrito em print() simplesmente
 desaparece — não tem pra onde ir. Isso torna impossível diagnosticar por
 que uma impressão "não fez nada", porque os logs que já existem (ex:
-services/printer/windows.py, services/redeService.py) nunca chegam a
+services/printer/windows.py, services/rede/redeService.py) nunca chegam a
 lugar nenhum. Depois de chamar configurar_logging(), os mesmos prints
 continuam aparecendo no console quando há um (ex: rodando via terminal ou
 dev_watch.py) E também ficam gravados em logs/app.log, disponíveis pra

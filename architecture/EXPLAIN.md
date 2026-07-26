@@ -24,20 +24,32 @@ retransmissão e de prevenção de loop, simplificando bastante o protocolo.
 
 ## Arquitetura
 
-**Descoberta (UDP broadcast)** + **canal de dados (TCP, malha completa)**,
-usando só `PyQt6.QtNetwork` (já vem com o PyQt6 — nenhuma dependência nova em
-`preConfig.py`).
+**Descoberta (mDNS/DNS-SD, via zeroconf)** + **canal de dados (TCP, malha
+completa)**. O canal de dados usa só `PyQt6.QtNetwork`; a descoberta usa a
+biblioteca `zeroconf` (ver `preConfig.py`), com um plano B em UDP broadcast
+para quando ela não estiver instalada.
+
+As duas metades ficam em arquivos separados dentro de `services/rede/`:
+`descoberta.py` só responde "quem está na rede e em que endereço", e
+`redeService.py` cuida da malha, do protocolo e da eleição da impressora.
 
 1. Cada instância abre um `QTcpServer` numa porta efêmera (porta 0 → o SO
-   escolhe) e um `QUdpSocket` fixo (porta de descoberta) em modo broadcast.
-2. A cada ~5s (e uma vez ao iniciar), cada instância manda um datagrama UDP
-   broadcast (`255.255.255.255`) com um JSON `{"assinatura": "PIZZARIA_REDE_V1",
-   "id": <uuid da instância>, "porta_tcp": <porta do QTcpServer>}`. A
-   assinatura garante que só instâncias deste app entram na rede (tráfego de
-   outros dispositivos na LAN é ignorado).
-3. Ao receber um datagrama de outra instância que ainda não é peer, só o lado
-   com o `id` "menor" (comparação de string) inicia a conexão TCP — evita
-   conexão dupla entre o mesmo par.
+   escolhe) e, só depois de saber essa porta, começa a se anunciar.
+2. O anúncio é um serviço DNS-SD do tipo `_pizzaria-rede._tcp.local.`, com a
+   porta TCP e as propriedades `{"assinatura": "PIZZARIA_REDE_V1", "id":
+   <uuid da instância>}`. O tipo de serviço já isola nossas instâncias do
+   resto do que se anuncia na rede (impressoras, TVs, outros programas). O
+   nome do serviço e o do host usam o uuid da instância, e não o hostname da
+   máquina, porque duas instâncias podem rodar no mesmo computador (é o caso
+   dos scripts em `docker/`) e uma sobrescreveria o anúncio da outra.
+3. O `ServiceBrowser` avisa quando um serviço aparece; resolver endereço e
+   porta é feito numa thread à parte (bloquear a thread do zeroconf com o
+   `get_service_info()` dela mesma travaria a resposta que se está
+   esperando). O resultado volta pra thread principal pelo sinal
+   `peerDescoberto`, e só então o `RedeService` decide o que fazer: ignora a
+   si mesmo e quem já é peer, e, entre os dois lados, só o de `id` "menor"
+   (comparação de string) inicia a conexão TCP — evita conexão dupla entre o
+   mesmo par.
 4. Nova conexão TCP → troca de handshake
    (`{"tipo": "identificar", "id": ..., "nome": ..., "temImpressora": bool}`)
    e, em seguida, cada lado manda `{"tipo": "meus_arquivos", "arquivos": [...]}`
@@ -58,8 +70,8 @@ usando só `PyQt6.QtNetwork` (já vem com o PyQt6 — nenhuma dependência nova 
    - Como é malha completa, **não há retransmissão**: quem cria/apaga um
      pedido manda a mensagem direto para todos os peers conectados; quem
      recebe só aplica local (grava/apaga o arquivo), nunca repassa adiante.
-6. Ao desconectar um peer, ele só é removido de `_peers` — a redescoberta via
-   broadcast periódico cuida da reconexão automática quando ele voltar. Se o
+6. Ao desconectar um peer, ele só é removido de `_peers` — quando ele voltar,
+   o anúncio dele reaparece na rede e a reconexão acontece sozinha. Se o
    peer removido era a máquina eleita pra imprimir, a eleição é recalculada
    na hora.
 
@@ -86,7 +98,23 @@ com um timeout de 10s. O resultado final chega pra quem pediu via o sinal
 global com o resultado, já que pode chegar segundos depois e o usuário pode
 já ter saído da tela onde pediu a impressão.
 
-### Arquivo novo: `services/redeService.py`
+### Arquivo novo: `services/rede/descoberta.py`
+
+- Só descoberta: quem está na rede local e em que endereço/porta. Nada de
+  malha, protocolo ou impressora — isso é do `redeService.py`.
+- `criar_descoberta(parent)` devolve a melhor estratégia disponível:
+  `DescobertaZeroconf` (padrão) ou `DescobertaBroadcast` (plano B, quando a
+  biblioteca `zeroconf` não está instalada). As duas herdam de `Descoberta`,
+  que define a interface comum: `iniciar(id_local, porta_tcp)`, `parar()` e
+  o sinal `peerDescoberto(id, endereco, porta_tcp)`.
+- A descoberta avisa de tudo que encontra — inclusive da própria máquina e
+  de peers repetidos. Filtrar é responsabilidade de quem recebe, que é quem
+  sabe com quem já tem conexão aberta.
+- `parar()` é ligado sozinho ao `aboutToQuit` da aplicação: o anúncio
+  precisa sair da rede ao fechar, senão as outras máquinas ficam tentando
+  discar pra uma instância morta até o registro expirar.
+
+### Arquivo novo: `services/rede/redeService.py`
 
 - Classe `RedeService(QObject)`, instanciada uma vez como singleton de
   módulo (`rede = RedeService()`), no padrão dos serviços existentes
@@ -96,7 +124,7 @@ já ter saído da tela onde pediu a impressão.
   - `pyqtSignal pedidoRemovidoRemoto(str)` — nome do arquivo.
   - `pyqtSignal peersMudaram(int)` + `pyqtProperty(int)` com a contagem de
     peers conectados (pra um indicador simples na tela).
-  - `iniciar()` — abre os sockets e o timer de broadcast; **precisa ser
+  - `iniciar()` — abre o servidor TCP e dispara a descoberta; **precisa ser
     chamado depois que `QGuiApplication` já existe** (main.py, depois do
     `engine = QQmlApplicationEngine()`).
   - `transmitir_pedido(nome_arquivo: str, conteudo_bytes: bytes)` e
@@ -132,7 +160,7 @@ já ter saído da tela onde pediu a impressão.
 Depois de criar `consultaController` e registrá-lo como context property:
 
 ```python
-from services.redeService import rede
+from services.rede import rede
 
 rede.pedidoRecebido.connect(consultaController.aplicarPedidoRemoto)
 rede.pedidoRemovidoRemoto.connect(consultaController.removerPedidoRemoto)
@@ -169,8 +197,8 @@ Não dá pra testar em 4 máquinas físicas neste ambiente, então a verificaç�
 será:
 
 1. Rodar duas instâncias de `main.py` no mesmo host (dois processos,
-   `QT_QPA_PLATFORM=offscreen`), simulando 2 "computadores" — o broadcast UDP
-   em `255.255.255.255` chega nos dois processos locais.
+   `QT_QPA_PLATFORM=offscreen`), simulando 2 "computadores" — o mDNS
+   enxerga os dois processos locais normalmente.
 2. Confirmar que os dois processos se descobrem e conectam (via log ou
    contagem de peers).
 3. Chamar `balcaoController.enviarPedido(...)` no processo A (via um
