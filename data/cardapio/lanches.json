@@ -1,34 +1,92 @@
 [
   {
-    "nome": "X-Salada",
-    "valor": "18,00"
-  },
-  {
+    "id": 1,
     "nome": "Hambúrguer",
-    "valor": "15,00"
+    "ingredientes": "Maionese, batata palha, alface, tomate, cebola, milho, catchup, mostarda, carne e presunto.",
+    "valor": {
+      "pao_hamburguer": "19,00",
+      "pao_frances": "23,00",
+      "pao_baby": "14,00"
+    }
   },
   {
-    "nome": "X-Bacon",
-    "valor": "20,00"
-  },
-  {
-    "nome": "X-Egg",
-    "valor": "19,00"
-  },
-  {
-    "nome": "X-Frango",
-    "valor": "21,00"
-  },
-  {
+    "id": 2,
     "nome": "X-Burguer",
-    "valor": "17,00"
+    "ingredientes": "Maionese, batata palha, milho, catchup, mostarda, carne e mussarela.",
+    "valor": {
+      "pao_hamburguer": "20,00",
+      "pao_frances": "24,00",
+      "pao_baby": "14,00"
+    }
   },
   {
-    "nome": "X-Tudo",
-    "valor": "25,00"
+    "id": 3,
+    "nome": "X-Salada",
+    "ingredientes": "Maionese, batata palha, alface, tomate, cebola, milho, catchup, mostarda, carne, presunto e mussarela.",
+    "valor": {
+      "pao_hamburguer": "21,00",
+      "pao_frances": "25,00",
+      "pao_baby": "15,00"
+    }
   },
   {
+    "id": 4,
+    "nome": "Misto Quente",
+    "ingredientes": "Maionese, batata palha, alface, tomate, cebola, milho, catchup, mostarda, 3 fatias de presunto e 3 fatias de mussarela.",
+    "valor": {
+      "pao_hamburguer": "21,00",
+      "pao_frances": "25,00",
+      "pao_baby": "15,00"
+    }
+  },
+  {
+    "id": 5,
+    "nome": "X-Egg",
+    "ingredientes": "Maionese, batata palha, alface, tomate, cebola, milho, catchup, mostarda, carne, presunto, mussarela e ovo.",
+    "valor": {
+      "pao_hamburguer": "22,00",
+      "pao_frances": "26,00",
+      "pao_baby": "16,00"
+    }
+  },
+  {
+    "id": 6,
+    "nome": "X-Frango",
+    "ingredientes": "Maionese, batata palha, alface, tomate, cebola, milho, catchup, mostarda, frango, catupiry e mussarela.",
+    "valor": {
+      "pao_hamburguer": "25,00",
+      "pao_frances": "29,00",
+      "pao_baby": "17,00"
+    }
+  },
+  {
+    "id": 7,
+    "nome": "X-Bacon",
+    "ingredientes": "Maionese, batata palha, alface, tomate, cebola, milho, catchup, mostarda, carne, presunto, mussarela e bacon.",
+    "valor": {
+      "pao_hamburguer": "26,00",
+      "pao_frances": "30,00",
+      "pao_baby": "17,00"
+    }
+  },
+  {
+    "id": 8,
     "nome": "X-Calabresa",
-    "valor": "22,00"
+    "ingredientes": "Maionese, alface, tomate, cebola, catchup, mostarda e calabresa.",
+    "valor": {
+      "pao_hamburguer": "29,00",
+      "pao_frances": "33,00",
+      "pao_baby": "17,00"
+    }
+  },
+  {
+    "id": 9,
+    "nome": "X-Tudo",
+    "ingredientes": "Maionese, batata palha, alface, tomate, cebola, milho, catchup, mostarda, carne, bacon e ovo.",
+    "valor": {
+      "pao_hamburguer": "28,00",
+      "pao_frances": "32,00",
+      "pao_baby": "17,00"
+    }
   }
 ]

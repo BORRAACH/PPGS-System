@@ -2,9 +2,16 @@ import QtQuick
 import QtQuick.Controls
 import estilo 1.0
 import "../../../components"
+import "../../../components/Texto.js" as Texto
 
 Page {
     id: telaLanches
+
+    focus: true
+    // "focus: true" sozinho não é suficiente: StackView assume o controle do
+    // foco ao trocar de página, então é preciso pedir foco de novo quando
+    // esta página vira a atual (senão digitar sem clicar antes não funciona).
+    StackView.onActivated: forceActiveFocus()
 
     property var onPedidoSelecionado: null
     property var pilha: null
@@ -16,26 +23,32 @@ Page {
     // Lanche aguardando a escolha do pão no popup (nome + valorNum). null
     // quando nenhum popup de pão está em andamento.
     property var paoPendente: null
-    // Tipos de pão disponíveis para qualquer lanche
+    // Tipos de pão disponíveis para qualquer lanche. "chave" indica o papel
+    // (role) do modeloLanches/modeloFiltrado/paoPendente onde está o preço
+    // daquele pão para o lanche em questão — cada pão tem seu próprio valor,
+    // vindo direto de lanches.json (valor.pao_hamburguer/pao_frances/pao_baby).
     readonly property var tiposPao: [
         {
             "nome": "Pão de Hambúrguer",
             "icone": "fa6s.burger",
             "cor": "#e67e22",
             // Pão padrão do lanche: não aparece no nome do pedido.
-            "resumo": ""
+            "resumo": "",
+            "chave": "valorHamburguer"
         },
         {
             "nome": "Pão Francês",
             "icone": "fa6s.bread-slice",
             "cor": "#8e44ad",
-            "resumo": "frances"
+            "resumo": "frances",
+            "chave": "valorFrances"
         },
         {
             "nome": "Pão Baby",
             "icone": "fa6s.bread-slice",
             "cor": "#16a085",
-            "resumo": "baby"
+            "resumo": "baby",
+            "chave": "valorBaby"
         }
     ]
     // Propriedade computada para o valor somado de todos os lanches selecionados
@@ -67,15 +80,27 @@ Page {
         return "";
     }
 
+    // Nome do papel (role) em que o preço daquele pão está guardado
+    // (modeloLanches/modeloFiltrado/paoPendente), ex: "valorFrances".
+    function chavePao(nomePao) {
+        for (var i = 0; i < tiposPao.length; i++) {
+            if (tiposPao[i].nome === nomePao)
+                return tiposPao[i].chave;
+        }
+        return "valorHamburguer";
+    }
+
     // Confirma o pão escolhido no popup para o lanche pendente e o adiciona
-    // à lista de selecionados. Chamado pelos botões de popupPao.
+    // à lista de selecionados. O preço só é conhecido agora, pois cada pão
+    // tem seu próprio valor (paoPendente carrega os 3 preços do lanche).
+    // Chamado pelos botões de popupPao.
     function confirmarPao(nomePao) {
         if (!paoPendente)
             return ;
 
         selecionados = selecionados.concat([{
             "nome": paoPendente.nome,
-            "valorNum": paoPendente.valorNum,
+            "valorNum": parseValor(paoPendente[chavePao(nomePao)]),
             "paoTipo": nomePao
         }]);
         paoPendente = null;
@@ -92,7 +117,17 @@ Page {
                         var dados = JSON.parse(xhr.responseText);
                         modeloLanches.clear();
                         for (var i = 0; i < dados.length; i++) {
-                            modeloLanches.append(dados[i]);
+                            // O preço de cada pão vem direto do JSON (valor.pao_hamburguer/
+                            // pao_frances/pao_baby) — achatado aqui em papéis (roles)
+                            // separados, já que o ListModel não lida bem com objetos
+                            // aninhados dentro de bindings do QML.
+                            modeloLanches.append({
+                                "nome": dados[i].nome,
+                                "ingredientes": dados[i].ingredientes,
+                                "valorHamburguer": dados[i].valor.pao_hamburguer,
+                                "valorFrances": dados[i].valor.pao_frances,
+                                "valorBaby": dados[i].valor.pao_baby
+                            });
                         }
                         console.log("Lanches carregados:", modeloLanches.count);
                         filtrarLanches("");
@@ -109,15 +144,17 @@ Page {
 
     function filtrarLanches(texto) {
         modeloFiltrado.clear();
-        var busca = texto ? texto.trim().toLowerCase() : "";
+        var busca = texto ? Texto.normalizar(texto.trim()) : "";
         var resultados = [];
         for (var i = 0; i < modeloLanches.count; i++) {
             var item = modeloLanches.get(i);
-            var nomeLower = item.nome.toLowerCase();
+            var nomeLower = Texto.normalizar(item.nome);
             if (busca === "" || nomeLower.indexOf(busca) !== -1)
                 resultados.push({
                     "nome": item.nome,
-                    "valor": item.valor,
+                    "valorHamburguer": item.valorHamburguer,
+                    "valorFrances": item.valorFrances,
+                    "valorBaby": item.valorBaby,
                     "prioridade": nomeLower.startsWith(busca) ? 0 : 1
                 });
         }
@@ -130,7 +167,9 @@ Page {
         for (var j = 0; j < resultados.length; j++) {
             modeloFiltrado.append({
                 "nome": resultados[j].nome,
-                "valor": resultados[j].valor
+                "valorHamburguer": resultados[j].valorHamburguer,
+                "valorFrances": resultados[j].valorFrances,
+                "valorBaby": resultados[j].valorBaby
             });
         }
     }
@@ -159,6 +198,17 @@ Page {
         var lista = selecionados.slice();
         lista.splice(indice, 1);
         selecionados = lista;
+    }
+
+    // Permite digitar direto na tela para pesquisar, sem precisar clicar
+    // antes na barra de busca — qualquer tecla "imprimível" (letras,
+    // números, acentos) foca a barra e já entra com o caractere digitado.
+    Keys.onPressed: function (event) {
+        if (!campoBusca.activeFocus && event.key >= Qt.Key_Space && event.key <= Qt.Key_ydiaeresis) {
+            campoBusca.forceActiveFocus();
+            campoBusca.text += event.text;
+            event.accepted = true;
+        }
     }
 
     Component.onCompleted: {
@@ -230,16 +280,48 @@ Page {
                         height: 46
                         onClicked: confirmarPao(modelData.nome)
 
-                        contentItem: Row {
-                            spacing: 8
-                            anchors.centerIn: parent
-                            Icone { nome: modelData.icone; cor: "#ffffff"; tamanho: 15; anchors.verticalCenter: parent.verticalCenter }
+                        // Cada pão tem seu próprio preço (vindo de lanches.json),
+                        // por isso o valor aparece junto do botão em vez de só
+                        // depois de escolhido.
+                        contentItem: Item {
+                            anchors.fill: parent
+                            anchors.leftMargin: 16
+                            anchors.rightMargin: 16
+
+                            Icone {
+                                id: iconePao
+                                nome: modelData.icone
+                                cor: "#ffffff"
+                                tamanho: 15
+                                anchors.left: parent.left
+                                anchors.verticalCenter: parent.verticalCenter
+                            }
+
+                            Text {
+                                id: textoPrecoPao
+
+                                text: paoPendente ? ("R$ " + parseValor(paoPendente[modelData.chave]).toFixed(2).replace(".", ",")) : ""
+                                font.pixelSize: 15
+                                font.bold: true
+                                color: "#ffffff"
+                                anchors.right: parent.right
+                                anchors.verticalCenter: parent.verticalCenter
+                            }
+
+                            // Nome ancorado entre o ícone e o preço (com margem
+                            // garantida) e não numa Row, para nunca "colar" no
+                            // preço quando o nome do pão for mais longo.
                             Text {
                                 text: modelData.nome
                                 font.pixelSize: 15
                                 font.bold: true
                                 color: "#ffffff"
+                                anchors.left: iconePao.right
+                                anchors.leftMargin: 8
+                                anchors.right: textoPrecoPao.left
+                                anchors.rightMargin: 10
                                 anchors.verticalCenter: parent.verticalCenter
+                                elide: Text.ElideRight
                             }
                         }
 
@@ -319,27 +401,29 @@ Page {
             }
 
             // BARRA DE PESQUISA
-            TextField {
+            Search {
                 id: campoBusca
 
                 width: parent.width
-                height: 42
+                corDestaque: "#e67e22"
                 placeholderText: "Pesquisar lanche (ex: bacon, salada)..."
-                placeholderTextColor: "#95a5a6"
-                font.pixelSize: Estilo.fonte.padrao
-                leftPadding: 14
-                rightPadding: 14
-                color: Estilo.cores.texto
-                selectByMouse: true
                 onTextChanged: {
                     filtrarLanches(text);
                 }
-
-                background: Rectangle {
-                    radius: Estilo.rounding.grande
-                    color: "#ffffff"
-                    border.color: campoBusca.activeFocus ? "#e67e22" : Estilo.cores.borda
-                    border.width: campoBusca.activeFocus ? 2 : 1
+                // Enter com um só resultado na busca já escolhe esse lanche
+                // (abre o popup de pão, como um clique) e limpa a busca.
+                onAccepted: {
+                    if (modeloFiltrado.count === 1) {
+                        var item = modeloFiltrado.get(0);
+                        paoPendente = {
+                            "nome": item.nome,
+                            "valorHamburguer": item.valorHamburguer,
+                            "valorFrances": item.valorFrances,
+                            "valorBaby": item.valorBaby
+                        };
+                        popupPao.open();
+                        campoBusca.text = "";
+                    }
                 }
             }
 
@@ -372,11 +456,17 @@ Page {
                     onClicked: {
                         paoPendente = {
                             "nome": model.nome,
-                            "valorNum": parseValor(model.valor)
+                            "valorHamburguer": model.valorHamburguer,
+                            "valorFrances": model.valorFrances,
+                            "valorBaby": model.valorBaby
                         };
                         popupPao.open();
                     }
 
+                    // Mesmo estilo (Row com spacing 10) da lista de sabores em
+                    // Pizzas.qml — sem preço aqui, já que cada pão tem seu
+                    // próprio valor, só mostrado depois de escolhido (na
+                    // pré-comanda, à direita).
                     contentItem: Row {
                         spacing: 10
 
@@ -404,16 +494,8 @@ Page {
                             font.pixelSize: Estilo.fonte.padrao
                             font.bold: true
                             color: Estilo.cores.texto
-                            width: parent.width - 120
+                            width: parent.width - 30
                             elide: Text.ElideRight
-                            anchors.verticalCenter: parent.verticalCenter
-                        }
-
-                        Text {
-                            text: "R$ " + model.valor
-                            font.pixelSize: Estilo.fonte.padrao
-                            color: Estilo.confirmar.normal
-                            font.bold: true
                             anchors.verticalCenter: parent.verticalCenter
                         }
                     }
