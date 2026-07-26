@@ -11,6 +11,7 @@ from PyQt6.QtNetwork import QHostAddress, QTcpServer, QTcpSocket
 
 from services.printerService import PrinterService
 from services.rede.descoberta import criar_descoberta
+from services.rede.eventos import BarramentoEventos
 
 _INTERVALO_CHECAGEM_IMPRESSORA_MS = 30000
 _TIMEOUT_IMPRESSAO_MS = 10000
@@ -22,9 +23,9 @@ class RedeService(QObject):
 
     Topologia em malha completa: como há no máximo poucas máquinas (4), cada
     instância se conecta diretamente a todas as outras que descobrir na rede
-    (ver services/rede/descoberta.py), então uma mensagem nunca precisa ser
-    retransmitida — quem cria/apaga um pedido manda direto pra cada peer
-    conectado.
+    (ver services/rede/descoberta.py) — na prática um evento publicado (ver
+    abaixo) já chega em 1 salto em todo mundo, mas o protocolo por trás não
+    depende disso continuar sendo verdade.
 
     Além de bytes entrando e saindo (quem grava/apaga os .txt em disco são os
     sinais conectados pelos controllers, ver main.py), esta classe também
@@ -32,7 +33,18 @@ class RedeService(QObject):
     máquina da malha está com a impressora física conectada — ver
     _recalcular_maquina_impressora — e roteia os pedidos de impressão
     (solicitar_impressao) só pra ela, em vez de cada máquina imprimir na sua
-    própria impressora local."""
+    própria impressora local.
+
+    A propagação de "avisos pra malha inteira" (comanda nova, comanda
+    apagada, cardápio alterado...) não vive aqui — é toda feita por
+    services/rede/eventos.py (BarramentoEventos), que implementa o
+    protocolo de gossip (id único + dedup + repassar adiante). Esta classe
+    só liga esse barramento aos sockets (ver _propagar_evento) e traduz
+    entre "chegou um evento de tipo X" e os sinais Qt que os controllers
+    escutam (ver _ao_receber_evento_pedido_novo/_ao_receber_evento_pedido_apagado)
+    — CardapioController usa o mesmo barramento diretamente, via
+    publicarEvento/registrarEvento, para o tipo "cardapio_alterado", sem
+    que esta classe precise saber nada sobre cardápio."""
 
     pedidoRecebido = pyqtSignal(str, QByteArray)
     pedidoRemovidoRemoto = pyqtSignal(str)
@@ -72,6 +84,10 @@ class RedeService(QObject):
         self._tcp_server = QTcpServer(self)
         self._timer_impressora = QTimer(self)
         self._descoberta = criar_descoberta(self)
+
+        self._eventos = BarramentoEventos(self._propagar_evento)
+        self._eventos.registrar("pedido_novo", self._ao_receber_evento_pedido_novo)
+        self._eventos.registrar("pedido_apagado", self._ao_receber_evento_pedido_apagado)
 
         self._impressoraLocalVerificada.connect(self._ao_verificar_impressora_local)
         self._descoberta.peerDescoberto.connect(self._ao_descobrir_peer)
@@ -257,20 +273,14 @@ class RedeService(QObject):
                 })
 
         elif tipo == "pedido":
-            nome = mensagem.get("arquivo", "")
-            conteudo_b64 = mensagem.get("conteudo_b64", "")
-            if not nome or not conteudo_b64:
-                return
-            try:
-                conteudo = base64.b64decode(conteudo_b64)
-            except ValueError:
-                return
-            self.pedidoRecebido.emit(nome, QByteArray(conteudo))
+            # Resposta direta ao catch-up pedido em "pedir_arquivo" — não
+            # passa pelo barramento de eventos: não é um anúncio pra malha
+            # inteira, é a resposta a UM pedido específico de UMA máquina
+            # que acabou de reconectar e está preenchendo o que perdeu.
+            self._emitir_pedido_recebido(mensagem.get("arquivo", ""), mensagem.get("conteudo_b64", ""))
 
-        elif tipo == "apagar":
-            nome = mensagem.get("arquivo", "")
-            if nome:
-                self.pedidoRemovidoRemoto.emit(nome)
+        elif tipo == "evento":
+            self._eventos.receber(mensagem, socket)
 
         elif tipo == "status_impressora":
             id_remoto = self._id_do_socket(socket)
@@ -310,6 +320,51 @@ class RedeService(QObject):
                 self.impressaoResultado.emit(True, mensagem.get("maquina") or "outra máquina")
             else:
                 self.impressaoResultado.emit(False, mensagem.get("erro") or "Falha ao imprimir na máquina remota.")
+
+    # ---------- Barramento de eventos (gossip) ----------
+
+    def _propagar_evento(self, evento, socket_origem):
+        """Ponte entre BarramentoEventos e os sockets reais: manda `evento`
+        pra todo peer conectado, exceto `socket_origem` (None numa
+        publicação local — nesse caso manda pra todo mundo)."""
+        mensagem = {"tipo": "evento", **evento}
+        for socket in self._peers.values():
+            if socket is socket_origem:
+                continue
+            self._enviar(socket, mensagem)
+
+    def _emitir_pedido_recebido(self, nome_arquivo, conteudo_b64):
+        if not nome_arquivo or not conteudo_b64:
+            return
+        try:
+            conteudo = base64.b64decode(conteudo_b64)
+        except ValueError:
+            return
+        self.pedidoRecebido.emit(nome_arquivo, QByteArray(conteudo))
+
+    def _ao_receber_evento_pedido_novo(self, payload):
+        payload = payload or {}
+        self._emitir_pedido_recebido(payload.get("arquivo", ""), payload.get("conteudo_b64", ""))
+
+    def _ao_receber_evento_pedido_apagado(self, payload):
+        nome = (payload or {}).get("arquivo", "")
+        if nome:
+            self.pedidoRemovidoRemoto.emit(nome)
+
+    def publicarEvento(self, tipo_evento: str, payload: dict):
+        """Anuncia `payload` (precisa ser serializável em JSON) pra malha
+        inteira sob o tipo `tipo_evento`, pelo mesmo barramento de gossip
+        usado internamente para pedido_novo/pedido_apagado — ver
+        services/rede/eventos.py. Usado por quem tem uma mudança pra
+        avisar às outras máquinas sem que esta classe precise saber o que
+        ela significa (ver CardapioController, tipo "cardapio_alterado")."""
+        self._eventos.publicar(tipo_evento, payload)
+
+    def registrarEvento(self, tipo_evento: str, callback):
+        """Registra `callback(payload)` pra rodar sempre que um evento
+        `tipo_evento` chegar de outra máquina — ver
+        services/rede/eventos.py:BarramentoEventos.registrar."""
+        self._eventos.registrar(tipo_evento, callback)
 
     # ---------- Impressora local e eleição da máquina que imprime ----------
 
@@ -471,18 +526,13 @@ class RedeService(QObject):
     # ---------- Chamadas dos controllers (saída) ----------
 
     def transmitir_pedido(self, nome_arquivo: str, conteudo_bytes: bytes):
-        mensagem = {
-            "tipo": "pedido",
+        self._eventos.publicar("pedido_novo", {
             "arquivo": nome_arquivo,
             "conteudo_b64": base64.b64encode(conteudo_bytes).decode("ascii"),
-        }
-        for socket in self._peers.values():
-            self._enviar(socket, mensagem)
+        })
 
     def transmitir_exclusao(self, nome_arquivo: str):
-        mensagem = {"tipo": "apagar", "arquivo": nome_arquivo}
-        for socket in self._peers.values():
-            self._enviar(socket, mensagem)
+        self._eventos.publicar("pedido_apagado", {"arquivo": nome_arquivo})
 
     def solicitar_impressao(self, conteudo_bytes: bytes):
         """Pede a impressão da comanda na máquina eleita da malha (ver

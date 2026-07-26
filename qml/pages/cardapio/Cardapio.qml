@@ -154,7 +154,22 @@ Page {
         }
     }
 
-    Component.onCompleted: carregarCategorias()
+    // Recarrega sozinho quando o cardápio muda por qualquer outro caminho
+    // que não este formulário: uma alteração salva em outra máquina da
+    // malha (ver services/cardapioService.py CardapioController, evento
+    // "cardapio_alterado" em services/rede/eventos.py) ou, mais raro, outra
+    // janela/aba desta mesma máquina. Se a categoria alterada não é a que
+    // está aberta agora, não precisa recarregar — ela já vai vir certa da
+    // próxima vez que for selecionada.
+    function aoCardapioAlterado(chaveCategoria) {
+        if (telaCardapio.categoriaAtual && telaCardapio.categoriaAtual.chave === chaveCategoria)
+            carregarItens();
+    }
+
+    Component.onCompleted: {
+        carregarCategorias();
+        cardapioController.cardapioAlterado.connect(aoCardapioAlterado);
+    }
 
     // Itens exibidos na lista (todos, ou só os que casam com a busca)
     ListModel {

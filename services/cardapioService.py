@@ -19,11 +19,14 @@ adicionada à mão no JSON (sem entrar em CATEGORIAS) se perde no primeiro
 salvamento feito pela tela.
 """
 
+import base64
 import json
 import os
 import re
 
 from PyQt6.QtCore import QObject, pyqtSignal, pyqtSlot
+
+from services.rede import rede
 
 # Tipos de campo que a tela sabe renderizar (ver PopupItemCardapio.qml):
 # uma linha de texto, um texto de várias linhas e um preço no formato
@@ -126,6 +129,17 @@ def _caminho_arquivo(categoria):
 def _categoria(chave):
     for categoria in CATEGORIAS:
         if categoria["chave"] == chave:
+            return categoria
+    return None
+
+
+def _categoria_por_arquivo(nome_arquivo):
+    """Caminho inverso de _categoria: a partir de "pizzas.json" (nome que
+    chega no evento "cardapio_alterado" de outra máquina, ver
+    CardapioController._ao_receber_cardapio_remoto), acha a categoria —
+    pra saber onde gravar e qual chave repassar em cardapioAlterado."""
+    for categoria in CATEGORIAS:
+        if categoria["arquivo"] == nome_arquivo:
             return categoria
     return None
 
@@ -265,9 +279,62 @@ def salvar(chave_categoria, itens):
 
 
 class CardapioController(QObject):
-    """Ponte para a tela Cardápio (QML) ler/gravar os arquivos acima."""
+    """Ponte para a tela Cardápio (QML) ler/gravar os arquivos acima.
+
+    Também mantém o cardápio sincronizado entre as máquinas da malha local:
+    toda gravação bem-sucedida publica o arquivo inteiro no barramento de
+    eventos por gossip (ver services/rede/eventos.py), e esta classe já
+    nasce inscrita para receber o mesmo tipo de evento vindo de outra
+    máquina e gravar localmente — sem que RedeService precise saber nada
+    sobre cardápio."""
 
     cardapioAlterado = pyqtSignal(str)
+
+    _TIPO_EVENTO_CARDAPIO = "cardapio_alterado"
+
+    def __init__(self):
+        super().__init__()
+        rede.registrarEvento(self._TIPO_EVENTO_CARDAPIO, self._ao_receber_cardapio_remoto)
+
+    def _publicar_cardapio_alterado(self, categoria):
+        caminho = _caminho_arquivo(categoria)
+        try:
+            with open(caminho, "rb") as arquivo:
+                conteudo = arquivo.read()
+        except OSError as erro:
+            print(f"[cardapioService] Falha ao ler {caminho} para propagar à rede: {erro}")
+            return
+
+        rede.publicarEvento(self._TIPO_EVENTO_CARDAPIO, {
+            "arquivo": categoria["arquivo"],
+            "conteudo_b64": base64.b64encode(conteudo).decode("ascii"),
+        })
+
+    def _ao_receber_cardapio_remoto(self, payload):
+        """Grava localmente um data/cardapio/*.json alterado em outra
+        máquina — mesmo formato que _publicar_cardapio_alterado manda."""
+        payload = payload or {}
+        nome_arquivo = os.path.basename(payload.get("arquivo", ""))
+        conteudo_b64 = payload.get("conteudo_b64", "")
+        categoria = _categoria_por_arquivo(nome_arquivo) if nome_arquivo else None
+        if categoria is None or not conteudo_b64:
+            return
+
+        try:
+            conteudo = base64.b64decode(conteudo_b64)
+        except ValueError:
+            return
+
+        caminho = _caminho_arquivo(categoria)
+        try:
+            os.makedirs(os.path.dirname(caminho), exist_ok=True)
+            with open(caminho, "wb") as arquivo:
+                arquivo.write(conteudo)
+        except OSError as erro:
+            print(f"[cardapioService] Falha ao gravar {caminho} (recebido da rede): {erro}")
+            return
+
+        self.cardapioAlterado.emit(categoria["chave"])
 
     @pyqtSlot(result="QVariantList")
     def listarCategorias(self):
@@ -294,4 +361,7 @@ class CardapioController(QObject):
         erro = salvar(chave_categoria, itens)
         if not erro:
             self.cardapioAlterado.emit(chave_categoria)
+            categoria = _categoria(chave_categoria)
+            if categoria is not None:
+                self._publicar_cardapio_alterado(categoria)
         return erro
