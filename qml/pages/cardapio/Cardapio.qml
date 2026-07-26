@@ -278,14 +278,27 @@ Page {
         }
 
         // --- BUSCA + ADICIONAR ---
-        RowLayout {
+        // Row simples (não RowLayout) igual ColunaEsquerda.qml (Consulta):
+        // dentro de um RowLayout, o "height: 42" do Search.qml (a barra de
+        // busca padrão de todas as telas) é sobrescrito pelo próprio layout
+        // — que gerencia a altura dos filhos sozinho e ignora height direto
+        // (ver aviso do qmllint: "height on an item managed by a layout") —
+        // e a barra saía mais baixa e com o arredondamento do canto
+        // proporcionalmente diferente do resto do app.
+        Row {
+            id: linhaBusca
+
+            // Sem "height:" explícito aqui — dentro de um ColumnLayout,
+            // isso levaria o mesmo aviso do qmllint que motivou trocar o
+            // RowLayout por um Row logo abaixo. A altura de 42 já vem de
+            // sobra da altura dos próprios filhos (Search/Button).
             Layout.fillWidth: true
             spacing: 12
 
             Search {
                 id: campoBusca
 
-                Layout.fillWidth: true
+                width: linhaBusca.width - btnAdicionar.width - linhaBusca.spacing
                 corDestaque: telaCardapio.corDestaque
                 placeholderText: "Pesquisar no cardápio (nome ou ingrediente)..."
                 onTextChanged: telaCardapio.filtrar(text)
