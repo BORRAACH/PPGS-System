@@ -328,7 +328,7 @@ Column {
 
                                 Text {
                                     visible: linhaCampo._tamanhoFonte !== raiz.tamanhoFontePadrao
-                                    text: linhaCampo._tamanhoFonte + "px"
+                                    text: raiz.multiplicadorFonte(linhaCampo._tamanhoFonte) + "x"
                                     font.pixelSize: 11
                                     font.bold: true
                                     color: Estilo.cores.textoSecundario

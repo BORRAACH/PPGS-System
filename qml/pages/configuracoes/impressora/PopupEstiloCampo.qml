@@ -22,6 +22,9 @@ Popup {
     property var controlador
     property string campoChave: ""
     property string campoRotulo: ""
+    // Nível do multiplicador ESC/POS atual (1x a 8x) — não um valor em
+    // pixels: ver o bloco "Tamanho da fonte" mais abaixo pro motivo.
+    property int nivelFonte: 1
 
     function abrirPara(chave, rotulo) {
         campoChave = chave;
@@ -29,8 +32,13 @@ Popup {
         chkNegrito.checked = controlador.obterAtributo(chave, "negrito");
         chkSublinhado.checked = controlador.obterAtributo(chave, "sublinhado");
         chkFundoPreto.checked = controlador.obterAtributo(chave, "fundo_preto");
-        campoTamanhoFonte.text = String(controlador.obterTamanhoFonte(chave));
+        nivelFonte = controlador.multiplicadorFonte(controlador.obterTamanhoFonte(chave));
         open();
+    }
+
+    function _definirNivelFonte(nivel) {
+        nivelFonte = nivel;
+        controlador.definirTamanhoFonteLocal(campoChave, nivel * controlador.tamanhoFontePadrao);
     }
 
     modal: true
@@ -195,41 +203,70 @@ Popup {
         Rectangle { width: parent.width; height: 1; color: Estilo.cores.bordaCard }
 
         // --- Tamanho da fonte ---
+        // Um campo livre em pixels dava a falsa impressão de controle
+        // contínuo: o ESC/POS só tem 8 multiplicadores inteiros do
+        // tamanho normal (1x a 8x), então digitar "25" ou "30" imprimia
+        // exatamente do mesmo tamanho (os dois viram 2x) — parecia bug
+        // ("só muda pra valores específicos"). Aqui o controle já mostra
+        // direto qual dos 8 níveis está selecionado.
         Item {
             width: parent.width
-            height: campoTamanhoFonte.height
+            height: 32
 
             Text {
-                text: "Tamanho da fonte (px)"
+                text: "Tamanho da fonte"
                 font.pixelSize: 14
                 color: Estilo.cores.texto
                 anchors.left: parent.left
                 anchors.verticalCenter: parent.verticalCenter
             }
 
-            TextField {
-                id: campoTamanhoFonte
-
+            Row {
                 anchors.right: parent.right
-                width: 70
-                horizontalAlignment: Text.AlignHCenter
-                topPadding: 6
-                bottomPadding: 6
-                validator: IntValidator { bottom: 1; top: 999 }
-                onEditingFinished: {
-                    var valor = parseInt(text, 10);
-                    if (isNaN(valor) || valor < 1)
-                        valor = popup.controlador.tamanhoFontePadrao;
+                spacing: 12
 
-                    text = String(valor);
-                    popup.controlador.definirTamanhoFonteLocal(popup.campoChave, valor);
+                Button {
+                    text: "-"
+                    width: 32
+                    height: 32
+                    anchors.verticalCenter: parent.verticalCenter
+                    enabled: popup.nivelFonte > 1
+                    onClicked: popup._definirNivelFonte(popup.nivelFonte - 1)
+
+                    background: Rectangle {
+                        radius: Estilo.rounding.padrao
+                        color: parent.down ? Estilo.cores.bordaCard : "#ffffff"
+                        border.color: Estilo.cores.borda
+                        border.width: 1
+                        opacity: parent.enabled ? 1 : 0.5
+                    }
                 }
 
-                background: Rectangle {
-                    radius: Estilo.rounding.padrao
-                    color: "#ffffff"
-                    border.color: campoTamanhoFonte.activeFocus ? "#475569" : Estilo.cores.borda
-                    border.width: 1
+                Text {
+                    width: 60
+                    text: popup.nivelFonte === 1 ? "Normal" : (popup.nivelFonte + "x")
+                    horizontalAlignment: Text.AlignHCenter
+                    font.pixelSize: 14
+                    font.bold: true
+                    color: Estilo.cores.texto
+                    anchors.verticalCenter: parent.verticalCenter
+                }
+
+                Button {
+                    text: "+"
+                    width: 32
+                    height: 32
+                    anchors.verticalCenter: parent.verticalCenter
+                    enabled: popup.nivelFonte < 8
+                    onClicked: popup._definirNivelFonte(popup.nivelFonte + 1)
+
+                    background: Rectangle {
+                        radius: Estilo.rounding.padrao
+                        color: parent.down ? Estilo.cores.bordaCard : "#ffffff"
+                        border.color: Estilo.cores.borda
+                        border.width: 1
+                        opacity: parent.enabled ? 1 : 0.5
+                    }
                 }
             }
         }
