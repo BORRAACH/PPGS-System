@@ -130,57 +130,67 @@ Rectangle {
             color: Qt.lighter(sideBar.color, 108)
             radius: Estilo.rounding.cheio
 
+            // Telas de manutenção do sistema (o que se mexe de vez em quando),
+            // separadas da cápsula de cima, que é o fluxo de atendimento do
+            // dia a dia: o cardápio em si (data/cardapio/*.json) e o estilo
+            // da comanda impressa. Mesmos campos e mesmo comportamento de
+            // clique de modeloNavegacao acima.
+            ListModel {
+                id: modeloRodape
+                ListElement { icone: "fa6s.book-open"; textoTooltip: "Cardápio"; pagina: "../pages/cardapio/Cardapio.qml"; nomeTela: "telaCardapio" }
+                ListElement { icone: "fa6s.gear"; textoTooltip: "Configurações"; pagina: "../pages/configuracoes/Configuracoes.qml"; nomeTela: "telaConfiguracoes" }
+            }
+
             ColumnLayout {
                 id: colFooter
                 anchors.centerIn: parent
                 width: parent.width - Estilo.preenchimento.pequeno * 2
-                spacing: Estilo.espacamento.menor 
+                spacing: Estilo.espacamento.menor
 
-                // Ícone de engrenagem — abre a tela de Configurações (estilo
-                // da comanda impressa: negrito/sublinhado/fundo preto/fonte
-                // grande por campo, espaçamento). Mesmo padrão de clique dos
-                // itens de modeloNavegacao acima, só que fora do Repeater
-                // por ser um atalho único no rodapé, não parte da lista.
-                Button {
-                    id: btnConfiguracoes
+                Repeater {
+                    model: modeloRodape
 
-                    Layout.fillWidth: true
-                    implicitHeight: 24 + Estilo.preenchimento.normal * 2
+                    delegate: Button {
+                        id: btnRodape
 
-                    background: Rectangle {
-                        color: btnConfiguracoes.hovered ? Qt.darker(capsulaRodape.color, 1.4) : "transparent"
-                        radius: Estilo.rounding.cheio
-                    }
-
-                    ToolTip {
-                        text: "Configurações"
-                        visible: btnConfiguracoes.hovered
-                        delay: 400
-                        padding: Estilo.preenchimento.normal
-                        x: btnConfiguracoes.width + Estilo.espacamento.pequeno
-                        y: (btnConfiguracoes.height - height) / 2
+                        Layout.fillWidth: true
+                        implicitHeight: 24 + Estilo.preenchimento.normal * 2
 
                         background: Rectangle {
-                            radius: Estilo.rounding.popup
-                            color: capsulaRodape.color
-                            border.color: Estilo.cores.bordaCard
-                            border.width: 1
+                            color: btnRodape.hovered ? Qt.darker(capsulaRodape.color, 1.4) : "transparent"
+                            radius: Estilo.rounding.cheio
                         }
-                    }
 
-                    contentItem: Item {
-                        anchors.fill: parent
-                        Icone {
-                            nome: "fa6s.gear"
-                            cor: Estilo.cores.texto
-                            tamanho: 22
-                            anchors.centerIn: parent
+                        ToolTip {
+                            text: textoTooltip
+                            visible: btnRodape.hovered
+                            delay: 400
+                            padding: Estilo.preenchimento.normal
+                            x: btnRodape.width + Estilo.espacamento.pequeno
+                            y: (btnRodape.height - height) / 2
+
+                            background: Rectangle {
+                                radius: Estilo.rounding.popup
+                                color: capsulaRodape.color
+                                border.color: Estilo.cores.bordaCard
+                                border.width: 1
+                            }
                         }
-                    }
 
-                    onClicked: {
-                        if (sideBar.stackView && sideBar.stackView.currentItem && sideBar.stackView.currentItem.objectName !== "telaConfiguracoes") {
-                            sideBar.stackView.push("../pages/configuracoes/Configuracoes.qml", {}, StackView.Immediate);
+                        contentItem: Item {
+                            anchors.fill: parent
+                            Icone {
+                                nome: icone
+                                cor: Estilo.cores.texto
+                                tamanho: 22
+                                anchors.centerIn: parent
+                            }
+                        }
+
+                        onClicked: {
+                            if (sideBar.stackView && sideBar.stackView.currentItem && sideBar.stackView.currentItem.objectName !== nomeTela) {
+                                sideBar.stackView.push(pagina, {}, StackView.Immediate);
+                            }
                         }
                     }
                 }

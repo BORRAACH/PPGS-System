@@ -1,38 +1,146 @@
 [
   {
-    "nome": "Coca-Cola 2L",
-    "valor": "14,00"
+    "nome": "Heineken Long Neck 600ml",
+    "valor": "15,00"
   },
   {
-    "nome": "Coca-Cola Lata",
-    "valor": "6,50"
+    "nome": "Antarctica Original 1 Litro",
+    "valor": "15,00"
   },
   {
-    "nome": "Guaraná Antarctica 2L",
-    "valor": "13,00"
+    "nome": "Antarctica Original 600ml",
+    "valor": "12,00"
   },
   {
-    "nome": "Guaraná Antarctica Lata",
-    "valor": "6,00"
-  },
-  {
-    "nome": "Fanta Laranja Lata",
-    "valor": "6,00"
-  },
-  {
-    "nome": "Suco Natural 500ml",
+    "nome": "Skol 600ml",
     "valor": "9,00"
   },
   {
-    "nome": "Água sem Gás 500ml",
-    "valor": "4,00"
+    "nome": "Skol 1 Litro",
+    "valor": "13,00"
   },
   {
-    "nome": "Água com Gás 500ml",
-    "valor": "4,50"
+    "nome": "Itaipava 1 Litro",
+    "valor": "12,00"
   },
   {
-    "nome": "Cerveja Long Neck",
+    "nome": "Don Nogueira Vinho de Mesa",
+    "valor": "25,00"
+  },
+  {
+    "nome": "Faroni Lopes Vinho Suave",
+    "valor": "30,00"
+  },
+  {
+    "nome": "Coca-Cola Tradicional 2L",
+    "valor": "14,00"
+  },
+  {
+    "nome": "Coca-Cola Sem Açúcar 2L",
+    "valor": "14,00"
+  },
+  {
+    "nome": "Guaraná Antarctica 2L",
+    "valor": "14,00"
+  },
+  {
+    "nome": "Guaraná Antarctica Zero 2L",
+    "valor": "14,00"
+  },
+  {
+    "nome": "Frutuba Laranja 2L",
     "valor": "8,00"
+  },
+  {
+    "nome": "Frutuba Guaraná 2L",
+    "valor": "8,00"
+  },
+  {
+    "nome": "Frutuba Limão 2L",
+    "valor": "8,00"
+  },
+  {
+    "nome": "Sukita Laranja 2L",
+    "valor": "12,00"
+  },
+  {
+    "nome": "Sukita Limão 2L",
+    "valor": "12,00"
+  },
+  {
+    "nome": "Sukita Uva 2L",
+    "valor": "12,00"
+  },
+  {
+    "nome": "Coca-Cola 350ml",
+    "valor": "6,00"
+  },
+  {
+    "nome": "Guaraná 350ml",
+    "valor": "6,00"
+  },
+  {
+    "nome": "Tônica Antarctica 350ml",
+    "valor": "6,00"
+  },
+  {
+    "nome": "Império 350ml",
+    "valor": "7,00"
+  },
+  {
+    "nome": "Heineken 350ml",
+    "valor": "8,00"
+  },
+  {
+    "nome": "Skol 350ml",
+    "valor": "6,00"
+  },
+  {
+    "nome": "Tropical Maracujá 300ml",
+    "valor": "8,00"
+  },
+  {
+    "nome": "Tropical Açaí com Guaraná 500ml",
+    "valor": "8,00"
+  },
+  {
+    "nome": "Tropical Laranja 300ml",
+    "valor": "8,00"
+  },
+  {
+    "nome": "Tropical Goiaba 300ml",
+    "valor": "8,00"
+  },
+  {
+    "nome": "Coca-Cola 1 Litro",
+    "valor": "10,00"
+  },
+  {
+    "nome": "Guaraná 1 Litro",
+    "valor": "6,00"
+  },
+  {
+    "nome": "Del Valle Laranja 1,5 Litro",
+    "valor": "8,00"
+  },
+  {
+    "nome": "Del Valle Uva 1,5 Litro",
+    "valor": "8,00"
+  },
+  {
+    "nome": "Coca-Cola 600ml Original",
+    "valor": "8,00"
+  },
+  {
+    "nome": "Coca-Cola 600ml Zero",
+    "valor": "8,00"
+  },
+  {
+    "nome": "Água Mineral com Gás 500ml",
+    "valor": "3,50"
+  },
+  {
+    "nome": "Água Mineral sem Gás 500ml",
+    "valor": "3,00"
   }
 ]
