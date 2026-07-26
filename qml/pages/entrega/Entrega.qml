@@ -299,75 +299,97 @@ Page {
                         spacing: 10
                         anchors.horizontalCenter: parent
 
-                        TextField {
-                            id: inputTelefone
+                        Column {
+                            spacing: 4
 
-                            // Evita recursão: reformatar o texto abaixo dispara
-                            // onTextChanged de novo, então ignoramos essa segunda
-                            // chamada enquanto a primeira ainda está ajustando o texto.
-                            property bool reformatando: false
+                            Text {
+                                text: "Telefone"
+                                font.pixelSize: 12
+                                font.bold: true
+                                color: Estilo.cores.textoSecundario
+                            }
 
-                            placeholderText: "TELEFONE"
-                            width: 190
-                            topPadding: 10
-                            bottomPadding: 10
-                            leftPadding: 10
-                            rightPadding: 10
-                            text: telefoneInicial
-                            inputMethodHints: Qt.ImhDigitsOnly
-                            focus: true
-                            KeyNavigation.tab: inputNomeCliente
-                            KeyNavigation.backtab: btnVoltar
-                            Keys.onReturnPressed: inputNomeCliente.forceActiveFocus()
-                            onTextChanged: {
-                                if (reformatando)
-                                    return ;
+                            TextField {
+                                id: inputTelefone
 
-                                reformatando = true;
-                                // Mantém só os dígitos e formata como "(DD)NNNNNNNNN"
-                                // conforme o usuário digita.
-                                var digitos = text.replace(/\D/g, "").slice(0, 11);
-                                var formatado = "";
-                                if (digitos.length > 0) {
-                                    formatado = "(" + digitos.slice(0, 2);
-                                    if (digitos.length >= 2)
-                                        formatado += ")" + digitos.slice(2);
+                                // Evita recursão: reformatar o texto abaixo dispara
+                                // onTextChanged de novo, então ignoramos essa segunda
+                                // chamada enquanto a primeira ainda está ajustando o texto.
+                                property bool reformatando: false
 
+                                placeholderText: "TELEFONE"
+                                width: 190
+                                topPadding: 10
+                                bottomPadding: 10
+                                leftPadding: 10
+                                rightPadding: 10
+                                text: telefoneInicial
+                                inputMethodHints: Qt.ImhDigitsOnly
+                                focus: true
+                                KeyNavigation.tab: inputNomeCliente
+                                KeyNavigation.backtab: btnVoltar
+                                Keys.onReturnPressed: inputNomeCliente.forceActiveFocus()
+                                onTextChanged: {
+                                    if (reformatando)
+                                        return ;
+
+                                    reformatando = true;
+                                    // Mantém só os dígitos e formata como "(DD)NNNNNNNNN"
+                                    // conforme o usuário digita.
+                                    var digitos = text.replace(/\D/g, "").slice(0, 11);
+                                    var formatado = "";
+                                    if (digitos.length > 0) {
+                                        formatado = "(" + digitos.slice(0, 2);
+                                        if (digitos.length >= 2)
+                                            formatado += ")" + digitos.slice(2);
+
+                                    }
+                                    text = formatado;
+                                    reformatando = false;
                                 }
-                                text = formatado;
-                                reformatando = false;
-                            }
 
-                            background: Rectangle {
-                                radius: Estilo.rounding.padrao
-                                color: "#ffffff"
-                                border.color: parent.activeFocus ? "#e67e22" : Estilo.cores.borda
-                                border.width: 1
-                            }
+                                background: Rectangle {
+                                    radius: Estilo.rounding.padrao
+                                    color: "#ffffff"
+                                    border.color: parent.activeFocus ? "#e67e22" : Estilo.cores.borda
+                                    border.width: 1
+                                }
 
+                            }
                         }
 
-                        TextField {
-                            id: inputNomeCliente
+                        Column {
+                            spacing: 4
 
-                            placeholderText: "NOME DO CLIENTE"
-                            width: 220
-                            topPadding: 10
-                            bottomPadding: 10
-                            leftPadding: 10
-                            rightPadding: 10
-                            text: clienteNome
-                            KeyNavigation.tab: inputEndereco
-                            KeyNavigation.backtab: inputTelefone
-                            Keys.onReturnPressed: inputEndereco.forceActiveFocus()
-
-                            background: Rectangle {
-                                radius: Estilo.rounding.padrao
-                                color: "#ffffff"
-                                border.color: parent.activeFocus ? "#e67e22" : Estilo.cores.borda
-                                border.width: 1
+                            Text {
+                                text: "Nome do Cliente"
+                                font.pixelSize: 12
+                                font.bold: true
+                                color: Estilo.cores.textoSecundario
                             }
 
+                            TextField {
+                                id: inputNomeCliente
+
+                                placeholderText: "NOME DO CLIENTE"
+                                width: 220
+                                topPadding: 10
+                                bottomPadding: 10
+                                leftPadding: 10
+                                rightPadding: 10
+                                text: clienteNome
+                                KeyNavigation.tab: inputEndereco
+                                KeyNavigation.backtab: inputTelefone
+                                Keys.onReturnPressed: inputEndereco.forceActiveFocus()
+
+                                background: Rectangle {
+                                    radius: Estilo.rounding.padrao
+                                    color: "#ffffff"
+                                    border.color: parent.activeFocus ? "#e67e22" : Estilo.cores.borda
+                                    border.width: 1
+                                }
+
+                            }
                         }
 
                     }
@@ -377,111 +399,155 @@ Page {
                         spacing: 10
                         anchors.horizontalCenter: parent
 
-                        TextField {
-                            id: inputEndereco
+                        Column {
+                            spacing: 4
 
-                            placeholderText: "ENDEREÇO"
-                            width: 320
-                            topPadding: 10
-                            bottomPadding: 10
-                            leftPadding: 10
-                            rightPadding: 10
-                            text: enderecoInicial
-                            KeyNavigation.tab: inputNumero
-                            KeyNavigation.backtab: inputNomeCliente
-                            Keys.onReturnPressed: inputNumero.forceActiveFocus()
-
-                            background: Rectangle {
-                                radius: Estilo.rounding.padrao
-                                color: "#ffffff"
-                                border.color: parent.activeFocus ? "#e67e22" : Estilo.cores.borda
-                                border.width: 1
+                            Text {
+                                text: "Endereço"
+                                font.pixelSize: 12
+                                font.bold: true
+                                color: Estilo.cores.textoSecundario
                             }
 
+                            TextField {
+                                id: inputEndereco
+
+                                placeholderText: "ENDEREÇO"
+                                width: 320
+                                topPadding: 10
+                                bottomPadding: 10
+                                leftPadding: 10
+                                rightPadding: 10
+                                text: enderecoInicial
+                                KeyNavigation.tab: inputNumero
+                                KeyNavigation.backtab: inputNomeCliente
+                                Keys.onReturnPressed: inputNumero.forceActiveFocus()
+
+                                background: Rectangle {
+                                    radius: Estilo.rounding.padrao
+                                    color: "#ffffff"
+                                    border.color: parent.activeFocus ? "#e67e22" : Estilo.cores.borda
+                                    border.width: 1
+                                }
+
+                            }
                         }
 
-                        TextField {
-                            id: inputNumero
+                        Column {
+                            spacing: 4
 
-                            placeholderText: "NÚMERO"
-                            width: 90
-                            topPadding: 10
-                            bottomPadding: 10
-                            leftPadding: 10
-                            rightPadding: 10
-                            text: numeroInicial
-                            inputMethodHints: Qt.ImhDigitsOnly
-                            KeyNavigation.tab: inputBairro
-                            KeyNavigation.backtab: inputEndereco
-                            Keys.onReturnPressed: inputBairro.forceActiveFocus()
-
-                            validator: RegularExpressionValidator {
-                                regularExpression: /^[0-9]*$/
+                            Text {
+                                text: "Número"
+                                font.pixelSize: 12
+                                font.bold: true
+                                color: Estilo.cores.textoSecundario
                             }
 
-                            background: Rectangle {
-                                radius: Estilo.rounding.padrao
-                                color: "#ffffff"
-                                border.color: parent.activeFocus ? "#e67e22" : Estilo.cores.borda
-                                border.width: 1
-                            }
+                            TextField {
+                                id: inputNumero
 
+                                placeholderText: "NÚMERO"
+                                width: 90
+                                topPadding: 10
+                                bottomPadding: 10
+                                leftPadding: 10
+                                rightPadding: 10
+                                text: numeroInicial
+                                inputMethodHints: Qt.ImhDigitsOnly
+                                KeyNavigation.tab: inputBairro
+                                KeyNavigation.backtab: inputEndereco
+                                Keys.onReturnPressed: inputBairro.forceActiveFocus()
+
+                                validator: RegularExpressionValidator {
+                                    regularExpression: /^[0-9]*$/
+                                }
+
+                                background: Rectangle {
+                                    radius: Estilo.rounding.padrao
+                                    color: "#ffffff"
+                                    border.color: parent.activeFocus ? "#e67e22" : Estilo.cores.borda
+                                    border.width: 1
+                                }
+
+                            }
                         }
 
                     }
 
                     // Campo Bairro
-                    TextField {
-                        id: inputBairro
-
-                        placeholderText: "BAIRRO"
-                        width: 420
-                        topPadding: 10
-                        bottomPadding: 10
-                        leftPadding: 10
-                        rightPadding: 10
+                    Column {
                         anchors.horizontalCenter: parent
-                        text: bairroInicial
-                        KeyNavigation.tab: inputObservacao
-                        KeyNavigation.backtab: inputNumero
-                        Keys.onReturnPressed: inputObservacao.forceActiveFocus()
+                        spacing: 4
 
-                        background: Rectangle {
-                            radius: Estilo.rounding.padrao
-                            color: "#ffffff"
-                            border.color: parent.activeFocus ? "#e67e22" : Estilo.cores.borda
-                            border.width: 1
+                        Text {
+                            text: "Bairro"
+                            font.pixelSize: 12
+                            font.bold: true
+                            color: Estilo.cores.textoSecundario
                         }
 
+                        TextField {
+                            id: inputBairro
+
+                            placeholderText: "BAIRRO"
+                            width: 420
+                            topPadding: 10
+                            bottomPadding: 10
+                            leftPadding: 10
+                            rightPadding: 10
+                            text: bairroInicial
+                            KeyNavigation.tab: inputObservacao
+                            KeyNavigation.backtab: inputNumero
+                            Keys.onReturnPressed: inputObservacao.forceActiveFocus()
+
+                            background: Rectangle {
+                                radius: Estilo.rounding.padrao
+                                color: "#ffffff"
+                                border.color: parent.activeFocus ? "#e67e22" : Estilo.cores.borda
+                                border.width: 1
+                            }
+
+                        }
                     }
 
                     // Campo Observação (geral da entrega)
-                    TextField {
-                        id: inputObservacao
-
-                        placeholderText: "OBSERVAÇÃO"
-                        width: 420
-                        topPadding: 10
-                        bottomPadding: 10
-                        leftPadding: 10
-                        rightPadding: 10
+                    Column {
                         anchors.horizontalCenter: parent
-                        text: observacaoInicial
-                        KeyNavigation.backtab: inputBairro
-                        // Tab/Enter chamam primeiroCampoPedido() na hora (não
-                        // usam "KeyNavigation.tab: ..."): esse binding seria
-                        // avaliado só uma vez, cedo demais — antes do primeiro
-                        // delegate da lista existir — e nunca mais reavaliado.
-                        Keys.onTabPressed: primeiroCampoPedido().forceActiveFocus()
-                        Keys.onReturnPressed: primeiroCampoPedido().forceActiveFocus()
+                        spacing: 4
 
-                        background: Rectangle {
-                            radius: Estilo.rounding.padrao
-                            color: "#ffffff"
-                            border.color: parent.activeFocus ? "#e67e22" : Estilo.cores.borda
-                            border.width: 1
+                        Text {
+                            text: "Observação"
+                            font.pixelSize: 12
+                            font.bold: true
+                            color: Estilo.cores.textoSecundario
                         }
 
+                        TextField {
+                            id: inputObservacao
+
+                            placeholderText: "OBSERVAÇÃO"
+                            width: 420
+                            topPadding: 10
+                            bottomPadding: 10
+                            leftPadding: 10
+                            rightPadding: 10
+                            text: observacaoInicial
+                            KeyNavigation.backtab: inputBairro
+                            // Tab/Enter chamam primeiroCampoPedido() na hora (não
+                            // usam "KeyNavigation.tab: ..."): esse binding seria
+                            // avaliado só uma vez, cedo demais — antes do primeiro
+                            // delegate da lista existir — e nunca mais reavaliado.
+                            Keys.onTabPressed: primeiroCampoPedido().forceActiveFocus()
+                            Keys.onReturnPressed: primeiroCampoPedido().forceActiveFocus()
+
+                            background: Rectangle {
+                                radius: Estilo.rounding.padrao
+                                color: "#ffffff"
+                                border.color: parent.activeFocus ? "#e67e22" : Estilo.cores.borda
+                                border.width: 1
+                            }
+
+                        }
                     }
 
                     // Espaçador extra para separar os dados do cliente/entrega da seção de pedido
@@ -501,6 +567,18 @@ Page {
                             color: "#e67e22"
                             anchors.verticalCenter: parent.verticalCenter
                         }
+                    }
+
+                    // --- CABEÇALHO DA LISTA DE PEDIDOS (rótulo das colunas, uma vez só —
+                    // repetir em cada linha do delegate abaixo poluiria a lista) ---
+                    Row {
+                        width: 690
+                        anchors.horizontalCenter: parent
+                        spacing: 10
+
+                        Text { text: "Pedido"; width: 200; font.pixelSize: 12; font.bold: true; color: Estilo.cores.textoSecundario }
+                        Text { text: "Observação"; width: 180; font.pixelSize: 12; font.bold: true; color: Estilo.cores.textoSecundario }
+                        Text { text: "Valor"; width: 110; font.pixelSize: 12; font.bold: true; color: Estilo.cores.textoSecundario }
                     }
 
                     // --- LISTA DINÂMICA DE PEDIDOS ---
@@ -750,154 +828,200 @@ Page {
                         spacing: 10
                         anchors.horizontalCenter: parent
 
-                        ComboBox {
-                            id: comboFormaPagamento
+                        Column {
+                            spacing: 4
 
-                            width: 150
-                            model: opcoesPagamento
-                            currentIndex: Math.max(0, opcoesPagamento.indexOf(formaPagamentoInicial))
-                            KeyNavigation.tab: inputTroco.visible ? inputTroco : inputTaxaEntrega
-                            // Backtab chama ultimoCampoValor() na hora, não como
-                            // "KeyNavigation.backtab: ..." — ver o comentário em
-                            // inputObservacao sobre por que um binding com
-                            // itemAtIndex() fica preso.
-                            Keys.onBacktabPressed: ultimoCampoValor().forceActiveFocus()
-
-                            contentItem: Text {
-                                text: comboFormaPagamento.displayText
-                                color: Estilo.cores.texto
-                                leftPadding: 10
-                                rightPadding: 10
-                                verticalAlignment: Text.AlignVCenter
-                                elide: Text.ElideRight
+                            Text {
+                                text: "Forma de Pagamento"
+                                font.pixelSize: 12
+                                font.bold: true
+                                color: Estilo.cores.textoSecundario
                             }
 
-                            background: Rectangle {
-                                radius: Estilo.rounding.padrao
-                                color: "#ffffff"
-                                border.color: comboFormaPagamento.activeFocus ? "#e67e22" : Estilo.cores.borda
-                                border.width: 1
-                                implicitHeight: inputTroco.implicitHeight
-                            }
+                            ComboBox {
+                                id: comboFormaPagamento
 
+                                width: 150
+                                model: opcoesPagamento
+                                currentIndex: Math.max(0, opcoesPagamento.indexOf(formaPagamentoInicial))
+                                KeyNavigation.tab: inputTroco.visible ? inputTroco : inputTaxaEntrega
+                                // Backtab chama ultimoCampoValor() na hora, não como
+                                // "KeyNavigation.backtab: ..." — ver o comentário em
+                                // inputObservacao sobre por que um binding com
+                                // itemAtIndex() fica preso.
+                                Keys.onBacktabPressed: ultimoCampoValor().forceActiveFocus()
+
+                                contentItem: Text {
+                                    text: comboFormaPagamento.displayText
+                                    color: Estilo.cores.texto
+                                    leftPadding: 10
+                                    rightPadding: 10
+                                    verticalAlignment: Text.AlignVCenter
+                                    elide: Text.ElideRight
+                                }
+
+                                background: Rectangle {
+                                    radius: Estilo.rounding.padrao
+                                    color: "#ffffff"
+                                    border.color: comboFormaPagamento.activeFocus ? "#e67e22" : Estilo.cores.borda
+                                    border.width: 1
+                                    implicitHeight: inputTroco.implicitHeight
+                                }
+
+                            }
                         }
 
                         // Campo Troco — só faz sentido quando o pagamento é em dinheiro.
-                        TextField {
-                            id: inputTroco
-
-                            placeholderText: "TROCO PARA"
-                            width: 150
-                            topPadding: 10
-                            bottomPadding: 10
-                            leftPadding: 10
-                            rightPadding: 10
-                            text: trocoInicial
+                        Column {
+                            spacing: 4
                             visible: comboFormaPagamento.currentText === "Dinheiro"
-                            KeyNavigation.tab: inputTaxaEntrega
-                            KeyNavigation.backtab: comboFormaPagamento
-                            Keys.onReturnPressed: inputTaxaEntrega.forceActiveFocus()
-                            onEditingFinished: {
-                                if (text !== "") {
-                                    var numLimpo = text.replace("R$", "").replace(" ", "").replace(",", ".");
-                                    var valorFloat = parseFloat(numLimpo);
-                                    if (!isNaN(valorFloat))
-                                        text = "R$ " + valorFloat.toFixed(2).replace(".", ",");
 
+                            Text {
+                                text: "Troco"
+                                font.pixelSize: 12
+                                font.bold: true
+                                color: Estilo.cores.textoSecundario
+                            }
+
+                            TextField {
+                                id: inputTroco
+
+                                placeholderText: "TROCO PARA"
+                                width: 150
+                                topPadding: 10
+                                bottomPadding: 10
+                                leftPadding: 10
+                                rightPadding: 10
+                                text: trocoInicial
+                                visible: comboFormaPagamento.currentText === "Dinheiro"
+                                KeyNavigation.tab: inputTaxaEntrega
+                                KeyNavigation.backtab: comboFormaPagamento
+                                Keys.onReturnPressed: inputTaxaEntrega.forceActiveFocus()
+                                onEditingFinished: {
+                                    if (text !== "") {
+                                        var numLimpo = text.replace("R$", "").replace(" ", "").replace(",", ".");
+                                        var valorFloat = parseFloat(numLimpo);
+                                        if (!isNaN(valorFloat))
+                                            text = "R$ " + valorFloat.toFixed(2).replace(".", ",");
+
+                                    }
                                 }
-                            }
 
-                            validator: DoubleValidator {
-                                bottom: 0
-                                decimals: 2
-                                notation: DoubleValidator.StandardNotation
-                            }
+                                validator: DoubleValidator {
+                                    bottom: 0
+                                    decimals: 2
+                                    notation: DoubleValidator.StandardNotation
+                                }
 
-                            background: Rectangle {
-                                radius: Estilo.rounding.padrao
-                                color: "#ffffff"
-                                border.color: parent.activeFocus ? "#e67e22" : Estilo.cores.borda
-                                border.width: 1
-                            }
+                                background: Rectangle {
+                                    radius: Estilo.rounding.padrao
+                                    color: "#ffffff"
+                                    border.color: parent.activeFocus ? "#e67e22" : Estilo.cores.borda
+                                    border.width: 1
+                                }
 
+                            }
                         }
 
                         // Campo Taxa de entrega — soma ao valor total do pedido.
-                        TextField {
-                            id: inputTaxaEntrega
+                        Column {
+                            spacing: 4
 
-                            placeholderText: "TAXA DE ENTREGA"
-                            width: 150
-                            topPadding: 10
-                            bottomPadding: 10
-                            leftPadding: 10
-                            rightPadding: 10
-                            text: taxaEntregaInicial
-                            KeyNavigation.tab: btnStatusPagamento.visible ? btnStatusPagamento : btnImprimir
-                            KeyNavigation.backtab: inputTroco.visible ? inputTroco : comboFormaPagamento
-                            Keys.onReturnPressed: (btnStatusPagamento.visible ? btnStatusPagamento : btnImprimir).forceActiveFocus()
-                            onEditingFinished: {
-                                if (text !== "") {
-                                    var numLimpo = text.replace("R$", "").replace(" ", "").replace(",", ".");
-                                    var valorFloat = parseFloat(numLimpo);
-                                    if (!isNaN(valorFloat))
-                                        text = "R$ " + valorFloat.toFixed(2).replace(".", ",");
+                            Text {
+                                text: "Taxa de Entrega"
+                                font.pixelSize: 12
+                                font.bold: true
+                                color: Estilo.cores.textoSecundario
+                            }
 
+                            TextField {
+                                id: inputTaxaEntrega
+
+                                placeholderText: "TAXA DE ENTREGA"
+                                width: 150
+                                topPadding: 10
+                                bottomPadding: 10
+                                leftPadding: 10
+                                rightPadding: 10
+                                text: taxaEntregaInicial
+                                KeyNavigation.tab: btnStatusPagamento.visible ? btnStatusPagamento : btnImprimir
+                                KeyNavigation.backtab: inputTroco.visible ? inputTroco : comboFormaPagamento
+                                Keys.onReturnPressed: (btnStatusPagamento.visible ? btnStatusPagamento : btnImprimir).forceActiveFocus()
+                                onEditingFinished: {
+                                    if (text !== "") {
+                                        var numLimpo = text.replace("R$", "").replace(" ", "").replace(",", ".");
+                                        var valorFloat = parseFloat(numLimpo);
+                                        if (!isNaN(valorFloat))
+                                            text = "R$ " + valorFloat.toFixed(2).replace(".", ",");
+
+                                    }
                                 }
-                            }
 
-                            validator: DoubleValidator {
-                                bottom: 0
-                                decimals: 2
-                                notation: DoubleValidator.StandardNotation
-                            }
+                                validator: DoubleValidator {
+                                    bottom: 0
+                                    decimals: 2
+                                    notation: DoubleValidator.StandardNotation
+                                }
 
-                            background: Rectangle {
-                                radius: Estilo.rounding.padrao
-                                color: "#ffffff"
-                                border.color: parent.activeFocus ? "#e67e22" : Estilo.cores.borda
-                                border.width: 1
-                            }
+                                background: Rectangle {
+                                    radius: Estilo.rounding.padrao
+                                    color: "#ffffff"
+                                    border.color: parent.activeFocus ? "#e67e22" : Estilo.cores.borda
+                                    border.width: 1
+                                }
 
+                            }
                         }
 
                         // Botão de status: alterna entre pago (PG) e não pago (NP).
-                        Button {
-                            id: btnStatusPagamento
-
-                            property bool pago: statusPagamentoInicial === "PG"
-
-                            text: pago ? "PG" : "NP"
-                            width: 60
-                            topPadding: 10
-                            bottomPadding: 10
-                            // Só faz sentido perguntar se já foi pago quando o
-                            // pagamento não é instantâneo como o Pix.
+                        Column {
+                            spacing: 4
                             visible: comboFormaPagamento.currentText !== "Pix"
-                            focusPolicy: Qt.StrongFocus
-                            KeyNavigation.tab: btnImprimir
-                            KeyNavigation.backtab: inputTaxaEntrega
-                            Keys.onReturnPressed: clicked()
-                            onClicked: pago = !pago
 
-                            contentItem: Text {
-                                text: btnStatusPagamento.text
+                            Text {
+                                text: "Status"
+                                font.pixelSize: 12
                                 font.bold: true
-                                color: "#ffffff"
-                                horizontalAlignment: Text.AlignHCenter
-                                verticalAlignment: Text.AlignVCenter
+                                color: Estilo.cores.textoSecundario
                             }
 
-                            background: Rectangle {
-                                radius: Estilo.rounding.padrao
-                                color: btnStatusPagamento.pago ? (parent.down ? Estilo.confirmar.pressionado : (parent.hovered ? Estilo.confirmar.hover : Estilo.confirmar.normal)) : (parent.down ? Estilo.cancelar.pressionado : (parent.hovered ? Estilo.cancelar.hover : Estilo.cancelar.normal))
-                                // Anel de foco: só aparece navegando por teclado —
-                                // sem isso, Tab chegava ao botão sem nenhum sinal
-                                // visual de onde o foco estava.
-                                border.color: Estilo.cores.texto
-                                border.width: parent.activeFocus ? 3 : 0
-                            }
+                            Button {
+                                id: btnStatusPagamento
 
+                                property bool pago: statusPagamentoInicial === "PG"
+
+                                text: pago ? "PG" : "NP"
+                                width: 60
+                                topPadding: 10
+                                bottomPadding: 10
+                                // Só faz sentido perguntar se já foi pago quando o
+                                // pagamento não é instantâneo como o Pix.
+                                visible: comboFormaPagamento.currentText !== "Pix"
+                                focusPolicy: Qt.StrongFocus
+                                KeyNavigation.tab: btnImprimir
+                                KeyNavigation.backtab: inputTaxaEntrega
+                                Keys.onReturnPressed: clicked()
+                                onClicked: pago = !pago
+
+                                contentItem: Text {
+                                    text: btnStatusPagamento.text
+                                    font.bold: true
+                                    color: "#ffffff"
+                                    horizontalAlignment: Text.AlignHCenter
+                                    verticalAlignment: Text.AlignVCenter
+                                }
+
+                                background: Rectangle {
+                                    radius: Estilo.rounding.padrao
+                                    color: btnStatusPagamento.pago ? (parent.down ? Estilo.confirmar.pressionado : (parent.hovered ? Estilo.confirmar.hover : Estilo.confirmar.normal)) : (parent.down ? Estilo.cancelar.pressionado : (parent.hovered ? Estilo.cancelar.hover : Estilo.cancelar.normal))
+                                    // Anel de foco: só aparece navegando por teclado —
+                                    // sem isso, Tab chegava ao botão sem nenhum sinal
+                                    // visual de onde o foco estava.
+                                    border.color: Estilo.cores.texto
+                                    border.width: parent.activeFocus ? 3 : 0
+                                }
+
+                            }
                         }
 
                     }

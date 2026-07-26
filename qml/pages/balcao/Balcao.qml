@@ -277,35 +277,58 @@ Page {
                     }
 
                     // Campo Nome do Cliente
-                    TextField {
-                        id: inputNomeCliente
-
-                        placeholderText: "NOME DO CLIENTE"
-                        width: 420
-                        topPadding: 10
-                        bottomPadding: 10
-                        leftPadding: 10
-                        rightPadding: 10
+                    Column {
                         anchors.horizontalCenter: parent
-                        text: clienteNome
-                        focus: true
-                        KeyNavigation.backtab: btnVoltar
-                        // Tab/Enter chamam primeiroCampoPedido() na hora (não
-                        // usam "KeyNavigation.tab: primeiroCampoPedido()"):
-                        // esse binding é avaliado só uma vez, cedo demais —
-                        // antes do primeiro delegate da lista existir — e
-                        // nunca mais é reavaliado, ficando preso apontando
-                        // para "null"/o próprio campo.
-                        Keys.onTabPressed: primeiroCampoPedido().forceActiveFocus()
-                        Keys.onReturnPressed: primeiroCampoPedido().forceActiveFocus()
+                        spacing: 4
 
-                        background: Rectangle {
-                            radius: Estilo.rounding.padrao
-                            color: "#ffffff"
-                            border.color: parent.activeFocus ? Estilo.confirmar.normal : Estilo.cores.borda
-                            border.width: 1
+                        Text {
+                            text: "Nome do Cliente"
+                            font.pixelSize: 12
+                            font.bold: true
+                            color: Estilo.cores.textoSecundario
                         }
 
+                        TextField {
+                            id: inputNomeCliente
+
+                            placeholderText: "NOME DO CLIENTE"
+                            width: 420
+                            topPadding: 10
+                            bottomPadding: 10
+                            leftPadding: 10
+                            rightPadding: 10
+                            text: clienteNome
+                            focus: true
+                            KeyNavigation.backtab: btnVoltar
+                            // Tab/Enter chamam primeiroCampoPedido() na hora (não
+                            // usam "KeyNavigation.tab: primeiroCampoPedido()"):
+                            // esse binding é avaliado só uma vez, cedo demais —
+                            // antes do primeiro delegate da lista existir — e
+                            // nunca mais é reavaliado, ficando preso apontando
+                            // para "null"/o próprio campo.
+                            Keys.onTabPressed: primeiroCampoPedido().forceActiveFocus()
+                            Keys.onReturnPressed: primeiroCampoPedido().forceActiveFocus()
+
+                            background: Rectangle {
+                                radius: Estilo.rounding.padrao
+                                color: "#ffffff"
+                                border.color: parent.activeFocus ? Estilo.confirmar.normal : Estilo.cores.borda
+                                border.width: 1
+                            }
+
+                        }
+                    }
+
+                    // --- CABEÇALHO DA LISTA DE PEDIDOS (rótulo das colunas, uma vez só —
+                    // repetir em cada linha do delegate abaixo poluiria a lista) ---
+                    Row {
+                        width: 690
+                        anchors.horizontalCenter: parent
+                        spacing: 10
+
+                        Text { text: "Pedido"; width: 200; font.pixelSize: 12; font.bold: true; color: Estilo.cores.textoSecundario }
+                        Text { text: "Observação"; width: 180; font.pixelSize: 12; font.bold: true; color: Estilo.cores.textoSecundario }
+                        Text { text: "Valor"; width: 110; font.pixelSize: 12; font.bold: true; color: Estilo.cores.textoSecundario }
                     }
 
                     // --- LISTA DINÂMICA DE PEDIDOS ---
@@ -555,115 +578,150 @@ Page {
                         spacing: 10
                         anchors.horizontalCenter: parent
 
-                        ComboBox {
-                            id: comboFormaPagamento
+                        Column {
+                            spacing: 4
 
-                            width: 150
-                            model: opcoesPagamento
-                            currentIndex: Math.max(0, opcoesPagamento.indexOf(formaPagamentoInicial))
-                            KeyNavigation.tab: inputTroco.visible ? inputTroco : (btnStatusPagamento.visible ? btnStatusPagamento : btnImprimir)
-                            // Backtab chama ultimoCampoValor() na hora, não como
-                            // "KeyNavigation.backtab: ..." — ver o comentário em
-                            // inputNomeCliente sobre por que um binding com
-                            // itemAtIndex() fica preso.
-                            Keys.onBacktabPressed: ultimoCampoValor().forceActiveFocus()
-
-                            contentItem: Text {
-                                text: comboFormaPagamento.displayText
-                                color: Estilo.cores.texto
-                                leftPadding: 10
-                                rightPadding: 10
-                                verticalAlignment: Text.AlignVCenter
-                                elide: Text.ElideRight
+                            Text {
+                                text: "Forma de Pagamento"
+                                font.pixelSize: 12
+                                font.bold: true
+                                color: Estilo.cores.textoSecundario
                             }
 
-                            background: Rectangle {
-                                radius: Estilo.rounding.padrao
-                                color: "#ffffff"
-                                border.color: comboFormaPagamento.activeFocus ? Estilo.confirmar.normal : Estilo.cores.borda
-                                border.width: 1
-                                implicitHeight: inputTroco.implicitHeight
-                            }
+                            ComboBox {
+                                id: comboFormaPagamento
 
+                                width: 150
+                                model: opcoesPagamento
+                                currentIndex: Math.max(0, opcoesPagamento.indexOf(formaPagamentoInicial))
+                                KeyNavigation.tab: inputTroco.visible ? inputTroco : (btnStatusPagamento.visible ? btnStatusPagamento : btnImprimir)
+                                // Backtab chama ultimoCampoValor() na hora, não como
+                                // "KeyNavigation.backtab: ..." — ver o comentário em
+                                // inputNomeCliente sobre por que um binding com
+                                // itemAtIndex() fica preso.
+                                Keys.onBacktabPressed: ultimoCampoValor().forceActiveFocus()
+
+                                contentItem: Text {
+                                    text: comboFormaPagamento.displayText
+                                    color: Estilo.cores.texto
+                                    leftPadding: 10
+                                    rightPadding: 10
+                                    verticalAlignment: Text.AlignVCenter
+                                    elide: Text.ElideRight
+                                }
+
+                                background: Rectangle {
+                                    radius: Estilo.rounding.padrao
+                                    color: "#ffffff"
+                                    border.color: comboFormaPagamento.activeFocus ? Estilo.confirmar.normal : Estilo.cores.borda
+                                    border.width: 1
+                                    implicitHeight: inputTroco.implicitHeight
+                                }
+
+                            }
                         }
 
                         // Campo Troco — só faz sentido quando o pagamento é em dinheiro.
-                        TextField {
-                            id: inputTroco
-
-                            placeholderText: "TROCO PARA"
-                            width: 150
-                            topPadding: 10
-                            bottomPadding: 10
-                            leftPadding: 10
-                            rightPadding: 10
-                            text: trocoInicial
+                        Column {
+                            spacing: 4
                             visible: comboFormaPagamento.currentText === "Dinheiro"
-                            KeyNavigation.tab: btnStatusPagamento.visible ? btnStatusPagamento : btnImprimir
-                            KeyNavigation.backtab: comboFormaPagamento
-                            Keys.onReturnPressed: (btnStatusPagamento.visible ? btnStatusPagamento : btnImprimir).forceActiveFocus()
-                            onEditingFinished: {
-                                if (text !== "") {
-                                    var numLimpo = text.replace("R$", "").replace(" ", "").replace(",", ".");
-                                    var valorFloat = parseFloat(numLimpo);
-                                    if (!isNaN(valorFloat))
-                                        text = "R$ " + valorFloat.toFixed(2).replace(".", ",");
 
+                            Text {
+                                text: "Troco"
+                                font.pixelSize: 12
+                                font.bold: true
+                                color: Estilo.cores.textoSecundario
+                            }
+
+                            TextField {
+                                id: inputTroco
+
+                                placeholderText: "TROCO PARA"
+                                width: 150
+                                topPadding: 10
+                                bottomPadding: 10
+                                leftPadding: 10
+                                rightPadding: 10
+                                text: trocoInicial
+                                visible: comboFormaPagamento.currentText === "Dinheiro"
+                                KeyNavigation.tab: btnStatusPagamento.visible ? btnStatusPagamento : btnImprimir
+                                KeyNavigation.backtab: comboFormaPagamento
+                                Keys.onReturnPressed: (btnStatusPagamento.visible ? btnStatusPagamento : btnImprimir).forceActiveFocus()
+                                onEditingFinished: {
+                                    if (text !== "") {
+                                        var numLimpo = text.replace("R$", "").replace(" ", "").replace(",", ".");
+                                        var valorFloat = parseFloat(numLimpo);
+                                        if (!isNaN(valorFloat))
+                                            text = "R$ " + valorFloat.toFixed(2).replace(".", ",");
+
+                                    }
                                 }
-                            }
 
-                            validator: DoubleValidator {
-                                bottom: 0
-                                decimals: 2
-                                notation: DoubleValidator.StandardNotation
-                            }
+                                validator: DoubleValidator {
+                                    bottom: 0
+                                    decimals: 2
+                                    notation: DoubleValidator.StandardNotation
+                                }
 
-                            background: Rectangle {
-                                radius: Estilo.rounding.padrao
-                                color: "#ffffff"
-                                border.color: parent.activeFocus ? Estilo.confirmar.normal : Estilo.cores.borda
-                                border.width: 1
-                            }
+                                background: Rectangle {
+                                    radius: Estilo.rounding.padrao
+                                    color: "#ffffff"
+                                    border.color: parent.activeFocus ? Estilo.confirmar.normal : Estilo.cores.borda
+                                    border.width: 1
+                                }
 
+                            }
                         }
 
                         // Botão de status: alterna entre pago (PG) e não pago (NP).
-                        Button {
-                            id: btnStatusPagamento
-
-                            property bool pago: statusPagamentoInicial === "PG"
-
-                            text: pago ? "PG" : "NP"
-                            width: 60
-                            topPadding: 10
-                            bottomPadding: 10
-                            // Só faz sentido perguntar se já foi pago quando o
-                            // pagamento não é instantâneo como o Pix.
+                        Column {
+                            spacing: 4
                             visible: comboFormaPagamento.currentText !== "Pix"
-                            focusPolicy: Qt.StrongFocus
-                            KeyNavigation.tab: btnImprimir
-                            KeyNavigation.backtab: inputTroco.visible ? inputTroco : comboFormaPagamento
-                            Keys.onReturnPressed: clicked()
-                            onClicked: pago = !pago
 
-                            contentItem: Text {
-                                text: btnStatusPagamento.text
+                            Text {
+                                text: "Status"
+                                font.pixelSize: 12
                                 font.bold: true
-                                color: "#ffffff"
-                                horizontalAlignment: Text.AlignHCenter
-                                verticalAlignment: Text.AlignVCenter
+                                color: Estilo.cores.textoSecundario
                             }
 
-                            background: Rectangle {
-                                radius: Estilo.rounding.padrao
-                                color: btnStatusPagamento.pago ? (parent.down ? Estilo.confirmar.pressionado : (parent.hovered ? Estilo.confirmar.hover : Estilo.confirmar.normal)) : (parent.down ? Estilo.cancelar.pressionado : (parent.hovered ? Estilo.cancelar.hover : Estilo.cancelar.normal))
-                                // Anel de foco: só aparece navegando por teclado —
-                                // sem isso, Tab chegava ao botão sem nenhum sinal
-                                // visual de onde o foco estava.
-                                border.color: Estilo.cores.texto
-                                border.width: parent.activeFocus ? 3 : 0
-                            }
+                            Button {
+                                id: btnStatusPagamento
 
+                                property bool pago: statusPagamentoInicial === "PG"
+
+                                text: pago ? "PG" : "NP"
+                                width: 60
+                                topPadding: 10
+                                bottomPadding: 10
+                                // Só faz sentido perguntar se já foi pago quando o
+                                // pagamento não é instantâneo como o Pix.
+                                visible: comboFormaPagamento.currentText !== "Pix"
+                                focusPolicy: Qt.StrongFocus
+                                KeyNavigation.tab: btnImprimir
+                                KeyNavigation.backtab: inputTroco.visible ? inputTroco : comboFormaPagamento
+                                Keys.onReturnPressed: clicked()
+                                onClicked: pago = !pago
+
+                                contentItem: Text {
+                                    text: btnStatusPagamento.text
+                                    font.bold: true
+                                    color: "#ffffff"
+                                    horizontalAlignment: Text.AlignHCenter
+                                    verticalAlignment: Text.AlignVCenter
+                                }
+
+                                background: Rectangle {
+                                    radius: Estilo.rounding.padrao
+                                    color: btnStatusPagamento.pago ? (parent.down ? Estilo.confirmar.pressionado : (parent.hovered ? Estilo.confirmar.hover : Estilo.confirmar.normal)) : (parent.down ? Estilo.cancelar.pressionado : (parent.hovered ? Estilo.cancelar.hover : Estilo.cancelar.normal))
+                                    // Anel de foco: só aparece navegando por teclado —
+                                    // sem isso, Tab chegava ao botão sem nenhum sinal
+                                    // visual de onde o foco estava.
+                                    border.color: Estilo.cores.texto
+                                    border.width: parent.activeFocus ? 3 : 0
+                                }
+
+                            }
                         }
 
                     }
