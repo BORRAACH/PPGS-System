@@ -8,6 +8,35 @@ Popup {
 
     property var onPedidoSelecionado: null
     property var pilha: null
+    // Índice do item em foco: 0..N-1 são as categorias, N é o botão Cancelar
+    property int indiceFoco: 0
+    readonly property int totalFocaveis: modeloCategorias.count + 1
+
+    // Abre a categoria correspondente ao índice, ou fecha se for o Cancelar
+    function acionarItem(indice) {
+        if (indice >= modeloCategorias.count) {
+            popupSelecaoPedido.close();
+            return ;
+        }
+        var pagina = modeloCategorias.get(indice).pagina;
+        // Fecha o popup e repassa a navegação adiante, para
+        // a pilha local da tela que abriu a seleção.
+        popupSelecaoPedido.close();
+        if (pilha)
+            pilha.push(pagina, {
+                "pilha": pilha,
+                "onPedidoSelecionado": function(nome, valor) {
+                    if (popupSelecaoPedido.onPedidoSelecionado)
+                        popupSelecaoPedido.onPedidoSelecionado(nome, valor);
+
+                }
+            });
+
+    }
+
+    function moverFoco(passo) {
+        indiceFoco = (indiceFoco + passo + totalFocaveis) % totalFocaveis;
+    }
 
     modal: true
     focus: true
@@ -15,6 +44,10 @@ Popup {
     padding: 25
     parent: Overlay.overlay
     anchors.centerIn: parent
+    onOpened: {
+        indiceFoco = 0;
+        colunaSelecao.forceActiveFocus();
+    }
 
     Overlay.modal: Rectangle {
         color: "#99000000"
@@ -64,6 +97,21 @@ Popup {
         id: colunaSelecao
 
         spacing: 20
+        focus: true
+        // Navegação por teclado: TAB / SHIFT+TAB percorrem os itens e
+        // ENTER (ou espaço) aciona o item em foco.
+        Keys.onPressed: function(event) {
+            if (event.key === Qt.Key_Backtab || (event.key === Qt.Key_Tab && (event.modifiers & Qt.ShiftModifier))) {
+                popupSelecaoPedido.moverFoco(-1);
+                event.accepted = true;
+            } else if (event.key === Qt.Key_Tab) {
+                popupSelecaoPedido.moverFoco(1);
+                event.accepted = true;
+            } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter || event.key === Qt.Key_Space) {
+                popupSelecaoPedido.acionarItem(popupSelecaoPedido.indiceFoco);
+                event.accepted = true;
+            }
+        }
 
         Text {
             text: "Selecione a Categoria"
@@ -93,20 +141,28 @@ Popup {
                     Button {
                         id: btnCategoria
 
-                        anchors.fill: parent
-                        onClicked: {
-                            // Fecha o popup e repassa a navegação adiante, para
-                            // a pilha local da tela que abriu a seleção.
-                            popupSelecaoPedido.close();
-                            if (pilha)
-                                pilha.push(model.pagina, {
-                                    "pilha": pilha,
-                                    "onPedidoSelecionado": function(nome, valor) {
-                                        if (popupSelecaoPedido.onPedidoSelecionado)
-                                            popupSelecaoPedido.onPedidoSelecionado(nome, valor);
+                        readonly property bool emFoco: popupSelecaoPedido.indiceFoco === index
 
-                                    }
-                                });
+                        anchors.fill: parent
+                        // O foco de teclado é controlado pelo popup, então o
+                        // botão não deve capturá-lo e quebrar a ordem do TAB.
+                        focusPolicy: Qt.NoFocus
+                        // O item em foco cresce, em vez de encolher por causa
+                        // da borda desenhada para dentro do retângulo.
+                        scale: emFoco ? 1.1 : 1
+                        z: emFoco ? 1 : 0
+                        onHoveredChanged: {
+                            if (hovered)
+                                popupSelecaoPedido.indiceFoco = index;
+
+                        }
+                        onClicked: popupSelecaoPedido.acionarItem(index)
+
+                        Behavior on scale {
+                            NumberAnimation {
+                                duration: 100
+                                easing.type: Easing.OutQuad
+                            }
 
                         }
 
@@ -133,7 +189,9 @@ Popup {
 
                         background: Rectangle {
                             radius: Estilo.rounding.medio
-                            color: btnCategoria.down ? Qt.darker(model.cor, 1.2) : (btnCategoria.hovered ? Qt.lighter(model.cor, 1.1) : model.cor)
+                            color: btnCategoria.down ? Qt.darker(model.cor, 1.2) : (btnCategoria.emFoco ? Qt.lighter(model.cor, 1.1) : model.cor)
+                            border.width: btnCategoria.emFoco ? 3 : 0
+                            border.color: "#ffffff"
 
                             Behavior on color {
                                 ColorAnimation {
@@ -155,11 +213,28 @@ Popup {
         Button {
             id: btnCancelar
 
+            readonly property bool emFoco: popupSelecaoPedido.indiceFoco === modeloCategorias.count
+
             text: "Cancelar"
             padding: 10
             width: Math.min(gradeCategorias.width, 200)
             anchors.horizontalCenter: parent
+            focusPolicy: Qt.NoFocus
+            scale: emFoco ? 1.1 : 1
+            onHoveredChanged: {
+                if (hovered)
+                    popupSelecaoPedido.indiceFoco = modeloCategorias.count;
+
+            }
             onClicked: popupSelecaoPedido.close()
+
+            Behavior on scale {
+                NumberAnimation {
+                    duration: 100
+                    easing.type: Easing.OutQuad
+                }
+
+            }
 
             contentItem: Text {
                 text: btnCancelar.text
@@ -171,7 +246,9 @@ Popup {
 
             background: Rectangle {
                 radius: Estilo.rounding.padrao
-                color: parent.down ? Estilo.cores.textoSecundario : (parent.hovered ? "#95a5a6" : Estilo.cores.textoSecundario)
+                color: btnCancelar.emFoco ? "#95a5a6" : Estilo.cores.textoSecundario
+                border.width: btnCancelar.emFoco ? 3 : 0
+                border.color: "#ffffff"
             }
 
         }
