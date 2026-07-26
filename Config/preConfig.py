@@ -19,15 +19,32 @@ import shutil
 import subprocess
 import sys
 
-# (nome do pacote a instalar via pip, módulo usado para checar se já
-# importa de verdade, valor de sys.platform exigido ou None se vale para
+# (nome do pacote a instalar via pip, módulos usados para checar se já
+# importam de verdade, valor de sys.platform exigido ou None se vale para
 # qualquer SO)
+#
+# Vale a pena listar TODOS os submódulos que o app importa, não só um: as
+# distribuições Linux quebram o PyQt6 em vários pacotes (no Debian/Ubuntu o
+# `python3-pyqt6` traz QtCore/QtGui/QtWidgets, mas QtQml/QtQuick só vêm no
+# `python3-pyqt6.qtquick`). Checando só PyQt6.QtCore, uma instalação parcial
+# dessas passa batido aqui e o app só morre depois, no import do main.py.
 _DEPENDENCIAS_PIP = [
-    ("PyQt6", "PyQt6.QtCore", None),
-    ("pywin32", "win32print", "win32"),
+    (
+        "PyQt6",
+        (
+            "PyQt6.QtCore",
+            "PyQt6.QtGui",
+            "PyQt6.QtNetwork",
+            "PyQt6.QtQml",
+            "PyQt6.QtQuick",
+            "PyQt6.QtWidgets",
+        ),
+        None,
+    ),
+    ("pywin32", ("win32print",), "win32"),
     # Ícones (Font Awesome, Material Design Icons...) expostos ao QML por
     # services/iconProvider.py — ver qml/components/Icone.qml.
-    ("qtawesome", "qtawesome", None),
+    ("qtawesome", ("qtawesome",), None),
 ]
 
 # Programas de sistema (não pacotes Python) exigidos só no Linux, e o nome
@@ -46,6 +63,21 @@ _PROGRAMAS_LINUX = {
     },
 }
 
+# Nome do pacote pip -> nome equivalente no gerenciador de cada distro. Usado
+# só para sugerir um comando quando a instalação via pip não deu certo: no
+# Linux o PyQt6 da distro já vem casado com as libs Qt do sistema, então é o
+# caminho mais confiável. Só o PyQt6 está mapeado porque é o único pesado/
+# nativo; o resto instala sem dor pelo pip.
+_PACOTES_DISTRO = {
+    "PyQt6": {
+        "apt-get": "python3-pyqt6",
+        "dnf": "python3-pyqt6",
+        "yum": "python3-pyqt6",
+        "pacman": "python-pyqt6",
+        "zypper": "python3-qt6",
+    },
+}
+
 # (gerenciador, comando base de instalação não-interativa) — nessa ordem de
 # preferência; o primeiro que existir no sistema é o usado.
 _GERENCIADORES_LINUX = [
@@ -57,50 +89,117 @@ _GERENCIADORES_LINUX = [
 ]
 
 
-def _importa(modulo: str) -> bool:
+def _erro_de_import(modulo: str) -> str | None:
     """Tenta importar de verdade (não só checar se existe no disco) — pega
-    também instalações quebradas/parciais, não só o módulo ausente."""
+    também instalações quebradas/parciais, não só o módulo ausente. Devolve
+    None quando importa, ou a mensagem do erro (que distingue "módulo não
+    existe" de "existe mas falta uma lib do sistema", ex: libGL.so.1)."""
+    # O módulo pode ter sido instalado agora há pouco, neste mesmo processo:
+    # sem invalidar os caches de import o Python continua enxergando o
+    # site-packages como estava quando começou a rodar, e o import falha
+    # mesmo com o pacote já no disco.
+    importlib.invalidate_caches()
     try:
         importlib.import_module(modulo)
-        return True
-    except ImportError:
-        return False
+        return None
+    except ImportError as erro:
+        return str(erro)
+
+
+def _importa(modulo: str) -> bool:
+    return _erro_de_import(modulo) is None
+
+
+def _em_ambiente_virtual() -> bool:
+    return sys.prefix != sys.base_prefix
+
+
+def _comandos_de_instalacao(pacote: str):
+    """Formas de instalar `pacote`, na ordem em que devem ser tentadas."""
+    tentativas = [([sys.executable, "-m", "pip", "install", pacote], "pip")]
+
+    # venvs criados com "uv venv" (ver .venv/pyvenv.cfg: "uv = ...") não
+    # vêm com o módulo pip instalado de propósito — o uv espera "uv pip
+    # install" no lugar de "python -m pip".
+    uv = shutil.which("uv")
+    if uv:
+        tentativas.append(
+            ([uv, "pip", "install", "--python", sys.executable, pacote], "uv pip")
+        )
+
+    if not _em_ambiente_virtual():
+        # PEP 668: as distribuições Linux atuais (Arch, Debian 12+, Ubuntu
+        # 23.04+, Fedora 38+) marcam o Python do sistema como "externally
+        # managed" e o pip se RECUSA a instalar nele — é por isso que a
+        # instalação automática falha em toda máquina Linux recém-formatada,
+        # mesmo com internet e com o pip presente.
+        #
+        # "--user" instala em ~/.local (que já está no sys.path), sem tocar
+        # em nenhum arquivo gerenciado pela distro; "--break-system-packages"
+        # só desliga a recusa do PEP 668 — combinados, o nome assusta mais do
+        # que o efeito real.
+        tentativas.append(
+            (
+                [sys.executable, "-m", "pip", "install", "--user",
+                 "--break-system-packages", pacote],
+                "pip --user",
+            )
+        )
+
+    return tentativas
 
 
 def _instalar_pip(pacote: str) -> bool:
     print(f"[preConfig] Instalando dependência Python ausente: {pacote}...")
-    try:
-        subprocess.run([sys.executable, "-m", "pip", "install", pacote], check=True)
-        return True
-    except (subprocess.CalledProcessError, OSError) as erro:
-        print(f"[preConfig] pip indisponível/falhou ({erro}); tentando via uv...")
 
-    # venvs criados com "uv venv" (ver .venv/pyvenv.cfg: "uv = ...") não
-    # vêm com o módulo pip instalado de propósito — o uv espera "uv pip
-    # install" no lugar de "python -m pip". Só entra aqui se o pip acima
-    # não deu certo, e só se o uv estiver disponível no PATH.
-    uv = shutil.which("uv")
-    if not uv:
-        return False
+    for comando, nome in _comandos_de_instalacao(pacote):
+        try:
+            subprocess.run(comando, check=True)
+            return True
+        except (subprocess.CalledProcessError, OSError) as erro:
+            print(f"[preConfig] Instalação de {pacote} via {nome} não deu certo ({erro}).")
 
-    try:
-        subprocess.run([uv, "pip", "install", "--python", sys.executable, pacote], check=True)
-        return True
-    except (subprocess.CalledProcessError, OSError) as erro:
-        print(f"[preConfig] Falha ao instalar {pacote} via uv: {erro}")
-        return False
+    return False
 
 
-def _garantir_modulo(pacote: str, modulo: str) -> None:
-    if _importa(modulo):
+def _dica_pacote_da_distro(pacote: str) -> str:
+    """Comando do gerenciador da distro para instalar `pacote`, quando faz
+    sentido sugerir — em Linux, instalar o PyQt6 pela distro costuma ser mais
+    confiável do que pelo pip, porque já traz as libs Qt do sistema junto."""
+    pacotes_distro = _PACOTES_DISTRO.get(pacote)
+    if not pacotes_distro or not sys.platform.startswith("linux"):
+        return ""
+
+    for gerenciador, comando_base in _GERENCIADORES_LINUX:
+        nome_distro = pacotes_distro.get(gerenciador)
+        if nome_distro and shutil.which(gerenciador):
+            # comando_base começa com ["sudo", "-n", ...]; o "-n" só existe
+            # pra não travar esperando senha — na dica manual ele atrapalha.
+            return " ".join(["sudo", *comando_base[2:], nome_distro])
+
+    return ""
+
+
+def _garantir_modulo(pacote: str, modulos) -> None:
+    faltando = {modulo: erro for modulo in modulos if (erro := _erro_de_import(modulo))}
+    if not faltando:
         return
 
-    if _instalar_pip(pacote) and _importa(modulo):
-        return
+    if _instalar_pip(pacote):
+        faltando = {modulo: erro for modulo in modulos if (erro := _erro_de_import(modulo))}
+        if not faltando:
+            return
 
+    print(f"[preConfig] Aviso: não consegui garantir a dependência '{pacote}' automaticamente.")
+    for modulo, erro in faltando.items():
+        print(f"[preConfig]   - {modulo}: {erro}")
+
+    dica_distro = _dica_pacote_da_distro(pacote)
+    if dica_distro:
+        print(f"[preConfig] Instale pela distribuição (recomendado no Linux): {dica_distro}")
     print(
-        f"[preConfig] Aviso: não consegui garantir a dependência '{pacote}' "
-        f"automaticamente. Tente instalar manualmente: pip install {pacote}"
+        f"[preConfig] Ou, num ambiente virtual: python -m venv .venv && "
+        f".venv/bin/pip install {pacote}"
     )
 
 
@@ -165,8 +264,8 @@ def _dependencias_aplicaveis():
     """_DEPENDENCIAS_PIP filtrada pela plataforma atual (ex: pywin32 só
     entra na lista se sys.platform == "win32")."""
     return [
-        (pacote, modulo)
-        for pacote, modulo, plataforma in _DEPENDENCIAS_PIP
+        (pacote, modulos)
+        for pacote, modulos, plataforma in _DEPENDENCIAS_PIP
         if not plataforma or sys.platform == plataforma
     ]
 
@@ -183,15 +282,19 @@ def garantir_dependencias() -> None:
     _configurar_estilo_qt_quick()
 
     dependencias = _dependencias_aplicaveis()
-    faltando = [(pacote, modulo) for pacote, modulo in dependencias if not _importa(modulo)]
+    faltando = [
+        (pacote, modulos)
+        for pacote, modulos in dependencias
+        if not all(_importa(modulo) for modulo in modulos)
+    ]
 
     if not faltando:
         print("[preConfig] Todas as dependências Python já estão instaladas — nada para fazer, iniciando o app.")
     else:
         nomes = ", ".join(pacote for pacote, _ in faltando)
-        print(f"[preConfig] Dependência(s) ausente(s): {nomes}. Instalando...")
-        for pacote, modulo in faltando:
-            _garantir_modulo(pacote, modulo)
+        print(f"[preConfig] Dependência(s) ausente(s) ou incompleta(s): {nomes}. Instalando...")
+        for pacote, modulos in faltando:
+            _garantir_modulo(pacote, modulos)
 
     _garantir_programas_sistema()
 

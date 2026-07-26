@@ -42,22 +42,38 @@ try:
     from services.redeService import rede
     from services.iconProvider import IconProvider
     from services.comandaEstiloService import ComandaEstiloController
-except ModuleNotFoundError as erro:
+except ImportError as erro:
     # preConfig.garantir_dependencias() já tentou instalar tudo sozinho —
     # se mesmo assim algo continua faltando (sem internet, sem permissão
     # etc.), termina aqui com uma mensagem clara em vez de um traceback cru.
-    # erro.name é o módulo exato (ex: "PyQt6.QtCore"), não necessariamente o
+    #
+    # Pega ImportError e não só ModuleNotFoundError de propósito: no Linux é
+    # comum o pacote estar instalado mas o .so não carregar por falta de uma
+    # lib do sistema (libGL.so.1, libxcb-cursor.so.0...) — isso é ImportError
+    # puro, e antes escapava daqui como traceback cru.
+    #
+    # erro.name é o módulo exato (ex: "PyQt6.QtQml"), não necessariamente o
     # nome do pacote pip — busca o pacote real em preConfig quando possível.
-    pacote = erro.name or "<pacote>"
-    for nome_pacote, nome_modulo, _plataforma in preConfig._DEPENDENCIAS_PIP:
-        if pacote == nome_modulo or pacote.startswith(nome_modulo.split(".")[0] + "."):
+    modulo = erro.name or "<desconhecido>"
+    pacote = modulo
+    for nome_pacote, nomes_modulos, _plataforma in preConfig._DEPENDENCIAS_PIP:
+        if any(modulo == m or modulo.startswith(m.split(".")[0] + ".") for m in nomes_modulos):
             pacote = nome_pacote
             break
+
     print(
-        f"[main] Não foi possível carregar a dependência '{erro.name}' mesmo "
-        "depois do preConfig tentar instalá-la automaticamente. Verifique "
-        f"sua conexão com a internet ou instale manualmente: pip install {pacote}"
+        f"[main] Não foi possível carregar a dependência '{modulo}' mesmo "
+        "depois do preConfig tentar instalá-la automaticamente."
     )
+    # A mensagem original diz QUAL é o problema de verdade: "No module named
+    # X" (não instalado) é bem diferente de "libGL.so.1: cannot open shared
+    # object file" (instalado, faltando lib do sistema).
+    print(f"[main] Erro original: {erro}")
+
+    dica_distro = preConfig._dica_pacote_da_distro(pacote)
+    if dica_distro:
+        print(f"[main] No Linux, o caminho mais confiável é instalar pela distribuição: {dica_distro}")
+    print(f"[main] Alternativa: pip install {pacote}")
     sys.exit(1)
 
 # codigo perigoso
