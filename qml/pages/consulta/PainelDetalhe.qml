@@ -42,7 +42,10 @@ Rectangle {
                     radius: 6
                     width: textoBadgeDetalhe.implicitWidth + 16
                     height: textoBadgeDetalhe.implicitHeight + 8
-                    color: painelDetalhe.pagina.comandaSelecionada && painelDetalhe.pagina.comandaSelecionada.tipo === "Entrega" ? "#0284c7" : "#d97706"
+                    color: {
+                        var tipo = painelDetalhe.pagina.comandaSelecionada ? painelDetalhe.pagina.comandaSelecionada.tipo : "";
+                        return tipo === "Entrega" ? "#0284c7" : (tipo === "Mesa" ? "#0d9488" : "#d97706");
+                    }
 
                     Text {
                         id: textoBadgeDetalhe

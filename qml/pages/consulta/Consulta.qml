@@ -125,6 +125,14 @@ Page {
         if (!dados || !dados.itens)
             return;
 
+        // Comanda de Mesa já fechada (com a divisão da conta já impressa)
+        // não tem como reabrir de volta num formulário estruturado — nem
+        // Balcao.qml nem Entrega.qml sabem o que fazer com "mesa"/divisão.
+        // O botão "Editar" já não aparece pra ela (ver
+        // ItemComandaDelegate.qml), isto é só defesa a mais.
+        if (dados.tipo === "Mesa")
+            return;
+
         var pilhaPrincipal = telaConsulta.StackView.view;
         if (!pilhaPrincipal)
             return;

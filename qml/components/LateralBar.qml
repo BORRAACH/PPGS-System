@@ -53,7 +53,9 @@ Rectangle {
                 ListElement { icone: "fa6s.house"; textoTooltip: "Início"; pagina: ""; nomeTela: "" }
                 ListElement { icone: "fa6s.bag-shopping"; textoTooltip: "Balcão"; pagina: "../pages/balcao/Balcao.qml"; nomeTela: "telaBalcao" }
                 ListElement { icone: "fa6s.motorcycle"; textoTooltip: "Entrega"; pagina: "../pages/entrega/Entrega.qml"; nomeTela: "telaEntrega" }
+                ListElement { icone: "fa6s.utensils"; textoTooltip: "Salão"; pagina: "../pages/salao/Salao.qml"; nomeTela: "telaSalao" }
                 ListElement { icone: "fa6s.magnifying-glass"; textoTooltip: "Consulta"; pagina: "../pages/consulta/Consulta.qml"; nomeTela: "telaConsulta" }
+                ListElement { icone: "fa6s.cash-register"; textoTooltip: "Fechamento"; pagina: "../pages/fechamento/Fechamento.qml"; nomeTela: "telaFechamento" }
                 ListElement { icone: "fa6s.globe"; textoTooltip: "Rede"; pagina: "../pages/rede/Rede.qml"; nomeTela: "telaRede" }
             }
 

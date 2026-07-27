@@ -17,6 +17,9 @@ Page {
 
     property var onPedidoSelecionado: null
     property var pilha: null
+    // false quando aberta a partir de Salao.qml (via Pedido.qml) — comanda
+    // de mesa não usa a promoção de pizza do dia (ver carregarPizzas()).
+    property bool usarPromocoes: true
     // Sabores escolhidos para a pizza que está sendo montada agora
     property var selecionados: []
     // Pizzas já fechadas nesta visita (cada uma com seus sabores e tamanho
@@ -107,7 +110,7 @@ Page {
     }
 
     function carregarPizzas() {
-        var promocoes = carregarPrecosPromocionais();
+        var promocoes = usarPromocoes ? carregarPrecosPromocionais() : {};
         var xhr = new XMLHttpRequest();
         xhr.open("GET", Qt.resolvedUrl(raizProjeto + "data/cardapio/pizzas.json"));
         xhr.onreadystatechange = function () {

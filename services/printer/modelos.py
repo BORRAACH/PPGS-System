@@ -1,3 +1,4 @@
+import re
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -33,3 +34,24 @@ class InfoImpressora:
     padrao: bool = False
     disponivel: bool = True
     bruto: dict[str, Any] = field(default_factory=dict)
+
+
+def eh_bematech_mp4200th(impressora: InfoImpressora) -> bool:
+    """Reconhece a Bematech MP-4200 TH pelo nome/fabricante/modelo
+    reportados pelo SO. No Linux, a fila costuma estar em modo raw
+    genérico (sem PPD), então fabricante/modelo vêm vazios e só o nome da
+    fila (ex: "Bematech4200TH") identifica o modelo — por isso os três
+    campos são combinados numa busca só, ignorando maiúsculas/pontuação/
+    espaços (assim "Bematech MP-4200 TH", "Bematech4200TH" e "MP-4200 TH
+    Miniprinter" batem igual).
+
+    Vive aqui (não em printerService.py, que é quem originalmente definia
+    isso) porque services/printer/windows.py também precisa: antes de
+    mandar uma consulta de status ESC/POS (DLE EOT) pra uma impressora,
+    precisa confirmar que é uma impressora ESC/POS de verdade — mandar
+    esses bytes crus pra uma impressora genérica (laser, PDF virtual etc.)
+    tem efeito indefinido, incluindo o risco de sair algo impresso, que é
+    exatamente o que essa consulta existe pra evitar."""
+    texto = f"{impressora.nome} {impressora.fabricante} {impressora.modelo}".lower()
+    texto_compacto = re.sub(r"[^a-z0-9]", "", texto)
+    return "bematech" in texto_compacto and "4200" in texto_compacto

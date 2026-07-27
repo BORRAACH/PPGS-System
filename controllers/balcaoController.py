@@ -1,5 +1,4 @@
 import os
-import re
 import threading
 import uuid
 from datetime import datetime
@@ -8,53 +7,17 @@ from PyQt6.QtCore import QObject, pyqtSignal, pyqtSlot
 
 from Config import impressoraWindows
 from services import comandaEstiloService as estilo
+from services import comandaTextoService as texto
 from services.printerService import PrinterService
 from services.rede import rede
 
-# Separador usado em Pizzas.qml (nomesArray.join(" / ")) para pizzas meio a meio.
-# Tem espaço dos dois lados, o que o distingue de nomes como "Atum c/ Cebola".
-SEPARADOR_SABORES = " / "
-
-# Codepage que a Bematech usa para acentuação (ç, ã, é...) em modo ESC/POS.
-# Não é UTF-8: se salvar como UTF-8, os acentos saem corrompidos no cupom impresso.
-CODEPAGE_IMPRESSORA = "cp850"
+CODEPAGE_IMPRESSORA = texto.CODEPAGE_IMPRESSORA
 
 # Marca impressa no topo e no rodapé de uma comanda de teste (ver
 # _salvarComanda) — em negrito direto via comandaEstiloService, não como um
 # "campo" configurável em EstiloImpressora.qml, porque é um aviso fixo pra
 # quem for tirar a comanda da impressora, não um dado do pedido.
 _MARCA_COMANDA_TESTE = f"{estilo.NEGRITO_LIGA}*** COMANDA DE TESTE ***{estilo.NEGRITO_DESLIGA}"
-
-
-def _dividir_sabores(pedido_texto):
-    """Separa um pedido em (lista_de_sabores, tamanho).
-
-    "Atum c/ Cebola / Bacon c/ Ovos (Grande)" vira
-    (["Atum c/ Cebola", "Bacon c/ Ovos"], "Grande").
-    """
-    tamanho = None
-    corpo = pedido_texto
-
-    match = re.match(r"^(.*)\s\(([^)]+)\)$", pedido_texto)
-    if match:
-        corpo = match.group(1)
-        tamanho = match.group(2)
-
-    sabores = [s.strip() for s in corpo.split(SEPARADOR_SABORES) if s.strip()]
-    return sabores, tamanho
-
-
-def _valor_para_float(valor_texto):
-    """Converte "R$ 45,00" em 45.0. Retorna 0.0 se não conseguir interpretar."""
-    if not valor_texto:
-        return 0.0
-
-    limpo = valor_texto.replace("R$", "").strip()
-    limpo = limpo.replace(".", "").replace(",", ".")
-    try:
-        return float(limpo)
-    except ValueError:
-        return 0.0
 
 
 class BalcaoController(QObject):
@@ -89,8 +52,8 @@ class BalcaoController(QObject):
         troco = dados.get("troco", "")
         status_pagamento = dados.get("statusPagamento", "NP")
 
-        grupos = self._montarGrupos(itens)
-        valor_total = sum(_valor_para_float(item.get("valor", "")) for item in itens)
+        grupos = texto.montar_grupos(itens)
+        valor_total = sum(texto.valor_para_float(item.get("valor", "")) for item in itens)
 
         agora = datetime.now()
         # Sufixo aleatório curto: com várias máquinas gravando pedidos ao
@@ -109,7 +72,7 @@ class BalcaoController(QObject):
             *estilo.linhas_espacamento_secoes(),
             "-" * 40,
             *estilo.linhas_espacamento_secoes(),
-            *self._formatarTabela(grupos),
+            *texto.formatar_tabela(grupos),
             *estilo.linhas_espacamento_secoes(),
             "-" * 40,
             *estilo.linhas_espacamento_secoes(),
@@ -130,7 +93,7 @@ class BalcaoController(QObject):
             f"[{estilo.formatar_campo(status_pagamento, 'status')}]"
         )
         if forma_pagamento == "Dinheiro" and troco:
-            troco_a_dar = _valor_para_float(troco) - valor_total
+            troco_a_dar = texto.valor_para_float(troco) - valor_total
             troco_a_dar_formatado = f"R$ {troco_a_dar:.2f}".replace(".", ",")
             linhas_arquivo.append(f"Troco a dar: {estilo.formatar_campo(troco_a_dar_formatado, 'troco_a_dar')}")
         if teste:
@@ -240,73 +203,3 @@ class BalcaoController(QObject):
             "padrao": impressora.padrao,
             "disponivel": impressora.disponivel,
         })
-
-    @staticmethod
-    def _montarGrupos(itens):
-        """Converte os itens do pedido em grupos de linhas (coluna_pedido, observacao, valor).
-
-        Cada item vira um grupo (uma pizza meio a meio gera várias linhas, mas
-        continua sendo um único grupo), para que se possa separar os grupos
-        com uma linha em branco depois de formatados.
-        """
-        grupos = []
-        for item in itens:
-            # Nome do item e observação saem em caixa alta no cupom impresso.
-            pedido = item.get("pedido", "").upper()
-            observacao = item.get("observacao", "").upper()
-            valor = item.get("valor", "")
-
-            sabores, tamanho = _dividir_sabores(pedido)
-
-            if len(sabores) <= 1:
-                grupos.append([(f"- {pedido}", observacao, valor)])
-                continue
-
-            # Pizza meio a meio: cada sabor ocupa "1/N" da pizza.
-            total = len(sabores)
-            grupo = []
-            for indice, sabor in enumerate(sabores):
-                nome_sabor = f"{sabor} ({tamanho})" if indice == 0 and tamanho else sabor
-                coluna_pedido = f"1/{total} - {nome_sabor}"
-                if indice == 0:
-                    grupo.append((coluna_pedido, observacao, valor))
-                else:
-                    grupo.append((coluna_pedido, "", ""))
-            grupos.append(grupo)
-
-        return grupos
-
-    @staticmethod
-    def _formatarTabela(grupos):
-        """Alinha pedido e valor em uma coluna "|" e separa cada grupo com uma
-        linha em branco. A observação (quando houver) vai numa linha própria,
-        recuada e com o estilo configurado para o campo "observacao_item" (ver
-        services/comandaEstiloService.py), depois de TODAS as frações do
-        grupo — mesmo numa pizza meio a meio (ou dividida em mais partes), a
-        observação sai só ao final, abaixo do nome completo, nunca entre uma
-        fração e outra."""
-        linhas = [linha for grupo in grupos for linha in grupo]
-        if not linhas:
-            return []
-
-        largura_pedido = max(len(l[0]) for l in linhas)
-
-        texto_linhas = []
-        for indice, grupo in enumerate(grupos):
-            if indice > 0:
-                texto_linhas.append("")
-
-            observacao_grupo = ""
-            for coluna_pedido, observacao, valor in grupo:
-                # Alinha primeiro com o texto puro, e só então aplica o
-                # estilo configurado — assim os bytes de controle (invisíveis
-                # na impressão) não contam como largura na coluna.
-                coluna_pedido_fmt = estilo.formatar_campo(coluna_pedido.ljust(largura_pedido), "pedido")
-                texto_linhas.append(f"{coluna_pedido_fmt} | {valor}")
-                if observacao:
-                    observacao_grupo = observacao
-
-            if observacao_grupo:
-                texto_linhas.append(f"  {estilo.formatar_campo(observacao_grupo, 'observacao_item')}")
-
-        return texto_linhas

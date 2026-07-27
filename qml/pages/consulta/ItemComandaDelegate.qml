@@ -58,6 +58,11 @@ Rectangle {
         Button {
             id: btnEditarItem
 
+            // Comanda de Mesa já fechada (com a divisão da conta já
+            // impressa) não tem como reabrir de volta num formulário
+            // estruturado — ver o guard equivalente em
+            // Consulta.qml:editarComanda().
+            visible: model.tipo !== "Mesa"
             implicitWidth: 32
             implicitHeight: 32
             padding: 0
@@ -113,7 +118,7 @@ Rectangle {
                 radius: 6
                 width: textoBadgeItem.implicitWidth + 14
                 height: textoBadgeItem.implicitHeight + 6
-                color: model.tipo === "Entrega" ? "#0284c7" : "#d97706"
+                color: model.tipo === "Entrega" ? "#0284c7" : (model.tipo === "Mesa" ? "#0d9488" : "#d97706")
                 anchors.verticalCenter: parent.verticalCenter
 
                 Text {

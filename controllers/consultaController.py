@@ -3,37 +3,22 @@ import re
 
 from PyQt6.QtCore import QByteArray, QObject, pyqtSignal, pyqtSlot
 
+from services import comandaParserService as parser
 from services.rede import rede
 
-# Mesma codepage usada por balcaoController/entregaController para salvar os
-# .txt das comandas — precisa decodificar com o mesmo codec, senão os
-# caracteres acentuados saem corrompidos.
-CODEPAGE_IMPRESSORA = "cp850"
-
-ESC = "\x1b"
-# Remove os códigos ESC/POS de negrito (ESC E 0x01 / ESC E 0x00) embutidos no
-# .txt pelos controllers de venda — só fazem sentido para a impressora
-# térmica, não para exibição em tela.
-_PADRAO_NEGRITO = re.compile(re.escape(ESC) + r"E[\x00\x01]")
-
 # Extraem os campos do cabeçalho do cupom (ver balcaoController/
-# entregaController) para montar o título exibido na Consulta e para
-# reconstruir os dados ao editar, sem depender do nome do arquivo.
-_PADRAO_CLIENTE = re.compile(r"^Cliente:[ \t]*(.*)$", re.MULTILINE)
-_PADRAO_DATA = re.compile(r"^Data:[ \t]*(.*)$", re.MULTILINE)
+# entregaController) para reconstruir os dados ao editar, sem depender do
+# nome do arquivo. Cliente/Data/Forma de pagamento/Status/Valor total vivem
+# em services/comandaParserService.py (compartilhados com
+# FechamentoController) — só os campos exclusivos de Entrega (usados apenas
+# por reconstruirComanda, pra reabrir a comanda num formulário editável)
+# continuam aqui.
 _PADRAO_TELEFONE = re.compile(r"^Telefone:[ \t]*(.*)$", re.MULTILINE)
 _PADRAO_ENDERECO = re.compile(r"^Endereço:[ \t]*(.*)$", re.MULTILINE)
 _PADRAO_BAIRRO = re.compile(r"^Bairro:[ \t]*(.*)$", re.MULTILINE)
 _PADRAO_OBSERVACAO_GERAL = re.compile(r"^Observação:[ \t]*(.*)$", re.MULTILINE)
-_PADRAO_FORMA_PAGAMENTO = re.compile(r"^Forma de pagamento:[ \t]*(.*)$", re.MULTILINE)
 _PADRAO_TROCO = re.compile(r"^Troco para:[ \t]*(.*)$", re.MULTILINE)
 _PADRAO_TAXA_ENTREGA = re.compile(r"^Taxa de entrega:[ \t]*(.*)$", re.MULTILINE)
-_PADRAO_STATUS_PAGAMENTO = re.compile(r"^Status:[ \t]*(.*)$", re.MULTILINE)
-# balcaoController imprime o status colado no fim da linha do valor total
-# (ex: "Valor do pedido: R$ 45,00 [PG]") em vez de uma linha "Status:"
-# própria como o entregaController — precisa de um padrão à parte para
-# reconstruir.
-_PADRAO_STATUS_PAGAMENTO_INLINE = re.compile(r"^Valor do pedido:.*\[(NP|PG)\][ \t]*$", re.MULTILINE)
 
 # Linha de um item na tabela do cupom: "coluna_pedido | valor". A observação
 # (quando houver) vem numa linha própria logo abaixo, recuada com 2 espaços
@@ -49,27 +34,6 @@ _PADRAO_SUFIXO_TAMANHO = re.compile(r"^(.*)\s\(([^)]+)\)$")
 # minúsculas para continuar reconhecendo o sufixo em comandas antigas e novas.
 _TAMANHOS_VALIDOS = ("Grande", "Broto", "Mini")
 _TAMANHOS_VALIDOS_UPPER = tuple(t.upper() for t in _TAMANHOS_VALIDOS)
-
-
-def _limpar_codigos_impressora(texto):
-    return _PADRAO_NEGRITO.sub("", texto)
-
-
-def _extrair_campo(padrao, texto):
-    match = padrao.search(texto)
-    return match.group(1).strip() if match else ""
-
-
-def _extrair_status_pagamento(texto):
-    """Tenta primeiro a linha "Status:" própria (entregaController); se não
-    encontrar, tenta o formato colado na linha do valor total
-    (balcaoController)."""
-    status = _extrair_campo(_PADRAO_STATUS_PAGAMENTO, texto)
-    if status:
-        return status
-
-    match = _PADRAO_STATUS_PAGAMENTO_INLINE.search(texto)
-    return match.group(1) if match else ""
 
 
 def _dividir_endereco_numero(endereco_completo):
@@ -183,16 +147,16 @@ class ConsultaController(QObject):
                 print(f"Falha ao ler {caminho}: {erro}")
                 continue
 
-            conteudo = conteudo_bytes.decode(CODEPAGE_IMPRESSORA, errors="replace")
-            conteudo = _limpar_codigos_impressora(conteudo).strip("\n")
-            tipo = "Entrega" if nome_arquivo.startswith("entrega_") else "Balcão"
+            conteudo = conteudo_bytes.decode(parser.CODEPAGE_IMPRESSORA, errors="replace")
+            conteudo = parser.limpar_codigos_impressora(conteudo).strip("\n")
+            tipo = parser.tipo_comanda(nome_arquivo)
 
             comandas.append({
                 "arquivo": nome_arquivo,
                 "tipo": tipo,
                 "conteudo": conteudo,
-                "cliente": _extrair_campo(_PADRAO_CLIENTE, conteudo),
-                "dataHora": _extrair_campo(_PADRAO_DATA, conteudo),
+                "cliente": parser.extrair_campo(parser.PADRAO_CLIENTE, conteudo),
+                "dataHora": parser.extrair_campo(parser.PADRAO_DATA, conteudo),
                 "modificadoEm": modificado_em,
             })
 
@@ -214,8 +178,8 @@ class ConsultaController(QObject):
             print(f"Falha ao ler {caminho}: {erro}")
             return {}
 
-        conteudo = conteudo_bytes.decode(CODEPAGE_IMPRESSORA, errors="replace")
-        conteudo = _limpar_codigos_impressora(conteudo)
+        conteudo = conteudo_bytes.decode(parser.CODEPAGE_IMPRESSORA, errors="replace")
+        conteudo = parser.limpar_codigos_impressora(conteudo)
         linhas = conteudo.split("\n")
 
         divisorias = [i for i, linha in enumerate(linhas) if linha.startswith("----")]
@@ -223,22 +187,22 @@ class ConsultaController(QObject):
             return {}
 
         linhas_tabela = linhas[divisorias[0] + 1:divisorias[1]]
-        endereco_completo = _extrair_campo(_PADRAO_ENDERECO, conteudo)
+        endereco_completo = parser.extrair_campo(_PADRAO_ENDERECO, conteudo)
         endereco, numero = _dividir_endereco_numero(endereco_completo)
 
         return {
             "arquivo": nome_arquivo,
-            "tipo": "Entrega" if nome_arquivo.startswith("entrega_") else "Balcão",
-            "cliente": _extrair_campo(_PADRAO_CLIENTE, conteudo),
-            "telefone": _extrair_campo(_PADRAO_TELEFONE, conteudo),
+            "tipo": parser.tipo_comanda(nome_arquivo),
+            "cliente": parser.extrair_campo(parser.PADRAO_CLIENTE, conteudo),
+            "telefone": parser.extrair_campo(_PADRAO_TELEFONE, conteudo),
             "endereco": endereco,
             "numero": numero,
-            "bairro": _extrair_campo(_PADRAO_BAIRRO, conteudo),
-            "observacaoGeral": _extrair_campo(_PADRAO_OBSERVACAO_GERAL, conteudo),
-            "formaPagamento": _extrair_campo(_PADRAO_FORMA_PAGAMENTO, conteudo),
-            "troco": _extrair_campo(_PADRAO_TROCO, conteudo),
-            "taxaEntrega": _extrair_campo(_PADRAO_TAXA_ENTREGA, conteudo),
-            "statusPagamento": _extrair_status_pagamento(conteudo),
+            "bairro": parser.extrair_campo(_PADRAO_BAIRRO, conteudo),
+            "observacaoGeral": parser.extrair_campo(_PADRAO_OBSERVACAO_GERAL, conteudo),
+            "formaPagamento": parser.extrair_campo(parser.PADRAO_FORMA_PAGAMENTO, conteudo),
+            "troco": parser.extrair_campo(_PADRAO_TROCO, conteudo),
+            "taxaEntrega": parser.extrair_campo(_PADRAO_TAXA_ENTREGA, conteudo),
+            "statusPagamento": parser.extrair_status_pagamento(conteudo),
             "itens": _reconstruir_itens(linhas_tabela),
         }
 

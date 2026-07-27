@@ -22,6 +22,11 @@ Config/.versao
 # Ver services/comandaEstiloService.py.
 Config/estilo_impressao.json
 
+# Escolha manual de qual máquina da malha imprime (tela Rede.qml),
+# específica de cada máquina/rede local, não código-fonte. Ver
+# services/rede/impressoraFixada.py.
+Config/impressora_fixada.json
+
 # Log de diagnóstico (stdout/stderr redirecionados + rotação) — gerado em
 # tempo de execução, específico de cada máquina. Ver Config/logConfig.py.
 logs/

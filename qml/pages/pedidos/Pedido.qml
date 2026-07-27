@@ -11,6 +11,12 @@ Popup {
     // Índice do item em foco: 0..N-1 são as categorias, N é o botão Cancelar
     property int indiceFoco: 0
     readonly property int totalFocaveis: modeloCategorias.count + 1
+    // Repassado pra pizzas/Pizzas.qml (só ela usa) — false em Salao.qml, já
+    // que promoção de pizza não vale pra comanda de mesa. As demais
+    // categorias não recebem essa prop (ver acionarItem): incluí-la no
+    // push delas gera aviso de "propriedade inexistente" em tempo de
+    // execução, já que elas não a declaram.
+    property bool usarPromocoes: true
 
     // Abre a categoria correspondente ao índice, ou fecha se for o Cancelar
     function acionarItem(indice) {
@@ -19,18 +25,21 @@ Popup {
             return ;
         }
         var pagina = modeloCategorias.get(indice).pagina;
+        var props = {
+            "pilha": pilha,
+            "onPedidoSelecionado": function(nome, valor) {
+                if (popupSelecaoPedido.onPedidoSelecionado)
+                    popupSelecaoPedido.onPedidoSelecionado(nome, valor);
+
+            }
+        };
+        if (pagina === "pizzas/Pizzas.qml")
+            props["usarPromocoes"] = popupSelecaoPedido.usarPromocoes;
         // Fecha o popup e repassa a navegação adiante, para
         // a pilha local da tela que abriu a seleção.
         popupSelecaoPedido.close();
         if (pilha)
-            pilha.push(pagina, {
-                "pilha": pilha,
-                "onPedidoSelecionado": function(nome, valor) {
-                    if (popupSelecaoPedido.onPedidoSelecionado)
-                        popupSelecaoPedido.onPedidoSelecionado(nome, valor);
-
-                }
-            });
+            pilha.push(pagina, props);
 
     }
 

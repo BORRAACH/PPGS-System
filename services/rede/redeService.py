@@ -10,6 +10,7 @@ from PyQt6.QtCore import QObject, QByteArray, QTimer, pyqtProperty, pyqtSignal, 
 from PyQt6.QtNetwork import QHostAddress, QTcpServer, QTcpSocket
 
 from services.printerService import PrinterService
+from services.rede import impressoraFixada
 from services.rede.descoberta import criar_descoberta
 from services.rede.eventos import BarramentoEventos
 
@@ -61,6 +62,16 @@ class RedeService(QObject):
     # lpstat/PowerShell) de volta pra thread principal — mesmo padrão de
     # BalcaoController.infoImpressoraPronta.
     _impressoraLocalVerificada = pyqtSignal(bool, object)
+    # Uso interno: repassa o resultado de um job de impressão pedido por
+    # OUTRA máquina (mensagem "imprimir", ver _processar_mensagem) de volta
+    # pra thread principal — a impressão em si roda numa thread à parte
+    # (pode levar vários segundos e não pode bloquear a UI nem o
+    # processamento de outras mensagens da malha), mas o envio da resposta
+    # de volta pelo socket (QTcpSocket) só é seguro a partir da thread que
+    # o criou. Carrega id_remetente (pra achar o socket atual do peer,
+    # ver _peers) em vez do próprio socket, porque a conexão pode já ter
+    # caído por outro motivo enquanto a impressão ainda rodava.
+    _imprimirRemotoConcluido = pyqtSignal(str, str, bool, str)
 
     def __init__(self):
         super().__init__()
@@ -79,6 +90,14 @@ class RedeService(QObject):
         # Id da máquina (pode ser self._id) escolhida pra receber comandas de
         # impressão; None = nenhuma máquina conhecida tem impressora agora.
         self._id_maquina_impressora = None
+        # Nome (platform.node(), estável entre execuções — diferente de
+        # id_maquina/self._id, que é gerado do zero a cada processo) da
+        # máquina fixada manualmente como impressora principal pela tela
+        # Rede.qml, ou None pra eleição automática (ver
+        # _recalcular_maquina_impressora/fixarImpressoraPrincipal).
+        # Carregado do disco aqui pra sobreviver a um restart do app;
+        # propagado/atualizado depois via gossip (evento "impressora_fixada").
+        self._nome_maquina_fixada = impressoraFixada.carregar_nome_fixado()
         self._jobs_impressao = {}  # job_id -> {"timer": QTimer, "concluido": bool}
 
         self._tcp_server = QTcpServer(self)
@@ -88,8 +107,10 @@ class RedeService(QObject):
         self._eventos = BarramentoEventos(self._propagar_evento)
         self._eventos.registrar("pedido_novo", self._ao_receber_evento_pedido_novo)
         self._eventos.registrar("pedido_apagado", self._ao_receber_evento_pedido_apagado)
+        self._eventos.registrar("impressora_fixada", self._ao_receber_evento_impressora_fixada)
 
         self._impressoraLocalVerificada.connect(self._ao_verificar_impressora_local)
+        self._imprimirRemotoConcluido.connect(self._ao_concluir_imprimir_remoto)
         self._descoberta.peerDescoberto.connect(self._ao_descobrir_peer)
 
     @pyqtProperty(int, notify=peersMudaram)
@@ -164,6 +185,17 @@ class RedeService(QObject):
             "nome": self._nome_local,
             "temImpressora": self._tem_impressora,
             "infoImpressora": self._info_impressora_local,
+            # Vai junto no handshake (não só no evento de gossip
+            # "impressora_fixada") pra uma máquina que conecta/reconecta
+            # DEPOIS de a fixação já ter sido escolhida em outra máquina
+            # também ficar sabendo — sem isso, só quem já estava conectado
+            # no exato momento da escolha recebia o evento (ver
+            # BarramentoEventos.publicar, que só manda pra quem está
+            # conectado agora); uma máquina nova nunca aprendia a fixação
+            # existente por nenhum outro caminho, nem reiniciando (nada
+            # disso fica salvo no disco DELA até ela mesma receber o aviso
+            # ao menos uma vez — ver _ao_receber_identificar_fixacao).
+            "nomeMaquinaFixada": self._nome_maquina_fixada,
         }
 
     def _preparar_socket(self, socket: QTcpSocket):
@@ -250,8 +282,15 @@ class RedeService(QObject):
                 "temImpressora": bool(mensagem.get("temImpressora")),
                 "infoImpressora": mensagem.get("infoImpressora"),
             }
+            adotou_fixacao = self._ao_receber_identificar_fixacao(mensagem.get("nomeMaquinaFixada"))
             self.peersMudaram.emit(len(self._peers))
             self._recalcular_maquina_impressora()
+            if adotou_fixacao:
+                # _recalcular_maquina_impressora só emite impressoraPrincipalMudou
+                # se o candidato eleito mudar — mas Rede.qml também depende
+                # desse sinal pra atualizar nomeMaquinaFixada/candidatosImpressora
+                # (ver fixarImpressoraPrincipal, mesmo motivo documentado lá).
+                self.impressoraPrincipalMudou.emit()
             # Assim que os dois se identificam, trocam a lista de arquivos
             # locais pra resolver o catch-up de quem ficou offline.
             self._enviar(socket, {"tipo": "meus_arquivos", "arquivos": self._listar_arquivos_locais()})
@@ -298,14 +337,19 @@ class RedeService(QObject):
                 conteudo = base64.b64decode(conteudo_b64)
             except ValueError:
                 return
-            sucesso, erro = self._tentar_imprimir_localmente(conteudo)
-            self._enviar(socket, {
-                "tipo": "imprimir_resultado",
-                "job_id": job_id,
-                "sucesso": sucesso,
-                "erro": erro,
-                "maquina": self._nome_local,
-            })
+            # A impressão em si (chamada bloqueante ao spooler/CUPS, pode
+            # levar vários segundos) roda numa thread à parte — processar
+            # esta mensagem síncrono aqui travaria a UI desta máquina (e o
+            # processamento de qualquer outra mensagem da malha) até o job
+            # terminar. O resultado volta pela thread principal via sinal
+            # (ver _imprimirRemotoConcluido/_ao_concluir_imprimir_remoto) —
+            # QTcpSocket não é seguro pra escrever a partir de outra thread.
+            id_remetente = self._id_do_socket(socket) or ""
+            threading.Thread(
+                target=self._imprimir_remoto_em_thread,
+                args=(conteudo, job_id, id_remetente),
+                daemon=True,
+            ).start()
 
         elif tipo == "imprimir_resultado":
             job_id = mensagem.get("job_id", "")
@@ -449,6 +493,19 @@ class RedeService(QObject):
         info = self._info_peers.get(id_maquina)
         return bool(info and info.get("temImpressora"))
 
+    def _resolver_id_por_nome(self, nome_maquina):
+        """Converte um nome de máquina (estável — ver _nome_maquina_fixada)
+        no id_maquina correspondente agora (efêmero — um novo por
+        execução), procurando entre esta máquina e os peers conectados.
+        None se nenhuma máquina conhecida agora tem esse nome (offline, ou
+        nome nunca visto nesta malha)."""
+        if nome_maquina == self._nome_local:
+            return self._id
+        for id_peer, info in self._info_peers.items():
+            if info.get("nome") == nome_maquina:
+                return id_peer
+        return None
+
     # Prioridade da eleição por tipo de porta — número menor vence. usb/
     # serial é a impressora fisicamente ligada nesta máquina; "rede" cobre
     # impressoras salvas/compartilhadas (ex: a mesma Bematech instalada
@@ -481,7 +538,15 @@ class RedeService(QObject):
         prioridade, a máquina com a impressora física de verdade nunca
         reassumia depois de reconectar: ela virava só mais uma candidata do
         mesmo desempate por id, perdendo pro sticky de quem já estava
-        eleito."""
+        eleito.
+
+        Se houver uma máquina fixada manualmente (ver
+        fixarImpressoraPrincipal/_nome_maquina_fixada) e ela ainda for uma
+        candidata válida agora, ela vence direto — ignora prioridade e
+        sticky. Se a fixação existir mas apontar pra uma máquina offline ou
+        sem impressora no momento, cai de volta pro algoritmo automático
+        abaixo (a fixação continua guardada e volta a valer sozinha assim
+        que essa máquina reconectar com impressora)."""
         candidatos = []
         if self._tem_impressora:
             candidatos.append(self._id)
@@ -493,22 +558,111 @@ class RedeService(QObject):
                 self.impressoraPrincipalMudou.emit()
             return
 
-        # Empate (mesma prioridade) é resolvido de forma determinística pelo
-        # id — toda máquina da malha vê o mesmo conjunto de candidatos e
-        # infoImpressora (gossiped por "identificar"/"status_impressora"),
-        # então chega à mesma conclusão.
-        melhor_candidato = min(candidatos, key=lambda id_maquina: (self._prioridade_candidato(id_maquina), id_maquina))
+        melhor_candidato = None
+        if self._nome_maquina_fixada is not None:
+            id_fixado = self._resolver_id_por_nome(self._nome_maquina_fixada)
+            if id_fixado is not None and self._maquina_impressora_valida(id_fixado):
+                melhor_candidato = id_fixado
 
-        if (
-            self._id_maquina_impressora is not None
-            and self._maquina_impressora_valida(self._id_maquina_impressora)
-            and self._prioridade_candidato(self._id_maquina_impressora) <= self._prioridade_candidato(melhor_candidato)
-        ):
-            return
+        if melhor_candidato is None:
+            # Empate (mesma prioridade) é resolvido de forma determinística
+            # pelo id — toda máquina da malha vê o mesmo conjunto de
+            # candidatos e infoImpressora (gossiped por "identificar"/
+            # "status_impressora"), então chega à mesma conclusão.
+            melhor_candidato = min(candidatos, key=lambda id_maquina: (self._prioridade_candidato(id_maquina), id_maquina))
+
+            if (
+                self._id_maquina_impressora is not None
+                and self._maquina_impressora_valida(self._id_maquina_impressora)
+                and self._prioridade_candidato(self._id_maquina_impressora) <= self._prioridade_candidato(melhor_candidato)
+            ):
+                return
 
         if melhor_candidato != self._id_maquina_impressora:
             self._id_maquina_impressora = melhor_candidato
             self.impressoraPrincipalMudou.emit()
+
+    # ---------- Seleção manual da impressora principal (Rede.qml) ----------
+
+    @pyqtProperty(str, notify=impressoraPrincipalMudou)
+    def nomeMaquinaFixada(self):
+        """Nome da máquina fixada manualmente (ver fixarImpressoraPrincipal),
+        ou "" quando a eleição está no modo automático — usado por
+        Rede.qml pra pré-selecionar o item certo no combo."""
+        return self._nome_maquina_fixada or ""
+
+    @pyqtSlot(result="QVariantList")
+    def candidatosImpressora(self):
+        """Máquinas que anunciam impressora agora (esta + peers) — as
+        opções disponíveis pra fixar manualmente em Rede.qml. Mesmo filtro
+        de candidatos usado por _recalcular_maquina_impressora."""
+        candidatos = []
+        if self._tem_impressora and self._info_impressora_local:
+            candidatos.append({
+                "nomeMaquina": self._nome_local,
+                "nomeImpressora": self._info_impressora_local.get("nome", ""),
+                "local": True,
+            })
+        for info in self._info_peers.values():
+            if info.get("temImpressora") and info.get("infoImpressora"):
+                candidatos.append({
+                    "nomeMaquina": info.get("nome") or "Máquina desconhecida",
+                    "nomeImpressora": info["infoImpressora"].get("nome", ""),
+                    "local": False,
+                })
+        return candidatos
+
+    @pyqtSlot(str)
+    def fixarImpressoraPrincipal(self, nomeMaquina: str):
+        """Fixa manualmente `nomeMaquina` como a máquina que imprime pra
+        malha inteira (string vazia = volta pra eleição automática por
+        prioridade de porta). Persiste localmente, propaga a escolha pra
+        todas as outras instâncias por gossip (mesmo barramento genérico
+        usado por publicarEvento) e recalcula a eleição na hora — publicar()
+        não roda os manipuladores locais (ver BarramentoEventos.publicar),
+        então quem chamou precisa aplicar o efeito por conta própria."""
+        self._nome_maquina_fixada = nomeMaquina or None
+        impressoraFixada.salvar_nome_fixado(self._nome_maquina_fixada)
+        self._eventos.publicar("impressora_fixada", {"nomeMaquina": self._nome_maquina_fixada})
+        # Emite mesmo que a máquina eleita não mude (ex: fixar a mesma que
+        # já estava eleita automaticamente) — Rede.qml usa esse sinal pra
+        # atualizar nomeMaquinaFixada/o selo "selecionada manualmente", que
+        # dependem de _nome_maquina_fixada e não só de quem está eleito.
+        self._recalcular_maquina_impressora()
+        self.impressoraPrincipalMudou.emit()
+
+    def _ao_receber_identificar_fixacao(self, nome_maquina_fixada_do_peer):
+        """Chamado ao processar o handshake "identificar" de um peer que
+        acabou de conectar — se esta máquina ainda não conhece nenhuma
+        fixação (nunca escolheu nada e nunca recebeu o evento de gossip
+        "impressora_fixada" até agora), mas o peer que chegou já conhece
+        uma, adota ela. Cobre o caso de uma máquina conectar/reconectar
+        DEPOIS que a escolha já foi feita em outro lugar — o evento de
+        gossip original (BarramentoEventos.publicar) só alcança quem já
+        estava conectado no momento; sem isso aqui, quem chega depois
+        nunca ficava sabendo, nem reiniciando (não tinha nada salvo no
+        disco dela pra recarregar).
+
+        Não sobrescreve uma fixação que ESTA máquina já tenha (mesmo que
+        diferente da do peer) — presume que uma escolha já feita aqui foi
+        deliberada e não deve ser silenciosamente trocada só por causa de
+        outro peer reconectando."""
+        if self._nome_maquina_fixada is not None or not nome_maquina_fixada_do_peer:
+            return False
+        self._nome_maquina_fixada = nome_maquina_fixada_do_peer
+        impressoraFixada.salvar_nome_fixado(nome_maquina_fixada_do_peer)
+        return True
+
+    def _ao_receber_evento_impressora_fixada(self, payload):
+        """Reação a um "impressora_fixada" publicado por OUTRA máquina —
+        replica o mesmo efeito de fixarImpressoraPrincipal nesta instância
+        (persistir localmente também, pra esta máquina já lembrar a última
+        escolha conhecida se reabrir sozinha antes de qualquer peer)."""
+        nome_maquina = (payload or {}).get("nomeMaquina") or None
+        self._nome_maquina_fixada = nome_maquina
+        impressoraFixada.salvar_nome_fixado(nome_maquina)
+        self._recalcular_maquina_impressora()
+        self.impressoraPrincipalMudou.emit()
 
     @pyqtSlot(result="QVariantMap")
     def impressoraPrincipal(self):
@@ -536,6 +690,7 @@ class RedeService(QObject):
         return {
             "maquina": nome_maquina,
             "local": local,
+            "fixadoManualmente": self._nome_maquina_fixada is not None,
             "nome": info.get("nome", ""),
             "modelo": info.get("modelo", ""),
             "fabricante": info.get("fabricante", ""),
@@ -550,6 +705,50 @@ class RedeService(QObject):
         except RuntimeError as erro:
             print(f"[RedeService] Não foi possível imprimir nesta máquina: {erro}")
             return False, str(erro)
+        except Exception as erro:
+            # Além de RuntimeError (falha "esperada" documentada em
+            # PrinterService.imprimir): qualquer outra exceção também vira
+            # falha reportada em vez de propagar — isto roda dentro de uma
+            # thread de impressão (ver solicitar_impressao/
+            # _imprimir_remoto_em_thread); deixar escapar mataria a thread
+            # silenciosamente sem que ninguém soubesse que o job falhou.
+            print(f"[RedeService] Falha inesperada ao imprimir nesta máquina: {erro}")
+            return False, str(erro)
+
+    def _imprimir_localmente_e_notificar(self, conteudo_bytes: bytes):
+        """Roda em thread própria (ver solicitar_impressao) — a impressão
+        (spooler/CUPS) pode levar vários segundos e não pode bloquear quem
+        pediu (ex: SalaoController.fecharMesa, BalcaoController.enviarPedido),
+        senão popups/telas que dependem do controle voltar rápido ficariam
+        "presos" até o job terminar. impressaoResultado é seguro de emitir
+        de qualquer thread — o Qt entrega o sinal na thread principal."""
+        sucesso, erro = self._tentar_imprimir_localmente(conteudo_bytes)
+        self.impressaoResultado.emit(sucesso, self._nome_local if sucesso else (erro or "Falha ao imprimir nesta máquina."))
+
+    def _imprimir_remoto_em_thread(self, conteudo_bytes: bytes, job_id: str, id_remetente: str):
+        """Roda em thread própria (ver o handler de "imprimir" em
+        _processar_mensagem) — mesmo motivo de _imprimir_localmente_e_notificar,
+        mas aqui a resposta precisa voltar por um QTcpSocket específico, o
+        que só é seguro a partir da thread que o criou (thread principal);
+        por isso o resultado é repassado por sinal em vez de chamar
+        _enviar() direto daqui."""
+        sucesso, erro = self._tentar_imprimir_localmente(conteudo_bytes)
+        self._imprimirRemotoConcluido.emit(id_remetente, job_id, sucesso, erro)
+
+    def _ao_concluir_imprimir_remoto(self, id_remetente: str, job_id: str, sucesso: bool, erro: str):
+        socket_remetente = self._peers.get(id_remetente) if id_remetente else None
+        if socket_remetente is None:
+            # Quem pediu já desconectou enquanto a impressão rodava — não
+            # há mais pra onde mandar a resposta. Quem pediu trata isso pelo
+            # próprio timeout do job (ver _finalizar_job_impressao).
+            return
+        self._enviar(socket_remetente, {
+            "tipo": "imprimir_resultado",
+            "job_id": job_id,
+            "sucesso": sucesso,
+            "erro": erro,
+            "maquina": self._nome_local,
+        })
 
     # ---------- Chamadas dos controllers (saída) ----------
 
@@ -568,8 +767,19 @@ class RedeService(QObject):
         O resultado (sucesso ou falha, de qualquer origem) chega pelo sinal
         impressaoResultado, de forma assíncrona."""
         if self._id_maquina_impressora == self._id:
-            sucesso, erro = self._tentar_imprimir_localmente(conteudo_bytes)
-            self.impressaoResultado.emit(sucesso, self._nome_local if sucesso else (erro or "Falha ao imprimir nesta máquina."))
+            # Em thread própria: a impressão em si (spooler/CUPS) pode levar
+            # vários segundos, e quem chamou solicitar_impressao (ex:
+            # BalcaoController.enviarPedido, SalaoController.fecharMesa)
+            # precisa voltar rápido — é chamado direto de um slot QML, e um
+            # popup que acabou de fechar (ver PopupComandaTeste.qml) só
+            # renderiza como fechado depois que a thread principal volta
+            # pro loop de eventos. O resultado chega do mesmo jeito
+            # assíncrono de sempre, pelo sinal impressaoResultado.
+            threading.Thread(
+                target=self._imprimir_localmente_e_notificar,
+                args=(conteudo_bytes,),
+                daemon=True,
+            ).start()
             return
 
         socket_destino = self._peers.get(self._id_maquina_impressora) if self._id_maquina_impressora else None

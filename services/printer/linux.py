@@ -297,7 +297,20 @@ def coletar_impressoras():
         # então sem isso uma impressora usb instalada uma vez e nunca mais
         # conectada continuaria contando como candidata pra eleição de
         # rede (ver RedeService._detectar_impressora_em_thread).
-        if tipo_porta in ("usb", "serial") and dispositivos_vivos is not None:
+        if tipo_porta == "serial":
+            # Checagem real e sem exigir privilégio nenhum: o nó de
+            # dispositivo (ex: /dev/ttyACM0/ttyUSB0) só existe enquanto o
+            # cabo estiver conectado — o kernel/udev remove o nó na hora da
+            # desconexão. Muito mais confiável que lpinfo -v aqui: como
+            # usuário comum (sem root/lpadmin), lpinfo -v não sonda
+            # dispositivos seriais/usb ao vivo de verdade — só devolve os
+            # backends de rede sempre disponíveis ("network beh/http/.../
+            # smb"), fazendo qualquer impressora serial de verdade plugada
+            # parecer sempre desconectada (era exatamente esse o sintoma:
+            # CUPS mostrando "enabled"/idle, mas disponivel sempre False).
+            caminho_dispositivo = _extrair_porta(uri_dispositivo)
+            conectada_agora = bool(caminho_dispositivo) and os.path.exists(caminho_dispositivo)
+        elif tipo_porta == "usb" and dispositivos_vivos is not None:
             conectada_agora = _uri_normalizada(uri_dispositivo) in dispositivos_vivos
         else:
             conectada_agora = True

@@ -73,6 +73,7 @@ FONTE_NORMAL_DESLIGA = _GS + "!" + "\x00"
 # nome.
 CAMPOS = [
     "cliente",
+    "mesa",
     "telefone",
     "endereco",
     "bairro",
@@ -91,6 +92,7 @@ ATRIBUTOS_BOOLEANOS = ["negrito", "sublinhado", "fundo_preto"]
 
 RODULOS_CAMPOS = {
     "cliente": "Nome do cliente",
+    "mesa": "Número da mesa",
     "telefone": "Telefone",
     "endereco": "Endereço (com número)",
     "bairro": "Bairro",

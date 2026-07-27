@@ -6,10 +6,9 @@ física direta — então a impressora precisa estar instalada e com o driver
 configurado em modo RAW/genérico antes de usar este serviço.
 """
 
-import re
-
 from services import comandaEstiloService as estilo
 from services.printer import coletar_informacoes_impressoras, enviar_para_impressora
+from services.printer.modelos import eh_bematech_mp4200th
 
 # ESC/POS "GS V 0" — corte total do papel. A Bematech MP-4200 TH entende
 # esse comando quando configurada em modo de emulação ESC/POS (padrão em
@@ -35,19 +34,6 @@ _COMANDO_CODEPAGE_CP850 = b"\x1b\x74\x02"
 # só "aparece" (sem corte) quando a PRÓXIMA comanda empurra esse trecho pra
 # fora — dando a impressão de que informações de uma comanda vazaram para a
 # outra.
-
-
-def _eh_bematech_mp4200th(impressora):
-    """Reconhece a Bematech MP-4200 TH pelo nome/fabricante/modelo
-    reportados pelo SO. No Linux, a fila costuma estar em modo raw
-    genérico (sem PPD), então fabricante/modelo vêm vazios e só o nome da
-    fila (ex: "Bematech4200TH") identifica o modelo — por isso os três
-    campos são combinados numa busca só, ignorando maiúsculas/pontuação/
-    espaços (assim "Bematech MP-4200 TH", "Bematech4200TH" e "MP-4200 TH
-    Miniprinter" batem igual)."""
-    texto = f"{impressora.nome} {impressora.fabricante} {impressora.modelo}".lower()
-    texto_compacto = re.sub(r"[^a-z0-9]", "", texto)
-    return "bematech" in texto_compacto and "4200" in texto_compacto
 
 
 class PrinterService:
@@ -102,7 +88,7 @@ class PrinterService:
 
         conteudo = _COMANDO_CODEPAGE_CP850 + conteudo
 
-        if _eh_bematech_mp4200th(impressora):
+        if eh_bematech_mp4200th(impressora):
             print(f"[PrinterService] '{impressora.nome}' identificada como Bematech MP-4200 TH — anexando espaçamento e corte automático do papel.")
             conteudo = conteudo + (b"\n" * estilo.linhas_espacamento_corte()) + _COMANDO_CORTE
 

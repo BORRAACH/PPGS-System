@@ -183,6 +183,59 @@ ApplicationWindow {
                                         }
                                     }
                                 }
+
+                                // Botão Salão
+                                Button {
+                                    id: btnSalao
+
+                                    implicitWidth: 120
+                                    implicitHeight: 120
+                                    padding: 10
+                                    onClicked: {
+                                        stackView.push("pages/salao/Salao.qml", {});
+                                    }
+
+                                    background: Rectangle {
+                                        id: bgSalao
+
+                                        color: btnSalao.pressed ? "#350d9488" : (btnSalao.hovered ? "#200d9488" : "#0a0d9488")
+                                        border.color: btnSalao.hovered ? "#0d9488" : "#5eead4"
+                                        border.width: 2
+                                        radius: Estilo.rounding.medio
+
+                                        MultiEffect {
+                                            anchors.fill: parent
+                                            source: bgSalao
+                                            shadowEnabled: true
+                                            shadowColor: "#20000000"
+                                            shadowBlur: btnSalao.hovered ? 0.8 : 0.4
+                                            shadowVerticalOffset: btnSalao.pressed ? 1 : (btnSalao.hovered ? 4 : 2)
+                                            shadowHorizontalOffset: 0
+                                            z: -1
+                                        }
+                                    }
+
+                                    contentItem: Column {
+                                        anchors.centerIn: parent
+                                        spacing: 8
+
+                                        Icone {
+                                            nome: "fa6s.utensils"
+                                            cor: "#0d9488"
+                                            tamanho: 36
+                                            anchors.horizontalCenter: parent
+                                        }
+
+                                        Text {
+                                            text: "Salão"
+                                            font.pixelSize: Estilo.fonte.padrao
+                                            font.bold: true
+                                            color: btnSalao.pressed ? "#115e59" : "#0f766e"
+                                            horizontalAlignment: Text.AlignHCenter
+                                            anchors.horizontalCenter: parent
+                                        }
+                                    }
+                                }
                             }
                         }
                     }

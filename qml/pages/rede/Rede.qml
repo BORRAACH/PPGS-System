@@ -23,6 +23,9 @@ Page {
     // _recalcular_maquina_impressora) — pode ser esta máquina ou outra;
     // {} enquanto nenhuma máquina conhecida tem impressora.
     property var infoImpressoraPrincipal: ({})
+    // Máquinas que anunciam impressora agora (esta + peers) — opções do
+    // combo de seleção manual abaixo (ver RedeService.candidatosImpressora).
+    property var candidatosImpressora: []
 
     function carregarPeers() {
         telaRede._todosPeers = redeController.listarPeers();
@@ -36,6 +39,19 @@ Page {
     // pode ser chamada direto, sem precisar de thread nem sinal de retorno.
     function carregarImpressoraPrincipal() {
         telaRede.infoImpressoraPrincipal = redeController.impressoraPrincipal();
+    }
+
+    // Idem — só lê o que o RedeService já mantém em memória.
+    function carregarCandidatosImpressora() {
+        telaRede.candidatosImpressora = redeController.candidatosImpressora();
+    }
+
+    // Chamado pelo combo de seleção manual (ver comboImpressoraPrincipal
+    // abaixo): índice 0 é sempre "Automático" (volta pra eleição por
+    // prioridade de porta); os demais mapeiam 1:1 pra candidatosImpressora.
+    function selecionarImpressoraPrincipal(index) {
+        var nomeMaquina = index <= 0 ? "" : telaRede.candidatosImpressora[index - 1].nomeMaquina;
+        redeController.fixarImpressoraPrincipal(nomeMaquina);
     }
 
     // Só dispara a busca (services/printer/* roda lpstat/PowerShell, que
@@ -73,11 +89,16 @@ Page {
 
         carregarImpressoraPrincipal();
         redeController.impressoraPrincipalMudou.connect(carregarImpressoraPrincipal);
+
+        carregarCandidatosImpressora();
+        redeController.peersMudaram.connect(carregarCandidatosImpressora);
+        redeController.impressoraPrincipalMudou.connect(carregarCandidatosImpressora);
     }
     StackView.onActivated: {
         carregarPeers();
         carregarImpressora();
         carregarImpressoraPrincipal();
+        carregarCandidatosImpressora();
     }
 
     // Só para as durações ("conectado há...") avançarem sozinhas na tela,
@@ -148,6 +169,7 @@ Page {
                     // máquina já ter sido reeleita antes deste clique.
                     redeController.verificarImpressoraLocal();
                     telaRede.carregarImpressoraPrincipal();
+                    telaRede.carregarCandidatosImpressora();
                 }
 
                 contentItem: Row {
@@ -351,6 +373,15 @@ Page {
                             }
                         }
 
+                        Text {
+                            Layout.fillWidth: true
+                            visible: !!telaRede.infoImpressoraPrincipal.fixadoManualmente
+                            text: "Selecionada manualmente"
+                            font.pixelSize: 11
+                            font.italic: true
+                            color: "#0ea5e9"
+                        }
+
                         // Detalhes só fazem sentido quando alguma máquina da
                         // malha está de fato servindo de impressora agora.
                         ColumnLayout {
@@ -393,6 +424,69 @@ Page {
                             color: Estilo.cores.textoSecundario
                             wrapMode: Text.WordWrap
                         }
+                    }
+                }
+
+                Text {
+                    text: "Escolher manualmente"
+                    font.pixelSize: Estilo.fonte.padrao
+                    font.bold: true
+                    color: Estilo.cores.textoSecundario
+                }
+
+                ComboBox {
+                    id: comboImpressoraPrincipal
+
+                    Layout.fillWidth: true
+                    // Índice 0 é sempre "Automático" — os demais mapeiam
+                    // 1:1 pra telaRede.candidatosImpressora (ver
+                    // selecionarImpressoraPrincipal).
+                    model: ["Automático"].concat(telaRede.candidatosImpressora.map(function (c) {
+                        return c.nomeMaquina + " — " + (c.nomeImpressora || "impressora");
+                    }))
+                    // Refaz o índice sempre que a lista de candidatos ou a
+                    // fixação atual mudar — currentIndex não é um binding
+                    // vivo pro usuário (o combo deixa o usuário mudar
+                    // livremente), então é recalculado explicitamente aqui
+                    // em vez de um binding direto.
+                    function sincronizarSelecao() {
+                        var nomeFixado = redeController.nomeMaquinaFixada;
+                        if (!nomeFixado) {
+                            currentIndex = 0;
+                            return;
+                        }
+                        for (var i = 0; i < telaRede.candidatosImpressora.length; i++) {
+                            if (telaRede.candidatosImpressora[i].nomeMaquina === nomeFixado) {
+                                currentIndex = i + 1;
+                                return;
+                            }
+                        }
+                        currentIndex = 0;
+                    }
+                    Component.onCompleted: sincronizarSelecao()
+                    Connections {
+                        target: telaRede
+                        function onCandidatosImpressoraChanged() {
+                            comboImpressoraPrincipal.sincronizarSelecao();
+                        }
+                    }
+                    onActivated: telaRede.selecionarImpressoraPrincipal(currentIndex)
+
+                    contentItem: Text {
+                        text: comboImpressoraPrincipal.displayText
+                        color: Estilo.cores.texto
+                        leftPadding: 10
+                        rightPadding: 10
+                        verticalAlignment: Text.AlignVCenter
+                        elide: Text.ElideRight
+                    }
+
+                    background: Rectangle {
+                        radius: Estilo.rounding.padrao
+                        color: "#ffffff"
+                        border.color: comboImpressoraPrincipal.activeFocus ? "#0ea5e9" : Estilo.cores.borda
+                        border.width: comboImpressoraPrincipal.activeFocus ? 2 : 1
+                        implicitHeight: 38
                     }
                 }
 

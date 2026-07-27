@@ -1,9 +1,29 @@
 import json
 import re
 import shutil
+import socket
 import subprocess
+import threading
 
-from .modelos import InfoImpressora
+from .modelos import InfoImpressora, eh_bematech_mp4200th
+
+# Timeout pra consulta de status ESC/POS (ver _consultar_status_esc_pos) —
+# generoso o bastante pro spooler processar um job de 3 bytes numa
+# impressora local, mas curto o bastante pra não travar o ciclo de
+# detecção (RedeService verifica a cada 30s) caso a porta simplesmente não
+# responda nada.
+_TIMEOUT_STATUS_ESC_POS_S = 3.0
+
+# Timeout das checagens de rede "cruas" (socket direto, sem passar pela
+# fila do spooler — ver _verificar_conexao_tcp/_consultar_status_esc_pos_tcp).
+# Mais curto que o da sondagem via spooler porque aqui é só um connect/send/
+# recv direto, sem overhead de StartDocPrinter/StartPagePrinter.
+_TIMEOUT_REDE_S = 1.5
+
+# Porta TCP/IP padrão de fato pra impressoras térmicas ESC/POS em modo
+# JetDirect/RAW, usada quando o Windows não expõe PortNumber (Get-PrinterPort
+# nem sempre preenche essa propriedade dependendo de como a porta foi criada).
+_PORTA_TCP_PADRAO = 9100
 
 # PortName costuma bastar para classificar o tipo de porta no Windows:
 # "COM3" (serial), "USB001" (usb), "192.168.0.50" ou "IP_192.168.0.50"/"WSD-..." (rede).
@@ -13,6 +33,12 @@ _PADROES_TIPO_PORTA = (
     (re.compile(r"^\d{1,3}(\.\d{1,3}){3}"), "rede"),
     (re.compile(r"IP_|WSD|TCP", re.IGNORECASE), "rede"),
 )
+
+# Host de porta de rede em formato IPv4 puro — usado pra decidir se vale a
+# pena tentar um socket TCP direto (ver _verificar_conexao_tcp). Portas WSD
+# ou baseadas em hostname não garantem um simples socket TCP/IP na porta
+# reportada, então ficam de fora dessa checagem extra.
+_PADRAO_IPV4 = re.compile(r"^\d{1,3}(\.\d{1,3}){3}$")
 
 # Consulta Win32_Printer (impressoras instaladas) e complementa com
 # Get-PrinterPort/Get-PrinterDriver para pegar host de rede e fabricante do
@@ -32,6 +58,7 @@ $impressoras = Get-CimInstance -ClassName Win32_Printer | ForEach-Object {
         Driver            = $printer.DriverName
         PortName          = $printer.PortName
         PortaHost         = $porta.PrinterHostAddress
+        PortaNumero       = $porta.PortNumber
         PortaDescricao    = $porta.Description
         Status            = $printer.PrinterStatus
         ForaDeLinha       = [bool]$printer.WorkOffline
@@ -88,6 +115,50 @@ def _classificar_porta(nome_porta, host_porta=""):
     return "desconhecido"
 
 
+def _verificar_conexao_tcp(host: str, porta: int, timeout: float = _TIMEOUT_REDE_S) -> bool:
+    """Tenta abrir de verdade um socket TCP em `host:porta` — diferente de
+    `tipo_porta`/`WorkOffline`, que são só metadado/config reportados pelo
+    Windows, isto é uma tentativa real de conexão. Usado pra confirmar (ou
+    desmentir) o status que o spooler reporta pra impressoras de rede, cujo
+    WorkOffline costuma ficar desatualizado (ver coletar_impressoras)."""
+    try:
+        with socket.create_connection((host, porta), timeout=timeout):
+            return True
+    except OSError as erro:
+        print(f"[printer/windows] Conexão TCP para {host}:{porta} falhou: {erro}")
+        return False
+
+
+def _consultar_status_esc_pos_tcp(host: str, porta: int, timeout: float = _TIMEOUT_REDE_S):
+    """Igual a `_consultar_status_esc_pos`, mas manda "DLE EOT 1" direto por
+    um socket TCP cru (host:porta), sem passar pela fila do spooler — não
+    depende do estado que o Windows reporta (WorkOffline/Paused), então
+    continua funcionando mesmo quando esse status está desatualizado.
+
+    Mesma semântica de retorno da função irmã: True (online), False (a
+    impressora respondeu que está offline) ou None quando não dá pra
+    confirmar (timeout, conexão recusada, resposta vazia) — None nunca
+    piora a disponibilidade já calculada, só confirma quando decide algo.
+    """
+    try:
+        with socket.create_connection((host, porta), timeout=timeout) as conexao:
+            conexao.settimeout(timeout)
+            conexao.sendall(b"\x10\x04\x01")
+            dados = conexao.recv(8)
+    except OSError as erro:
+        print(f"[printer/windows] Consulta de status ESC/POS via TCP para {host}:{porta} falhou: {erro}")
+        return None
+
+    if not dados:
+        print(f"[printer/windows] {host}:{porta} não respondeu à consulta de status ESC/POS via TCP.")
+        return None
+
+    byte_status = dados[0]
+    offline = bool(byte_status & 0x08)
+    print(f"[printer/windows] Status ESC/POS via TCP de {host}:{porta}: byte=0x{byte_status:02x} {'OFFLINE' if offline else 'online'}.")
+    return not offline
+
+
 def imprimir(nome_impressora: str, conteudo: bytes) -> None:
     """Envia `conteudo` (bytes crus, já formatados em ESC/POS) para a fila de
     impressão `nome_impressora`, em modo RAW (sem reprocessamento pelo driver).
@@ -122,6 +193,85 @@ def imprimir(nome_impressora: str, conteudo: bytes) -> None:
         raise RuntimeError(f"Falha ao enviar o job para '{nome_impressora}': {erro}") from erro
     finally:
         win32print.ClosePrinter(handle)
+
+
+def _consultar_status_esc_pos(nome_impressora: str):
+    """Manda "DLE EOT 1" (bytes 0x10 0x04 0x01 — "transmit printer status"
+    do protocolo ESC/POS) e lê 1 byte de volta pela mesma porta, sem
+    imprimir nada visível (não é texto nem comando de avanço/corte — só um
+    pedido de status que a própria impressora responde). O bit 3 da
+    resposta é 0 quando a impressora está online e 1 quando está offline
+    (tampa aberta, sem papel, erro etc.) — convenção usada pela Epson e
+    replicada pela maioria dos clones ESC/POS, incluindo a Bematech.
+
+    Só chamar para impressoras confirmadas como ESC/POS (ver
+    eh_bematech_mp4200th) — mandar esses bytes crus pra uma impressora
+    genérica tem efeito indefinido.
+
+    Retorna True (online), False (a própria impressora respondeu que está
+    offline) ou None quando não dá pra confirmar (porta sem retorno
+    bidirecional habilitado, driver que não repassa RAW puro, timeout,
+    etc.). None é "não verificado", nunca "offline" — quem chama deve
+    manter a disponibilidade já calculada por WorkOffline/Pausada nesse
+    caso, não piorá-la por causa de uma consulta extra que simplesmente
+    não é suportada nesta configuração.
+
+    Roda a chamada win32print bloqueante numa thread à parte só para poder
+    aplicar um timeout de verdade (a API do Windows não aceita um timeout
+    nativo aqui) — se a thread não voltar a tempo, é tratada como
+    indefinida e a thread fica presa sozinha em segundo plano até o SO
+    encerrar o handle (não há como abortá-la de fora com segurança).
+    """
+    resultado: dict = {"valor": None}
+
+    def _consultar():
+        import pywintypes
+        import win32print
+
+        try:
+            handle = win32print.OpenPrinter(nome_impressora)
+        except pywintypes.error as erro:
+            print(f"[printer/windows] Não foi possível abrir '{nome_impressora}' para consultar status ESC/POS: {erro}")
+            return
+
+        try:
+            win32print.StartDocPrinter(handle, 1, ("Status ESC/POS", None, "RAW"))
+            try:
+                win32print.StartPagePrinter(handle)
+                try:
+                    win32print.WritePrinter(handle, b"\x10\x04\x01")
+                    leitura = win32print.ReadPrinter(handle, 8)
+                finally:
+                    win32print.EndPagePrinter(handle)
+            finally:
+                win32print.EndDocPrinter(handle)
+        except pywintypes.error as erro:
+            print(f"[printer/windows] Falha ao consultar status ESC/POS de '{nome_impressora}': {erro}")
+            return
+        finally:
+            win32print.ClosePrinter(handle)
+
+        # ReadPrinter costuma devolver os bytes lidos direto, mas versões
+        # do pywin32 já variaram nesse retorno — aceita as duas formas em
+        # vez de arriscar um crash por causa de um detalhe de binding.
+        dados = leitura[0] if isinstance(leitura, tuple) else leitura
+        if not dados:
+            print(f"[printer/windows] '{nome_impressora}' não respondeu à consulta de status ESC/POS (porta sem retorno bidirecional?).")
+            return
+
+        byte_status = dados[0] if isinstance(dados, (bytes, bytearray)) else ord(dados[0])
+        offline = bool(byte_status & 0x08)
+        resultado["valor"] = not offline
+        print(f"[printer/windows] Status ESC/POS de '{nome_impressora}': byte=0x{byte_status:02x} {'OFFLINE' if offline else 'online'}.")
+
+    thread = threading.Thread(target=_consultar, daemon=True)
+    thread.start()
+    thread.join(_TIMEOUT_STATUS_ESC_POS_S)
+    if thread.is_alive():
+        print(f"[printer/windows] Consulta de status ESC/POS de '{nome_impressora}' expirou ({_TIMEOUT_STATUS_ESC_POS_S}s) — tratando como indefinida.")
+        return None
+
+    return resultado["valor"]
 
 
 def coletar_impressoras():
@@ -167,19 +317,57 @@ def coletar_impressoras():
         pausada = bool(item.get("Pausada"))
         print(f"[printer/windows] '{item.get('Nome', '')}': PortName='{nome_porta}' PortaHost='{host_porta}' Status='{item.get('Status', '')}' ForaDeLinha={fora_de_linha} Pausada={pausada}")
 
-        impressoras.append(
-            InfoImpressora(
-                nome=item.get("Nome", ""),
-                modelo=item.get("Driver", ""),
-                fabricante=item.get("DriverFabricante") or "",
-                driver=item.get("Driver", ""),
-                porta=host_porta or nome_porta,
-                tipo_porta=_classificar_porta(nome_porta, host_porta),
-                status=str(item.get("Status", "")),
-                padrao=bool(item.get("Padrao")),
-                disponivel=not fora_de_linha and not pausada,
-                bruto=item,
-            )
+        impressora = InfoImpressora(
+            nome=item.get("Nome", ""),
+            modelo=item.get("Driver", ""),
+            fabricante=item.get("DriverFabricante") or "",
+            driver=item.get("Driver", ""),
+            porta=host_porta or nome_porta,
+            tipo_porta=_classificar_porta(nome_porta, host_porta),
+            status=str(item.get("Status", "")),
+            padrao=bool(item.get("Padrao")),
+            disponivel=not fora_de_linha and not pausada,
+            bruto=item,
         )
+
+        # Checagem real de porta pra impressoras de rede: WorkOffline/
+        # Pausada são só o que o spooler reporta, e pra portas de rede esse
+        # status costuma ficar desatualizado (o spooler não faz polling
+        # constante do socket) — um socket TCP real em host_porta:porta_tcp
+        # é uma confirmação muito mais confiável de que a impressora está
+        # de fato ligada/acessível agora. Só tentado quando host_porta é um
+        # IPv4 literal — portas WSD/hostname não garantem um simples socket
+        # TCP/IP na porta reportada.
+        if impressora.tipo_porta == "rede" and _PADRAO_IPV4.match(host_porta):
+            porta_tcp = item.get("PortaNumero") or _PORTA_TCP_PADRAO
+            porta_aberta = _verificar_conexao_tcp(host_porta, porta_tcp)
+            if porta_aberta:
+                if not impressora.disponivel:
+                    print(f"[printer/windows] '{impressora.nome}': porta TCP {host_porta}:{porta_tcp} respondeu à conexão apesar do spooler reportar indisponível — revertendo para disponível.")
+                impressora.disponivel = True
+                if eh_bematech_mp4200th(impressora):
+                    status_esc_pos = _consultar_status_esc_pos_tcp(host_porta, porta_tcp)
+                    if status_esc_pos is False:
+                        impressora.disponivel = False
+            else:
+                if impressora.disponivel:
+                    print(f"[printer/windows] '{impressora.nome}': porta TCP {host_porta}:{porta_tcp} não respondeu — marcando indisponível apesar do spooler reportar disponível.")
+                impressora.disponivel = False
+
+        # Consulta de status ESC/POS via spooler: só vale a pena tentar se
+        # já passou nos sinais baratos (conectada, não pausada, incluindo a
+        # checagem de rede acima) e for uma impressora ESC/POS de verdade
+        # (ver eh_bematech_mp4200th — mandar DLE EOT pra qualquer outra
+        # coisa é efeito indefinido). Não roda de novo pra quem já foi
+        # confirmada via TCP acima (tipo_porta == "rede"), pra não sondar a
+        # mesma impressora duas vezes. "False" aqui deixa disponivel=False;
+        # "None" (não deu pra confirmar) mantém o que já estava — nunca
+        # piora um resultado que a consulta extra simplesmente não suporta.
+        if impressora.disponivel and impressora.tipo_porta != "rede" and eh_bematech_mp4200th(impressora):
+            status_esc_pos = _consultar_status_esc_pos(impressora.nome)
+            if status_esc_pos is False:
+                impressora.disponivel = False
+
+        impressoras.append(impressora)
 
     return impressoras

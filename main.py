@@ -38,7 +38,9 @@ try:
 
     from controllers.balcaoController import BalcaoController
     from controllers.entregaController import EntregaController
+    from controllers.salaoController import SalaoController
     from controllers.consultaController import ConsultaController
+    from controllers.fechamentoController import FechamentoController
     from services.rede import rede
     from services.iconProvider import IconProvider
     from services.comandaEstiloService import ComandaEstiloController
@@ -92,6 +94,14 @@ os.environ["QML_XHR_ALLOW_FILE_READ"] = "1"
 
 if __name__ == "__main__":
     app = _app_atualizador or QGuiApplication(sys.argv)
+    # Nome/organização estáveis — necessário para QStandardPaths resolver
+    # sempre o mesmo diretório de cache entre execuções (ver
+    # services/rede/fechamentoCache.py); sem isso, o Qt cai num caminho
+    # baseado no nome do executável (variável conforme como o app foi
+    # iniciado), o que espalharia o cache de fechamento por pastas
+    # diferentes a cada vez.
+    app.setApplicationName("PizzeriaSystem")
+    app.setOrganizationName("PizzeriaSystem")
     engine = QQmlApplicationEngine()
 
     # Diretório onde o script está sendo executado
@@ -111,8 +121,12 @@ if __name__ == "__main__":
     engine.rootContext().setContextProperty("balcaoController", controller)
     entregaController = EntregaController()
     engine.rootContext().setContextProperty("entregaController", entregaController)
+    salaoController = SalaoController()
+    engine.rootContext().setContextProperty("salaoController", salaoController)
     consultaController = ConsultaController()
     engine.rootContext().setContextProperty("consultaController", consultaController)
+    fechamentoController = FechamentoController()
+    engine.rootContext().setContextProperty("fechamentoController", fechamentoController)
     comandaEstiloController = ComandaEstiloController()
     engine.rootContext().setContextProperty("comandaEstiloController", comandaEstiloController)
     # Edição de data/cardapio/*.json pela tela Cardápio — as telas de pedido
