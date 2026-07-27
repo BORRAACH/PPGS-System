@@ -30,6 +30,8 @@ import os
 import subprocess
 import sys
 
+from Config import mesclarCardapio
+
 _TIMEOUT_GIT = 15
 
 
@@ -204,18 +206,68 @@ def _ha_mudancas_locais_em(caminho):
     return bool(saida)
 
 
+def _caminho_relativo_cardapio(nome_arquivo):
+    # Sempre com "/" (não os.path.join): isto também alimenta "git show
+    # HEAD:<caminho>" abaixo, e o git usa "/" no seu modelo de objetos
+    # mesmo rodando no Windows — um separador errado ali simplesmente não
+    # acha o blob. os.path.join com o resultado ainda funciona certo pra
+    # abrir o arquivo de verdade (Windows aceita "/" também).
+    return f"data/cardapio/{nome_arquivo}"
+
+
+def _arquivos_cardapio_modificados_localmente():
+    """Nomes dos data/cardapio/*.json (ex: "pizzas.json", sem o caminho)
+    reconhecidos por Config/mesclarCardapio.py com mudança não commitada
+    nesta máquina agora."""
+    saida = _rodar_git("status", "--porcelain", "--", "data/cardapio")
+    if not saida:
+        return []
+
+    encontrados = []
+    for linha in saida.splitlines():
+        nome_arquivo = os.path.basename(linha[3:].strip())
+        if nome_arquivo in mesclarCardapio.CAMPOS_PRECO_POR_ARQUIVO and nome_arquivo not in encontrados:
+            encontrados.append(nome_arquivo)
+    return encontrados
+
+
+def _ler_arquivo_projeto(caminho_relativo):
+    caminho_absoluto = os.path.join(_raiz_projeto(), caminho_relativo)
+    try:
+        with open(caminho_absoluto, "r", encoding="utf-8") as arquivo:
+            return arquivo.read()
+    except OSError as erro:
+        print(f"[atualizador] Falha ao ler {caminho_relativo}: {erro}")
+        return None
+
+
+def _escrever_arquivo_projeto(caminho_relativo, conteudo):
+    caminho_absoluto = os.path.join(_raiz_projeto(), caminho_relativo)
+    try:
+        # newline="\n" pelo mesmo motivo de services/cardapioService.py:
+        # salvar() — sem isso o Python no Windows reintroduziria "\r\n" e
+        # o problema que este módulo existe pra evitar voltaria no
+        # próximo update.
+        with open(caminho_absoluto, "w", encoding="utf-8", newline="\n") as arquivo:
+            arquivo.write(conteudo)
+        return True
+    except OSError as erro:
+        print(f"[atualizador] Falha ao gravar {caminho_relativo} mesclado: {erro}")
+        return False
+
+
 def _guardar_cardapio_local():
     """Poe de lado (git stash) qualquer mudança não commitada em
     data/cardapio/*.json antes do merge — ver comentário em _atualizar()
-    sobre por que esses arquivos ficam localmente modificados sozinhos.
-    Devolve True se guardou algo (e portanto precisa tentar devolver
-    depois), False se não havia nada pra guardar."""
+    sobre por que esses arquivos costumam ficar localmente modificados
+    sozinhos. Devolve True se guardou algo (e portanto precisa tentar
+    devolver/mesclar depois), False se não havia nada pra guardar."""
     if not _ha_mudancas_locais_em("data/cardapio"):
         return False
 
-    print("[atualizador] data/cardapio/*.json tem mudanças locais (provavelmente só a tela "
-          "Cardápio salvando com \\r\\n no Windows, ver services/cardapioService.py) — guardando "
-          "num stash antes de atualizar, pra não travar o merge.")
+    print("[atualizador] data/cardapio/*.json tem mudanças locais nesta máquina — guardando "
+          "num stash antes de atualizar, pra não travar o merge (ver Config/mesclarCardapio.py "
+          "pra como isso é reaplicado por cima da atualização).")
     _rodar_git("stash", "push", "--include-untracked", "--message", "atualizador: cardápio local antes de atualizar", "--", "data/cardapio")
     return True
 
@@ -228,10 +280,53 @@ def _desfazer_guarda_cardapio_local():
     _rodar_git("stash", "pop")
 
 
+def _mesclar_cardapios_locais(arquivos, conteudo_base, conteudo_local):
+    """Chamado depois de um merge bem-sucedido, com o stash de
+    _guardar_cardapio_local() ainda guardado: pra cada arquivo que tinha
+    edição local, mescla com o que acabou de vir da atualização (preço
+    editado localmente prevalece, resto — inclusive itens novos/removidos
+    — vem da atualização; ver Config/mesclarCardapio.py) e grava por cima
+    da versão "só remota" que o merge deixou no disco.
+
+    Sempre descarta o stash no final: seu conteúdo relevante já foi
+    incorporado (ou, na pior hipótese — JSON local inválido, por exemplo
+    — mesclarCardapio.mesclar() decidiu de propósito manter só a versão
+    da atualização, e não há nada a mais pra recuperar dali)."""
+    for nome_arquivo in arquivos:
+        caminho_relativo = _caminho_relativo_cardapio(nome_arquivo)
+        texto_atualizado = _ler_arquivo_projeto(caminho_relativo)
+        if texto_atualizado is None:
+            continue
+
+        texto_mesclado = mesclarCardapio.mesclar(
+            nome_arquivo,
+            conteudo_base.get(nome_arquivo) or "",
+            conteudo_local.get(nome_arquivo) or "",
+            texto_atualizado,
+        )
+        if texto_mesclado != texto_atualizado and _escrever_arquivo_projeto(caminho_relativo, texto_mesclado):
+            print(f"[atualizador] {caminho_relativo}: mesclado com a edição local desta máquina "
+                  "(preços editados aqui foram preservados).")
+
+    _rodar_git("stash", "drop")
+
+
 def _atualizar(branch, upstream):
     from PyQt6.QtWidgets import QMessageBox
 
     print(f"[atualizador] Atualizando '{branch}' a partir de '{upstream}'...")
+
+    # Precisa ler a base (versão no commit atual) e o local (o que está no
+    # disco agora, não commitado) ANTES de guardar/mesclar qualquer coisa —
+    # depois do "git stash push" o arquivo no disco já não é mais "o
+    # local", é a versão da base de volta.
+    arquivos_cardapio_locais = _arquivos_cardapio_modificados_localmente()
+    conteudo_base = {}
+    conteudo_local = {}
+    for nome_arquivo in arquivos_cardapio_locais:
+        caminho_relativo = _caminho_relativo_cardapio(nome_arquivo)
+        conteudo_base[nome_arquivo] = _rodar_git("show", f"HEAD:{caminho_relativo}") or ""
+        conteudo_local[nome_arquivo] = _ler_arquivo_projeto(caminho_relativo) or ""
 
     guardou_cardapio = _guardar_cardapio_local()
     resultado_merge = _rodar_git("merge", "--ff-only", upstream)
@@ -251,17 +346,7 @@ def _atualizar(branch, upstream):
         return
 
     if guardou_cardapio:
-        # De propósito NÃO tenta "git stash pop" aqui: a árvore de trabalho
-        # já avançou pro commit novo, então reaplicar o cardápio guardado
-        # vira um merge de verdade — se o commit puxado tiver mexido nos
-        # mesmos itens, o "pop" grava marcadores de conflito ("<<<<<<<")
-        # direto no JSON, que nenhuma tela (Cardápio, Balcão, Entrega...)
-        # consegue mais ler. Fica guardado em "git stash list" — recuperável
-        # à mão depois — e o cardápio que acabou de vir da atualização vale
-        # a partir daqui, sem risco de corromper o arquivo sozinho.
-        print("[atualizador] Cardápio local guardado em 'git stash list' (não reaplicado "
-              "automaticamente, pra não arriscar gravar conflito no JSON) — recupere com "
-              "'git stash pop' na pasta do projeto se precisar daquela edição.")
+        _mesclar_cardapios_locais(arquivos_cardapio_locais, conteudo_base, conteudo_local)
 
     print("[atualizador] Atualizado com sucesso — usando o código novo a partir daqui.")
 
