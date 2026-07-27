@@ -257,6 +257,30 @@ Page {
                 return linha ? linha.campoValor : inputObservacao;
             }
 
+            // Prosseguem de fato com o envio, depois que comandaVazia() já
+            // foi checada (e, se vazia, o popup de comanda de teste já
+            // respondeu) — chamadas tanto direto pelos botões quanto pelo
+            // handler de popupComandaTeste.respondido.
+            function prosseguirImprimir(dadosPedido) {
+                var sucesso = entregaController.enviarPedido(dadosPedido, spinnerCopias.value);
+                if (sucesso) {
+                    limparFormularioPedido();
+                    telaEntrega.mostrarNotificacao(dadosPedido.teste ? "Comanda de teste impressa." : "Pedido salvo com sucesso!", true);
+                } else {
+                    telaEntrega.mostrarNotificacao("Erro ao salvar o pedido.", false);
+                }
+            }
+
+            function prosseguirLancar(dadosPedido) {
+                var sucesso = entregaController.lancarPedido(dadosPedido);
+                if (sucesso) {
+                    limparFormularioPedido();
+                    telaEntrega.mostrarNotificacao(dadosPedido.teste ? "Comanda de teste registrada (não aparece na Consulta)." : "Comanda lançada com sucesso!", true);
+                } else {
+                    telaEntrega.mostrarNotificacao("Erro ao lançar a comanda.", false);
+                }
+            }
+
             function limparFormularioPedido() {
                 if (telaEntrega.arquivoOriginal !== "") {
                     consultaController.apagarComanda(telaEntrega.arquivoOriginal);
@@ -278,6 +302,7 @@ Page {
                 inputTroco.text = "";
                 inputTaxaEntrega.text = "";
                 btnStatusPagamento.pago = false;
+                spinnerCopias.value = 2;
             }
 
             // Rola verticalmente quando a lista de pedidos cresce (ou a
@@ -972,9 +997,9 @@ Page {
                                 leftPadding: 10
                                 rightPadding: 10
                                 text: taxaEntregaInicial
-                                KeyNavigation.tab: btnStatusPagamento.visible ? btnStatusPagamento : btnImprimir
+                                KeyNavigation.tab: btnStatusPagamento.visible ? btnStatusPagamento : spinnerCopias
                                 KeyNavigation.backtab: inputTroco.visible ? inputTroco : comboFormaPagamento
-                                Keys.onReturnPressed: (btnStatusPagamento.visible ? btnStatusPagamento : btnImprimir).forceActiveFocus()
+                                Keys.onReturnPressed: (btnStatusPagamento.visible ? btnStatusPagamento : spinnerCopias).forceActiveFocus()
                                 onEditingFinished: {
                                     if (text !== "") {
                                         var numLimpo = text.replace("R$", "").replace(" ", "").replace(",", ".");
@@ -1002,9 +1027,12 @@ Page {
                         }
 
                         // Botão de status: alterna entre pago (PG) e não pago (NP).
+                        // Visível pra qualquer forma de pagamento, inclusive Pix —
+                        // Pix não é necessariamente pago na hora (ex: cliente manda
+                        // o comprovante depois), então também precisa poder marcar
+                        // como NP nesse caso.
                         Column {
                             spacing: 4
-                            visible: comboFormaPagamento.currentText !== "Pix"
 
                             Text {
                                 text: "Status"
@@ -1022,11 +1050,8 @@ Page {
                                 width: 60
                                 topPadding: 10
                                 bottomPadding: 10
-                                // Só faz sentido perguntar se já foi pago quando o
-                                // pagamento não é instantâneo como o Pix.
-                                visible: comboFormaPagamento.currentText !== "Pix"
                                 focusPolicy: Qt.StrongFocus
-                                KeyNavigation.tab: btnImprimir
+                                KeyNavigation.tab: spinnerCopias
                                 KeyNavigation.backtab: inputTaxaEntrega
                                 Keys.onReturnPressed: clicked()
                                 onClicked: pago = !pago
@@ -1052,6 +1077,55 @@ Page {
                             }
                         }
 
+                        // Quantas vezes "Imprimir" pede a impressão da mesma
+                        // comanda (o arquivo é salvo uma única vez — ver
+                        // EntregaController.enviarPedido). Padrão 2 aqui —
+                        // diferente de Balcão — porque toda entrega já sai
+                        // precisando de duas vias (uma pro motoboy, uma pra
+                        // cozinha/registro).
+                        Column {
+                            spacing: 4
+
+                            Text {
+                                text: "Cópias"
+                                font.pixelSize: 12
+                                font.bold: true
+                                color: Estilo.cores.textoSecundario
+                            }
+
+                            SpinBox {
+                                id: spinnerCopias
+
+                                from: 1
+                                to: 5
+                                value: 2
+                                editable: true
+                                width: 100
+                                height: 42
+                                KeyNavigation.tab: btnImprimir
+                                KeyNavigation.backtab: btnStatusPagamento.visible ? btnStatusPagamento : inputTaxaEntrega
+
+                                contentItem: TextInput {
+                                    text: spinnerCopias.textFromValue(spinnerCopias.value, spinnerCopias.locale)
+                                    font.pixelSize: Estilo.fonte.padrao
+                                    color: Estilo.cores.texto
+                                    horizontalAlignment: Qt.AlignHCenter
+                                    verticalAlignment: Qt.AlignVCenter
+                                    readOnly: !spinnerCopias.editable
+                                    validator: spinnerCopias.validator
+                                    selectByMouse: true
+                                }
+
+                                background: Rectangle {
+                                    radius: Estilo.rounding.padrao
+                                    color: "#ffffff"
+                                    border.color: spinnerCopias.activeFocus ? "#e67e22" : Estilo.cores.borda
+                                    border.width: spinnerCopias.activeFocus ? 2 : 1
+                                }
+
+                            }
+                        }
+
                     }
 
                     // --- BOTÕES DE AÇÃO INFERIORES ---
@@ -1067,21 +1141,15 @@ Page {
                             width: 200
                             focusPolicy: Qt.StrongFocus
                             KeyNavigation.tab: btnLancar
-                            KeyNavigation.backtab: btnStatusPagamento.visible ? btnStatusPagamento : inputTaxaEntrega
+                            KeyNavigation.backtab: spinnerCopias
                             Keys.onReturnPressed: clicked()
                             onClicked: {
                                 var dados = coletarDadosPedido();
                                 if (comandaVazia(dados)) {
-                                    telaEntrega.mostrarNotificacao("Preencha ao menos um campo antes de imprimir.", false);
+                                    popupComandaTeste.abrirPara("imprimir", dados);
                                     return ;
                                 }
-                                var sucesso = entregaController.enviarPedido(dados);
-                                if (sucesso) {
-                                    limparFormularioPedido();
-                                    telaEntrega.mostrarNotificacao("Pedido salvo com sucesso!", true);
-                                } else {
-                                    telaEntrega.mostrarNotificacao("Erro ao salvar o pedido.", false);
-                                }
+                                prosseguirImprimir(dados);
                             }
 
                             contentItem: Row {
@@ -1121,16 +1189,10 @@ Page {
                             onClicked: {
                                 var dados = coletarDadosPedido();
                                 if (comandaVazia(dados)) {
-                                    telaEntrega.mostrarNotificacao("Preencha ao menos um campo antes de lançar a comanda.", false);
+                                    popupComandaTeste.abrirPara("lancar", dados);
                                     return ;
                                 }
-                                var sucesso = entregaController.lancarPedido(dados);
-                                if (sucesso) {
-                                    limparFormularioPedido();
-                                    telaEntrega.mostrarNotificacao("Comanda lançada com sucesso!", true);
-                                } else {
-                                    telaEntrega.mostrarNotificacao("Erro ao lançar a comanda.", false);
-                                }
+                                prosseguirLancar(dados);
                             }
 
                             contentItem: Row {
@@ -1213,6 +1275,25 @@ Page {
 
             }
 
+            }
+
+            // Só abre quando comandaVazia() barra o clique em Imprimir/Lançar
+            // (ver os dois onClicked acima) — nunca some sem resposta: ou o
+            // usuário escolhe teste/normal, ou fecha sem prosseguir.
+            PopupComandaTeste {
+                id: popupComandaTeste
+
+                onRespondido: function(teste) {
+                    var dadosPedido = dados;
+                    if (teste) {
+                        dadosPedido.cliente = "Teste";
+                        dadosPedido.teste = true;
+                    }
+                    if (acaoPendente === "imprimir")
+                        prosseguirImprimir(dadosPedido);
+                    else
+                        prosseguirLancar(dadosPedido);
+                }
             }
 
         }

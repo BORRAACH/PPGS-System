@@ -19,6 +19,12 @@ SEPARADOR_SABORES = " / "
 # Não é UTF-8: se salvar como UTF-8, os acentos saem corrompidos no cupom impresso.
 CODEPAGE_IMPRESSORA = "cp850"
 
+# Marca impressa no topo e no rodapé de uma comanda de teste (ver
+# _salvarComanda) — em negrito direto via comandaEstiloService, não como um
+# "campo" configurável em EstiloImpressora.qml, porque é um aviso fixo pra
+# quem for tirar a comanda da impressora, não um dado do pedido.
+_MARCA_COMANDA_TESTE = f"{estilo.NEGRITO_LIGA}*** COMANDA DE TESTE ***{estilo.NEGRITO_DESLIGA}"
+
 
 def _dividir_sabores(pedido_texto):
     """Separa um pedido em (lista_de_sabores, tamanho).
@@ -68,8 +74,16 @@ class BalcaoController(QObject):
         """Monta o texto da comanda, grava o .txt e propaga para a rede
         local. Não imprime nada — usado tanto por enviarPedido() quanto por
         lancarPedido(). Retorna (sucesso, conteudo_bytes); conteudo_bytes
-        vem vazio quando sucesso é False."""
-        cliente = dados.get("cliente", "")
+        vem vazio quando sucesso é False.
+
+        Se dados["teste"] vier True (comanda em branco confirmada como
+        teste pelo popup de Balcao.qml), o cliente vira "Teste", o cupom
+        sai marcado no topo/rodapé, e a comanda NÃO é gravada em disco nem
+        propagada pela rede — não deve aparecer na Consulta. conteudo_bytes
+        ainda volta preenchido, porque enviarPedido() precisa dele pra
+        pedir a impressão mesmo nesse caso."""
+        teste = bool(dados.get("teste", False))
+        cliente = "Teste" if teste else dados.get("cliente", "")
         itens = dados.get("itens", [])
         forma_pagamento = dados.get("formaPagamento", "")
         troco = dados.get("troco", "")
@@ -85,7 +99,11 @@ class BalcaoController(QObject):
         nome_arquivo = f"pedido_{agora.strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}.txt"
         caminho_arquivo = os.path.join(self.pasta_pedidos, nome_arquivo)
 
-        linhas_arquivo = [
+        linhas_arquivo = []
+        if teste:
+            linhas_arquivo.append(_MARCA_COMANDA_TESTE)
+            linhas_arquivo.extend(estilo.linhas_espacamento_secoes())
+        linhas_arquivo.extend([
             f"Cliente: {estilo.formatar_campo(cliente, 'cliente')}",
             f"Data: {estilo.formatar_campo(agora.strftime('%d/%m/%Y %H:%M:%S'), 'data')}",
             *estilo.linhas_espacamento_secoes(),
@@ -95,7 +113,7 @@ class BalcaoController(QObject):
             *estilo.linhas_espacamento_secoes(),
             "-" * 40,
             *estilo.linhas_espacamento_secoes(),
-        ]
+        ])
         if forma_pagamento:
             linhas_arquivo.append(f"Forma de pagamento: {estilo.formatar_campo(forma_pagamento, 'forma_pagamento')}")
             if forma_pagamento == "Dinheiro" and troco:
@@ -115,10 +133,20 @@ class BalcaoController(QObject):
             troco_a_dar = _valor_para_float(troco) - valor_total
             troco_a_dar_formatado = f"R$ {troco_a_dar:.2f}".replace(".", ",")
             linhas_arquivo.append(f"Troco a dar: {estilo.formatar_campo(troco_a_dar_formatado, 'troco_a_dar')}")
+        if teste:
+            linhas_arquivo.extend(estilo.linhas_espacamento_secoes())
+            linhas_arquivo.append(_MARCA_COMANDA_TESTE)
         conteudo = "\n".join(linhas_arquivo) + "\n"
         # Modo binário: o texto vira bytes em cp850 e os códigos ESC/POS de
         # negrito são preservados como estão, sem reinterpretação de encoding.
         conteudo_bytes = conteudo.encode(CODEPAGE_IMPRESSORA, errors="replace")
+
+        if teste:
+            # Comanda de teste: não grava em disco nem propaga pela rede —
+            # não deve sobrar rastro nem aparecer na Consulta. conteudo_bytes
+            # já basta pra enviarPedido() pedir a impressão.
+            print("Comanda de teste (em branco) — não salva, não propagada.")
+            return True, conteudo_bytes
 
         try:
             with open(caminho_arquivo, "wb") as arquivo:
@@ -133,12 +161,16 @@ class BalcaoController(QObject):
         return True, conteudo_bytes
 
     @pyqtSlot("QVariantMap", result=bool)
-    def enviarPedido(self, dados):
-        """Gera o arquivo .txt do pedido e pede a impressão pela malha local.
-        Retorna True assim que o arquivo é salvo — a QML usa esse retorno
-        para decidir se limpa a tela para um próximo pedido; a confirmação
-        da impressão em si chega depois, separadamente (ver
-        rede.impressaoResultado)."""
+    @pyqtSlot("QVariantMap", int, result=bool)
+    def enviarPedido(self, dados, copias=1):
+        """Gera o arquivo .txt do pedido e pede a impressão pela malha local
+        `copias` vezes (padrão 1) — a comanda é salva uma única vez (ver
+        _salvarComanda), só o pedido de impressão se repete, pros casos em
+        que o balcão precisa de mais de uma via da mesma comanda (ex: uma
+        pra cozinha, uma pro cliente). Retorna True assim que o arquivo é
+        salvo — a QML usa esse retorno para decidir se limpa a tela para um
+        próximo pedido; a confirmação de cada impressão chega depois,
+        separadamente (ver rede.impressaoResultado, um sinal por cópia)."""
         sucesso, conteudo_bytes = self._salvarComanda(dados)
         if not sucesso:
             return False
@@ -148,7 +180,8 @@ class BalcaoController(QObject):
         # estiver com a impressora conectada — pode ser esta ou outra. O
         # resultado chega depois, de forma assíncrona, pelo sinal
         # rede.impressaoResultado.
-        rede.solicitar_impressao(conteudo_bytes)
+        for _ in range(max(1, copias)):
+            rede.solicitar_impressao(conteudo_bytes)
         return True
 
     @pyqtSlot("QVariantMap", result=bool)

@@ -69,7 +69,45 @@ Page {
         pizzasMontadas = lista;
     }
 
+    // "promo_seg_qui.json" vale de segunda a quinta (getDay() 1-4);
+    // "promo_sex_dom.json" vale de sexta a domingo (5, 6 ou 0) — ver
+    // data/cardapio/promocoes/.
+    function arquivoPromocaoAtual() {
+        var diaSemana = new Date().getDay();
+        return (diaSemana >= 1 && diaSemana <= 4) ? "promo_seg_qui.json" : "promo_sex_dom.json";
+    }
+
+    // Devolve {nome: {valorMini, valorBroto, valorGrande}} da promoção do
+    // dia, ou {} se não existir/estiver ilegível — carregamento de pizzas
+    // nunca deve travar por causa de uma promoção com problema. Síncrono
+    // (3º argumento "false" do open()) de propósito: é um arquivo local
+    // pequeno, e carregarPizzas() precisa do resultado pronto ANTES de
+    // montar modeloPizzas, em vez de encadear dois callbacks assíncronos.
+    function carregarPrecosPromocionais() {
+        var arquivo = arquivoPromocaoAtual();
+        var xhr = new XMLHttpRequest();
+        xhr.open("GET", Qt.resolvedUrl(raizProjeto + "data/cardapio/promocoes/" + arquivo), false);
+        xhr.send();
+        if (xhr.status !== 200 && xhr.status !== 0)
+            return {};
+
+        try {
+            var lista = JSON.parse(xhr.responseText);
+        } catch (e) {
+            console.error("Erro ao interpretar " + arquivo + ":", e);
+            return {};
+        }
+
+        var porNome = {};
+        for (var i = 0; i < lista.length; i++) {
+            if (lista[i] && lista[i].nome)
+                porNome[lista[i].nome] = lista[i];
+        }
+        return porNome;
+    }
+
     function carregarPizzas() {
+        var promocoes = carregarPrecosPromocionais();
         var xhr = new XMLHttpRequest();
         xhr.open("GET", Qt.resolvedUrl(raizProjeto + "data/cardapio/pizzas.json"));
         xhr.onreadystatechange = function () {
@@ -79,7 +117,24 @@ Page {
                         var dados = JSON.parse(xhr.responseText);
                         modeloPizzas.clear();
                         for (var i = 0; i < dados.length; i++) {
-                            modeloPizzas.append(dados[i]);
+                            var item = dados[i];
+                            // Sabor em promoção hoje: os três preços da
+                            // promoção substituem os do cardápio normal —
+                            // nome/ingredientes/id continuam vindo de
+                            // pizzas.json (a promoção não precisa repetir
+                            // isso, só o preço).
+                            var promo = promocoes[item.nome];
+                            if (promo) {
+                                item = {
+                                    "id": item.id,
+                                    "nome": item.nome,
+                                    "ingredientes": item.ingredientes,
+                                    "valorMini": promo.valorMini !== undefined ? promo.valorMini : item.valorMini,
+                                    "valorBroto": promo.valorBroto !== undefined ? promo.valorBroto : item.valorBroto,
+                                    "valorGrande": promo.valorGrande !== undefined ? promo.valorGrande : item.valorGrande
+                                };
+                            }
+                            modeloPizzas.append(item);
                         }
                         console.log("Pizzas carregadas:", modeloPizzas.count);
                         filtrarPizzas("");
