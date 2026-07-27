@@ -94,6 +94,11 @@ class RedeService(QObject):
         self._iniciado = False
 
         self._printer_service = PrinterService()
+        # Guarda contra ciclos de detecção sobrepostos (ver
+        # _detectar_impressora_local) — leitura/escrita de bool é atômica
+        # no CPython (GIL), não precisa de lock pra essa checagem simples
+        # de "pula este ciclo se o anterior ainda não terminou".
+        self._detectando_impressora_local = False
         self._tem_impressora = False
         # {"nome", "modelo", "fabricante", "tipoPorta", "porta"} da
         # impressora local, ou None — só preenchido quando _tem_impressora.
@@ -600,9 +605,27 @@ class RedeService(QObject):
         self._detectar_impressora_local()
 
     def _detectar_impressora_local(self):
+        # Evita empilhar detecções concorrentes: lpstat/PowerShell (ver
+        # services/printer/linux.py e windows.py) têm timeout de até 10-20s
+        # cada, e numa máquina fraca a checagem inteira pode facilmente
+        # passar do intervalo de 30s do próprio timer — sem essa trava, cada
+        # tique perdido soma mais uma thread concorrente brigando por CPU
+        # (e todas fazendo praticamente o mesmo trabalho), o tipo de coisa
+        # que trava um computador fraco em vez de só deixar a informação
+        # alguns segundos desatualizada.
+        if self._detectando_impressora_local:
+            print("[RedeService] Detecção de impressora local anterior ainda em andamento — pulando este ciclo.")
+            return
+        self._detectando_impressora_local = True
         threading.Thread(target=self._detectar_impressora_em_thread, daemon=True).start()
 
     def _detectar_impressora_em_thread(self):
+        try:
+            self._detectar_impressora_em_thread_interno()
+        finally:
+            self._detectando_impressora_local = False
+
+    def _detectar_impressora_em_thread_interno(self):
         try:
             impressora = self._printer_service.localizar_impressora()
         except Exception as erro:

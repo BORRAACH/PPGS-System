@@ -33,6 +33,32 @@ Page {
         filaNotificacoes.notificar(mensagem, sucesso);
     }
 
+    // O resultado de enviarPedido() só confirma que o .txt foi salvo — o
+    // resultado de verdade da impressão (que pode acontecer em outra
+    // máquina da rede) chega depois, de forma assíncrona, por este sinal
+    // (ver services/rede/redeService.py:solicitar_impressao).
+    //
+    // Conexão DECLARATIVA (Connections), não um
+    // "redeController.impressaoResultado.connect(function(){...})" solto em
+    // Component.onCompleted: um Connections é um filho desta página, então
+    // sua ligação com redeController (um objeto global, que vive pra
+    // sempre) morre junto quando a página é destruída. Um .connect() direto
+    // a partir de uma função anônima nunca se desliga sozinho — cada vez
+    // que esta tela era recriada (todo clique na barra lateral, ver
+    // LateralBar.qml), mais uma conexão "morta" se acumulava presa a uma
+    // instância antiga que devia ter sido esquecida, um vazamento de
+    // memória silencioso que piora a cada navegação.
+    Connections {
+        target: redeController
+
+        function onImpressaoResultado(sucesso, mensagem) {
+            telaBalcao.mostrarNotificacao(
+                sucesso ? ("Comanda impressa (" + mensagem + ")") : ("Falha ao imprimir: " + mensagem),
+                sucesso
+            );
+        }
+    }
+
     Component.onCompleted: {
         if (itensIniciais && itensIniciais.length > 0) {
             modeloPedidos.clear();
@@ -46,17 +72,6 @@ Page {
                 });
             }
         }
-
-        // O resultado de enviarPedido() só confirma que o .txt foi salvo —
-        // o resultado de verdade da impressão (que pode acontecer em outra
-        // máquina da rede) chega depois, de forma assíncrona, por este
-        // sinal (ver services/rede/redeService.py:solicitar_impressao).
-        redeController.impressaoResultado.connect(function (sucesso, mensagem) {
-            telaBalcao.mostrarNotificacao(
-                sucesso ? ("Comanda impressa (" + mensagem + ")") : ("Falha ao imprimir: " + mensagem),
-                sucesso
-            );
-        });
     }
 
     // --- MODELO GLOBAL DA TELA (Agora acessível pelos Shortcuts e pela ListView) ---

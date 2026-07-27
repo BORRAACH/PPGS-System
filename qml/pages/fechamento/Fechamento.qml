@@ -86,15 +86,24 @@ Page {
         telaFechamento.mostrarNotificacao("Caixa de " + telaFechamento.formatarDataExibicao(telaFechamento.dataSelecionada) + " recalculado e salvo.", true);
     }
 
-    Component.onCompleted: {
-        carregarDia(hojeIso());
+    // Conexão declarativa, não um .connect() solto em Component.onCompleted
+    // — mesmo motivo documentado em Balcao.qml/Rede.qml: fechamentoController
+    // é global e vive pra sempre, então a conexão precisa estar presa ao
+    // ciclo de vida desta página (Connections), não solta num closure.
+    Connections {
+        target: fechamentoController
+
         // Se outra máquina fechar o caixa do dia que está sendo exibido
         // aqui agora, recarrega sozinha — mesmo espírito de
         // SalaoController.mesasAtualizadas.
-        fechamentoController.fechamentoAtualizado.connect(function (data) {
+        function onFechamentoAtualizado(data) {
             if (data === telaFechamento.dataSelecionada)
                 telaFechamento.carregarDia(data);
-        });
+        }
+    }
+
+    Component.onCompleted: {
+        carregarDia(hojeIso());
     }
     StackView.onActivated: {
         carregarDia(telaFechamento.dataSelecionada || hojeIso());

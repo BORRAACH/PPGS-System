@@ -111,7 +111,22 @@ Rectangle {
                                     sideBar.stackView.pop(null);
                                 }
                             } else if (sideBar.stackView && sideBar.stackView.currentItem && sideBar.stackView.currentItem.objectName !== nomeTela) {
-                                sideBar.stackView.push(pagina, {}, StackView.Immediate);
+                                // replace(null, ...) troca a pilha INTEIRA
+                                // pela página nova — não push(), que só
+                                // empilha por cima sem nunca destruir nada.
+                                // Navegação aqui é sempre entre telas
+                                // irmãs (Balcão, Entrega, Salão...), nunca
+                                // um "entrar mais fundo" que precise voltar
+                                // depois — com push(), um dia inteiro
+                                // clicando entre elas (sem nunca voltar pro
+                                // Início, que é o único botão que limpa a
+                                // pilha) acumulava uma instância nova a
+                                // cada clique, cada uma com seu próprio
+                                // ListModel/Timer/conexões, sem nunca
+                                // liberar memória — exatamente o tipo de
+                                // vazamento que trava máquinas fracas ao
+                                // longo do expediente.
+                                sideBar.stackView.replace(null, pagina, {}, StackView.Immediate);
                             }
                         }
                     }
@@ -191,7 +206,9 @@ Rectangle {
 
                         onClicked: {
                             if (sideBar.stackView && sideBar.stackView.currentItem && sideBar.stackView.currentItem.objectName !== nomeTela) {
-                                sideBar.stackView.push(pagina, {}, StackView.Immediate);
+                                // Ver o mesmo comentário no Repeater de
+                                // modeloNavegacao acima.
+                                sideBar.stackView.replace(null, pagina, {}, StackView.Immediate);
                             }
                         }
                     }

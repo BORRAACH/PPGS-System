@@ -166,9 +166,20 @@ Page {
             carregarItens();
     }
 
+    // Conexão declarativa, não um .connect() solto em Component.onCompleted
+    // — mesmo motivo documentado em Balcao.qml/Rede.qml: cardapioController
+    // é global e vive pra sempre, então a conexão precisa estar presa ao
+    // ciclo de vida desta página (Connections), não solta num closure.
+    Connections {
+        target: cardapioController
+
+        function onCardapioAlterado(chaveCategoria) {
+            aoCardapioAlterado(chaveCategoria);
+        }
+    }
+
     Component.onCompleted: {
         carregarCategorias();
-        cardapioController.cardapioAlterado.connect(aoCardapioAlterado);
     }
 
     // Itens exibidos na lista (todos, ou só os que casam com a busca)

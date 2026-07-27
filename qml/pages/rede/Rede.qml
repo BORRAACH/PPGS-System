@@ -75,24 +75,43 @@ Page {
         return horas + "h " + (minutos % 60) + "min";
     }
 
+    // Conexões declarativas, não .connect() soltos em Component.onCompleted
+    // — redeController/balcaoController são globais que vivem pra sempre;
+    // um Connections é filho desta página e se desliga sozinho quando ela
+    // é destruída, em vez de acumular uma conexão morta a cada vez que
+    // esta tela é recriada (todo clique na barra lateral, ver
+    // LateralBar.qml/Balcao.qml).
+    Connections {
+        target: redeController
+
+        function onPeersMudaram() {
+            carregarPeers();
+            carregarCandidatosImpressora();
+        }
+
+        function onImpressoraPrincipalMudou() {
+            carregarImpressoraPrincipal();
+            carregarCandidatosImpressora();
+        }
+    }
+
+    Connections {
+        target: balcaoController
+
+        function onInfoImpressoraPronta(info) {
+            telaRede.infoImpressora = info;
+            telaRede.carregandoImpressora = false;
+        }
+    }
+
     Component.onCompleted: {
         // A lista de peers já é local (sem I/O externo) — carrega e mostra
         // a página na hora. A impressora só é buscada depois, em thread,
         // pra não atrasar a abertura da tela.
         carregarPeers();
-        redeController.peersMudaram.connect(carregarPeers);
-        balcaoController.infoImpressoraPronta.connect(function (info) {
-            telaRede.infoImpressora = info;
-            telaRede.carregandoImpressora = false;
-        });
         carregarImpressora();
-
         carregarImpressoraPrincipal();
-        redeController.impressoraPrincipalMudou.connect(carregarImpressoraPrincipal);
-
         carregarCandidatosImpressora();
-        redeController.peersMudaram.connect(carregarCandidatosImpressora);
-        redeController.impressoraPrincipalMudou.connect(carregarCandidatosImpressora);
     }
     StackView.onActivated: {
         carregarPeers();

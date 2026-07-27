@@ -34,21 +34,38 @@ Page {
         }
     }
 
-    Component.onCompleted: {
-        carregarMesasAbertas();
-        // Recarrega sozinho quando uma mesa muda/fecha em qualquer máquina
-        // da malha (ver SalaoController.mesasAtualizadas).
-        salaoController.mesasAtualizadas.connect(carregarMesasAbertas);
+    // Conexões declarativas, não .connect() soltos em Component.onCompleted
+    // — mesmo motivo documentado em Balcao.qml: salaoController/
+    // redeController são globais que vivem pra sempre, então uma conexão
+    // feita a partir de uma função solta nunca se desligava sozinha —
+    // acumulava uma a cada vez que esta tela era recriada (todo clique na
+    // barra lateral). Um Connections é filho desta página e morre junto
+    // com ela.
+    Connections {
+        target: salaoController
 
-        // Mesmo padrão de Balcao.qml/Entrega.qml: o resultado de verdade da
-        // impressão (que pode acontecer em outra máquina) chega depois,
-        // assíncrono, por este sinal.
-        redeController.impressaoResultado.connect(function (sucesso, mensagem) {
+        // Recarrega sozinho quando uma mesa muda/fecha em qualquer máquina
+        // da malha.
+        function onMesasAtualizadas() {
+            carregarMesasAbertas();
+        }
+    }
+
+    Connections {
+        target: redeController
+
+        // O resultado de verdade da impressão (que pode acontecer em outra
+        // máquina) chega depois, assíncrono, por este sinal.
+        function onImpressaoResultado(sucesso, mensagem) {
             telaSalao.mostrarNotificacao(
                 sucesso ? ("Comanda impressa (" + mensagem + ")") : ("Falha ao imprimir: " + mensagem),
                 sucesso
             );
-        });
+        }
+    }
+
+    Component.onCompleted: {
+        carregarMesasAbertas();
     }
     StackView.onActivated: {
         carregarMesasAbertas();

@@ -177,11 +177,22 @@ Page {
         }
     }
 
-    Component.onCompleted: {
-        carregarComandas();
+    // Conexão declarativa, não um .connect() solto em Component.onCompleted
+    // — mesmo motivo documentado em Balcao.qml/Rede.qml: consultaController
+    // é global e vive pra sempre, então a conexão precisa estar presa ao
+    // ciclo de vida desta página (Connections), não solta num closure.
+    Connections {
+        target: consultaController
+
         // Recarrega sozinho quando um pedido de outra máquina da rede
         // chega/some (ver redeController/consultaController.aplicarPedidoRemoto).
-        consultaController.comandasAtualizadas.connect(carregarComandas);
+        function onComandasAtualizadas() {
+            carregarComandas();
+        }
+    }
+
+    Component.onCompleted: {
+        carregarComandas();
     }
     // "focus: true" sozinho não é suficiente: StackView assume o controle do
     // foco ao trocar de página, então é preciso pedir foco de novo quando

@@ -39,6 +39,21 @@ Page {
         filaNotificacoes.notificar(mensagem, sucesso);
     }
 
+    // Conexão declarativa, não um .connect() solto em Component.onCompleted
+    // — mesmo motivo documentado em Balcao.qml: sua vida útil fica presa à
+    // desta página automaticamente, evitando acumular uma conexão morta a
+    // cada vez que esta tela é recriada (todo clique na barra lateral).
+    Connections {
+        target: redeController
+
+        function onImpressaoResultado(sucesso, mensagem) {
+            telaEntrega.mostrarNotificacao(
+                sucesso ? ("Comanda impressa (" + mensagem + ")") : ("Falha ao imprimir: " + mensagem),
+                sucesso
+            );
+        }
+    }
+
     Component.onCompleted: {
         if (itensIniciais && itensIniciais.length > 0) {
             modeloPedidos.clear();
@@ -52,17 +67,6 @@ Page {
                 });
             }
         }
-
-        // O resultado de enviarPedido() só confirma que o .txt foi salvo —
-        // o resultado de verdade da impressão (que pode acontecer em outra
-        // máquina da rede) chega depois, de forma assíncrona, por este
-        // sinal (ver services/rede/redeService.py:solicitar_impressao).
-        redeController.impressaoResultado.connect(function (sucesso, mensagem) {
-            telaEntrega.mostrarNotificacao(
-                sucesso ? ("Comanda impressa (" + mensagem + ")") : ("Falha ao imprimir: " + mensagem),
-                sucesso
-            );
-        });
     }
 
     // --- MODELO GLOBAL DA TELA (Agora acessível pelos Shortcuts e pela ListView) ---
