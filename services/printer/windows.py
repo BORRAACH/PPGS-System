@@ -15,12 +15,18 @@ _PADROES_TIPO_PORTA = (
 )
 
 # Consulta Win32_Printer (impressoras instaladas) e complementa com
-# Get-PrinterPort/Get-PrinterDriver para pegar host de rede e fabricante do driver.
+# Get-PrinterPort/Get-PrinterDriver para pegar host de rede e fabricante do
+# driver, e Get-Printer (módulo PrintManagement, nativo desde Windows 8/
+# Server 2012) só para o PrinterStatus amigável — é o único lugar que
+# expõe "Paused" como string pronta; o PrinterStatus do Win32_Printer é um
+# enum numérico diferente (Idle/Printing/.../Offline), sem noção de fila
+# pausada pelo administrador.
 _SCRIPT_PS = r"""
 $impressoras = Get-CimInstance -ClassName Win32_Printer | ForEach-Object {
     $printer = $_
     $porta = Get-PrinterPort -Name $printer.PortName -ErrorAction SilentlyContinue
     $driver = Get-PrinterDriver -Name $printer.DriverName -ErrorAction SilentlyContinue
+    $gerenciada = Get-Printer -Name $printer.Name -ErrorAction SilentlyContinue
     [PSCustomObject]@{
         Nome              = $printer.Name
         Driver            = $printer.DriverName
@@ -29,6 +35,7 @@ $impressoras = Get-CimInstance -ClassName Win32_Printer | ForEach-Object {
         PortaDescricao    = $porta.Description
         Status            = $printer.PrinterStatus
         ForaDeLinha       = [bool]$printer.WorkOffline
+        Pausada           = ($gerenciada.PrinterStatus -eq "Paused")
         Padrao            = [bool]$printer.Default
         Local             = [bool]$printer.Local
         Rede              = [bool]$printer.Network
@@ -153,7 +160,12 @@ def coletar_impressoras():
         # cabo desconectado (a porta em si, "USB001", não desaparece só
         # porque o dispositivo não está mais nela agora).
         fora_de_linha = bool(item.get("ForaDeLinha"))
-        print(f"[printer/windows] '{item.get('Nome', '')}': PortName='{nome_porta}' PortaHost='{host_porta}' Status='{item.get('Status', '')}' ForaDeLinha={fora_de_linha}")
+        # Pausada (fila parada pelo administrador) é um sinal separado de
+        # ForaDeLinha (dispositivo Plug-and-Play sumiu) — os dois deixam a
+        # impressora incapaz de imprimir agora, então ambos entram em
+        # "disponivel".
+        pausada = bool(item.get("Pausada"))
+        print(f"[printer/windows] '{item.get('Nome', '')}': PortName='{nome_porta}' PortaHost='{host_porta}' Status='{item.get('Status', '')}' ForaDeLinha={fora_de_linha} Pausada={pausada}")
 
         impressoras.append(
             InfoImpressora(
@@ -165,7 +177,7 @@ def coletar_impressoras():
                 tipo_porta=_classificar_porta(nome_porta, host_porta),
                 status=str(item.get("Status", "")),
                 padrao=bool(item.get("Padrao")),
-                disponivel=not fora_de_linha,
+                disponivel=not fora_de_linha and not pausada,
                 bruto=item,
             )
         )

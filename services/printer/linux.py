@@ -119,10 +119,22 @@ def _dispositivos_conectados_agora():
 
 
 def _descricao_e_status(nome_impressora):
-    """Extrai (descricao/modelo, status, caminho_ppd) via `lpstat -l -p <nome>`."""
+    """Extrai (descricao/modelo, status, habilitada, caminho_ppd) via
+    `lpstat -l -p <nome>`.
+
+    `habilitada` é o mesmo "enabled"/"disabled" que já compunha `status`,
+    mas como bool solto — usado por coletar_impressoras() como proxy tanto
+    de "fila habilitada" quanto de "impressora ligada agora": o CUPS
+    desabilita a fila sozinho quando um job de verdade falha no backend
+    (ex: "Unable to open serial port" com a impressora desligada — ver
+    _garantir_fila_habilitada), então uma fila "disabled" é o sinal mais
+    barato disponível sem sondar a porta ou tentar imprimir de propósito só
+    pra checar. Default True quando a regex não bate (saída vazia/CUPS
+    fora do ar) — não dá pra confirmar desabilitada, então não assume."""
     saida = _executar(["lpstat", "-l", "-p", nome_impressora])
     descricao = ""
     status = ""
+    habilitada = True
     caminho_ppd = ""
 
     # O texto muda de formato conforme o estado: uma fila habilitada tem um
@@ -135,6 +147,7 @@ def _descricao_e_status(nome_impressora):
     if m:
         motivo = m.group(1)
         status = f"{motivo.strip()} ({m.group(2)})" if motivo else m.group(2)
+        habilitada = m.group(2) == "enabled"
 
     m = re.search(r"Description:\s*(.+)", saida)
     if m:
@@ -144,7 +157,7 @@ def _descricao_e_status(nome_impressora):
     if m:
         caminho_ppd = m.group(1).strip()
 
-    return descricao, status, caminho_ppd
+    return descricao, status, habilitada, caminho_ppd
 
 
 def _fabricante_e_modelo_do_ppd(caminho_ppd):
@@ -274,7 +287,7 @@ def coletar_impressoras():
     impressoras = []
     for nome in nomes:
         uri_dispositivo = dispositivos.get(nome, "")
-        descricao, status, caminho_ppd = _descricao_e_status(nome)
+        descricao, status, habilitada, caminho_ppd = _descricao_e_status(nome)
         fabricante, modelo_ppd = _fabricante_e_modelo_do_ppd(caminho_ppd)
         tipo_porta = _classificar_porta(uri_dispositivo)
 
@@ -285,11 +298,16 @@ def coletar_impressoras():
         # conectada continuaria contando como candidata pra eleição de
         # rede (ver RedeService._detectar_impressora_em_thread).
         if tipo_porta in ("usb", "serial") and dispositivos_vivos is not None:
-            disponivel = _uri_normalizada(uri_dispositivo) in dispositivos_vivos
+            conectada_agora = _uri_normalizada(uri_dispositivo) in dispositivos_vivos
         else:
-            disponivel = True
+            conectada_agora = True
 
-        print(f"[printer/linux] '{nome}': device-uri='{uri_dispositivo}' status='{status}' disponivel={disponivel}")
+        # `habilitada` entra na mesma conta: além de conectada, a fila
+        # precisa estar habilitada no CUPS — ver _descricao_e_status pra
+        # como isso também funciona como proxy de "impressora ligada".
+        disponivel = conectada_agora and habilitada
+
+        print(f"[printer/linux] '{nome}': device-uri='{uri_dispositivo}' status='{status}' conectada_agora={conectada_agora} habilitada={habilitada} disponivel={disponivel}")
 
         impressoras.append(
             InfoImpressora(
