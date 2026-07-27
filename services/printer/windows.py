@@ -3,16 +3,8 @@ import re
 import shutil
 import socket
 import subprocess
-import threading
 
 from .modelos import InfoImpressora, eh_bematech_mp4200th
-
-# Timeout pra consulta de status ESC/POS (ver _consultar_status_esc_pos) —
-# generoso o bastante pro spooler processar um job de 3 bytes numa
-# impressora local, mas curto o bastante pra não travar o ciclo de
-# detecção (RedeService verifica a cada 30s) caso a porta simplesmente não
-# responda nada.
-_TIMEOUT_STATUS_ESC_POS_S = 3.0
 
 # Timeout das checagens de rede "cruas" (socket direto, sem passar pela
 # fila do spooler — ver _verificar_conexao_tcp/_consultar_status_esc_pos_tcp).
@@ -196,82 +188,28 @@ def imprimir(nome_impressora: str, conteudo: bytes) -> None:
 
 
 def _consultar_status_esc_pos(nome_impressora: str):
-    """Manda "DLE EOT 1" (bytes 0x10 0x04 0x01 — "transmit printer status"
-    do protocolo ESC/POS) e lê 1 byte de volta pela mesma porta, sem
-    imprimir nada visível (não é texto nem comando de avanço/corte — só um
-    pedido de status que a própria impressora responde). O bit 3 da
-    resposta é 0 quando a impressora está online e 1 quando está offline
-    (tampa aberta, sem papel, erro etc.) — convenção usada pela Epson e
-    replicada pela maioria dos clones ESC/POS, incluindo a Bematech.
+    """Confirmação extra de status ESC/POS via spooler — DESATIVADA.
 
-    Só chamar para impressoras confirmadas como ESC/POS (ver
-    eh_bematech_mp4200th) — mandar esses bytes crus pra uma impressora
-    genérica tem efeito indefinido.
+    A ideia era mandar "DLE EOT 1" (0x10 0x04 0x01 — "transmit printer
+    status") pela fila do spooler e ler 1 byte de volta pelo mesmo handle,
+    igual a `_consultar_status_esc_pos_tcp` faz por socket cru para
+    impressoras de rede. Só que, diferente do socket, o Win32 Print API
+    não tem como ler de volta pelo mesmo handle de um job: `win32print`
+    (pywin32) nunca expôs um `ReadPrinter` — é chamada inexistente, não um
+    detalhe de versão (confirmado em produção: AttributeError "module
+    'win32print' has no attribute 'ReadPrinter'"). Cada tentativa batia em
+    WritePrinter (que já manda os 3 bytes de verdade pela fila da
+    impressora física) e só depois quebrava na leitura — ou seja, ficava
+    enfileirando um job real a cada ciclo de detecção (30s) sem nunca
+    completar a checagem.
 
-    Retorna True (online), False (a própria impressora respondeu que está
-    offline) ou None quando não dá pra confirmar (porta sem retorno
-    bidirecional habilitado, driver que não repassa RAW puro, timeout,
-    etc.). None é "não verificado", nunca "offline" — quem chama deve
-    manter a disponibilidade já calculada por WorkOffline/Pausada nesse
-    caso, não piorá-la por causa de uma consulta extra que simplesmente
-    não é suportada nesta configuração.
-
-    Roda a chamada win32print bloqueante numa thread à parte só para poder
-    aplicar um timeout de verdade (a API do Windows não aceita um timeout
-    nativo aqui) — se a thread não voltar a tempo, é tratada como
-    indefinida e a thread fica presa sozinha em segundo plano até o SO
-    encerrar o handle (não há como abortá-la de fora com segurança).
-    """
-    resultado: dict = {"valor": None}
-
-    def _consultar():
-        import pywintypes
-        import win32print
-
-        try:
-            handle = win32print.OpenPrinter(nome_impressora)
-        except pywintypes.error as erro:
-            print(f"[printer/windows] Não foi possível abrir '{nome_impressora}' para consultar status ESC/POS: {erro}")
-            return
-
-        try:
-            win32print.StartDocPrinter(handle, 1, ("Status ESC/POS", None, "RAW"))
-            try:
-                win32print.StartPagePrinter(handle)
-                try:
-                    win32print.WritePrinter(handle, b"\x10\x04\x01")
-                    leitura = win32print.ReadPrinter(handle, 8)
-                finally:
-                    win32print.EndPagePrinter(handle)
-            finally:
-                win32print.EndDocPrinter(handle)
-        except pywintypes.error as erro:
-            print(f"[printer/windows] Falha ao consultar status ESC/POS de '{nome_impressora}': {erro}")
-            return
-        finally:
-            win32print.ClosePrinter(handle)
-
-        # ReadPrinter costuma devolver os bytes lidos direto, mas versões
-        # do pywin32 já variaram nesse retorno — aceita as duas formas em
-        # vez de arriscar um crash por causa de um detalhe de binding.
-        dados = leitura[0] if isinstance(leitura, tuple) else leitura
-        if not dados:
-            print(f"[printer/windows] '{nome_impressora}' não respondeu à consulta de status ESC/POS (porta sem retorno bidirecional?).")
-            return
-
-        byte_status = dados[0] if isinstance(dados, (bytes, bytearray)) else ord(dados[0])
-        offline = bool(byte_status & 0x08)
-        resultado["valor"] = not offline
-        print(f"[printer/windows] Status ESC/POS de '{nome_impressora}': byte=0x{byte_status:02x} {'OFFLINE' if offline else 'online'}.")
-
-    thread = threading.Thread(target=_consultar, daemon=True)
-    thread.start()
-    thread.join(_TIMEOUT_STATUS_ESC_POS_S)
-    if thread.is_alive():
-        print(f"[printer/windows] Consulta de status ESC/POS de '{nome_impressora}' expirou ({_TIMEOUT_STATUS_ESC_POS_S}s) — tratando como indefinida.")
-        return None
-
-    return resultado["valor"]
+    Sem uma forma real de ler bidirecionalmente por aqui (precisaria abrir
+    a porta serial/COM diretamente, fora do spooler, com pyserial ou
+    equivalente — não implementado), esta função não faz mais nada:
+    sempre devolve None ("não verificado"), e quem chama já trata None
+    como "mantém a disponibilidade calculada por WorkOffline/Pausada",
+    exatamente como antes desta tentativa de confirmação existir."""
+    return None
 
 
 def coletar_impressoras():
