@@ -384,13 +384,28 @@ class RedeService(QObject):
         # Só conta pra eleição de rede se for uma porta física/de rede de
         # verdade (usb/serial/rede) — "desconhecido" cobre impressoras
         # virtuais do Windows (Microsoft Print to PDF, Fax etc.) que
-        # aparecem como "salvas"/padrão mas não são a térmica de verdade.
+        # aparecem como "salvas"/padrão mas não são a térmica de verdade —
+        # E se estiver de fato disponível agora (ver InfoImpressora.
+        # disponivel/services/printer/windows.py e linux.py): uma
+        # impressora usb/serial instalada uma vez continua com esse
+        # tipo_porta pra sempre no SO, mesmo depois de desconectada de
+        # verdade, então sem checar "disponivel" também, uma máquina sem
+        # nenhuma impressora física conectada no momento podia ficar presa
+        # como a eleita da malha (sticky, ver _recalcular_maquina_impressora)
+        # e nunca devolver a vaga pra outra máquina que chegasse depois
+        # com a impressora usb de verdade conectada.
         # PrinterService/Rede.qml continuam mostrando qualquer impressora
         # encontrada normalmente; esse filtro vale só pra decidir quem
         # recebe os pedidos de impressão da malha.
-        tem_impressora_valida = impressora is not None and impressora.tipo_porta != "desconhecido"
-        if impressora is not None and not tem_impressora_valida:
+        tem_impressora_valida = (
+            impressora is not None
+            and impressora.tipo_porta != "desconhecido"
+            and impressora.disponivel
+        )
+        if impressora is not None and impressora.tipo_porta == "desconhecido":
             print(f"[RedeService] Impressora local '{impressora.nome}' encontrada, mas com porta não identificada (tipo_porta='{impressora.tipo_porta}') — não conta pra eleição de rede.")
+        elif impressora is not None and not impressora.disponivel:
+            print(f"[RedeService] Impressora local '{impressora.nome}' está instalada (tipo_porta='{impressora.tipo_porta}'), mas não parece conectada/disponível agora — não conta pra eleição de rede.")
 
         info = None
         if tem_impressora_valida:

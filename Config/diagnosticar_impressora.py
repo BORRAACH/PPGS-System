@@ -67,7 +67,7 @@ def listar_impressoras():
             f"- '{impressora.nome}' | modelo='{impressora.modelo}' "
             f"fabricante='{impressora.fabricante}' porta='{impressora.porta}' "
             f"tipo_porta='{impressora.tipo_porta}' status='{impressora.status}' "
-            f"padrao={impressora.padrao}"
+            f"padrao={impressora.padrao} disponivel={impressora.disponivel}"
         )
     return impressoras
 
@@ -147,8 +147,14 @@ def main() -> None:
 
     log(
         f"Impressora selecionada: '{impressora.nome}' "
-        f"(porta: {impressora.porta}, tipo: {impressora.tipo_porta}, status: {impressora.status})."
+        f"(porta: {impressora.porta}, tipo: {impressora.tipo_porta}, status: {impressora.status}, "
+        f"disponivel: {impressora.disponivel})."
     )
+    if not impressora.disponivel:
+        log(
+            "ATENÇÃO: esta impressora está instalada mas não parece conectada/disponível agora — "
+            "não vai contar como candidata na eleição de quem imprime pela malha (RedeService)."
+        )
 
     if args.sem_teste:
         log("Teste de impressão pulado (--sem-teste). === Diagnóstico concluído ===")

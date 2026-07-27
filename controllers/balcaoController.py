@@ -238,6 +238,7 @@ class BalcaoController(QObject):
             "tipoPorta": impressora.tipo_porta,
             "status": impressora.status,
             "padrao": impressora.padrao,
+            "disponivel": impressora.disponivel,
         })
 
     @staticmethod

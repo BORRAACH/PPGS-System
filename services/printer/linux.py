@@ -1,5 +1,6 @@
 import os
 import re
+import shutil
 import subprocess
 
 from .modelos import InfoImpressora
@@ -81,6 +82,40 @@ def _destino_padrao():
     saida = _executar(["lpstat", "-d"])
     m = re.search(r"system default destination:\s*(\S+)", saida)
     return m.group(1) if m else None
+
+
+def _uri_normalizada(uri_dispositivo):
+    """Remove a query string ("?serial=...", "?baud=...") de uma URI de
+    dispositivo — só o necessário pra comparar "é o mesmo dispositivo",
+    já que pequenas variações nesses parâmetros entre duas leituras (ex:
+    o CUPS reencontrando o mesmo dispositivo depois de um replug) não
+    mudam qual porta/aparelho é."""
+    return (uri_dispositivo or "").split("?", 1)[0]
+
+
+def _dispositivos_conectados_agora():
+    """URIs (normalizadas) dos dispositivos que o CUPS enxerga fisicamente
+    presentes AGORA, via `lpinfo -v` — diferente de `lpstat -v`, que só
+    lista a porta configurada na fila (e continua listando mesmo com o
+    aparelho desconectado, porque é config, não um scan ao vivo). `lpinfo
+    -v` é o comando que faz o scan de verdade (usb/serial/rede), o mesmo
+    usado normalmente pra achar impressoras na hora de instalar uma nova.
+
+    Retorna None (distinto de um set vazio) se o utilitário `lpinfo` não
+    está disponível — quem chama (coletar_impressoras) trata None como
+    "não deu pra confirmar a liveness" e assume disponível por padrão, em
+    vez de um set vazio genuíno (que significa "confirmado: nada
+    conectado agora")."""
+    if shutil.which("lpinfo") is None:
+        return None
+
+    saida = _executar(["lpinfo", "-v"])
+    uris = set()
+    for linha in saida.splitlines():
+        m = re.match(r"\S+\s+(\S+)", linha.strip())
+        if m:
+            uris.add(_uri_normalizada(m.group(1)))
+    return uris
 
 
 def _descricao_e_status(nome_impressora):
@@ -230,6 +265,10 @@ def coletar_impressoras():
 
     dispositivos = _dispositivos_por_impressora()
     padrao = _destino_padrao()
+    # None = "lpinfo" indisponível, não deu pra confirmar liveness nenhuma
+    # (ver _dispositivos_conectados_agora) — distinto de um set vazio, que
+    # significa "confirmado: nenhum dispositivo usb/serial visto agora".
+    dispositivos_vivos = _dispositivos_conectados_agora()
     print(f"[printer/linux] {len(nomes)} impressora(s) encontrada(s) via CUPS: {', '.join(nomes)} (padrão: {padrao or 'nenhuma'}).")
 
     impressoras = []
@@ -237,7 +276,20 @@ def coletar_impressoras():
         uri_dispositivo = dispositivos.get(nome, "")
         descricao, status, caminho_ppd = _descricao_e_status(nome)
         fabricante, modelo_ppd = _fabricante_e_modelo_do_ppd(caminho_ppd)
-        print(f"[printer/linux] '{nome}': device-uri='{uri_dispositivo}' status='{status}'")
+        tipo_porta = _classificar_porta(uri_dispositivo)
+
+        # Só usb/serial precisam de confirmação de liveness: o tipo de
+        # porta sozinho não muda quando o cabo é desconectado (a fila
+        # continua configurada pra "usb://..."/"serial:/dev/ttyUSB0"),
+        # então sem isso uma impressora usb instalada uma vez e nunca mais
+        # conectada continuaria contando como candidata pra eleição de
+        # rede (ver RedeService._detectar_impressora_em_thread).
+        if tipo_porta in ("usb", "serial") and dispositivos_vivos is not None:
+            disponivel = _uri_normalizada(uri_dispositivo) in dispositivos_vivos
+        else:
+            disponivel = True
+
+        print(f"[printer/linux] '{nome}': device-uri='{uri_dispositivo}' status='{status}' disponivel={disponivel}")
 
         impressoras.append(
             InfoImpressora(
@@ -246,9 +298,10 @@ def coletar_impressoras():
                 fabricante=fabricante,
                 driver=caminho_ppd,
                 porta=_extrair_porta(uri_dispositivo),
-                tipo_porta=_classificar_porta(uri_dispositivo),
+                tipo_porta=tipo_porta,
                 status=status,
                 padrao=(nome == padrao),
+                disponivel=disponivel,
                 bruto={
                     "uri_dispositivo": uri_dispositivo,
                     "descricao_cups": descricao,

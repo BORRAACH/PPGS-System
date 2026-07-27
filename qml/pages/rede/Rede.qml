@@ -467,6 +467,22 @@ Page {
                                 font.italic: true
                                 color: Estilo.cores.textoSecundario
                             }
+
+                            // "disponivel" vem False quando o SO ainda tem a
+                            // fila instalada (porta usb/serial), mas o
+                            // aparelho não está de fato conectado agora — ver
+                            // InfoImpressora.disponivel. Essa impressora não
+                            // entra na eleição de quem imprime pela malha
+                            // (RedeService), mesmo aparecendo aqui.
+                            Text {
+                                Layout.fillWidth: true
+                                visible: telaRede.infoImpressora.disponivel === false
+                                text: "Instalada, mas não parece conectada agora — não concorre à eleição da malha."
+                                font.pixelSize: 11
+                                font.italic: true
+                                color: Estilo.cores.textoSecundario
+                                wrapMode: Text.WordWrap
+                            }
                         }
 
                         Text {

@@ -28,6 +28,7 @@ $impressoras = Get-CimInstance -ClassName Win32_Printer | ForEach-Object {
         PortaHost         = $porta.PrinterHostAddress
         PortaDescricao    = $porta.Description
         Status            = $printer.PrinterStatus
+        ForaDeLinha       = [bool]$printer.WorkOffline
         Padrao            = [bool]$printer.Default
         Local             = [bool]$printer.Local
         Rede              = [bool]$printer.Network
@@ -144,7 +145,15 @@ def coletar_impressoras():
     for item in dados:
         nome_porta = item.get("PortName") or ""
         host_porta = item.get("PortaHost") or ""
-        print(f"[printer/windows] '{item.get('Nome', '')}': PortName='{nome_porta}' PortaHost='{host_porta}' Status='{item.get('Status', '')}'")
+        # WorkOffline é o Windows quem mantém, não este script: pra
+        # impressoras Plug-and-Play (que é o caso de usb/serial), o
+        # spooler detecta o dispositivo físico sumir e marca a fila como
+        # "fora de linha" sozinho — diferente de tipo_porta, que só olha o
+        # nome da porta e por isso continua "usb" pra sempre, mesmo com o
+        # cabo desconectado (a porta em si, "USB001", não desaparece só
+        # porque o dispositivo não está mais nela agora).
+        fora_de_linha = bool(item.get("ForaDeLinha"))
+        print(f"[printer/windows] '{item.get('Nome', '')}': PortName='{nome_porta}' PortaHost='{host_porta}' Status='{item.get('Status', '')}' ForaDeLinha={fora_de_linha}")
 
         impressoras.append(
             InfoImpressora(
@@ -156,6 +165,7 @@ def coletar_impressoras():
                 tipo_porta=_classificar_porta(nome_porta, host_porta),
                 status=str(item.get("Status", "")),
                 padrao=bool(item.get("Padrao")),
+                disponivel=not fora_de_linha,
                 bruto=item,
             )
         )
