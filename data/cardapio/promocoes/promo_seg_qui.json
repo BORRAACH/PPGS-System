@@ -1,0 +1,90 @@
+[
+  {
+    "nome": "Dois Queijos",
+    "ingredientes": "Molho, mussarela e catupiry",
+    "valorMini": "24,90",
+    "valorBroto": "34,90",
+    "valorGrande": "41,90",
+    "id": 23
+  },
+  {
+    "nome": "Calabresa",
+    "ingredientes": "Molho, calabresa e cebola",
+    "valorMini": "24,90",
+    "valorBroto": "34,90",
+    "valorGrande": "41,90",
+    "id": 32
+  },
+  {
+    "nome": "Catu Brócolis",
+    "ingredientes": "Molho, catupiry, brócolis, bacon e alho",
+    "valorMini": "24,90",
+    "valorBroto": "34,90",
+    "valorGrande": "41,90",
+    "id": 45
+  },
+  {
+    "nome": "Catu Frango",
+    "ingredientes": "Molho, catupiry e frango",
+    "valorMini": "24,90",
+    "valorBroto": "34,90",
+    "valorGrande": "41,90",
+    "id": 44
+  },
+  {
+    "nome": "Gênova",
+    "ingredientes": "Molho, mussarela, tomate, ovo e bacon",
+    "valorMini": "24,90",
+    "valorBroto": "34,90",
+    "valorGrande": "43,90",
+    "id": 30
+  },
+  {
+    "nome": "Veneza",
+    "ingredientes": "Molho, mussarela, peito de peru, catupiry e tomate",
+    "valorMini": "24,90",
+    "valorBroto": "34,90",
+    "valorGrande": "43,90",
+    "id": 31
+  },
+  {
+    "nome": "Frango Especial",
+    "ingredientes": "Molho, mussarela, frango e catupiry",
+    "valorMini": "24,90",
+    "valorBroto": "34,90",
+    "valorGrande": "43,90",
+    "id": 28
+  },
+  {
+    "nome": "Brócolis Especial",
+    "ingredientes": "Molho, mussarela, brócolis, catupiry, bacon e alho",
+    "valorMini": "24,90",
+    "valorBroto": "34,90",
+    "valorGrande": "43,90",
+    "id": 29
+  },
+  {
+    "nome": "Portuguesa",
+    "ingredientes": "Molho, mussarela, presunto, ovos e cebola",
+    "valorMini": "24,90",
+    "valorBroto": "34,90",
+    "valorGrande": "47,90",
+    "id": 15
+  },
+  {
+    "nome": "À Moda da Casa",
+    "ingredientes": "Molho, mussarela, calabresa, palmito e provolone",
+    "valorMini": "24,90",
+    "valorBroto": "34,90",
+    "valorGrande": "47,90",
+    "id": 2
+  },
+  {
+    "nome": "Strogonoff de Frango",
+    "ingredientes": "Molho, mussarela, strogonoff de frango e batata palha",
+    "valorMini": "24,90",
+    "valorBroto": "34,90",
+    "valorGrande": "47,90",
+    "id": 20
+  }
+]

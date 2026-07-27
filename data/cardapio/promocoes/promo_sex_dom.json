@@ -1,0 +1,96 @@
+[
+  {
+    "nome": "Calabresa",
+    "ingredientes": "Molho, calabresa e cebola",
+    "valorMini": "24,90",
+    "valorBroto": "34,90",
+    "valorGrande": "43,90",
+    "id": 32
+  },
+  {
+    "nome": "Catu Brócolis",
+    "ingredientes": "Molho, catupiry, brócolis, bacon e alho",
+    "valorMini": "24,90",
+    "valorBroto": "34,90",
+    "valorGrande": "43,90",
+    "id": 45
+  },
+  {
+    "nome": "Catu Frango",
+    "ingredientes": "Molho, catupiry e frango",
+    "valorMini": "24,90",
+    "valorBroto": "34,90",
+    "valorGrande": "43,90",
+    "id": 44
+  },
+  {
+    "nome": "Gênova",
+    "ingredientes": "Molho, mussarela, tomate, ovo e bacon",
+    "valorMini": "24,90",
+    "valorBroto": "34,90",
+    "valorGrande": "45,90",
+    "id": 30
+  },
+  {
+    "nome": "Veneza",
+    "ingredientes": "Molho, mussarela, peito de peru, catupiry e tomate",
+    "valorMini": "24,90",
+    "valorBroto": "34,90",
+    "valorGrande": "45,90",
+    "id": 31
+  },
+  {
+    "nome": "Caipira",
+    "ingredientes": "Molho, mussarela, catupiry, frango e milho",
+    "valorMini": "24,90",
+    "valorBroto": "34,90",
+    "valorGrande": "45,90",
+    "id": 42
+  },
+  {
+    "nome": "Strogonoff de Frango",
+    "ingredientes": "Molho, mussarela, strogonoff de frango e batata palha",
+    "valorMini": "24,90",
+    "valorBroto": "34,90",
+    "valorGrande": "49,90",
+    "id": 20
+  },
+  {
+    "nome": "Brigadeiro",
+    "ingredientes": "Chocolate ao leite ou chocolate branco e granulado",
+    "valorMini": "24,90",
+    "valorBroto": "34,90",
+    "valorGrande": "49,90",
+    "id": 65
+  },
+  {
+    "nome": "Portuguesa",
+    "ingredientes": "Molho, mussarela, presunto, ovos e cebola",
+    "valorMini": "24,90",
+    "valorBroto": "34,90",
+    "valorGrande": "49,90",
+    "id": 15
+  },
+  {
+    "nome": "Strogonoff de Carne",
+    "ingredientes": "Molho, mussarela, strogonoff de carne e batata palha",
+    "valorMini": "29,90",
+    "valorBroto": "39,90",
+    "valorGrande": "53,90",
+    "id": 21
+  },
+  {
+    "nome": "Costelinha",
+    "ingredientes": "Molho, mussarela, costelinha e cebola",
+    "valorBroto": "34,90",
+    "valorGrande": "53,90",
+    "id": 57
+  },
+  {
+    "nome": "Copa Lombo",
+    "ingredientes": "Molho, mussarela, copa lombo, catupiry e cebola",
+    "valorBroto": "34,90",
+    "valorGrande": "53,90",
+    "id": 56
+  }
+]
