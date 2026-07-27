@@ -19,8 +19,14 @@ _PORTA_TCP_PADRAO = 9100
 
 # PortName costuma bastar para classificar o tipo de porta no Windows:
 # "COM3" (serial), "USB001" (usb), "192.168.0.50" ou "IP_192.168.0.50"/"WSD-..." (rede).
+# O padrão de serial NÃO é ancorado no início ("COM\d+", não "^COM\d+"):
+# instaladores de driver de fabricante (ex: Bematech) costumam criar a
+# porta com um nome próprio que só embute o COM, tipo "Bematech_COM3" —
+# ancorado no início isso caía sempre em "desconhecido" e a impressora
+# ficava fora da eleição de rede mesmo instalada e funcionando (confirmado
+# em produção: porta "Bematech_COM3" batendo só nesse padrão).
 _PADROES_TIPO_PORTA = (
-    (re.compile(r"^COM\d+", re.IGNORECASE), "serial"),
+    (re.compile(r"COM\d+", re.IGNORECASE), "serial"),
     (re.compile(r"USB", re.IGNORECASE), "usb"),
     (re.compile(r"^\d{1,3}(\.\d{1,3}){3}"), "rede"),
     (re.compile(r"IP_|WSD|TCP", re.IGNORECASE), "rede"),
