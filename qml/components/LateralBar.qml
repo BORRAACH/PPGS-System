@@ -46,11 +46,11 @@ Rectangle {
             radius: Estilo.rounding.cheio
 
             // Itens de navegação: ícone, texto do tooltip, página de destino
-            // (vazia para o botão Home, que apenas volta ao topo da pilha) e
-            // objectName da tela para evitar push duplicado da mesma página.
+            // e objectName da tela — evita trocar de novo pra mesma página
+            // já aberta (ver onClicked abaixo).
             ListModel {
                 id: modeloNavegacao
-                ListElement { icone: "fa6s.house"; textoTooltip: "Início"; pagina: ""; nomeTela: "" }
+                ListElement { icone: "fa6s.house"; textoTooltip: "Início"; pagina: "../pages/inicio/Inicio.qml"; nomeTela: "pageHome" }
                 ListElement { icone: "fa6s.bag-shopping"; textoTooltip: "Balcão"; pagina: "../pages/balcao/Balcao.qml"; nomeTela: "telaBalcao" }
                 ListElement { icone: "fa6s.motorcycle"; textoTooltip: "Entrega"; pagina: "../pages/entrega/Entrega.qml"; nomeTela: "telaEntrega" }
                 ListElement { icone: "fa6s.utensils"; textoTooltip: "Salão"; pagina: "../pages/salao/Salao.qml"; nomeTela: "telaSalao" }
@@ -106,25 +106,23 @@ Rectangle {
                         }
 
                         onClicked: {
-                            if (pagina === "") {
-                                if (sideBar.stackView) {
-                                    sideBar.stackView.pop(null);
-                                }
-                            } else if (sideBar.stackView && sideBar.stackView.currentItem && sideBar.stackView.currentItem.objectName !== nomeTela) {
+                            if (sideBar.stackView && sideBar.stackView.currentItem && sideBar.stackView.currentItem.objectName !== nomeTela) {
                                 // replace(null, ...) troca a pilha INTEIRA
                                 // pela página nova — não push(), que só
                                 // empilha por cima sem nunca destruir nada.
                                 // Navegação aqui é sempre entre telas
-                                // irmãs (Balcão, Entrega, Salão...), nunca
-                                // um "entrar mais fundo" que precise voltar
-                                // depois — com push(), um dia inteiro
-                                // clicando entre elas (sem nunca voltar pro
-                                // Início, que é o único botão que limpa a
-                                // pilha) acumulava uma instância nova a
-                                // cada clique, cada uma com seu próprio
-                                // ListModel/Timer/conexões, sem nunca
-                                // liberar memória — exatamente o tipo de
-                                // vazamento que trava máquinas fracas ao
+                                // irmãs (Início, Balcão, Entrega, Salão...),
+                                // nunca um "entrar mais fundo" que precise
+                                // voltar depois, então Início não é mais um
+                                // caso especial (pop(null)) — é só mais um
+                                // destino, como qualquer outro (ver
+                                // qml/pages/inicio/Inicio.qml). Com push(),
+                                // um dia inteiro clicando entre telas sem
+                                // nunca "voltar" acumulava uma instância
+                                // nova a cada clique, cada uma com seu
+                                // próprio ListModel/Timer/conexões, sem
+                                // nunca liberar memória — exatamente o tipo
+                                // de vazamento que trava máquinas fracas ao
                                 // longo do expediente.
                                 sideBar.stackView.replace(null, pagina, {}, StackView.Immediate);
                             }
