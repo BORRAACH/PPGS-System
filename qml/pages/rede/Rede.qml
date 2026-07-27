@@ -135,6 +135,19 @@ Page {
                 onClicked: {
                     telaRede.carregarPeers();
                     telaRede.carregarImpressora();
+                    // Força uma nova checagem da impressora desta máquina
+                    // agora (em vez de esperar o próximo tique de 30s do
+                    // RedeService) — cobre o caso comum de acabar de
+                    // plugar a impressora na USB e clicar em Atualizar
+                    // esperando a reeleição imediata. O resultado chega
+                    // depois, de forma assíncrona (ver
+                    // RedeService.verificarImpressoraLocal); quando a
+                    // eleição realmente mudar, impressoraPrincipalMudou
+                    // (já conectado acima) atualiza infoImpressoraPrincipal
+                    // sozinho — chamar aqui também cobre o caso de outra
+                    // máquina já ter sido reeleita antes deste clique.
+                    redeController.verificarImpressoraLocal();
+                    telaRede.carregarImpressoraPrincipal();
                 }
 
                 contentItem: Row {

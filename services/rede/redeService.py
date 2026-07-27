@@ -368,6 +368,19 @@ class RedeService(QObject):
 
     # ---------- Impressora local e eleição da máquina que imprime ----------
 
+    @pyqtSlot()
+    def verificarImpressoraLocal(self):
+        """Força uma nova checagem da impressora local agora, em vez de
+        esperar o próximo tique de _timer_impressora (30s) — usado pelo
+        botão "Atualizar" de Rede.qml, pro caso comum de acabar de plugar a
+        Bematech na USB e querer que ESTA máquina já seja reeleita a
+        principal, sem esperar. O resultado (e a reeleição, se mudar
+        alguma coisa) chega do mesmo jeito assíncrono de sempre — ver
+        _ao_verificar_impressora_local/_recalcular_maquina_impressora — e
+        Rede.qml já está escutando impressoraPrincipalMudou pra atualizar
+        sozinha quando isso acontecer."""
+        self._detectar_impressora_local()
+
     def _detectar_impressora_local(self):
         threading.Thread(target=self._detectar_impressora_em_thread, daemon=True).start()
 
