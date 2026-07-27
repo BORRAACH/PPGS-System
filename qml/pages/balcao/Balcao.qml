@@ -262,8 +262,29 @@ Page {
                 btnStatusPagamento.pago = false;
             }
 
+            // Rola verticalmente quando a lista de pedidos cresce (ou a
+            // janela é pequena) o suficiente pra empurrar o conteúdo pra
+            // fora da área visível — mesmo padrão de Flickable+ScrollBar
+            // usado em PainelDetalhe.qml (Consulta). Sem isso, os botões
+            // de baixo (Imprimir/Lançar/Voltar) ficavam inacessíveis.
+            Flickable {
+                id: flickableConteudo
+
+                anchors.fill: parent
+                clip: true
+                contentWidth: width
+                contentHeight: Math.max(height, rowConteudo.implicitHeight + 40)
+                boundsBehavior: Flickable.StopAtBounds
+
+                ScrollBar.vertical: ScrollBar {
+                    policy: ScrollBar.AsNeeded
+                }
+
             Row {
-                anchors.centerIn: parent
+                id: rowConteudo
+
+                anchors.horizontalCenter: parent.horizontalCenter
+                anchors.verticalCenter: parent.verticalCenter
                 spacing: 30
 
                 Column {
@@ -887,6 +908,8 @@ Page {
                     troco: comboFormaPagamento.currentText === "Dinheiro" ? inputTroco.text : ""
                     pago: btnStatusPagamento.pago
                 }
+
+            }
 
             }
 
