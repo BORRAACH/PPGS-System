@@ -80,6 +80,8 @@ CAMPOS = [
     "data",
     "pedido",
     "observacao_item",
+    "borda_item",
+    "adicional_item",
     "observacao_entrega",
     "forma_pagamento",
     "troco_para",
@@ -103,6 +105,8 @@ RODULOS_CAMPOS = {
     # "observacao_entrega" é a observação geral do pedido, que só existe na
     # tela de Entrega, perto dos dados de endereço.
     "observacao_item": "Observação do item (sabor)",
+    "borda_item": "Borda da pizza",
+    "adicional_item": "Adicional do sabor",
     "observacao_entrega": "Observação geral (perto do endereço)",
     "forma_pagamento": "Forma de pagamento",
     "troco_para": "Troco para",

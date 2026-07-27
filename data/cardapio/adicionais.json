@@ -1,0 +1,54 @@
+{
+  "bordas": [
+    {
+      "nome": "Borda Catupiry",
+      "valor": "10,00"
+    },
+    {
+      "nome": "Borda Cheddar",
+      "valor": "10,00"
+    },
+    {
+      "nome": "Borda Mussarela",
+      "valor": "18,00"
+    },
+    {
+      "nome": "Borda Chocolate",
+      "valor": "12,00"
+    }
+  ],
+  "adicionais": [
+    {
+      "nome": "Bacon",
+      "valor": "5,00"
+    },
+    {
+      "nome": "Catupiry",
+      "valor": "5,00"
+    },
+    {
+      "nome": "Cheddar",
+      "valor": "5,00"
+    },
+    {
+      "nome": "Cebola",
+      "valor": "3,00"
+    },
+    {
+      "nome": "Ovo",
+      "valor": "3,00"
+    },
+    {
+      "nome": "Milho",
+      "valor": "3,00"
+    },
+    {
+      "nome": "Azeitona",
+      "valor": "3,00"
+    },
+    {
+      "nome": "Champignon",
+      "valor": "4,00"
+    }
+  ]
+}

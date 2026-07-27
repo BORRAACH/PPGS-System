@@ -145,11 +145,15 @@ Page {
                 modeloPedidos.setProperty(telaSalao.indicePedidoAtual, "pedido", itens[0].nome);
                 modeloPedidos.setProperty(telaSalao.indicePedidoAtual, "valor", itens[0].valor);
                 modeloPedidos.setProperty(telaSalao.indicePedidoAtual, "observacao", itens[0].observacao || "");
+                modeloPedidos.setProperty(telaSalao.indicePedidoAtual, "borda", itens[0].borda || null);
+                modeloPedidos.setProperty(telaSalao.indicePedidoAtual, "adicionais", itens[0].adicionais || []);
                 for (var i = 1; i < itens.length; i++) {
                     modeloPedidos.insert(telaSalao.indicePedidoAtual + i, {
                         "pedido": itens[i].nome,
                         "observacao": itens[i].observacao || "",
-                        "valor": itens[i].valor
+                        "valor": itens[i].valor,
+                        "borda": itens[i].borda || null,
+                        "adicionais": itens[i].adicionais || []
                     });
                 }
                 return ;
@@ -199,7 +203,9 @@ Page {
                     itens.push({
                         "pedido": item.pedido,
                         "observacao": item.observacao,
-                        "valor": item.valor
+                        "valor": item.valor,
+                        "borda": item.borda || null,
+                        "adicionais": item.adicionais || []
                     });
                 }
 

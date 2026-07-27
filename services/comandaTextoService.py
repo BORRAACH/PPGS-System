@@ -48,50 +48,95 @@ def valor_para_float(valor_texto):
         return 0.0
 
 
-def montar_grupos(itens):
-    """Converte os itens do pedido em grupos de linhas (coluna_pedido, observacao, valor).
+# Prefixos que marcam as linhas extras impressas abaixo de um item (ver
+# montar_grupos/formatar_tabela) — precisam ser reconhecíveis de volta por
+# consultaController._reconstruir_itens, para não confundi-las com uma
+# observação livre digitada pelo atendente.
+PREFIXO_ADICIONAL = "+ "
+PREFIXO_BORDA = "* "
 
-    Cada item vira um grupo (uma pizza meio a meio gera várias linhas, mas
-    continua sendo um único grupo), para que se possa separar os grupos
-    com uma linha em branco depois de formatados.
-    """
+
+def montar_grupos(itens):
+    """Converte os itens do pedido em grupos (um por item; uma pizza meio a
+    meio gera várias linhas — uma por sabor/fração — mas continua sendo um
+    único grupo), para que se possa separar os grupos com uma linha em
+    branco depois de formatados.
+
+    Cada grupo é um dict: {"linhas": [(coluna_pedido, valor, extras)], ...},
+    "borda": texto da borda (nível do item/pizza inteira, "" se não houver),
+    "observacao": texto da observação geral do item.
+
+    "extras" (dentro de cada linha) é a lista de adicionais atribuídos
+    especificamente àquele sabor (ver Pizzas.qml/PopupAdicionaisBordas.qml) —
+    cada um sai numa linha própria, logo abaixo da fração correspondente."""
     grupos = []
     for item in itens:
         # Nome do item e observação saem em caixa alta no cupom impresso.
         pedido = item.get("pedido", "").upper()
         observacao = item.get("observacao", "").upper()
         valor = item.get("valor", "")
+        adicionais = item.get("adicionais") or []
 
         sabores, tamanho = dividir_sabores(pedido)
 
         if len(sabores) <= 1:
-            grupos.append([(f"- {pedido}", observacao, valor)])
-            continue
+            sabor_unico = sabores[0] if sabores else pedido
+            linhas = [(f"- {pedido}", valor, _extras_adicionais(adicionais, sabor_unico))]
+        else:
+            # Pizza meio a meio: cada sabor ocupa "1/N" da pizza.
+            total = len(sabores)
+            linhas = []
+            for indice, sabor in enumerate(sabores):
+                nome_sabor = f"{sabor} ({tamanho})" if indice == 0 and tamanho else sabor
+                coluna_pedido = f"1/{total} - {nome_sabor}"
+                valor_linha = valor if indice == 0 else ""
+                linhas.append((coluna_pedido, valor_linha, _extras_adicionais(adicionais, sabor)))
 
-        # Pizza meio a meio: cada sabor ocupa "1/N" da pizza.
-        total = len(sabores)
-        grupo = []
-        for indice, sabor in enumerate(sabores):
-            nome_sabor = f"{sabor} ({tamanho})" if indice == 0 and tamanho else sabor
-            coluna_pedido = f"1/{total} - {nome_sabor}"
-            if indice == 0:
-                grupo.append((coluna_pedido, observacao, valor))
-            else:
-                grupo.append((coluna_pedido, "", ""))
-        grupos.append(grupo)
+        grupos.append({
+            "linhas": linhas,
+            "observacao": observacao,
+            "borda": _formatar_borda(item.get("borda")),
+        })
 
     return grupos
 
 
+def _extras_adicionais(adicionais, sabor):
+    """Linhas dos adicionais atribuídos a `sabor` (comparação sem diferenciar
+    caixa — os nomes de sabor chegam em caixa alta do cupom, mas o adicional
+    guarda o nome do sabor como veio de Pizzas.qml)."""
+    extras = []
+    for adicional in adicionais:
+        if (adicional.get("sabor") or "").strip().upper() != (sabor or "").strip().upper():
+            continue
+        nome = (adicional.get("nome") or "").upper()
+        valor_adicional = adicional.get("valor") or ""
+        sufixo = f" ({valor_adicional})" if valor_adicional else ""
+        extras.append(f"{PREFIXO_ADICIONAL}{nome}{sufixo}")
+    return extras
+
+
+def _formatar_borda(borda):
+    if not borda:
+        return ""
+
+    nome = (borda.get("nome") or "").strip()
+    if not nome:
+        return ""
+
+    valor_borda = borda.get("valor") or ""
+    sufixo = f" ({valor_borda})" if valor_borda else ""
+    return f"{PREFIXO_BORDA}{nome.upper()}{sufixo}"
+
+
 def formatar_tabela(grupos):
     """Alinha pedido e valor em uma coluna "|" e separa cada grupo com uma
-    linha em branco. A observação (quando houver) vai numa linha própria,
-    recuada e com o estilo configurado para o campo "observacao_item" (ver
-    services/comandaEstiloService.py), depois de TODAS as frações do
-    grupo — mesmo numa pizza meio a meio (ou dividida em mais partes), a
-    observação sai só ao final, abaixo do nome completo, nunca entre uma
-    fração e outra."""
-    linhas = [linha for grupo in grupos for linha in grupo]
+    linha em branco. Depois de cada fração vêm seus adicionais (se houver);
+    depois de TODAS as frações do grupo vêm a borda (quando houver) e por
+    último a observação — mesmo numa pizza meio a meio (ou dividida em mais
+    partes), borda e observação saem só ao final, abaixo do nome completo,
+    nunca entre uma fração e outra."""
+    linhas = [linha for grupo in grupos for linha in grupo["linhas"]]
     if not linhas:
         return []
 
@@ -102,17 +147,18 @@ def formatar_tabela(grupos):
         if indice > 0:
             texto_linhas.append("")
 
-        observacao_grupo = ""
-        for coluna_pedido, observacao, valor in grupo:
+        for coluna_pedido, valor, extras in grupo["linhas"]:
             # Alinha primeiro com o texto puro, e só então aplica o
             # estilo configurado — assim os bytes de controle (invisíveis
             # na impressão) não contam como largura na coluna.
             coluna_pedido_fmt = estilo.formatar_campo(coluna_pedido.ljust(largura_pedido), "pedido")
             texto_linhas.append(f"{coluna_pedido_fmt} | {valor}")
-            if observacao:
-                observacao_grupo = observacao
+            for extra in extras:
+                texto_linhas.append(f"  {estilo.formatar_campo(extra, 'adicional_item')}")
 
-        if observacao_grupo:
-            texto_linhas.append(f"  {estilo.formatar_campo(observacao_grupo, 'observacao_item')}")
+        if grupo["borda"]:
+            texto_linhas.append(f"  {estilo.formatar_campo(grupo['borda'], 'borda_item')}")
+        if grupo["observacao"]:
+            texto_linhas.append(f"  {estilo.formatar_campo(grupo['observacao'], 'observacao_item')}")
 
     return texto_linhas

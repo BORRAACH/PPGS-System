@@ -4,6 +4,7 @@ import re
 from PyQt6.QtCore import QByteArray, QObject, pyqtSignal, pyqtSlot
 
 from services import comandaParserService as parser
+from services.comandaTextoService import PREFIXO_ADICIONAL, PREFIXO_BORDA
 from services.rede import rede
 
 # Extraem os campos do cabeçalho do cupom (ver balcaoController/
@@ -25,6 +26,12 @@ _PADRAO_TAXA_ENTREGA = re.compile(r"^Taxa de entrega:[ \t]*(.*)$", re.MULTILINE)
 # (ver balcaoController/entregaController._formatarTabela).
 _PADRAO_LINHA_TABELA = re.compile(r"^(.*)\|(.*)$")
 _PADRAO_LINHA_OBSERVACAO = re.compile(r"^  (.+)$")
+# Linhas de adicional/borda (ver comandaTextoService.montar_grupos) — casadas
+# ANTES de _PADRAO_LINHA_OBSERVACAO (que bateria com qualquer uma delas
+# também, por ser só "recuo + texto"), senão um adicional/borda vira
+# observação na reconstrução.
+_PADRAO_LINHA_ADICIONAL = re.compile(r"^  " + re.escape(PREFIXO_ADICIONAL) + r"(.+?)(?: \((.+)\))?$")
+_PADRAO_LINHA_BORDA = re.compile(r"^  " + re.escape(PREFIXO_BORDA) + r"(.+?)(?: \((.+)\))?$")
 # Fração de sabor de pizza meio a meio: "1/3 - Nome do Sabor".
 _PADRAO_FRACAO_SABOR = re.compile(r"^\d+/\d+ - (.+)$")
 # Sufixo de tamanho no primeiro sabor: "Nome do Sabor (Grande)".
@@ -49,26 +56,49 @@ def _dividir_endereco_numero(endereco_completo):
 
 
 def _reconstruir_itens(linhas_tabela):
-    """Desfaz balcaoController._montarGrupos/_formatarTabela: volta das
+    """Desfaz comandaTextoService.montar_grupos/formatar_tabela: volta das
     linhas já formatadas do cupom para a lista de itens (pedido, observação,
-    valor) como ficavam em modeloPedidos antes de imprimir."""
+    valor, borda, adicionais) como ficavam em modeloPedidos antes de
+    imprimir."""
     itens = []
     grupo_atual = []
+    # Borda é um extra de nível de grupo (a pizza inteira), não de uma fração
+    # específica — por isso fica fora de grupo_atual, num estado à parte que
+    # fechar_grupo() consome e reseta.
+    borda_atual = {"nome": "", "valor": ""}
 
     def fechar_grupo():
         if not grupo_atual:
             return
 
+        borda = {"nome": borda_atual["nome"], "valor": borda_atual["valor"]} if borda_atual["nome"] else None
+
         if len(grupo_atual) == 1:
-            coluna_pedido, observacao, valor = grupo_atual[0]
+            coluna_pedido, observacao, valor, adicionais = grupo_atual[0]
             pedido = coluna_pedido[2:] if coluna_pedido.startswith("- ") else coluna_pedido
-            itens.append({"pedido": pedido, "observacao": observacao, "valor": valor})
+            # O adicional foi salvo (em Pizzas.qml) com o nome do sabor SEM o
+            # sufixo de tamanho — precisa desfazer o mesmo sufixo aqui para
+            # que "sabor" volte a bater com o nome usado ao reimprimir.
+            sabor_sem_tamanho = pedido
+            match_tamanho = _PADRAO_SUFIXO_TAMANHO.match(pedido)
+            if match_tamanho and match_tamanho.group(2).strip().upper() in _TAMANHOS_VALIDOS_UPPER:
+                sabor_sem_tamanho = match_tamanho.group(1)
+            for adicional in adicionais:
+                adicional["sabor"] = sabor_sem_tamanho
+            itens.append({
+                "pedido": pedido,
+                "observacao": observacao,
+                "valor": valor,
+                "borda": borda,
+                "adicionais": adicionais,
+            })
         else:
             sabores = []
             tamanho = ""
             observacao_final = ""
             valor_final = ""
-            for indice, (coluna_pedido, observacao, valor) in enumerate(grupo_atual):
+            adicionais_totais = []
+            for indice, (coluna_pedido, observacao, valor, adicionais) in enumerate(grupo_atual):
                 match_fracao = _PADRAO_FRACAO_SABOR.match(coluna_pedido)
                 nome = match_fracao.group(1) if match_fracao else coluna_pedido
                 if indice == 0:
@@ -78,30 +108,60 @@ def _reconstruir_itens(linhas_tabela):
                         tamanho = match_tamanho.group(2)
                     valor_final = valor
                 # A observação do grupo agora é impressa depois de TODAS as
-                # frações (ver _formatarTabela), então fica anexada à última
+                # frações (ver formatar_tabela), então fica anexada à última
                 # fração lida, não necessariamente à primeira.
                 if observacao:
                     observacao_final = observacao
+                for adicional in adicionais:
+                    adicional["sabor"] = nome
+                adicionais_totais.extend(adicionais)
                 sabores.append(nome)
 
             pedido = " / ".join(sabores)
             if tamanho:
                 pedido += f" ({tamanho})"
-            itens.append({"pedido": pedido, "observacao": observacao_final, "valor": valor_final})
+            itens.append({
+                "pedido": pedido,
+                "observacao": observacao_final,
+                "valor": valor_final,
+                "borda": borda,
+                "adicionais": adicionais_totais,
+            })
 
         grupo_atual.clear()
+        borda_atual["nome"] = ""
+        borda_atual["valor"] = ""
 
     for linha in linhas_tabela:
         if linha.strip() == "":
             fechar_grupo()
             continue
 
+        # Adicional (recuado, "+ ..."), pertence à fração imediatamente
+        # acima dele dentro do grupo atual.
+        match_adicional = _PADRAO_LINHA_ADICIONAL.match(linha)
+        if match_adicional and grupo_atual:
+            _coluna_pedido, _observacao, _valor, adicionais = grupo_atual[-1]
+            adicionais.append({
+                "nome": match_adicional.group(1).strip(),
+                "valor": (match_adicional.group(2) or "").strip(),
+            })
+            continue
+
+        # Borda (recuada, "* ..."), pertence ao grupo inteiro — só pode
+        # haver uma por pizza (ver PopupAdicionaisBordas.qml).
+        match_borda = _PADRAO_LINHA_BORDA.match(linha)
+        if match_borda and grupo_atual:
+            borda_atual["nome"] = match_borda.group(1).strip()
+            borda_atual["valor"] = (match_borda.group(2) or "").strip()
+            continue
+
         # Linha de observação (recuada), pertence ao pedido imediatamente
         # acima dela dentro do grupo atual.
         match_observacao = _PADRAO_LINHA_OBSERVACAO.match(linha)
         if match_observacao and grupo_atual:
-            coluna_pedido, _observacao_antiga, valor = grupo_atual[-1]
-            grupo_atual[-1] = (coluna_pedido, match_observacao.group(1).strip(), valor)
+            coluna_pedido, _observacao_antiga, valor, adicionais = grupo_atual[-1]
+            grupo_atual[-1] = (coluna_pedido, match_observacao.group(1).strip(), valor, adicionais)
             continue
 
         match_linha = _PADRAO_LINHA_TABELA.match(linha)
@@ -109,7 +169,7 @@ def _reconstruir_itens(linhas_tabela):
             continue
 
         coluna_pedido, valor = (g.strip() for g in match_linha.groups())
-        grupo_atual.append((coluna_pedido, "", valor))
+        grupo_atual.append((coluna_pedido, "", valor, []))
 
     fechar_grupo()
     return itens

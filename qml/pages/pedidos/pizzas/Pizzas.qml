@@ -24,7 +24,11 @@ Page {
     property var selecionados: []
     // Pizzas já fechadas nesta visita (cada uma com seus sabores e tamanho
     // próprios) — permite montar mais de uma pizza sem sair desta tela.
-    // Cada item: { sabores: [...], tamanho: "Grande", valorNum: 45.0 }
+    // Cada item: { sabores: [...], tamanho: "Grande", valorNum: 45.0,
+    // borda: null | {nome, valorNum}, adicionais: [{sabor, nome, valorNum}] }.
+    // Borda/adicionais só podem ser atribuídos aqui, nunca à pizza ainda em
+    // montagem (ver btnAdicionaisBordas) — ela só ganha uma posição estável
+    // nesta lista depois de "Adicionar Pizza".
     property var pizzasMontadas: []
     // Tamanho atualmente selecionado: "Grande", "Broto" ou "Mini"
     property string tamanhoSelecionado: "Grande"
@@ -44,7 +48,7 @@ Page {
     readonly property real valorTotalPedido: {
         var soma = 0;
         for (var i = 0; i < pizzasMontadas.length; i++) {
-            soma += pizzasMontadas[i].valorNum;
+            soma += valorFinalPizza(pizzasMontadas[i]);
         }
         return soma + valorAtualMaior;
     }
@@ -60,7 +64,9 @@ Page {
         lista.push({
             "sabores": selecionados.slice(),
             "tamanho": tamanhoSelecionado,
-            "valorNum": valorAtualMaior
+            "valorNum": valorAtualMaior,
+            "borda": null,
+            "adicionais": []
         });
         pizzasMontadas = lista;
         selecionados = [];
@@ -69,6 +75,78 @@ Page {
     function removerPizzaMontada(indice) {
         var lista = pizzasMontadas.slice();
         lista.splice(indice, 1);
+        pizzasMontadas = lista;
+    }
+
+    // Soma do valor da borda (se houver) + todos os adicionais de uma pizza
+    // já montada — usado no total do pedido e no cartão de cada pizza.
+    function valorExtrasPizza(pizza) {
+        var soma = pizza.borda ? pizza.borda.valorNum : 0;
+        var adicionais = pizza.adicionais || [];
+        for (var i = 0; i < adicionais.length; i++) {
+            soma += adicionais[i].valorNum;
+        }
+        return soma;
+    }
+
+    function valorFinalPizza(pizza) {
+        return pizza.valorNum + valorExtrasPizza(pizza);
+    }
+
+    // Resumo textual da borda/adicionais de uma pizza, exibido junto dos
+    // sabores no cartão de "PIZZAS ADICIONADAS".
+    function resumoExtrasPizza(pizza) {
+        var partes = [];
+        if (pizza.borda)
+            partes.push(pizza.borda.nome);
+
+        var adicionais = pizza.adicionais || [];
+        for (var i = 0; i < adicionais.length; i++) {
+            partes.push("+ " + adicionais[i].nome + " (" + adicionais[i].sabor + ")");
+        }
+        return partes.length > 0 ? " — " + partes.join(", ") : "";
+    }
+
+    // Chamadas pelo PopupAdicionaisBordas ao concluir a escolha — sempre
+    // reconstroem o item e reatribuem pizzasMontadas (em vez de mutar o
+    // array/objeto in-place), porque QML só percebe a mudança de uma
+    // "property var" quando ela é reatribuída, não quando seu conteúdo é
+    // alterado por dentro.
+    function atribuirBorda(indicePizza, borda) {
+        if (indicePizza < 0 || indicePizza >= pizzasMontadas.length)
+            return;
+
+        var lista = pizzasMontadas.slice();
+        var atual = lista[indicePizza];
+        lista[indicePizza] = {
+            "sabores": atual.sabores,
+            "tamanho": atual.tamanho,
+            "valorNum": atual.valorNum,
+            "borda": borda,
+            "adicionais": atual.adicionais
+        };
+        pizzasMontadas = lista;
+    }
+
+    function atribuirAdicional(indicePizza, nomeSabor, adicional) {
+        if (indicePizza < 0 || indicePizza >= pizzasMontadas.length)
+            return;
+
+        var lista = pizzasMontadas.slice();
+        var atual = lista[indicePizza];
+        var adicionaisNovos = (atual.adicionais || []).slice();
+        adicionaisNovos.push({
+            "sabor": nomeSabor,
+            "nome": adicional.nome,
+            "valorNum": adicional.valorNum
+        });
+        lista[indicePizza] = {
+            "sabores": atual.sabores,
+            "tamanho": atual.tamanho,
+            "valorNum": atual.valorNum,
+            "borda": atual.borda,
+            "adicionais": adicionaisNovos
+        };
         pizzasMontadas = lista;
     }
 
@@ -264,6 +342,18 @@ Page {
     // Modelo auxiliar para exibir apenas os itens filtrados
     ListModel {
         id: modeloFiltrado
+    }
+
+    PopupAdicionaisBordas {
+        id: popupAdicionaisBordas
+
+        pizzasMontadas: telaPizzas.pizzasMontadas
+        onAtribuirBorda: function (indicePizza, borda) {
+            telaPizzas.atribuirBorda(indicePizza, borda);
+        }
+        onAtribuirAdicional: function (indicePizza, nomeSabor, adicional) {
+            telaPizzas.atribuirAdicional(indicePizza, nomeSabor, adicional);
+        }
     }
 
     // Layout Principal
@@ -767,11 +857,50 @@ Page {
                 }
             }
 
+            // 3.1. Borda/adicional só fazem sentido numa pizza que já tem
+            // sabores e tamanho fechados — por isso opera sobre
+            // pizzasMontadas, não sobre a pizza em andamento (selecionados).
+            Button {
+                id: btnAdicionaisBordas
+
+                width: parent.width
+                height: 42
+                enabled: pizzasMontadas.length > 0
+                onClicked: popupAdicionaisBordas.open()
+
+                contentItem: Row {
+                    spacing: 6
+                    anchors.centerIn: parent
+                    opacity: btnAdicionaisBordas.enabled ? 1 : 0.6
+
+                    Icone {
+                        nome: "fa6s.plus"
+                        cor: "#ffffff"
+                        tamanho: 14
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
+                    Text {
+                        text: "Adicionais ou Bordas"
+                        font.pixelSize: 14
+                        font.bold: true
+                        color: "#ffffff"
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
+                }
+
+                background: Rectangle {
+                    radius: Estilo.rounding.grande
+                    color: !btnAdicionaisBordas.enabled ? "#bdc3c7" : (btnAdicionaisBordas.down ? "#0f766e" : (btnAdicionaisBordas.hovered ? "#14b8a6" : "#0d9488"))
+                    border.color: !btnAdicionaisBordas.enabled ? "#bdc3c7" : "#0f766e"
+                    border.width: 1
+                }
+            }
+
             // 4. Pizzas já adicionadas ao pedido — cada uma pode ser
             // removida individualmente antes de confirmar.
             Rectangle {
                 width: parent.width
-                height: parent.height - 210 - 110 - 42 - 65 - 46 - (12 * 5)
+                height: parent.height - 210 - 110 - 42 - 42 - 65 - 46 - (12 * 6)
                 color: "#ffffff"
                 radius: Estilo.rounding.medio
                 border.color: Estilo.cores.bordaCard
@@ -885,7 +1014,7 @@ Page {
                                     Text {
                                         id: textoValorPizzaMontada
 
-                                        text: "R$ " + modelData.valorNum.toFixed(2).replace(".", ",")
+                                        text: "R$ " + valorFinalPizza(modelData).toFixed(2).replace(".", ",")
                                         font.pixelSize: 12
                                         color: Estilo.cores.textoSecundario
                                         anchors.right: btnRemoverPizzaMontada.left
@@ -896,7 +1025,7 @@ Page {
                                     Text {
                                         text: modelData.sabores.map(function (s) {
                                             return s.nome;
-                                        }).join(" / ")
+                                        }).join(" / ") + resumoExtrasPizza(modelData)
                                         font.pixelSize: 13
                                         font.bold: true
                                         color: Estilo.cores.texto
@@ -988,7 +1117,9 @@ Page {
                             listaFinal.push({
                                 "sabores": selecionados.slice(),
                                 "tamanho": tamanhoSelecionado,
-                                "valorNum": valorAtualMaior
+                                "valorNum": valorAtualMaior,
+                                "borda": null,
+                                "adicionais": []
                             });
                         }
                         if (listaFinal.length === 0)
@@ -998,10 +1129,23 @@ Page {
                             var nomesArray = pizza.sabores.map(function (item) {
                                 return item.nome;
                             });
+                            var borda = pizza.borda ? {
+                                "nome": pizza.borda.nome,
+                                "valor": "R$ " + pizza.borda.valorNum.toFixed(2).replace(".", ",")
+                            } : null;
+                            var adicionais = (pizza.adicionais || []).map(function (adicional) {
+                                return {
+                                    "sabor": adicional.sabor,
+                                    "nome": adicional.nome,
+                                    "valor": "R$ " + adicional.valorNum.toFixed(2).replace(".", ",")
+                                };
+                            });
                             return {
                                 "nome": nomesArray.join(" / ") + " (" + pizza.tamanho + ")",
-                                "valor": "R$ " + pizza.valorNum.toFixed(2).replace(".", ","),
-                                "observacao": ""
+                                "valor": "R$ " + valorFinalPizza(pizza).toFixed(2).replace(".", ","),
+                                "observacao": "",
+                                "borda": borda,
+                                "adicionais": adicionais
                             };
                         });
                         if (typeof onPedidoSelecionado === "function")
