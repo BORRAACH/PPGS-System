@@ -263,7 +263,15 @@ def salvar(chave_categoria, itens):
     temporario = caminho + ".tmp"
     try:
         os.makedirs(os.path.dirname(caminho), exist_ok=True)
-        with open(temporario, "w", encoding="utf-8") as arquivo:
+        # newline="\n" força LF mesmo no Windows (Python em modo texto
+        # normalmente escreve "\r\n" lá) — sem isso, todo cardápio salvo
+        # pela tela numa máquina Windows diverge do arquivo commitado só
+        # por causa da quebra de linha, deixando data/cardapio/*.json
+        # "modificado localmente" pro git mesmo sem nenhuma edição de
+        # verdade. Isso trava o autoupdate (ver Config/atualizador.py:
+        # "git merge --ff-only" se recusa a mexer num arquivo com mudança
+        # local, sempre que uma atualização também tocar nesse arquivo).
+        with open(temporario, "w", encoding="utf-8", newline="\n") as arquivo:
             json.dump(saida, arquivo, indent=2, ensure_ascii=False)
             arquivo.write("\n")
         os.replace(temporario, caminho)

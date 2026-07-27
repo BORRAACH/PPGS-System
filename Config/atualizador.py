@@ -197,11 +197,50 @@ def _perguntar_atualizar(quantidade, resumo):
     return caixa.clickedButton() is botao_atualizar
 
 
+def _ha_mudancas_locais_em(caminho):
+    """True se `caminho` (relativo à raiz do projeto) tem alguma mudança
+    não commitada — modificada, staged ou não rastreada."""
+    saida = _rodar_git("status", "--porcelain", "--", caminho)
+    return bool(saida)
+
+
+def _guardar_cardapio_local():
+    """Poe de lado (git stash) qualquer mudança não commitada em
+    data/cardapio/*.json antes do merge — ver comentário em _atualizar()
+    sobre por que esses arquivos ficam localmente modificados sozinhos.
+    Devolve True se guardou algo (e portanto precisa tentar devolver
+    depois), False se não havia nada pra guardar."""
+    if not _ha_mudancas_locais_em("data/cardapio"):
+        return False
+
+    print("[atualizador] data/cardapio/*.json tem mudanças locais (provavelmente só a tela "
+          "Cardápio salvando com \\r\\n no Windows, ver services/cardapioService.py) — guardando "
+          "num stash antes de atualizar, pra não travar o merge.")
+    _rodar_git("stash", "push", "--include-untracked", "--message", "atualizador: cardápio local antes de atualizar", "--", "data/cardapio")
+    return True
+
+
+def _desfazer_guarda_cardapio_local():
+    """Só chamado quando o merge NÃO rolou — a árvore de trabalho
+    continua exatamente onde estava quando _guardar_cardapio_local()
+    guardou o stash, então reaplicar aqui é sempre seguro (não tem como
+    dar conflito contra a mesma árvore de onde saiu)."""
+    _rodar_git("stash", "pop")
+
+
 def _atualizar(branch, upstream):
     from PyQt6.QtWidgets import QMessageBox
 
     print(f"[atualizador] Atualizando '{branch}' a partir de '{upstream}'...")
-    if _rodar_git("merge", "--ff-only", upstream) is None:
+
+    guardou_cardapio = _guardar_cardapio_local()
+    resultado_merge = _rodar_git("merge", "--ff-only", upstream)
+
+    if resultado_merge is None:
+        if guardou_cardapio:
+            # O merge falhou por outro motivo (não pelo cardápio, que já
+            # tiramos do caminho) — devolve como estava antes de desistir.
+            _desfazer_guarda_cardapio_local()
         QMessageBox.warning(
             None,
             "Falha ao atualizar",
@@ -210,6 +249,19 @@ def _atualizar(branch, upstream):
             "para atualizar manualmente, rode 'git pull' na pasta do projeto.",
         )
         return
+
+    if guardou_cardapio:
+        # De propósito NÃO tenta "git stash pop" aqui: a árvore de trabalho
+        # já avançou pro commit novo, então reaplicar o cardápio guardado
+        # vira um merge de verdade — se o commit puxado tiver mexido nos
+        # mesmos itens, o "pop" grava marcadores de conflito ("<<<<<<<")
+        # direto no JSON, que nenhuma tela (Cardápio, Balcão, Entrega...)
+        # consegue mais ler. Fica guardado em "git stash list" — recuperável
+        # à mão depois — e o cardápio que acabou de vir da atualização vale
+        # a partir daqui, sem risco de corromper o arquivo sozinho.
+        print("[atualizador] Cardápio local guardado em 'git stash list' (não reaplicado "
+              "automaticamente, pra não arriscar gravar conflito no JSON) — recupere com "
+              "'git stash pop' na pasta do projeto se precisar daquela edição.")
 
     print("[atualizador] Atualizado com sucesso — usando o código novo a partir daqui.")
 
