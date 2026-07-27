@@ -1,11 +1,25 @@
+import base64
+import hashlib
 import os
 import re
+import time
 
 from PyQt6.QtCore import QByteArray, QObject, pyqtSignal, pyqtSlot
 
 from services import comandaParserService as parser
 from services.comandaTextoService import PREFIXO_ADICIONAL, PREFIXO_BORDA
-from services.rede import rede
+from services.rede import rede, tombstones
+
+# Janela (em dias) que o resumo periódico de anti-entropy compara pra este
+# domínio (ver _resumo_pedidos/RedeService.registrarDominioSincronizado) —
+# cobre o caso de uma mensagem se perder durante uma conexão contínua
+# (raro; TCP não perde mensagem no meio de uma conexão viva, mas um bug
+# de aplicação pode). Histórico mais antigo continua garantido pelo
+# catch-up de handshake existente (meus_arquivos/pedir_arquivo, sem
+# limite de janela), que roda a cada reconexão, não só periodicamente —
+# sem essa janela aqui, o resumo comparado a cada ciclo cresceria pra
+# sempre conforme o volume de pedidos aumentasse ao longo dos anos.
+_JANELA_RECONCILIACAO_PEDIDOS_DIAS = 7
 
 # Extraem os campos do cabeçalho do cupom (ver balcaoController/
 # entregaController) para reconstruir os dados ao editar, sem depender do
@@ -185,6 +199,76 @@ class ConsultaController(QObject):
         super().__init__()
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         self.pasta_pedidos = os.path.join(base_dir, "pedidos")
+        # Cache de hash por arquivo pra _resumo_pedidos não precisar reler e
+        # rehashear todo pedido a cada ciclo de reconciliação — pedidos são
+        # imutáveis (só criados ou apagados, nunca editados no lugar), então
+        # (mtime, size) muda no máximo uma vez na vida do arquivo.
+        self._cache_hash_pedidos = {}  # nome_arquivo -> ((mtime, size), hash)
+
+        rede.registrarDominioSincronizado(
+            "pedidos",
+            self._resumo_pedidos,
+            self._obter_pedido_reconciliacao,
+            self._aplicar_pedido_reconciliacao,
+            self._apagar_pedido_reconciliacao,
+        )
+
+    # ---------- Anti-entropy (ver services/rede/redeService.py:registrarDominioSincronizado) ----------
+
+    def _resumo_pedidos(self):
+        limite = time.time() - _JANELA_RECONCILIACAO_PEDIDOS_DIAS * 86400
+        itens = {}
+        if os.path.isdir(self.pasta_pedidos):
+            for nome_arquivo in os.listdir(self.pasta_pedidos):
+                if not nome_arquivo.endswith(".txt"):
+                    continue
+                caminho = os.path.join(self.pasta_pedidos, nome_arquivo)
+                try:
+                    info = os.stat(caminho)
+                except OSError:
+                    continue
+                if info.st_mtime < limite:
+                    continue
+                itens[nome_arquivo] = self._hash_pedido(nome_arquivo, caminho, info)
+        return {"itens": itens, "apagados": tombstones.carregar("pedidos")}
+
+    def _hash_pedido(self, nome_arquivo, caminho, info):
+        chave_cache = (info.st_mtime, info.st_size)
+        em_cache = self._cache_hash_pedidos.get(nome_arquivo)
+        if em_cache and em_cache[0] == chave_cache:
+            return em_cache[1]
+
+        try:
+            with open(caminho, "rb") as arquivo:
+                conteudo = arquivo.read()
+        except OSError:
+            return ""
+
+        digest = hashlib.sha256(conteudo).hexdigest()[:16]
+        self._cache_hash_pedidos[nome_arquivo] = (chave_cache, digest)
+        return digest
+
+    def _obter_pedido_reconciliacao(self, nome_arquivo):
+        caminho = os.path.join(self.pasta_pedidos, os.path.basename(nome_arquivo))
+        try:
+            with open(caminho, "rb") as arquivo:
+                conteudo = arquivo.read()
+        except OSError:
+            return None
+        return {"conteudo_b64": base64.b64encode(conteudo).decode("ascii")}
+
+    def _aplicar_pedido_reconciliacao(self, nome_arquivo, payload):
+        conteudo_b64 = (payload or {}).get("conteudo_b64", "")
+        if not conteudo_b64:
+            return
+        try:
+            conteudo = base64.b64decode(conteudo_b64)
+        except ValueError:
+            return
+        self.aplicarPedidoRemoto(nome_arquivo, QByteArray(conteudo))
+
+    def _apagar_pedido_reconciliacao(self, nome_arquivo):
+        self.removerPedidoRemoto(nome_arquivo)
 
     @pyqtSlot(result="QVariantList")
     def listarComandas(self):
@@ -278,6 +362,7 @@ class ConsultaController(QObject):
             print(f"Falha ao apagar {caminho}: {erro}")
             return False
 
+        tombstones.registrar("pedidos", nome_arquivo)
         rede.transmitir_exclusao(nome_arquivo)
         return True
 
@@ -310,4 +395,9 @@ class ConsultaController(QObject):
         except OSError:
             pass
 
+        # Todo nó que APRENDE de uma exclusão precisa lembrar dela, não só
+        # quem apagou originalmente (ver services/rede/tombstones.py) —
+        # senão um terceiro nó ainda desatualizado pode reintroduzi-la mais
+        # tarde através deste aqui.
+        tombstones.registrar("pedidos", nome_arquivo)
         self.comandasAtualizadas.emit()

@@ -20,6 +20,7 @@ salvamento feito pela tela.
 """
 
 import base64
+import hashlib
 import json
 import os
 import re
@@ -303,6 +304,47 @@ class CardapioController(QObject):
     def __init__(self):
         super().__init__()
         rede.registrarEvento(self._TIPO_EVENTO_CARDAPIO, self._ao_receber_cardapio_remoto)
+        rede.registrarDominioSincronizado(
+            "cardapio",
+            self._resumo_cardapio,
+            self._obter_cardapio_reconciliacao,
+            self._aplicar_cardapio_reconciliacao,
+        )
+
+    # ---------- Anti-entropy (ver services/rede/redeService.py:registrarDominioSincronizado) ----------
+    # Sem "apagados": os 4 arquivos de categoria nunca são removidos, só
+    # reescritos — a exclusão de um item do cardápio já é implícita na
+    # próxima gravação (a lista sai sem ele), não precisa de tombstone.
+
+    def _resumo_cardapio(self):
+        itens = {}
+        for categoria in CATEGORIAS:
+            caminho = _caminho_arquivo(categoria)
+            try:
+                with open(caminho, "rb") as arquivo:
+                    conteudo = arquivo.read()
+            except OSError:
+                continue
+            itens[categoria["arquivo"]] = hashlib.sha256(conteudo).hexdigest()[:16]
+        return {"itens": itens}
+
+    def _obter_cardapio_reconciliacao(self, nome_arquivo):
+        categoria = _categoria_por_arquivo(nome_arquivo)
+        if categoria is None:
+            return None
+        caminho = _caminho_arquivo(categoria)
+        try:
+            with open(caminho, "rb") as arquivo:
+                conteudo = arquivo.read()
+        except OSError:
+            return None
+        return {"conteudo_b64": base64.b64encode(conteudo).decode("ascii")}
+
+    def _aplicar_cardapio_reconciliacao(self, nome_arquivo, payload):
+        self._ao_receber_cardapio_remoto({
+            "arquivo": nome_arquivo,
+            "conteudo_b64": (payload or {}).get("conteudo_b64", ""),
+        })
 
     def _publicar_cardapio_alterado(self, categoria):
         caminho = _caminho_arquivo(categoria)
@@ -334,12 +376,21 @@ class CardapioController(QObject):
             return
 
         caminho = _caminho_arquivo(categoria)
+        # Mesmo cuidado de salvar(): grava num temporário e só então troca
+        # pelo arquivo real, pra uma falha no meio da escrita nunca deixar
+        # o cardápio recebido da rede pela metade.
+        temporario = caminho + ".tmp"
         try:
             os.makedirs(os.path.dirname(caminho), exist_ok=True)
-            with open(caminho, "wb") as arquivo:
+            with open(temporario, "wb") as arquivo:
                 arquivo.write(conteudo)
+            os.replace(temporario, caminho)
         except OSError as erro:
             print(f"[cardapioService] Falha ao gravar {caminho} (recebido da rede): {erro}")
+            try:
+                os.remove(temporario)
+            except OSError:
+                pass
             return
 
         self.cardapioAlterado.emit(categoria["chave"])

@@ -47,6 +47,18 @@ def carregar(data_iso):
         return None
 
 
+def listar_dias():
+    """Datas ("AAAA-MM-DD") de todo dia já calculado/cacheado nesta
+    máquina — usado pela camada de anti-entropy (ver
+    FechamentoController._resumo_fechamento) pra saber o que comparar com
+    os peers, sem precisar guardar essa lista em outro lugar além dos
+    próprios nomes de arquivo já existentes."""
+    pasta = _pasta_fechamentos()
+    if not os.path.isdir(pasta):
+        return []
+    return [nome_arquivo[:-len(".json")] for nome_arquivo in os.listdir(pasta) if nome_arquivo.endswith(".json")]
+
+
 def salvar(data_iso, resumo):
     caminho = _caminho_arquivo(data_iso)
     try:

@@ -7,7 +7,7 @@ from PyQt6.QtCore import QObject, pyqtSignal, pyqtSlot
 
 from services import comandaEstiloService as estilo
 from services import comandaTextoService as texto
-from services.rede import rede
+from services.rede import rede, tombstones
 
 # Tipo de evento de gossip (ver services/rede/eventos.py:BarramentoEventos)
 # usado pra sincronizar mesas abertas entre as máquinas da malha — mesmo
@@ -54,6 +54,32 @@ class SalaoController(QObject):
         rede.registrarEvento(_EVENTO_MESA_ATUALIZADA, self._ao_receber_mesa_remota)
         rede.registrarEvento(_EVENTO_MESA_FECHADA, self._ao_receber_mesa_fechada_remota)
         rede.peersMudaram.connect(self._ao_peers_mudarem)
+        rede.registrarDominioSincronizado(
+            "mesas",
+            self._resumo_mesas,
+            self._obter_mesa_reconciliacao,
+            self._aplicar_mesa_reconciliacao,
+            self._apagar_mesa_reconciliacao,
+        )
+
+    # ---------- Anti-entropy (ver services/rede/redeService.py:registrarDominioSincronizado) ----------
+
+    def _resumo_mesas(self):
+        # "atualizadaEm" já é o critério de desempate usado por
+        # _ao_receber_mesa_remota (string ISO 8601, comparável direto) —
+        # reaproveitado aqui como a "versão" de cada mesa, sem precisar de
+        # nenhum hash de conteúdo.
+        itens = {mesa["id"]: mesa.get("atualizadaEm", "") for mesa in self._listar_mesas_locais() if mesa.get("id")}
+        return {"itens": itens, "apagados": tombstones.carregar("mesas")}
+
+    def _obter_mesa_reconciliacao(self, mesa_id):
+        return self._ler_mesa_arquivo(self._caminho_mesa(mesa_id))
+
+    def _aplicar_mesa_reconciliacao(self, mesa_id, payload):
+        self._ao_receber_mesa_remota(payload)
+
+    def _apagar_mesa_reconciliacao(self, mesa_id):
+        self._ao_receber_mesa_fechada_remota({"id": mesa_id})
 
     # ---------- Arquivos locais ----------
 
@@ -168,6 +194,7 @@ class SalaoController(QObject):
             print(f"[salaoController] Falha ao apagar {caminho}: {erro}")
             return False
 
+        tombstones.registrar("mesas", mesa_id)
         rede.publicarEvento(_EVENTO_MESA_FECHADA, {"id": mesa_id})
         return True
 
@@ -211,6 +238,7 @@ class SalaoController(QObject):
             os.remove(self._caminho_mesa(mesa_id))
         except OSError:
             pass
+        tombstones.registrar("mesas", mesa_id)
         rede.publicarEvento(_EVENTO_MESA_FECHADA, {"id": mesa_id})
 
         for _ in range(max(1, copias)):
@@ -262,10 +290,16 @@ class SalaoController(QObject):
         só se for mais nova que a que já temos (comparação de string ISO
         8601, que ordena igual a data/hora), pra um reenvio de catch-up
         atrasado (ver _ao_peers_mudarem) não desfazer uma edição mais
-        recente feita nesta própria máquina enquanto isso."""
+        recente feita nesta própria máquina enquanto isso.
+
+        Também recusa reabrir uma mesa que esta máquina já sabe que foi
+        fechada (tombstone local) — sem essa checagem, um peer com uma
+        cópia desatualizada da mesa (estava offline quando ela fechou)
+        conseguia "ressuscitá-la" aqui, tanto via gossip quanto via
+        reconciliação periódica (ver services/rede/tombstones.py)."""
         mesa = payload or {}
         mesa_id = mesa.get("id")
-        if not mesa_id:
+        if not mesa_id or mesa_id in tombstones.carregar("mesas"):
             return
 
         existente = self._ler_mesa_arquivo(self._caminho_mesa(mesa_id))
@@ -284,6 +318,10 @@ class SalaoController(QObject):
             os.remove(self._caminho_mesa(mesa_id))
         except OSError:
             pass
+        # Todo nó que APRENDE do fechamento precisa lembrar dele, não só
+        # quem fechou originalmente — mesmo motivo documentado em
+        # ConsultaController.removerPedidoRemoto.
+        tombstones.registrar("mesas", mesa_id)
         self.mesasAtualizadas.emit()
 
     def _ao_peers_mudarem(self, quantidade):

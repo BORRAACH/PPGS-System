@@ -1,5 +1,7 @@
+import hashlib
+import json
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from PyQt6.QtCore import QObject, pyqtSignal, pyqtSlot
 
@@ -11,6 +13,12 @@ from services.rede import fechamentoCache, rede
 # mesmo mecanismo genérico usado por CardapioController ("cardapio_alterado")
 # e SalaoController ("mesa_atualizada").
 _EVENTO_FECHAMENTO_ATUALIZADO = "fechamento_atualizado"
+
+# Janela (em dias) que o resumo periódico de anti-entropy compara pra este
+# domínio — mesmo raciocínio de _JANELA_RECONCILIACAO_PEDIDOS_DIAS em
+# consultaController.py: mantém o resumo comparado a cada ciclo limitado,
+# em vez de crescer pra sempre conforme os dias de operação se acumulam.
+_JANELA_RECONCILIACAO_FECHAMENTO_DIAS = 30
 
 
 def _hoje_iso():
@@ -39,6 +47,42 @@ class FechamentoController(QObject):
         self.pasta_pedidos = os.path.join(base_dir, "pedidos")
 
         rede.registrarEvento(_EVENTO_FECHAMENTO_ATUALIZADO, self._ao_receber_fechamento_remoto)
+        rede.registrarDominioSincronizado(
+            "fechamento",
+            self._resumo_fechamento,
+            self._obter_fechamento_reconciliacao,
+            self._aplicar_fechamento_reconciliacao,
+        )
+
+    # ---------- Anti-entropy (ver services/rede/redeService.py:registrarDominioSincronizado) ----------
+    # Sem "apagados": não existe operação de apagar um resumo de
+    # fechamento — é um cache sempre recalculável a partir de pedidos/*.txt.
+
+    def _resumo_fechamento(self):
+        hoje = _hoje_iso()
+        # "Hoje" nunca usa cache (obterFechamento sempre recalcula ao
+        # vivo, comandas continuam chegando o dia inteiro) — comparar
+        # geraria divergência esperada e constante entre as máquinas, sem
+        # nenhum benefício real.
+        limite = (datetime.now() - timedelta(days=_JANELA_RECONCILIACAO_FECHAMENTO_DIAS)).strftime("%Y-%m-%d")
+        itens = {}
+        for data_iso in fechamentoCache.listar_dias():
+            if data_iso == hoje or data_iso < limite:
+                continue
+            resumo = fechamentoCache.carregar(data_iso)
+            if resumo is None:
+                continue
+            itens[data_iso] = hashlib.sha256(json.dumps(resumo, sort_keys=True).encode("utf-8")).hexdigest()[:16]
+        return {"itens": itens}
+
+    def _obter_fechamento_reconciliacao(self, data_iso):
+        resumo = fechamentoCache.carregar(data_iso)
+        if resumo is None:
+            return None
+        return {"resumo": resumo}
+
+    def _aplicar_fechamento_reconciliacao(self, data_iso, payload):
+        self._ao_receber_fechamento_remoto({"data": data_iso, "resumo": (payload or {}).get("resumo")})
 
     def _listar_arquivos_do_dia(self, data_iso):
         """Nomes de arquivo cuja data embutida bate com `data_iso`, sem

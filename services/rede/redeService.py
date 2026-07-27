@@ -2,6 +2,7 @@ import base64
 import json
 import os
 import platform
+import random
 import threading
 import time
 import uuid
@@ -10,12 +11,22 @@ from PyQt6.QtCore import QObject, QByteArray, QTimer, pyqtProperty, pyqtSignal, 
 from PyQt6.QtNetwork import QHostAddress, QTcpServer, QTcpSocket
 
 from services.printerService import PrinterService
-from services.rede import impressoraFixada
+from services.rede import impressoraFixada, tombstones
 from services.rede.descoberta import criar_descoberta
 from services.rede.eventos import BarramentoEventos
 
 _INTERVALO_CHECAGEM_IMPRESSORA_MS = 30000
 _TIMEOUT_IMPRESSAO_MS = 10000
+# Intervalo do ciclo de anti-entropy (ver registrarDominioSincronizado/
+# _disparar_reconciliacao) — a rede de segurança que corrige o que o
+# gossip (services/rede/eventos.py) perdeu por causa de uma máquina
+# offline no momento de um evento, ou uma mensagem perdida durante uma
+# conexão contínua. Não afeta a velocidade normal de sincronização
+# (gossip continua quase instantâneo quando as máquinas estão online ao
+# mesmo tempo) — só o tempo até uma divergência se autocorrigir. Variável
+# de ambiente só pra acelerar os testes em docker/, não pensada pra uso em
+# produção.
+_INTERVALO_RECONCILIACAO_MS = int(os.environ.get("PIZZARIA_RECONCILIACAO_MS", "120000"))
 
 
 class RedeService(QObject):
@@ -100,8 +111,16 @@ class RedeService(QObject):
         self._nome_maquina_fixada = impressoraFixada.carregar_nome_fixado()
         self._jobs_impressao = {}  # job_id -> {"timer": QTimer, "concluido": bool}
 
+        # Domínios de estado inscritos na camada de anti-entropy periódica
+        # (ver registrarDominioSincronizado) — nome -> {"resumo", "obter",
+        # "aplicar", "apagar"}. RedeService nunca sabe o que cada domínio
+        # significa, só itera genericamente (mesma separação de
+        # responsabilidade documentada em services/rede/eventos.py).
+        self._dominios_sincronizados = {}
+
         self._tcp_server = QTcpServer(self)
         self._timer_impressora = QTimer(self)
+        self._timer_reconciliacao = QTimer(self)
         self._descoberta = criar_descoberta(self)
 
         self._eventos = BarramentoEventos(self._propagar_evento)
@@ -150,6 +169,16 @@ class RedeService(QObject):
         self._detectar_impressora_local()
         self._timer_impressora.timeout.connect(self._detectar_impressora_local)
         self._timer_impressora.start(_INTERVALO_CHECAGEM_IMPRESSORA_MS)
+
+        # Anti-entropy: começa com um atraso aleatório (0-10s) só no
+        # arranque, pra várias máquinas ligadas juntas (ex: todas no início
+        # do expediente) não disparem o primeiro ciclo exatamente no mesmo
+        # instante — o intervalo entre disparos depois disso continua fixo.
+        self._timer_reconciliacao.timeout.connect(self._disparar_reconciliacao)
+        QTimer.singleShot(
+            random.randint(0, 10000),
+            lambda: self._timer_reconciliacao.start(_INTERVALO_RECONCILIACAO_MS),
+        )
 
     # ---------- Descoberta ----------
 
@@ -297,7 +326,14 @@ class RedeService(QObject):
 
         elif tipo == "meus_arquivos":
             arquivos_remotos = set(mensagem.get("arquivos", []))
-            faltando = arquivos_remotos - set(self._listar_arquivos_locais())
+            # Subtrai também os arquivos com tombstone local: sem isso, um
+            # peer com uma cópia desatualizada (estava offline quando o
+            # arquivo foi apagado aqui) reintroduzia o arquivo de volta —
+            # o catch-up só olhava "o peer tem um arquivo que eu não
+            # tenho", nunca "eu já tive esse arquivo e apaguei de
+            # propósito" (ver services/rede/tombstones.py).
+            apagados_localmente = set(tombstones.carregar("pedidos"))
+            faltando = arquivos_remotos - set(self._listar_arquivos_locais()) - apagados_localmente
             for nome in faltando:
                 self._enviar(socket, {"tipo": "pedir_arquivo", "arquivo": nome})
 
@@ -365,6 +401,15 @@ class RedeService(QObject):
             else:
                 self.impressaoResultado.emit(False, mensagem.get("erro") or "Falha ao imprimir na máquina remota.")
 
+        elif tipo == "reconciliar_resumo":
+            self._ao_receber_reconciliar_resumo(socket, mensagem.get("dominios") or {})
+
+        elif tipo == "reconciliar_pedir":
+            self._ao_receber_reconciliar_pedir(socket, mensagem.get("dominio", ""), mensagem.get("chaves") or [])
+
+        elif tipo == "reconciliar_dados":
+            self._ao_receber_reconciliar_dados(mensagem.get("dominio", ""), mensagem.get("itens") or {})
+
     # ---------- Barramento de eventos (gossip) ----------
 
     def _propagar_evento(self, evento, socket_origem):
@@ -409,6 +454,135 @@ class RedeService(QObject):
         `tipo_evento` chegar de outra máquina — ver
         services/rede/eventos.py:BarramentoEventos.registrar."""
         self._eventos.registrar(tipo_evento, callback)
+
+    # ---------- Anti-entropy (reconciliação periódica) ----------
+
+    def registrarDominioSincronizado(self, nome_dominio: str, resumo, obter, aplicar, apagar=None):
+        """Inscreve um domínio de estado (pedidos, mesas, cardápio,
+        fechamento...) na camada de anti-entropy periódica — a rede de
+        segurança que corrige o que o gossip (BarramentoEventos) perdeu
+        porque uma máquina estava offline no momento de um evento, ou uma
+        mensagem se perdeu no meio de uma conexão contínua. Gossip continua
+        sendo o caminho rápido pra quando todo mundo está online ao mesmo
+        tempo; esta camada só entra em ação quando ele já deveria ter
+        sincronizado algo e não sincronizou. Espelha registrarEvento/
+        publicarEvento: quem chama não precisa saber nada de sockets, só
+        descrever o próprio estado.
+
+        - `resumo()` -> {"itens": {chave: versao}, "apagados": {chave:
+          isoApagadoEm}} — chamado a cada ciclo (ver
+          _disparar_reconciliacao); "versao" pode ser um hash de conteúdo
+          ou qualquer string que mude quando o item muda. "apagados" pode
+          ser omitido (ou {}) em domínios sem exclusão.
+        - `obter(chave)` -> payload serializável em JSON pra mandar a um
+          peer que pediu aquela chave, ou None se ela não existir mais
+          (corrida entre o resumo ter sido montado e o pedido chegar).
+        - `aplicar(chave, payload)` -> grava localmente o que um peer
+          mandou.
+        - `apagar(chave)` -> aplica uma exclusão aprendida de um peer.
+          None (padrão) em domínios sem exclusão — cardápio e fechamento
+          nunca apagam, só reescrevem."""
+        self._dominios_sincronizados[nome_dominio] = {
+            "resumo": resumo,
+            "obter": obter,
+            "aplicar": aplicar,
+            "apagar": apagar,
+        }
+
+    def _disparar_reconciliacao(self):
+        """Um ciclo de anti-entropy: monta o resumo atual de cada domínio
+        registrado e manda pra cada peer conectado agora. Cada máquina
+        dispara isso sozinha e periodicamente — não é um protocolo de
+        pergunta/resposta com estado, então não precisa de nenhuma
+        coordenação entre as máquinas: a convergência nos dois sentidos
+        acontece naturalmente em no máximo ~2 ciclos."""
+        tombstones.purgar_antigos()
+
+        if not self._peers or not self._dominios_sincronizados:
+            return
+
+        dominios_msg = {}
+        for nome, dominio in self._dominios_sincronizados.items():
+            try:
+                dominios_msg[nome] = dominio["resumo"]()
+            except Exception as erro:
+                print(f"[RedeService] Falha ao montar resumo de '{nome}' para reconciliação: {erro}")
+
+        if not dominios_msg:
+            return
+
+        mensagem = {"tipo": "reconciliar_resumo", "dominios": dominios_msg}
+        for socket in self._peers.values():
+            self._enviar(socket, mensagem)
+
+    def _ao_receber_reconciliar_resumo(self, socket: QTcpSocket, dominios_recebidos: dict):
+        """Compara o resumo recebido de um peer com o estado local de cada
+        domínio: aplica direto qualquer exclusão nova que o peer conheça
+        (ver tombstones.mesclar) e pede (reconciliar_pedir) qualquer item
+        que esteja faltando ou desatualizado localmente — exceto o que já
+        tem tombstone aqui, pra não reintroduzir algo apagado de
+        propósito."""
+        for nome, resumo_peer in dominios_recebidos.items():
+            dominio = self._dominios_sincronizados.get(nome)
+            if dominio is None:
+                continue
+
+            resumo_peer = resumo_peer or {}
+            apagados_peer = resumo_peer.get("apagados") or {}
+            if apagados_peer and dominio["apagar"] is not None:
+                novos = tombstones.mesclar(nome, apagados_peer)
+                for chave in novos:
+                    try:
+                        dominio["apagar"](chave)
+                    except Exception as erro:
+                        print(f"[RedeService] Falha ao aplicar exclusão de '{nome}'/{chave} vinda de reconciliação: {erro}")
+
+            itens_peer = resumo_peer.get("itens") or {}
+            if not itens_peer:
+                continue
+
+            tombstones_locais = tombstones.carregar(nome) if dominio["apagar"] is not None else {}
+            try:
+                itens_locais = (dominio["resumo"]() or {}).get("itens") or {}
+            except Exception as erro:
+                print(f"[RedeService] Falha ao montar resumo local de '{nome}' para comparação: {erro}")
+                continue
+
+            faltando = [
+                chave for chave, versao in itens_peer.items()
+                if chave not in tombstones_locais and itens_locais.get(chave) != versao
+            ]
+            if faltando:
+                self._enviar(socket, {"tipo": "reconciliar_pedir", "dominio": nome, "chaves": faltando})
+
+    def _ao_receber_reconciliar_pedir(self, socket: QTcpSocket, nome_dominio: str, chaves: list):
+        dominio = self._dominios_sincronizados.get(nome_dominio)
+        if dominio is None or not chaves:
+            return
+
+        itens = {}
+        for chave in chaves:
+            try:
+                payload = dominio["obter"](chave)
+            except Exception as erro:
+                print(f"[RedeService] Falha ao obter '{nome_dominio}'/{chave} para reconciliação: {erro}")
+                continue
+            if payload is not None:
+                itens[chave] = payload
+
+        if itens:
+            self._enviar(socket, {"tipo": "reconciliar_dados", "dominio": nome_dominio, "itens": itens})
+
+    def _ao_receber_reconciliar_dados(self, nome_dominio: str, itens: dict):
+        dominio = self._dominios_sincronizados.get(nome_dominio)
+        if dominio is None:
+            return
+
+        for chave, payload in itens.items():
+            try:
+                dominio["aplicar"](chave, payload)
+            except Exception as erro:
+                print(f"[RedeService] Falha ao aplicar '{nome_dominio}'/{chave} recebido por reconciliação: {erro}")
 
     # ---------- Impressora local e eleição da máquina que imprime ----------
 
