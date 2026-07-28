@@ -22,8 +22,6 @@ Page {
     property string statusPagamentoInicial: ""
     property string taxaEntregaInicial: ""
     property var itensIniciais: []
-    // Formas de pagamento disponíveis para o pedido de entrega.
-    readonly property var opcoesPagamento: ["Pix", "Crédito", "Débito", "Dinheiro"]
     // Nome do arquivo da comanda original quando esta tela foi aberta pela
     // Consulta para editar uma comanda existente ("" = comanda nova). Ao
     // imprimir com sucesso, o arquivo antigo é apagado para não duplicar.
@@ -63,7 +61,12 @@ Page {
                     "observacao": itensIniciais[i].observacao || "",
                     "valor": itensIniciais[i].valor || "",
                     "borda": itensIniciais[i].borda || null,
-                    "adicionais": itensIniciais[i].adicionais || []
+                    // Guardado como string, não array: um array atribuído a um
+                    // role de ListModel vira um list-model aninhado (não um
+                    // JS array de verdade), e isso quebra tanto a leitura em
+                    // coletarDadosPedido() quanto o envio pro Python (que
+                    // recebe um QAbstractListModel em vez de uma lista).
+                    "adicionais": JSON.stringify(itensIniciais[i].adicionais || [])
                 });
             }
         }
@@ -142,14 +145,16 @@ Page {
                 modeloPedidos.setProperty(telaEntrega.indicePedidoAtual, "valor", itens[0].valor);
                 modeloPedidos.setProperty(telaEntrega.indicePedidoAtual, "observacao", itens[0].observacao || "");
                 modeloPedidos.setProperty(telaEntrega.indicePedidoAtual, "borda", itens[0].borda || null);
-                modeloPedidos.setProperty(telaEntrega.indicePedidoAtual, "adicionais", itens[0].adicionais || []);
+                // Ver o comentário em Component.onCompleted sobre por que
+                // "adicionais" precisa ser string (JSON), não array.
+                modeloPedidos.setProperty(telaEntrega.indicePedidoAtual, "adicionais", JSON.stringify(itens[0].adicionais || []));
                 for (var i = 1; i < itens.length; i++) {
                     modeloPedidos.insert(telaEntrega.indicePedidoAtual + i, {
                         "pedido": itens[i].nome,
                         "observacao": itens[i].observacao || "",
                         "valor": itens[i].valor,
                         "borda": itens[i].borda || null,
-                        "adicionais": itens[i].adicionais || []
+                        "adicionais": JSON.stringify(itens[i].adicionais || [])
                     });
                 }
                 return ;
@@ -204,7 +209,7 @@ Page {
             property alias inputTelefone: inputTelefone
 
             // Precisam ficar aqui dentro do Component, não na raiz da Page:
-            // os campos que elas leem (inputNomeCliente, inputTaxaEntrega
+            // os campos que elas leem (inputNomeCliente, camposPagamento
             // etc.) só existem dentro desta árvore instanciada — uma função
             // declarada na Page não os enxerga (ReferenceError em runtime,
             // só aparece quando a função é chamada, não no carregamento).
@@ -217,7 +222,10 @@ Page {
                         "observacao": item.observacao,
                         "valor": item.valor,
                         "borda": item.borda || null,
-                        "adicionais": item.adicionais || []
+                        // item.adicionais é a string JSON guardada no
+                        // ListModel (ver Component.onCompleted) — desfaz aqui
+                        // pra virar array de novo antes de mandar pro Python.
+                        "adicionais": JSON.parse(item.adicionais || "[]")
                     });
                 }
 
@@ -229,10 +237,10 @@ Page {
                     "bairro": inputBairro.text,
                     "observacaoGeral": inputObservacao.text,
                     "itens": itens,
-                    "formaPagamento": comboFormaPagamento.currentText,
-                    "troco": comboFormaPagamento.currentText === "Dinheiro" ? inputTroco.text : "",
-                    "statusPagamento": btnStatusPagamento.pago ? "PG" : "NP",
-                    "taxaEntrega": inputTaxaEntrega.text
+                    "formaPagamento": camposPagamento.formaPagamento,
+                    "troco": camposPagamento.formaPagamento === "Dinheiro" ? camposPagamento.troco : "",
+                    "statusPagamento": camposPagamento.pago ? "PG" : "NP",
+                    "taxaEntrega": camposPagamento.taxaEntrega
                 };
             }
 
@@ -308,12 +316,11 @@ Page {
                 modeloPedidos.append({
                     "pedido": "",
                     "observacao": "",
-                    "valor": ""
+                    "valor": "",
+                    "borda": null,
+                    "adicionais": "[]"
                 });
-                comboFormaPagamento.currentIndex = 0;
-                inputTroco.text = "";
-                inputTaxaEntrega.text = "";
-                btnStatusPagamento.pago = false;
+                camposPagamento.redefinirPadrao();
                 spinnerCopias.value = 2;
             }
 
@@ -675,202 +682,14 @@ Page {
                             target: modeloPedidos
                         }
 
-                        delegate: Row {
-                            id: linhaDelegate
-
-                            spacing: 10
-                            anchors.horizontalCenter: parent
-
-                            property alias campoPedido: campoPedido
-                            property alias campoObservacao: campoObservacao
-                            property alias campoValor: campoValor
-
-                            // Vizinhos dinâmicos: cada linha é uma instância
-                            // separada do mesmo delegate, então não dá pra
-                            // referenciar "a linha de baixo" por id — o
-                            // número de linhas muda em tempo de execução, daí
-                            // o lookup por índice via ListView.view.
-                            function campoPedidoAnterior() {
-                                if (index > 0) {
-                                    var linha = ListView.view.itemAtIndex(index - 1);
-                                    if (linha)
-                                        return linha.campoValor;
-                                }
-                                return inputObservacao;
+                        delegate: LinhaPedido {
+                            corDestaque: "#e67e22"
+                            campoExternoAnterior: inputObservacao
+                            campoExternoProximo: camposPagamento.primeiroCampo
+                            onSelecionarPedido: function(indice) {
+                                telaEntrega.indicePedidoAtual = indice;
+                                popupSelecaoPedido.open();
                             }
-
-                            function campoPedidoProximo() {
-                                if (index + 1 < ListView.view.count) {
-                                    var linha = ListView.view.itemAtIndex(index + 1);
-                                    if (linha)
-                                        return linha.campoPedido;
-                                }
-                                return comboFormaPagamento;
-                            }
-
-                            // Campo Pedido
-                            TextField {
-                                id: campoPedido
-
-                                placeholderText: "SELECIONAR PEDIDO"
-                                width: 200
-                                topPadding: 10
-                                bottomPadding: 10
-                                leftPadding: 10
-                                rightPadding: 10
-                                text: model.pedido
-                                readOnly: true
-                                hoverEnabled: true
-                                KeyNavigation.tab: campoObservacao
-                                // Backtab chama campoPedidoAnterior() na hora, não
-                                // como "KeyNavigation.backtab: ..." — ver o
-                                // comentário em inputObservacao sobre por que um
-                                // binding com itemAtIndex() fica preso.
-                                Keys.onBacktabPressed: linhaDelegate.campoPedidoAnterior().forceActiveFocus()
-                                // Enter abre o popup de seleção — mesmo efeito do
-                                // clique do mouse, já que o campo é somente leitura.
-                                Keys.onReturnPressed: {
-                                    telaEntrega.indicePedidoAtual = index;
-                                    popupSelecaoPedido.open();
-                                }
-
-                                MouseArea {
-                                    id: mouseAreaPedido
-
-                                    anchors.fill: parent
-                                    cursorShape: Qt.PointingHandCursor
-                                    hoverEnabled: true
-                                    onClicked: {
-                                        telaEntrega.indicePedidoAtual = index;
-                                        popupSelecaoPedido.open();
-                                    }
-                                }
-
-                                background: Rectangle {
-                                    radius: Estilo.rounding.padrao
-                                    color: mouseAreaPedido.containsMouse ? "#f0f0f0" : "#ffffff"
-                                    border.color: parent.activeFocus ? "#e67e22" : Estilo.cores.borda
-                                    border.width: 1
-                                }
-
-                            }
-
-                            // Campo Observação
-                            TextField {
-                                id: campoObservacao
-
-                                placeholderText: "OBSERVAÇÃO"
-                                width: 180
-                                topPadding: 10
-                                bottomPadding: 10
-                                leftPadding: 10
-                                rightPadding: 10
-                                text: model.observacao
-                                onTextChanged: model.observacao = text
-                                KeyNavigation.tab: campoValor
-                                KeyNavigation.backtab: campoPedido
-                                Keys.onReturnPressed: campoValor.forceActiveFocus()
-
-                                background: Rectangle {
-                                    radius: Estilo.rounding.padrao
-                                    color: "#ffffff"
-                                    border.color: parent.activeFocus ? "#e67e22" : Estilo.cores.borda
-                                    border.width: 1
-                                }
-
-                            }
-
-                            // Campo Valor
-                            TextField {
-                                id: campoValor
-
-                                placeholderText: "R$ 0,00"
-                                width: 110
-                                topPadding: 10
-                                bottomPadding: 10
-                                leftPadding: 10
-                                rightPadding: 10
-                                text: model.valor
-                                KeyNavigation.backtab: campoObservacao
-                                // Tab chama campoPedidoProximo() na hora, não como
-                                // "KeyNavigation.tab: ..." — ver o comentário em
-                                // inputObservacao sobre por que um binding com
-                                // itemAtIndex() fica preso.
-                                Keys.onTabPressed: linhaDelegate.campoPedidoProximo().forceActiveFocus()
-                                Keys.onReturnPressed: linhaDelegate.campoPedidoProximo().forceActiveFocus()
-                                onEditingFinished: {
-                                    if (text !== "") {
-                                        var numLimpo = text.replace("R$", "").replace(" ", "").replace(",", ".");
-                                        var valorFloat = parseFloat(numLimpo);
-                                        if (!isNaN(valorFloat)) {
-                                            var formatado = "R$ " + valorFloat.toFixed(2).replace(".", ",");
-                                            model.valor = formatado;
-                                            text = formatado;
-                                        }
-                                    }
-                                }
-
-                                validator: DoubleValidator {
-                                    bottom: 0
-                                    decimals: 2
-                                    notation: DoubleValidator.StandardNotation
-                                }
-
-                                background: Rectangle {
-                                    radius: Estilo.rounding.padrao
-                                    color: "#ffffff"
-                                    border.color: parent.activeFocus ? "#e67e22" : Estilo.cores.borda
-                                    border.width: 1
-                                }
-
-                            }
-
-                            // Botão "+"
-                            Button {
-                                text: "+"
-                                padding: 10
-                                height: campoPedido.implicitHeight
-                                width: height
-                                anchors.verticalCenter: parent.verticalCenter
-                                visible: index === (modeloPedidos.count - 1)
-                                onClicked: {
-                                    modeloPedidos.append({
-                                        "pedido": "",
-                                        "observacao": "",
-                                        "valor": ""
-                                    });
-                                }
-
-                                background: Rectangle {
-                                    radius: Estilo.rounding.padrao
-                                    color: parent.down ? "#e67e22" : (parent.hovered ? Estilo.cores.bordaCard : "#ffffff")
-                                    border.color: Estilo.cores.borda
-                                    border.width: 1
-                                }
-
-                            }
-
-                            // Botão "-"
-                            Button {
-                                text: "-"
-                                padding: 10
-                                height: campoPedido.implicitHeight
-                                width: height
-                                anchors.verticalCenter: parent.verticalCenter
-                                visible: modeloPedidos.count > 1
-                                onClicked: {
-                                    modeloPedidos.remove(index);
-                                }
-
-                                background: Rectangle {
-                                    radius: Estilo.rounding.padrao
-                                    color: parent.down ? Estilo.cancelar.normal : (parent.hovered ? Estilo.cores.bordaCard : "#ffffff")
-                                    border.color: Estilo.cores.borda
-                                    border.width: 1
-                                }
-
-                            }
-
                         }
 
                     }
@@ -893,200 +712,19 @@ Page {
                         spacing: 10
                         anchors.horizontalCenter: parent
 
-                        Column {
-                            spacing: 4
+                        CamposPagamento {
+                            id: camposPagamento
 
-                            Text {
-                                text: "Forma de Pagamento"
-                                font.pixelSize: 12
-                                font.bold: true
-                                color: Estilo.cores.textoSecundario
+                            corDestaque: "#e67e22"
+                            formaPagamentoInicial: telaEntrega.formaPagamentoInicial
+                            trocoInicial: telaEntrega.trocoInicial
+                            statusPagamentoInicial: telaEntrega.statusPagamentoInicial
+                            mostrarTaxaEntrega: true
+                            taxaEntregaInicial: telaEntrega.taxaEntregaInicial
+                            obterCampoAnterior: function() {
+                                return ultimoCampoValor();
                             }
-
-                            ComboBox {
-                                id: comboFormaPagamento
-
-                                width: 150
-                                model: opcoesPagamento
-                                currentIndex: Math.max(0, opcoesPagamento.indexOf(formaPagamentoInicial))
-                                KeyNavigation.tab: inputTroco.visible ? inputTroco : inputTaxaEntrega
-                                // Backtab chama ultimoCampoValor() na hora, não como
-                                // "KeyNavigation.backtab: ..." — ver o comentário em
-                                // inputObservacao sobre por que um binding com
-                                // itemAtIndex() fica preso.
-                                Keys.onBacktabPressed: ultimoCampoValor().forceActiveFocus()
-
-                                contentItem: Text {
-                                    text: comboFormaPagamento.displayText
-                                    color: Estilo.cores.texto
-                                    leftPadding: 10
-                                    rightPadding: 10
-                                    verticalAlignment: Text.AlignVCenter
-                                    elide: Text.ElideRight
-                                }
-
-                                background: Rectangle {
-                                    radius: Estilo.rounding.padrao
-                                    color: "#ffffff"
-                                    border.color: comboFormaPagamento.activeFocus ? "#e67e22" : Estilo.cores.borda
-                                    border.width: 1
-                                    implicitHeight: inputTroco.implicitHeight
-                                }
-
-                            }
-                        }
-
-                        // Campo Troco — só faz sentido quando o pagamento é em dinheiro.
-                        Column {
-                            spacing: 4
-                            visible: comboFormaPagamento.currentText === "Dinheiro"
-
-                            Text {
-                                text: "Troco"
-                                font.pixelSize: 12
-                                font.bold: true
-                                color: Estilo.cores.textoSecundario
-                            }
-
-                            TextField {
-                                id: inputTroco
-
-                                placeholderText: "TROCO PARA"
-                                width: 150
-                                topPadding: 10
-                                bottomPadding: 10
-                                leftPadding: 10
-                                rightPadding: 10
-                                text: trocoInicial
-                                visible: comboFormaPagamento.currentText === "Dinheiro"
-                                KeyNavigation.tab: inputTaxaEntrega
-                                KeyNavigation.backtab: comboFormaPagamento
-                                Keys.onReturnPressed: inputTaxaEntrega.forceActiveFocus()
-                                onEditingFinished: {
-                                    if (text !== "") {
-                                        var numLimpo = text.replace("R$", "").replace(" ", "").replace(",", ".");
-                                        var valorFloat = parseFloat(numLimpo);
-                                        if (!isNaN(valorFloat))
-                                            text = "R$ " + valorFloat.toFixed(2).replace(".", ",");
-
-                                    }
-                                }
-
-                                validator: DoubleValidator {
-                                    bottom: 0
-                                    decimals: 2
-                                    notation: DoubleValidator.StandardNotation
-                                }
-
-                                background: Rectangle {
-                                    radius: Estilo.rounding.padrao
-                                    color: "#ffffff"
-                                    border.color: parent.activeFocus ? "#e67e22" : Estilo.cores.borda
-                                    border.width: 1
-                                }
-
-                            }
-                        }
-
-                        // Campo Taxa de entrega — soma ao valor total do pedido.
-                        Column {
-                            spacing: 4
-
-                            Text {
-                                text: "Taxa de Entrega"
-                                font.pixelSize: 12
-                                font.bold: true
-                                color: Estilo.cores.textoSecundario
-                            }
-
-                            TextField {
-                                id: inputTaxaEntrega
-
-                                placeholderText: "TAXA DE ENTREGA"
-                                width: 150
-                                topPadding: 10
-                                bottomPadding: 10
-                                leftPadding: 10
-                                rightPadding: 10
-                                text: taxaEntregaInicial
-                                KeyNavigation.tab: btnStatusPagamento.visible ? btnStatusPagamento : spinnerCopias
-                                KeyNavigation.backtab: inputTroco.visible ? inputTroco : comboFormaPagamento
-                                Keys.onReturnPressed: (btnStatusPagamento.visible ? btnStatusPagamento : spinnerCopias).forceActiveFocus()
-                                onEditingFinished: {
-                                    if (text !== "") {
-                                        var numLimpo = text.replace("R$", "").replace(" ", "").replace(",", ".");
-                                        var valorFloat = parseFloat(numLimpo);
-                                        if (!isNaN(valorFloat))
-                                            text = "R$ " + valorFloat.toFixed(2).replace(".", ",");
-
-                                    }
-                                }
-
-                                validator: DoubleValidator {
-                                    bottom: 0
-                                    decimals: 2
-                                    notation: DoubleValidator.StandardNotation
-                                }
-
-                                background: Rectangle {
-                                    radius: Estilo.rounding.padrao
-                                    color: "#ffffff"
-                                    border.color: parent.activeFocus ? "#e67e22" : Estilo.cores.borda
-                                    border.width: 1
-                                }
-
-                            }
-                        }
-
-                        // Botão de status: alterna entre pago (PG) e não pago (NP).
-                        // Visível pra qualquer forma de pagamento, inclusive Pix —
-                        // Pix não é necessariamente pago na hora (ex: cliente manda
-                        // o comprovante depois), então também precisa poder marcar
-                        // como NP nesse caso.
-                        Column {
-                            spacing: 4
-
-                            Text {
-                                text: "Status"
-                                font.pixelSize: 12
-                                font.bold: true
-                                color: Estilo.cores.textoSecundario
-                            }
-
-                            Button {
-                                id: btnStatusPagamento
-
-                                property bool pago: statusPagamentoInicial === "PG"
-
-                                text: pago ? "PG" : "NP"
-                                width: 60
-                                topPadding: 10
-                                bottomPadding: 10
-                                focusPolicy: Qt.StrongFocus
-                                KeyNavigation.tab: spinnerCopias
-                                KeyNavigation.backtab: inputTaxaEntrega
-                                Keys.onReturnPressed: clicked()
-                                onClicked: pago = !pago
-
-                                contentItem: Text {
-                                    text: btnStatusPagamento.text
-                                    font.bold: true
-                                    color: "#ffffff"
-                                    horizontalAlignment: Text.AlignHCenter
-                                    verticalAlignment: Text.AlignVCenter
-                                }
-
-                                background: Rectangle {
-                                    radius: Estilo.rounding.padrao
-                                    color: btnStatusPagamento.pago ? (parent.down ? Estilo.confirmar.pressionado : (parent.hovered ? Estilo.confirmar.hover : Estilo.confirmar.normal)) : (parent.down ? Estilo.cancelar.pressionado : (parent.hovered ? Estilo.cancelar.hover : Estilo.cancelar.normal))
-                                    // Anel de foco: só aparece navegando por teclado —
-                                    // sem isso, Tab chegava ao botão sem nenhum sinal
-                                    // visual de onde o foco estava.
-                                    border.color: Estilo.cores.texto
-                                    border.width: parent.activeFocus ? 3 : 0
-                                }
-
-                            }
+                            proximoCampo: spinnerCopias
                         }
 
                         // Quantas vezes "Imprimir" pede a impressão da mesma
@@ -1105,36 +743,13 @@ Page {
                                 color: Estilo.cores.textoSecundario
                             }
 
-                            SpinBox {
+                            SpinnerCopias {
                                 id: spinnerCopias
 
-                                from: 1
-                                to: 5
                                 value: 2
-                                editable: true
-                                width: 100
-                                height: 42
+                                corDestaque: "#e67e22"
                                 KeyNavigation.tab: btnImprimir
-                                KeyNavigation.backtab: btnStatusPagamento.visible ? btnStatusPagamento : inputTaxaEntrega
-
-                                contentItem: TextInput {
-                                    text: spinnerCopias.textFromValue(spinnerCopias.value, spinnerCopias.locale)
-                                    font.pixelSize: Estilo.fonte.padrao
-                                    color: Estilo.cores.texto
-                                    horizontalAlignment: Qt.AlignHCenter
-                                    verticalAlignment: Qt.AlignVCenter
-                                    readOnly: !spinnerCopias.editable
-                                    validator: spinnerCopias.validator
-                                    selectByMouse: true
-                                }
-
-                                background: Rectangle {
-                                    radius: Estilo.rounding.padrao
-                                    color: "#ffffff"
-                                    border.color: spinnerCopias.activeFocus ? "#e67e22" : Estilo.cores.borda
-                                    border.width: spinnerCopias.activeFocus ? 2 : 1
-                                }
-
+                                KeyNavigation.backtab: camposPagamento.ultimoCampo
                             }
                         }
 
@@ -1278,10 +893,10 @@ Page {
                     anchors.verticalCenter: parent.verticalCenter
                     itens: modeloPedidos
                     corDestaque: "#e67e22"
-                    formaPagamento: comboFormaPagamento.currentText
-                    troco: comboFormaPagamento.currentText === "Dinheiro" ? inputTroco.text : ""
-                    pago: btnStatusPagamento.pago
-                    taxaEntrega: inputTaxaEntrega.text
+                    formaPagamento: camposPagamento.formaPagamento
+                    troco: camposPagamento.formaPagamento === "Dinheiro" ? camposPagamento.troco : ""
+                    pago: camposPagamento.pago
+                    taxaEntrega: camposPagamento.taxaEntrega
                     mostrarTaxaEntrega: true
                 }
 

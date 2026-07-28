@@ -561,32 +561,12 @@ Popup {
                 anchors.verticalCenter: parent.verticalCenter
             }
 
-            SpinBox {
+            SpinnerCopias {
                 id: spinnerCopiasFechamento
 
-                from: 1
-                to: 5
                 value: 1
-                editable: true
                 width: 90
-
-                contentItem: TextInput {
-                    text: spinnerCopiasFechamento.textFromValue(spinnerCopiasFechamento.value, spinnerCopiasFechamento.locale)
-                    font.pixelSize: Estilo.fonte.padrao
-                    color: Estilo.cores.texto
-                    horizontalAlignment: Qt.AlignHCenter
-                    verticalAlignment: Qt.AlignVCenter
-                    readOnly: !spinnerCopiasFechamento.editable
-                    validator: spinnerCopiasFechamento.validator
-                    selectByMouse: true
-                }
-
-                background: Rectangle {
-                    radius: Estilo.rounding.padrao
-                    color: "#ffffff"
-                    border.color: spinnerCopiasFechamento.activeFocus ? "#0d9488" : Estilo.cores.borda
-                    border.width: 1
-                }
+                corDestaque: "#0d9488"
             }
         }
 

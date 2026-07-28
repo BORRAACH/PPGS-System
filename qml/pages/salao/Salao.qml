@@ -163,14 +163,19 @@ Page {
                 modeloPedidos.setProperty(telaSalao.indicePedidoAtual, "valor", itens[0].valor);
                 modeloPedidos.setProperty(telaSalao.indicePedidoAtual, "observacao", itens[0].observacao || "");
                 modeloPedidos.setProperty(telaSalao.indicePedidoAtual, "borda", itens[0].borda || null);
-                modeloPedidos.setProperty(telaSalao.indicePedidoAtual, "adicionais", itens[0].adicionais || []);
+                // Guardado como string, não array: um array atribuído a um
+                // role de ListModel vira um list-model aninhado (não um JS
+                // array de verdade), e isso quebra tanto a leitura em
+                // coletarDadosMesa() quanto o envio pro Python (que recebe um
+                // QAbstractListModel em vez de uma lista).
+                modeloPedidos.setProperty(telaSalao.indicePedidoAtual, "adicionais", JSON.stringify(itens[0].adicionais || []));
                 for (var i = 1; i < itens.length; i++) {
                     modeloPedidos.insert(telaSalao.indicePedidoAtual + i, {
                         "pedido": itens[i].nome,
                         "observacao": itens[i].observacao || "",
                         "valor": itens[i].valor,
                         "borda": itens[i].borda || null,
-                        "adicionais": itens[i].adicionais || []
+                        "adicionais": JSON.stringify(itens[i].adicionais || [])
                     });
                 }
                 return ;
@@ -222,7 +227,10 @@ Page {
                         "observacao": item.observacao,
                         "valor": item.valor,
                         "borda": item.borda || null,
-                        "adicionais": item.adicionais || []
+                        // item.adicionais é a string JSON guardada no
+                        // ListModel (ver onPedidoSelecionado) — desfaz aqui
+                        // pra virar array de novo antes de mandar pro Python.
+                        "adicionais": JSON.parse(item.adicionais || "[]")
                     });
                 }
 
@@ -290,7 +298,17 @@ Page {
                     });
                 } else {
                     for (var i = 0; i < itens.length; i++) {
-                        modeloPedidos.append(itens[i]);
+                        // Não repassa itens[i] direto: "adicionais" chega do
+                        // Python como array de verdade, e um array atribuído
+                        // a um role de ListModel vira um list-model
+                        // aninhado, não um JS array (ver coletarDadosMesa()).
+                        modeloPedidos.append({
+                            "pedido": itens[i].pedido || "",
+                            "observacao": itens[i].observacao || "",
+                            "valor": itens[i].valor || "",
+                            "borda": itens[i].borda || null,
+                            "adicionais": JSON.stringify(itens[i].adicionais || [])
+                        });
                     }
                 }
             }
@@ -467,175 +485,13 @@ Page {
                                 target: modeloPedidos
                             }
 
-                            delegate: Row {
-                                id: linhaDelegate
-
-                                spacing: 10
-                                anchors.horizontalCenter: parent
-
-                                property alias campoPedido: campoPedido
-                                property alias campoObservacao: campoObservacao
-                                property alias campoValor: campoValor
-
-                                function campoPedidoAnterior() {
-                                    if (index > 0) {
-                                        var linha = ListView.view.itemAtIndex(index - 1);
-                                        if (linha)
-                                            return linha.campoValor;
-                                    }
-                                    return inputMesa;
-                                }
-
-                                function campoPedidoProximo() {
-                                    if (index + 1 < ListView.view.count) {
-                                        var linha = ListView.view.itemAtIndex(index + 1);
-                                        if (linha)
-                                            return linha.campoPedido;
-                                    }
-                                    return btnSalvarMesa;
-                                }
-
-                                TextField {
-                                    id: campoPedido
-
-                                    placeholderText: "SELECIONAR PEDIDO"
-                                    width: 200
-                                    topPadding: 10
-                                    bottomPadding: 10
-                                    leftPadding: 10
-                                    rightPadding: 10
-                                    text: model.pedido
-                                    readOnly: true
-                                    hoverEnabled: true
-                                    KeyNavigation.tab: campoObservacao
-                                    Keys.onBacktabPressed: linhaDelegate.campoPedidoAnterior().forceActiveFocus()
-                                    Keys.onReturnPressed: {
-                                        telaSalao.indicePedidoAtual = index;
-                                        popupSelecaoPedido.open();
-                                    }
-
-                                    MouseArea {
-                                        id: mouseAreaPedido
-
-                                        anchors.fill: parent
-                                        cursorShape: Qt.PointingHandCursor
-                                        hoverEnabled: true
-                                        onClicked: {
-                                            telaSalao.indicePedidoAtual = index;
-                                            popupSelecaoPedido.open();
-                                        }
-                                    }
-
-                                    background: Rectangle {
-                                        radius: Estilo.rounding.padrao
-                                        color: mouseAreaPedido.containsMouse ? "#f0f0f0" : "#ffffff"
-                                        border.color: parent.activeFocus ? "#0d9488" : Estilo.cores.borda
-                                        border.width: 1
-                                    }
-                                }
-
-                                TextField {
-                                    id: campoObservacao
-
-                                    placeholderText: "OBSERVAÇÃO"
-                                    width: 180
-                                    topPadding: 10
-                                    bottomPadding: 10
-                                    leftPadding: 10
-                                    rightPadding: 10
-                                    text: model.observacao
-                                    onTextChanged: model.observacao = text
-                                    KeyNavigation.tab: campoValor
-                                    KeyNavigation.backtab: campoPedido
-                                    Keys.onReturnPressed: campoValor.forceActiveFocus()
-
-                                    background: Rectangle {
-                                        radius: Estilo.rounding.padrao
-                                        color: "#ffffff"
-                                        border.color: parent.activeFocus ? "#0d9488" : Estilo.cores.borda
-                                        border.width: 1
-                                    }
-                                }
-
-                                TextField {
-                                    id: campoValor
-
-                                    placeholderText: "R$ 0,00"
-                                    width: 110
-                                    topPadding: 10
-                                    bottomPadding: 10
-                                    leftPadding: 10
-                                    rightPadding: 10
-                                    text: model.valor
-                                    KeyNavigation.backtab: campoObservacao
-                                    Keys.onTabPressed: linhaDelegate.campoPedidoProximo().forceActiveFocus()
-                                    Keys.onReturnPressed: linhaDelegate.campoPedidoProximo().forceActiveFocus()
-                                    onEditingFinished: {
-                                        if (text !== "") {
-                                            var numLimpo = text.replace("R$", "").replace(" ", "").replace(",", ".");
-                                            var valorFloat = parseFloat(numLimpo);
-                                            if (!isNaN(valorFloat)) {
-                                                var formatado = "R$ " + valorFloat.toFixed(2).replace(".", ",");
-                                                model.valor = formatado;
-                                                text = formatado;
-                                            }
-                                        }
-                                    }
-
-                                    validator: DoubleValidator {
-                                        bottom: 0
-                                        decimals: 2
-                                        notation: DoubleValidator.StandardNotation
-                                    }
-
-                                    background: Rectangle {
-                                        radius: Estilo.rounding.padrao
-                                        color: "#ffffff"
-                                        border.color: parent.activeFocus ? "#0d9488" : Estilo.cores.borda
-                                        border.width: 1
-                                    }
-                                }
-
-                                Button {
-                                    text: "+"
-                                    padding: 10
-                                    height: campoPedido.implicitHeight
-                                    width: height
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    visible: index === (modeloPedidos.count - 1)
-                                    onClicked: {
-                                        modeloPedidos.append({
-                                            "pedido": "",
-                                            "observacao": "",
-                                            "valor": ""
-                                        });
-                                    }
-
-                                    background: Rectangle {
-                                        radius: Estilo.rounding.padrao
-                                        color: parent.down ? "#0d9488" : (parent.hovered ? Estilo.cores.bordaCard : "#ffffff")
-                                        border.color: Estilo.cores.borda
-                                        border.width: 1
-                                    }
-                                }
-
-                                Button {
-                                    text: "-"
-                                    padding: 10
-                                    height: campoPedido.implicitHeight
-                                    width: height
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    visible: modeloPedidos.count > 1
-                                    onClicked: {
-                                        modeloPedidos.remove(index);
-                                    }
-
-                                    background: Rectangle {
-                                        radius: Estilo.rounding.padrao
-                                        color: parent.down ? Estilo.cancelar.normal : (parent.hovered ? Estilo.cores.bordaCard : "#ffffff")
-                                        border.color: Estilo.cores.borda
-                                        border.width: 1
-                                    }
+                            delegate: LinhaPedido {
+                                corDestaque: "#0d9488"
+                                campoExternoAnterior: inputMesa
+                                campoExternoProximo: btnSalvarMesa
+                                onSelecionarPedido: function(indice) {
+                                    telaSalao.indicePedidoAtual = indice;
+                                    popupSelecaoPedido.open();
                                 }
                             }
                         }
