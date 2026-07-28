@@ -54,4 +54,13 @@ def eh_bematech_mp4200th(impressora: InfoImpressora) -> bool:
     exatamente o que essa consulta existe pra evitar."""
     texto = f"{impressora.nome} {impressora.fabricante} {impressora.modelo}".lower()
     texto_compacto = re.sub(r"[^a-z0-9]", "", texto)
-    return "bematech" in texto_compacto and "4200" in texto_compacto
+    if "bematech" in texto_compacto and "4200" in texto_compacto:
+        return True
+    # Instalada pelo instalador oficial da Bematech (não pelo script de
+    # autoconfiguração deste app, o único que nomeia a fila como "Bematech
+    # MP-4200 TH"): o nome amigável que o Windows mostra é só o nome do
+    # produto, "MP-4200 TH", sem a marca "Bematech" em lugar nenhum —
+    # confirmado em campo (título "MP-4200 TH", porta "Bematech_COM3": a
+    # marca só aparece no nome da porta, que nem é olhado aqui). "mp4200th"
+    # sozinho já é específico o bastante pra não precisar da marca junto.
+    return "mp4200th" in texto_compacto
