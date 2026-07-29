@@ -1,0 +1,86 @@
+{
+  "tamanhos": [
+    {
+      "nome": "300 ML",
+      "valor": "13,00"
+    },
+    {
+      "nome": "500 ML",
+      "valor": "15,00"
+    },
+    {
+      "nome": "700 ML",
+      "valor": "17,00"
+    }
+  ],
+  "adicionais": [
+    {
+      "nome": "Sucrilhos",
+      "valor": "3,50"
+    },
+    {
+      "nome": "Farinha Láctea",
+      "valor": "3,50"
+    },
+    {
+      "nome": "Chocoball",
+      "valor": "3,50"
+    },
+    {
+      "nome": "Leite Condensado",
+      "valor": "3,50"
+    },
+    {
+      "nome": "Leite em Pó",
+      "valor": "3,50"
+    },
+    {
+      "nome": "Confete",
+      "valor": "3,50"
+    },
+    {
+      "nome": "Ovomaltine",
+      "valor": "3,50"
+    },
+    {
+      "nome": "Granola",
+      "valor": "3,50"
+    },
+    {
+      "nome": "Paçoquinha",
+      "valor": "3,50"
+    },
+    {
+      "nome": "Bis",
+      "valor": "3,50"
+    },
+    {
+      "nome": "Kit Kat",
+      "valor": "5,00"
+    },
+    {
+      "nome": "Sonho de Valsa",
+      "valor": "5,00"
+    },
+    {
+      "nome": "Morango",
+      "valor": "5,00"
+    },
+    {
+      "nome": "Banana",
+      "valor": "5,00"
+    },
+    {
+      "nome": "Nutella 300 ML",
+      "valor": "4,50"
+    },
+    {
+      "nome": "Nutella 500 ML",
+      "valor": "6,50"
+    },
+    {
+      "nome": "Nutella 700 ML",
+      "valor": "8,50"
+    }
+  ]
+}

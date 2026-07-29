@@ -17,30 +17,35 @@ Popup {
     // push delas gera aviso de "propriedade inexistente" em tempo de
     // execução, já que elas não a declaram.
     property bool usarPromocoes: true
+    // Repassado pra bebidas/Bebidas.qml (só ela usa) — true só em Salao.qml,
+    // já que alguns itens de bebida têm um preço maior específico pra
+    // comanda de mesa (ver Bebidas.qml:comandaDeMesa/precoEfetivo). Mesmo
+    // motivo de usarPromocoes: as demais categorias não declaram esta prop.
+    property bool comandaDeMesa: false
 
     // Abre a categoria correspondente ao índice, ou fecha se for o Cancelar
     function acionarItem(indice) {
         if (indice >= modeloCategorias.count) {
             popupSelecaoPedido.close();
-            return ;
+            return;
         }
         var pagina = modeloCategorias.get(indice).pagina;
         var props = {
             "pilha": pilha,
-            "onPedidoSelecionado": function(nome, valor) {
+            "onPedidoSelecionado": function (nome, valor) {
                 if (popupSelecaoPedido.onPedidoSelecionado)
                     popupSelecaoPedido.onPedidoSelecionado(nome, valor);
-
             }
         };
         if (pagina === "pizzas/Pizzas.qml")
             props["usarPromocoes"] = popupSelecaoPedido.usarPromocoes;
+        else if (pagina === "bebidas/Bebidas.qml")
+            props["comandaDeMesa"] = popupSelecaoPedido.comandaDeMesa;
         // Fecha o popup e repassa a navegação adiante, para
         // a pilha local da tela que abriu a seleção.
         popupSelecaoPedido.close();
         if (pilha)
             pilha.push(pagina, props);
-
     }
 
     function moverFoco(passo) {
@@ -92,6 +97,13 @@ Popup {
             cor: "#3498db"
             pagina: "bebidas/Bebidas.qml"
         }
+        
+        ListElement {
+            nome: "Açaí"
+            icone: "fa6s.ice-cream"
+            cor: "#8e44ad"
+            pagina: "acai/Acai.qml"
+        }
 
         ListElement {
             nome: "Outros"
@@ -99,7 +111,6 @@ Popup {
             cor: "#9b59b6"
             pagina: "outros/Outros.qml"
         }
-
     }
 
     contentItem: Column {
@@ -109,7 +120,7 @@ Popup {
         focus: true
         // Navegação por teclado: TAB / SHIFT+TAB percorrem os itens e
         // ENTER (ou espaço) aciona o item em foco.
-        Keys.onPressed: function(event) {
+        Keys.onPressed: function (event) {
             if (event.key === Qt.Key_Backtab || (event.key === Qt.Key_Tab && (event.modifiers & Qt.ShiftModifier))) {
                 popupSelecaoPedido.moverFoco(-1);
                 event.accepted = true;
@@ -127,16 +138,21 @@ Popup {
             font.pixelSize: Estilo.fonte.titulo
             font.bold: true
             color: Estilo.cores.texto
-            anchors.horizontalCenter: parent
+            anchors.horizontalCenter: parent.horizontalCenter
         }
 
         Grid {
             id: gradeCategorias
 
-            width: 380
-            anchors.horizontalCenter: parent
+            // Uma coluna por categoria: com "columns" menor que o número de
+            // categorias, a última sobra sozinha numa segunda linha alinhada
+            // à esquerda (foi o que aconteceu ao entrar o Açaí, o 5º item).
+            // A largura acompanha o número de categorias para o botão não
+            // encolher a ponto de cortar o rótulo ("Bebidas").
+            columns: modeloCategorias.count
+            width: (95 * columns) + (spacing * (columns - 1))
+            anchors.horizontalCenter: parent.horizontalCenter
             spacing: 15
-            columns: 4
 
             Repeater {
                 model: modeloCategorias
@@ -163,7 +179,6 @@ Popup {
                         onHoveredChanged: {
                             if (hovered)
                                 popupSelecaoPedido.indiceFoco = index;
-
                         }
                         onClicked: popupSelecaoPedido.acionarItem(index)
 
@@ -172,7 +187,6 @@ Popup {
                                 duration: 100
                                 easing.type: Easing.OutQuad
                             }
-
                         }
 
                         contentItem: Column {
@@ -183,7 +197,7 @@ Popup {
                                 nome: model.icone
                                 cor: "#ffffff"
                                 tamanho: btnCategoria.width * 0.35
-                                anchors.horizontalCenter: parent
+                                anchors.horizontalCenter: parent.horizontalCenter
                             }
 
                             Text {
@@ -191,9 +205,8 @@ Popup {
                                 font.pixelSize: 15
                                 font.bold: true
                                 color: "#ffffff"
-                                anchors.horizontalCenter: parent
+                                anchors.horizontalCenter: parent.horizontalCenter
                             }
-
                         }
 
                         background: Rectangle {
@@ -206,17 +219,11 @@ Popup {
                                 ColorAnimation {
                                     duration: 100
                                 }
-
                             }
-
                         }
-
                     }
-
                 }
-
             }
-
         }
 
         Button {
@@ -227,13 +234,12 @@ Popup {
             text: "Cancelar"
             padding: 10
             width: Math.min(gradeCategorias.width, 200)
-            anchors.horizontalCenter: parent
+            anchors.horizontalCenter: parent.horizontalCenter
             focusPolicy: Qt.NoFocus
             scale: emFoco ? 1.1 : 1
             onHoveredChanged: {
                 if (hovered)
                     popupSelecaoPedido.indiceFoco = modeloCategorias.count;
-
             }
             onClicked: popupSelecaoPedido.close()
 
@@ -242,7 +248,6 @@ Popup {
                     duration: 100
                     easing.type: Easing.OutQuad
                 }
-
             }
 
             contentItem: Text {
@@ -259,9 +264,6 @@ Popup {
                 border.width: btnCancelar.emFoco ? 3 : 0
                 border.color: "#ffffff"
             }
-
         }
-
     }
-
 }

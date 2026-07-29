@@ -54,7 +54,10 @@ _PADRAO_SUFIXO_TAMANHO = re.compile(r"^(.*)\s\(([^)]+)\)$")
 # balcaoController/entregaController agora imprimem o nome do item em caixa
 # alta (ex: "(GRANDE)"), então a comparação precisa ignorar maiúsculas/
 # minúsculas para continuar reconhecendo o sufixo em comandas antigas e novas.
-_TAMANHOS_VALIDOS = ("Grande", "Broto", "Mini")
+# "300 ML"/"500 ML"/"700 ML" são os tamanhos de Acai.qml (ver
+# data/cardapio/acai.json) — sem eles aqui, os adicionais de um copo de
+# açaí editado via Consulta perderiam a associação com o item ao reimprimir.
+_TAMANHOS_VALIDOS = ("Grande", "Broto", "Mini", "300 ML", "500 ML", "700 ML")
 _TAMANHOS_VALIDOS_UPPER = tuple(t.upper() for t in _TAMANHOS_VALIDOS)
 
 
