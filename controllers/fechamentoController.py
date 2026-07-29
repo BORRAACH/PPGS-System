@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 
 from PyQt6.QtCore import QObject, pyqtSignal, pyqtSlot
 
+from Config.logConfig import protegido
 from services import comandaParserService as parser
 from services.rede import fechamentoCache, rede
 
@@ -157,6 +158,7 @@ class FechamentoController(QObject):
         }
 
     @pyqtSlot(str, result="QVariantMap")
+    @protegido({})
     def calcularFechamento(self, data_iso):
         """Recalcula o resumo de `data_iso` ("AAAA-MM-DD") direto das
         comandas, sempre — salva no cache local desta máquina e propaga
@@ -168,6 +170,7 @@ class FechamentoController(QObject):
         return resumo
 
     @pyqtSlot(str, result="QVariantMap")
+    @protegido({})
     def obterFechamento(self, data_iso):
         """Ponto de entrada usado ao abrir a página ou trocar de data: hoje
         é sempre recalculado ao vivo (comandas continuam chegando o dia
@@ -188,7 +191,16 @@ class FechamentoController(QObject):
         — grava o resumo recebido no cache local desta máquina também
         (sem recalcular: confia no cálculo de quem publicou, mesmo espírito
         de SalaoController._ao_receber_mesa_remota) e avisa a tela, se
-        estiver aberta nesse dia."""
+        estiver aberta nesse dia.
+
+        Sobrescreve sempre, sem comparar idEvento/versão nenhuma (ao
+        contrário de mesas/cardápio, que usam services/rede/relogio.py
+        pra um LWW real) — de propósito: este cache não é a fonte de
+        verdade, é 100% recalculável a partir de pedidos/*.txt (que já
+        converge corretamente via o domínio "pedidos" + tombstones), então
+        não existe um conflito de verdade pra arbitrar aqui — reexecutar o
+        cálculo pra um mesmo dia, em qualquer máquina, sempre dá o mesmo
+        resultado determinístico."""
         payload = payload or {}
         data_iso = payload.get("data")
         resumo = payload.get("resumo")

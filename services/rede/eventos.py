@@ -24,13 +24,14 @@ máquinas que não conseguem abrir conexão direta uma com a outra, mas ambas
 alcançam uma terceira)."""
 
 import time
-import uuid
+
+from services.rede import relogio
 
 # Tempo que um id de evento fica guardado só pra descartar reentregas (a
 # mesma mensagem chegando por dois caminhos na malha) — não precisa durar
 # mais que alguns minutos: depois disso, se o id "reaparecesse" seria uma
-# mensagem nova de verdade (uuid4 colidir de propósito não é uma
-# preocupação real aqui).
+# mensagem nova de verdade (dois ids de relogio.novo_id() colidirem de
+# propósito não é uma preocupação real aqui).
 _TTL_VISTOS_SEGUNDOS = 10 * 60
 
 
@@ -56,8 +57,14 @@ class BarramentoEventos:
         """Anuncia um evento novo, desta máquina, pra malha inteira. Não
         chama os manipuladores locais: quem publica já sabe o que
         aconteceu (foi quem fez acontecer) — os manipuladores existem só
-        para reagir a eventos que vieram de fora."""
-        evento = {"id": uuid.uuid4().hex, "tipoEvento": tipo_evento, "payload": payload}
+        para reagir a eventos que vieram de fora.
+
+        O "id" do evento é gerado por relogio.novo_id() (ver
+        services/rede/relogio.py) em vez de um uuid aleatório — serve tanto
+        pra dedup de gossip (papel que um uuid já cumpria) quanto pra dar a
+        cada mudança de estado um lugar na linha do tempo comum da malha,
+        sem que quem chama publicar() precise pensar nisso."""
+        evento = {"id": relogio.novo_id(), "tipoEvento": tipo_evento, "payload": payload}
         self._marcar_visto(evento["id"])
         self._enviar_para_peers(evento, None)
 
@@ -71,6 +78,13 @@ class BarramentoEventos:
         tipo_evento = mensagem.get("tipoEvento")
         if not id_evento or not tipo_evento:
             return
+
+        # Mantém o relógio lógico desta máquina alinhado com QUALQUER
+        # evento visto na malha, mesmo tipos que este módulo não conhece e
+        # mesmo reentregas (idempotente) — é o que garante que o próximo
+        # id gerado localmente (relogio.novo_id()) nunca fique "atrás" de
+        # algo que esta máquina já sabe que aconteceu em outro lugar.
+        relogio.observar(id_evento)
 
         self._purgar_vistos_antigos()
         if id_evento in self._vistos:

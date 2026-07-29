@@ -5,9 +5,10 @@ from datetime import datetime
 
 from PyQt6.QtCore import QObject, pyqtSignal, pyqtSlot
 
+from Config.logConfig import protegido
 from services import comandaEstiloService as estilo
 from services import comandaTextoService as texto
-from services.rede import rede, tombstones
+from services.rede import relogio, rede, tombstones
 
 # Tipo de evento de gossip (ver services/rede/eventos.py:BarramentoEventos)
 # usado pra sincronizar mesas abertas entre as máquinas da malha — mesmo
@@ -65,11 +66,11 @@ class SalaoController(QObject):
     # ---------- Anti-entropy (ver services/rede/redeService.py:registrarDominioSincronizado) ----------
 
     def _resumo_mesas(self):
-        # "atualizadaEm" já é o critério de desempate usado por
-        # _ao_receber_mesa_remota (string ISO 8601, comparável direto) —
+        # "idEvento" já é o critério de desempate usado por
+        # _ao_receber_mesa_remota (ver services/rede/relogio.py) —
         # reaproveitado aqui como a "versão" de cada mesa, sem precisar de
         # nenhum hash de conteúdo.
-        itens = {mesa["id"]: mesa.get("atualizadaEm", "") for mesa in self._listar_mesas_locais() if mesa.get("id")}
+        itens = {mesa["id"]: mesa.get("idEvento", "") for mesa in self._listar_mesas_locais() if mesa.get("id")}
         return {"itens": itens, "apagados": tombstones.carregar("mesas")}
 
     def _obter_mesa_reconciliacao(self, mesa_id):
@@ -120,6 +121,7 @@ class SalaoController(QObject):
     # ---------- API para a QML ----------
 
     @pyqtSlot(result="QVariantList")
+    @protegido([])
     def listarMesasAbertas(self):
         """Resumo de cada mesa aberta (mesa, cliente, total, qtd de itens),
         ordenado pelo número da mesa — usado pela faixa de mesas abertas em
@@ -138,11 +140,13 @@ class SalaoController(QObject):
         return resumos
 
     @pyqtSlot(str, result="QVariantMap")
+    @protegido({})
     def carregarMesa(self, mesa_id):
         mesa = self._ler_mesa_arquivo(self._caminho_mesa(mesa_id))
         return mesa or {}
 
     @pyqtSlot("QVariantMap", result="QVariantMap")
+    @protegido({"erro": "Falha inesperada ao salvar a mesa — ver logs/app.log."})
     def salvarMesa(self, dados):
         """Cria (id vazio) ou atualiza uma mesa aberta. Recusa salvar se OUTRA
         mesa já aberta estiver usando o mesmo número (não faz sentido duas
@@ -171,6 +175,11 @@ class SalaoController(QObject):
             "itens": dados.get("itens", []),
             "criadaEm": mesa_existente.get("criadaEm", agora),
             "atualizadaEm": agora,
+            # Critério de desempate real entre máquinas (ver
+            # _ao_receber_mesa_remota/_resumo_mesas) — atualizadaEm fica só
+            # como campo legível pra quem olhar o JSON, não é mais usado
+            # pra decidir quem vence (ver services/rede/relogio.py).
+            "idEvento": relogio.novo_id(),
         }
 
         if not self._gravar_mesa_arquivo(mesa):
@@ -182,6 +191,7 @@ class SalaoController(QObject):
         return resultado
 
     @pyqtSlot(str, result=bool)
+    @protegido(False)
     def apagarMesa(self, mesa_id):
         """Cancela uma mesa aberta sem imprimir nada (mesa aberta por
         engano, por exemplo) — apaga o arquivo local e avisa a rede pra
@@ -200,6 +210,7 @@ class SalaoController(QObject):
 
     @pyqtSlot(str, "QVariantList", result=bool)
     @pyqtSlot(str, "QVariantList", int, result=bool)
+    @protegido(False)
     def fecharMesa(self, mesa_id, divisoes, copias=1):
         """Fecha a conta: monta o cupom final (itens + divisão da conta já
         resolvida — cada item de `divisoes` já vem com nome/valor/forma de
@@ -287,23 +298,30 @@ class SalaoController(QObject):
 
     def _ao_receber_mesa_remota(self, payload):
         """Grava localmente uma mesa criada/atualizada em outra máquina —
-        só se for mais nova que a que já temos (comparação de string ISO
-        8601, que ordena igual a data/hora), pra um reenvio de catch-up
-        atrasado (ver _ao_peers_mudarem) não desfazer uma edição mais
-        recente feita nesta própria máquina enquanto isso.
+        só se for mais nova que a que já temos (comparação por idEvento,
+        ver services/rede/relogio.py — a linha do tempo comum da malha),
+        pra um reenvio de catch-up atrasado (ver _ao_peers_mudarem) não
+        desfazer uma edição mais recente feita nesta própria máquina
+        enquanto isso.
 
         Também recusa reabrir uma mesa que esta máquina já sabe que foi
         fechada (tombstone local) — sem essa checagem, um peer com uma
         cópia desatualizada da mesa (estava offline quando ela fechou)
         conseguia "ressuscitá-la" aqui, tanto via gossip quanto via
-        reconciliação periódica (ver services/rede/tombstones.py)."""
+        reconciliação periódica (ver services/rede/tombstones.py).
+
+        Chamada tanto pelo gossip (mesa_atualizada) quanto pela
+        reconciliação (_aplicar_mesa_reconciliacao) — por isso o
+        relogio.observar() aqui cobre os dois caminhos de uma vez."""
         mesa = payload or {}
         mesa_id = mesa.get("id")
         if not mesa_id or mesa_id in tombstones.carregar("mesas"):
             return
 
+        relogio.observar(mesa.get("idEvento"))
+
         existente = self._ler_mesa_arquivo(self._caminho_mesa(mesa_id))
-        if existente and existente.get("atualizadaEm", "") >= mesa.get("atualizadaEm", ""):
+        if existente and not relogio.mais_novo(mesa.get("idEvento", ""), existente.get("idEvento", "")):
             return
 
         if self._gravar_mesa_arquivo(mesa):

@@ -8,10 +8,17 @@ na pilha, ela relê o JSON do disco sozinha: alterações feitas aqui já valem 
 próximo pedido, sem reiniciar o app.
 
 Cada categoria descreve seus próprios campos (CATEGORIAS abaixo) porque os
-quatro arquivos não têm o mesmo formato: pizza tem três preços por tamanho,
-lanche tem três preços por tipo de pão (aninhados em "valor"), bebida e
-"outros" têm um preço só. A tela monta o formulário a partir dessa descrição,
-em vez de ter um formulário escrito à mão por categoria.
+arquivos não têm o mesmo formato: pizza tem três preços por tamanho, lanche
+tem três preços por tipo de pão (aninhados em "valor"), bebida e "outros" têm
+um preço só. A tela monta o formulário a partir dessa descrição, em vez de ter
+um formulário escrito à mão por categoria.
+
+Uma categoria normalmente ocupa um arquivo inteiro (a lista de itens é a raiz
+do JSON), mas pode ocupar só uma parte dele: acai.json guarda dois grupos
+independentes ("tamanhos" e "adicionais") num objeto só, porque a tela de
+Açaí lê os dois juntos. Categorias assim declaram "secao" e duas delas
+convivem no mesmo arquivo — ver _categorias_por_arquivo e a mesclagem em
+salvar().
 
 Atenção: só os campos descritos aqui sobrevivem a uma gravação — o arquivo é
 reescrito a partir da lista de campos da categoria, então uma chave nova
@@ -27,7 +34,8 @@ import re
 
 from PyQt6.QtCore import QObject, pyqtSignal, pyqtSlot
 
-from services.rede import rede
+from Config.logConfig import protegido
+from services.rede import relogio, rede
 
 # Tipos de campo que a tela sabe renderizar (ver PopupItemCardapio.qml):
 # uma linha de texto, um texto de várias linhas e um preço no formato
@@ -43,6 +51,9 @@ PRECO = "preco"
 #
 # "curto" é o rótulo usado no resumo de preços da lista (ex: "Mini R$ 24,90");
 # vazio quando a categoria só tem um preço e não precisa de qualificação.
+#
+# "secao" (opcional) é a chave do objeto JSON onde a lista de itens desta
+# categoria mora. Sem ela, a lista é a própria raiz do arquivo.
 CATEGORIAS = [
     {
         "chave": "pizzas",
@@ -93,6 +104,42 @@ CATEGORIAS = [
         "campos": [
             {"chave": "nome", "rotulo": "Nome da bebida", "tipo": TEXTO, "obrigatorio": True, "curto": ""},
             {"chave": "valor", "rotulo": "Preço", "tipo": PRECO, "obrigatorio": True, "curto": ""},
+            # Opcional: só alguns itens têm um preço diferente pra comanda de
+            # mesa (ver qml/pages/pedidos/bebidas/Bebidas.qml:comandaDeMesa) —
+            # a maioria das bebidas cobra o mesmo valor em Balcão/Entrega/Salão
+            # e não preenche este campo.
+            {"chave": "valorMesa", "rotulo": "Preço no salão/mesa (opcional)", "tipo": PRECO, "obrigatorio": False, "curto": "Mesa"},
+        ],
+    },
+    # As duas categorias de açaí dividem acai.json (ver "secao" acima): a tela
+    # de Açaí precisa dos tamanhos e dos adicionais juntos numa leitura só, mas
+    # aqui eles são duas listas editáveis independentes.
+    {
+        "chave": "acaiTamanhos",
+        "rotulo": "Açaí",
+        "novoRotulo": "Novo tamanho",
+        "arquivo": "acai.json",
+        "secao": "tamanhos",
+        "icone": "fa6s.ice-cream",
+        "cor": "#8e44ad",
+        "numerado": False,
+        "campos": [
+            {"chave": "nome", "rotulo": "Tamanho do copo", "tipo": TEXTO, "obrigatorio": True, "curto": ""},
+            {"chave": "valor", "rotulo": "Preço", "tipo": PRECO, "obrigatorio": True, "curto": ""},
+        ],
+    },
+    {
+        "chave": "acaiAdicionais",
+        "rotulo": "Adicionais de açaí",
+        "novoRotulo": "Novo adicional",
+        "arquivo": "acai.json",
+        "secao": "adicionais",
+        "icone": "fa6s.cookie",
+        "cor": "#8e44ad",
+        "numerado": False,
+        "campos": [
+            {"chave": "nome", "rotulo": "Nome do adicional", "tipo": TEXTO, "obrigatorio": True, "curto": ""},
+            {"chave": "valor", "rotulo": "Preço", "tipo": PRECO, "obrigatorio": True, "curto": ""},
         ],
     },
     {
@@ -127,6 +174,62 @@ def _caminho_arquivo(categoria):
     return os.path.join(_raiz_projeto(), "data", "cardapio", categoria["arquivo"])
 
 
+# Versão (idEvento, ver services/rede/relogio.py) da última gravação
+# conhecida de cada arquivo de categoria — necessário porque os arquivos de
+# cardápio têm schema fixo (ver módulo, topo) e não sobra espaço pra
+# embutir esse campo neles sem quebrar essa garantia. Sidecar fora dos
+# arquivos de cardápio de verdade, mesmo padrão de pasta ".sync/" que
+# services/rede/tombstones.py já usa dentro de pedidos/.
+def _pasta_sincronizacao():
+    return os.path.join(_raiz_projeto(), "data", "cardapio", ".sync")
+
+
+def _caminho_versoes():
+    return os.path.join(_pasta_sincronizacao(), "versoes.json")
+
+
+def _carregar_versoes():
+    caminho = _caminho_versoes()
+    if not os.path.isfile(caminho):
+        return {}
+    try:
+        with open(caminho, "r", encoding="utf-8") as arquivo:
+            dados = json.load(arquivo)
+    except (OSError, json.JSONDecodeError) as erro:
+        print(f"[cardapioService] Falha ao ler {caminho}: {erro} — assumindo vazio.")
+        return {}
+    return dados if isinstance(dados, dict) else {}
+
+
+def _salvar_versoes(dados):
+    caminho = _caminho_versoes()
+    temporario = caminho + ".tmp"
+    try:
+        os.makedirs(os.path.dirname(caminho), exist_ok=True)
+        with open(temporario, "w", encoding="utf-8") as arquivo:
+            json.dump(dados, arquivo, indent=2, ensure_ascii=False)
+        os.replace(temporario, caminho)
+    except OSError as erro:
+        print(f"[cardapioService] Falha ao gravar {caminho}: {erro}")
+        try:
+            os.remove(temporario)
+        except OSError:
+            pass
+
+
+def _versao_arquivo(nome_arquivo):
+    """idEvento da última gravação conhecida de `nome_arquivo` por este
+    mecanismo, ou "" se nunca foi registrada (arquivo nunca alterado desde
+    que este sidecar passou a existir)."""
+    return _carregar_versoes().get(nome_arquivo, "")
+
+
+def _definir_versao_arquivo(nome_arquivo, id_evento):
+    dados = _carregar_versoes()
+    dados[nome_arquivo] = id_evento
+    _salvar_versoes(dados)
+
+
 def _categoria(chave):
     for categoria in CATEGORIAS:
         if categoria["chave"] == chave:
@@ -134,15 +237,16 @@ def _categoria(chave):
     return None
 
 
-def _categoria_por_arquivo(nome_arquivo):
+def _categorias_por_arquivo(nome_arquivo):
     """Caminho inverso de _categoria: a partir de "pizzas.json" (nome que
     chega no evento "cardapio_alterado" de outra máquina, ver
-    CardapioController._ao_receber_cardapio_remoto), acha a categoria —
-    pra saber onde gravar e qual chave repassar em cardapioAlterado."""
-    for categoria in CATEGORIAS:
-        if categoria["arquivo"] == nome_arquivo:
-            return categoria
-    return None
+    CardapioController._ao_receber_cardapio_remoto), acha as categorias —
+    pra saber onde gravar e quais chaves repassar em cardapioAlterado.
+
+    Devolve uma lista porque um arquivo pode conter mais de uma categoria
+    (as duas seções de acai.json): quando ele chega da rede, a tela precisa
+    recarregar as duas, não só a primeira encontrada."""
+    return [categoria for categoria in CATEGORIAS if categoria["arquivo"] == nome_arquivo]
 
 
 def _ler_caminho(item, caminho):
@@ -188,6 +292,24 @@ def _numerar_itens(categoria, itens):
         item["id"] = indice
 
 
+def _ler_documento(categoria):
+    """Lê o JSON inteiro do arquivo da categoria (não só a parte dela).
+
+    Devolve (documento, ""), (None, "") se o arquivo ainda não existe, ou
+    (None, mensagem) se existe mas não deu pra ler. Quem chama trata esses
+    três casos de forma diferente: carregar() mostra lista vazia nos dois
+    últimos, mas salvar() precisa distinguir "não existe" (pode criar) de
+    "ilegível" (não pode reescrever por cima, senão apaga a outra seção)."""
+    caminho = _caminho_arquivo(categoria)
+    try:
+        with open(caminho, "r", encoding="utf-8") as arquivo:
+            return json.load(arquivo), ""
+    except FileNotFoundError:
+        return None, ""
+    except (OSError, json.JSONDecodeError) as erro:
+        return None, f"Falha ao ler {caminho}: {erro}"
+
+
 def carregar(chave_categoria):
     """Itens da categoria como dicts planos ({"valor.pao_baby": "14,00"}),
     prontos para o formulário da tela. Lista vazia se o arquivo não existir ou
@@ -198,14 +320,23 @@ def carregar(chave_categoria):
         return []
 
     caminho = _caminho_arquivo(categoria)
-    try:
-        with open(caminho, "r", encoding="utf-8") as arquivo:
-            dados = json.load(arquivo)
-    except FileNotFoundError:
+    documento, erro = _ler_documento(categoria)
+    if erro:
+        print(f"[cardapioService] {erro}")
         return []
-    except (OSError, json.JSONDecodeError) as erro:
-        print(f"[cardapioService] Falha ao ler {caminho}: {erro}")
+
+    if documento is None:
         return []
+
+    dados = documento
+    secao = categoria.get("secao")
+    if secao is not None:
+        if not isinstance(documento, dict):
+            print(f'[cardapioService] {caminho} não é um objeto com a seção "{secao}".')
+            return []
+        # Seção ausente é normal num arquivo ainda sem nenhum item daquele
+        # grupo — a tela só mostra a lista vazia.
+        dados = documento.get(secao) or []
 
     if not isinstance(dados, list):
         print(f"[cardapioService] {caminho} não contém uma lista de itens.")
@@ -217,6 +348,32 @@ def carregar(chave_categoria):
             continue
         itens.append({campo["chave"]: str(_ler_caminho(item, campo["chave"])) for campo in categoria["campos"]})
     return itens
+
+
+def _montar_conteudo_do_arquivo(categoria, itens_validados):
+    """O que vai ser escrito no arquivo inteiro: a própria lista, quando a
+    categoria ocupa o arquivo todo; ou o objeto de hoje com só a seção dela
+    trocada, quando divide o arquivo com outra (acai.json).
+
+    Devolve (conteudo, "") ou (None, mensagem). Se o arquivo existe mas está
+    ilegível, recusa a gravação: reescrevê-lo com apenas esta seção apagaria
+    silenciosamente a outra (os tamanhos sumiriam ao salvar os adicionais)."""
+    secao = categoria.get("secao")
+    if secao is None:
+        return itens_validados, ""
+
+    documento, erro = _ler_documento(categoria)
+    if erro:
+        return None, f"Não foi possível ler o cardápio atual para atualizá-lo: {erro}"
+
+    if documento is None:
+        documento = {}
+    elif not isinstance(documento, dict):
+        caminho = _caminho_arquivo(categoria)
+        return None, f'O arquivo {os.path.basename(caminho)} não está no formato esperado (seção "{secao}").'
+
+    documento[secao] = itens_validados
+    return documento, ""
 
 
 def salvar(chave_categoria, itens):
@@ -257,6 +414,10 @@ def salvar(chave_categoria, itens):
     _numerar_itens(categoria, saida)
 
     caminho = _caminho_arquivo(categoria)
+    conteudo, erro = _montar_conteudo_do_arquivo(categoria, saida)
+    if erro:
+        return erro
+
     # Grava num temporário e só então troca pelo arquivo real: se faltar
     # espaço/permissão no meio da escrita, o cardápio antigo continua
     # intacto em vez de virar um JSON truncado que nenhuma tela de pedido
@@ -273,7 +434,7 @@ def salvar(chave_categoria, itens):
         # "git merge --ff-only" se recusa a mexer num arquivo com mudança
         # local, sempre que uma atualização também tocar nesse arquivo).
         with open(temporario, "w", encoding="utf-8", newline="\n") as arquivo:
-            json.dump(saida, arquivo, indent=2, ensure_ascii=False)
+            json.dump(conteudo, arquivo, indent=2, ensure_ascii=False)
             arquivo.write("\n")
         os.replace(temporario, caminho)
     except OSError as erro:
@@ -312,38 +473,55 @@ class CardapioController(QObject):
         )
 
     # ---------- Anti-entropy (ver services/rede/redeService.py:registrarDominioSincronizado) ----------
-    # Sem "apagados": os 4 arquivos de categoria nunca são removidos, só
+    # Sem "apagados": os arquivos de categoria nunca são removidos, só
     # reescritos — a exclusão de um item do cardápio já é implícita na
     # próxima gravação (a lista sai sem ele), não precisa de tombstone.
+    #
+    # A unidade sincronizada é o ARQUIVO, não a categoria: as duas seções de
+    # acai.json viajam juntas, num hash/payload só.
 
     def _resumo_cardapio(self):
         itens = {}
         for categoria in CATEGORIAS:
-            caminho = _caminho_arquivo(categoria)
-            try:
-                with open(caminho, "rb") as arquivo:
-                    conteudo = arquivo.read()
-            except OSError:
+            if categoria["arquivo"] in itens:
                 continue
-            itens[categoria["arquivo"]] = hashlib.sha256(conteudo).hexdigest()[:16]
+            versao = _versao_arquivo(categoria["arquivo"])
+            if not versao:
+                # Arquivo nunca alterado desde que este mecanismo passou a
+                # existir — cai no hash de conteúdo (comportamento de
+                # antes) só pra detectar divergência; não é usado como
+                # critério de "mais recente" (ver _ao_receber_cardapio_remoto).
+                caminho = _caminho_arquivo(categoria)
+                try:
+                    with open(caminho, "rb") as arquivo:
+                        conteudo = arquivo.read()
+                except OSError:
+                    continue
+                versao = hashlib.sha256(conteudo).hexdigest()[:16]
+            itens[categoria["arquivo"]] = versao
         return {"itens": itens}
 
     def _obter_cardapio_reconciliacao(self, nome_arquivo):
-        categoria = _categoria_por_arquivo(nome_arquivo)
-        if categoria is None:
+        categorias = _categorias_por_arquivo(nome_arquivo)
+        if not categorias:
             return None
-        caminho = _caminho_arquivo(categoria)
+        caminho = _caminho_arquivo(categorias[0])
         try:
             with open(caminho, "rb") as arquivo:
                 conteudo = arquivo.read()
         except OSError:
             return None
-        return {"conteudo_b64": base64.b64encode(conteudo).decode("ascii")}
+        return {
+            "conteudo_b64": base64.b64encode(conteudo).decode("ascii"),
+            "idEvento": _versao_arquivo(nome_arquivo),
+        }
 
     def _aplicar_cardapio_reconciliacao(self, nome_arquivo, payload):
+        payload = payload or {}
         self._ao_receber_cardapio_remoto({
             "arquivo": nome_arquivo,
-            "conteudo_b64": (payload or {}).get("conteudo_b64", ""),
+            "conteudo_b64": payload.get("conteudo_b64", ""),
+            "idEvento": payload.get("idEvento", ""),
         })
 
     def _publicar_cardapio_alterado(self, categoria):
@@ -355,27 +533,44 @@ class CardapioController(QObject):
             print(f"[cardapioService] Falha ao ler {caminho} para propagar à rede: {erro}")
             return
 
+        id_evento = relogio.novo_id()
+        _definir_versao_arquivo(categoria["arquivo"], id_evento)
         rede.publicarEvento(self._TIPO_EVENTO_CARDAPIO, {
             "arquivo": categoria["arquivo"],
             "conteudo_b64": base64.b64encode(conteudo).decode("ascii"),
+            "idEvento": id_evento,
         })
 
     def _ao_receber_cardapio_remoto(self, payload):
         """Grava localmente um data/cardapio/*.json alterado em outra
-        máquina — mesmo formato que _publicar_cardapio_alterado manda."""
+        máquina — mesmo formato que _publicar_cardapio_alterado manda. Só
+        sobrescreve se o idEvento recebido for mais novo que a versão
+        local conhecida (ver services/rede/relogio.py) — sem essa
+        checagem, duas máquinas editando o mesmo arquivo quase ao mesmo
+        tempo convergiam pra quem "chegasse por último" (gossip ou
+        reconciliação), podendo desfazer uma edição mais nova. Payload sem
+        idEvento (de uma máquina ainda não atualizada com este mecanismo)
+        continua sendo aceito sempre, pra não travar um rollout misto."""
         payload = payload or {}
         nome_arquivo = os.path.basename(payload.get("arquivo", ""))
         conteudo_b64 = payload.get("conteudo_b64", "")
-        categoria = _categoria_por_arquivo(nome_arquivo) if nome_arquivo else None
-        if categoria is None or not conteudo_b64:
+        id_recebido = payload.get("idEvento", "")
+        categorias = _categorias_por_arquivo(nome_arquivo) if nome_arquivo else []
+        if not categorias or not conteudo_b64:
             return
+
+        if id_recebido:
+            relogio.observar(id_recebido)
+            versao_local = _versao_arquivo(nome_arquivo)
+            if versao_local and not relogio.mais_novo(id_recebido, versao_local):
+                return
 
         try:
             conteudo = base64.b64decode(conteudo_b64)
         except ValueError:
             return
 
-        caminho = _caminho_arquivo(categoria)
+        caminho = _caminho_arquivo(categorias[0])
         # Mesmo cuidado de salvar(): grava num temporário e só então troca
         # pelo arquivo real, pra uma falha no meio da escrita nunca deixar
         # o cardápio recebido da rede pela metade.
@@ -393,9 +588,16 @@ class CardapioController(QObject):
                 pass
             return
 
-        self.cardapioAlterado.emit(categoria["chave"])
+        if id_recebido:
+            _definir_versao_arquivo(nome_arquivo, id_recebido)
+
+        # Uma chave por categoria do arquivo: com acai.json, a tela precisa
+        # recarregar tanto os tamanhos quanto os adicionais.
+        for categoria in categorias:
+            self.cardapioAlterado.emit(categoria["chave"])
 
     @pyqtSlot(result="QVariantList")
+    @protegido([])
     def listarCategorias(self):
         return [
             {
@@ -410,10 +612,12 @@ class CardapioController(QObject):
         ]
 
     @pyqtSlot(str, result="QVariantList")
+    @protegido([])
     def listarItens(self, chave_categoria):
         return carregar(chave_categoria)
 
     @pyqtSlot(str, "QVariantList", result=str)
+    @protegido("Falha inesperada ao salvar o cardápio — ver logs/app.log.")
     def salvarItens(self, chave_categoria, itens):
         """Devolve "" se gravou, ou a mensagem de erro para a tela mostrar na
         notificação (ver Cardapio.qml)."""
