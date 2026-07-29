@@ -24,7 +24,7 @@ import socket
 import threading
 
 from PyQt6.QtCore import QCoreApplication, QObject, QTimer, pyqtSignal
-from PyQt6.QtNetwork import QHostAddress, QUdpSocket
+from PyQt6.QtNetwork import QAbstractSocket, QHostAddress, QNetworkInterface, QUdpSocket
 
 try:
     from zeroconf import ServiceBrowser, ServiceInfo, ServiceStateChange, Zeroconf
@@ -50,21 +50,96 @@ _INTERVALO_BROADCAST_MS = 5000
 _TIMEOUT_RESOLVER_MS = 3000
 
 
-def _ip_local() -> str:
-    """Endereço IP desta máquina na interface que ela usa pra falar com a
-    rede local. O connect() num socket UDP não envia pacote nenhum nem
-    exige que o destino exista — só faz o sistema escolher a interface de
-    saída, que é justamente a que queremos anunciar. Bem mais confiável
-    que resolver o hostname, que em muita máquina Linux devolve
-    127.0.0.1."""
+def _ip_por_rota() -> str:
+    """Endereço IP desta máquina na interface que o sistema usaria pra sair
+    da rede. O connect() num socket UDP não envia pacote nenhum nem exige
+    que o destino exista — só faz o sistema escolher a interface de saída.
+    Bem mais confiável que resolver o hostname, que em muita máquina Linux
+    devolve 127.0.0.1.
+
+    Devolve "" quando não há rota nenhuma. Isso NÃO quer dizer "sem
+    internet": o connect() só precisa de rota, não de alcance, então um
+    roteador configurado mas sem link com a operadora continua devolvendo o
+    IP certo. O caso em que falha é o de não existir rota default alguma —
+    switch sem roteador, IP fixo sem gateway, DHCP sem a opção router —
+    que é justamente como se monta uma rede só pra ligar as máquinas entre
+    si. Quem chama precisa cair pra _ips_das_interfaces()."""
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
         sock.connect(("8.8.8.8", 80))
         return sock.getsockname()[0]
     except OSError:
-        return "127.0.0.1"
+        return ""
     finally:
         sock.close()
+
+
+def _ips_das_interfaces() -> list:
+    """Todo IPv4 não-loopback das interfaces ativas, direto do sistema —
+    não depende de rota nenhuma.
+
+    Usa QNetworkInterface (já vem no QtNetwork, que a malha inteira usa) em
+    vez de resolver o hostname, que costuma devolver 127.0.0.1/127.0.1.1.
+
+    O filtro por IsRunning (e não só IsUp) descarta interface configurada
+    mas sem cabo/link — inclusive as pontes virtuais que o Docker/VirtualBox
+    deixam pra trás, cujo IP não leva a lugar nenhum e só faria os peers
+    tentarem discar pro endereço errado."""
+    enderecos = []
+    for interface in QNetworkInterface.allInterfaces():
+        flags = interface.flags()
+        if flags & QNetworkInterface.InterfaceFlag.IsLoopBack:
+            continue
+        if not (flags & QNetworkInterface.InterfaceFlag.IsUp):
+            continue
+        if not (flags & QNetworkInterface.InterfaceFlag.IsRunning):
+            continue
+        for entrada in interface.addressEntries():
+            ip = entrada.ip()
+            if ip.protocol() != QAbstractSocket.NetworkLayerProtocol.IPv4Protocol:
+                continue
+            if ip.isLoopback():
+                continue
+            texto = ip.toString()
+            if texto not in enderecos:
+                enderecos.append(texto)
+    return enderecos
+
+
+def enderecos_para_anunciar() -> list:
+    """IPv4 que esta máquina publica no mDNS pros peers discarem de volta,
+    do mais provável pro menos.
+
+    Anuncia TODOS os endereços ativos, não só um: numa máquina com cabo e
+    Wi-Fi ao mesmo tempo (ou com VPN), a interface que sai pra internet não
+    é necessariamente a que enxerga as outras máquinas da pizzaria —
+    anunciar só uma delas deixava metade da malha sem conseguir conectar.
+    O endereço escolhido pela rota vai na frente por ser o mais provável, e
+    é o que os peers tentam primeiro.
+
+    Loopback só entra se não houver absolutamente mais nada, e com aviso no
+    log: um 127.0.0.1 anunciado faz cada máquina dizer "me procure no meu
+    próprio loopback", e o peer que tentar discar conecta nele mesmo. Ele
+    ainda serve pra duas instâncias no MESMO computador se acharem (o caso
+    dos scripts em docker/), então não vale remover — mas passar por aqui
+    calado era a metade mais cara do problema: a malha não formava e não
+    havia nada no logs/app.log explicando por quê."""
+    enderecos = _ips_das_interfaces()
+
+    preferido = _ip_por_rota()
+    if preferido and not preferido.startswith("127."):
+        if preferido in enderecos:
+            enderecos.remove(preferido)
+        enderecos.insert(0, preferido)
+
+    if enderecos:
+        return enderecos
+
+    print(
+        "[descoberta] AVISO: nenhuma interface de rede ativa com IPv4 — anunciando 127.0.0.1. "
+        "As outras máquinas NÃO vão conseguir se conectar a esta. Confira cabo/Wi-Fi e o IP da máquina."
+    )
+    return ["127.0.0.1"]
 
 
 class Descoberta(QObject):
@@ -142,10 +217,11 @@ class DescobertaZeroconf(Descoberta):
         # app aberto) rodam duas instâncias no mesmo computador, e o padrão do
         # zeroconf — o hostname da máquina — faria uma sobrescrever o anúncio
         # da outra. O id da instância já é um uuid, então serve para os dois.
+        enderecos = enderecos_para_anunciar()
         self._info_servico = ServiceInfo(
             _TIPO_SERVICO,
             f"{self._id_local}.{_TIPO_SERVICO}",
-            addresses=[socket.inet_aton(_ip_local())],
+            addresses=[socket.inet_aton(endereco) for endereco in enderecos],
             port=self._porta_tcp,
             properties={"assinatura": _ASSINATURA, "id": self._id_local},
             server=f"{self._id_local}.local.",
@@ -157,7 +233,13 @@ class DescobertaZeroconf(Descoberta):
             print(f"[descoberta] Falha ao anunciar esta máquina via zeroconf: {erro}")
 
         self._browser = ServiceBrowser(self._zeroconf, _TIPO_SERVICO, handlers=[self._ao_mudar_servico])
-        print(f"[descoberta] Anunciando '{_TIPO_SERVICO}' na porta {self._porta_tcp} e procurando outras máquinas.")
+        # O endereço anunciado entra no log de propósito: quando a malha não
+        # forma, é a primeira coisa que se quer conferir — e era exatamente
+        # o que faltava pra diagnosticar o caso do 127.0.0.1.
+        print(
+            f"[descoberta] Anunciando '{_TIPO_SERVICO}' em {', '.join(enderecos)} "
+            f"na porta {self._porta_tcp} e procurando outras máquinas."
+        )
 
     def _ao_mudar_servico(self, zeroconf, service_type, name, state_change) -> None:
         if state_change not in (ServiceStateChange.Added, ServiceStateChange.Updated):
