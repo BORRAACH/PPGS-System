@@ -8,27 +8,22 @@ item" de "vi e ele foi apagado" — e tanto o catch-up de handshake
 (ver RedeService._disparar_reconciliacao) acabariam empurrando o item
 apagado de volta pra quem apagou.
 
-Guardado em pedidos/.sync/tombstones.json — dentro da própria árvore de
-pedidos/ (já fora do git), mas fora dos padrões "*.txt" e "mesas/*.json"
-que os scans existentes usam (ConsultaController.listarComandas,
-SalaoController._listar_mesas_locais, RedeService._listar_arquivos_locais),
-então não aparece em nenhum deles."""
+Guardado em pedidos/.sync/tombstones.json (ver services/rede/caminhos.py) —
+dentro da própria árvore de pedidos/ (já fora do git), mas fora dos padrões
+"*.txt" e "mesas/*.json" que os scans existentes usam
+(ConsultaController.listarComandas, SalaoController._listar_mesas_locais,
+RedeService._listar_arquivos_locais), então não aparece em nenhum deles."""
 
-import json
 import os
 from datetime import datetime, timedelta
 
-from services.rede import relogio
+from services.rede import caminhos, relogio
 
 _RETENCAO_PADRAO_DIAS = 180
 
 
-def _raiz_projeto():
-    return os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-
 def _caminho_arquivo():
-    return os.path.join(_raiz_projeto(), "pedidos", ".sync", "tombstones.json")
+    return os.path.join(caminhos.pasta_sincronizacao(), "tombstones.json")
 
 
 def _migrar_valor_antigo(quando):
@@ -62,20 +57,7 @@ def _migrar_formato_antigo(dados):
 
 
 def _carregar_tudo():
-    caminho = _caminho_arquivo()
-    if not os.path.isfile(caminho):
-        return {}
-
-    try:
-        with open(caminho, "r", encoding="utf-8") as arquivo:
-            dados = json.load(arquivo)
-    except (OSError, json.JSONDecodeError) as erro:
-        print(f"[tombstones] Falha ao ler {caminho}: {erro} — assumindo vazio.")
-        return {}
-
-    if not isinstance(dados, dict):
-        return {}
-
+    dados = caminhos.carregar_json(_caminho_arquivo(), "tombstones")
     dados, mudou = _migrar_formato_antigo(dados)
     if mudou:
         _salvar_tudo(dados)
@@ -83,19 +65,7 @@ def _carregar_tudo():
 
 
 def _salvar_tudo(dados):
-    caminho = _caminho_arquivo()
-    temporario = caminho + ".tmp"
-    try:
-        os.makedirs(os.path.dirname(caminho), exist_ok=True)
-        with open(temporario, "w", encoding="utf-8") as arquivo:
-            json.dump(dados, arquivo, indent=2, ensure_ascii=False)
-        os.replace(temporario, caminho)
-    except OSError as erro:
-        print(f"[tombstones] Falha ao gravar {caminho}: {erro}")
-        try:
-            os.remove(temporario)
-        except OSError:
-            pass
+    caminhos.salvar_json(_caminho_arquivo(), dados, "tombstones")
 
 
 def carregar(dominio):
@@ -121,6 +91,23 @@ def registrar(dominio, chave, quando=None):
     dados.setdefault(dominio, {})[chave] = quando
     _salvar_tudo(dados)
     return quando
+
+
+def remover(dominio, chave):
+    """Esquece uma exclusão. Só existe pra decisão manual do usuário: quando
+    ele olha um conflito na Consulta e diz que a comanda daqui é a certa
+    (ver ConsultaController.manterVersaoLocal), o tombstone precisa sair,
+    senão a comanda continuaria fora do resumo anunciado à malha e a decisão
+    dele nunca chegaria nas outras máquinas. Nada automático deve chamar
+    isto — um nó que "esquece" exclusões sozinho reintroduz na malha tudo
+    que já foi apagado."""
+    dados = _carregar_tudo()
+    secao = dados.get(dominio)
+    if not isinstance(secao, dict) or chave not in secao:
+        return False
+    del secao[chave]
+    _salvar_tudo(dados)
+    return True
 
 
 def mesclar(dominio, recebidos):

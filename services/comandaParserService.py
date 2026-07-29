@@ -32,6 +32,12 @@ _PADRAO_NEGRITO = re.compile(re.escape(ESC) + r"E[\x00\x01]")
 PADRAO_CLIENTE = re.compile(r"^Cliente:[ \t]*(.*)$", re.MULTILINE)
 PADRAO_DATA = re.compile(r"^Data:[ \t]*(.*)$", re.MULTILINE)
 PADRAO_FORMA_PAGAMENTO = re.compile(r"^Forma de pagamento:[ \t]*(.*)$", re.MULTILINE)
+# Código curto do cabeçalho (ver services/comandaSequencialService.py), ex:
+# "ID: A291201". Está no arquivo desde que passou a ser impresso, mas até
+# agora ninguém o lia de volta — a Consulta o mostra pra que o mesmo código
+# que está no papel possa ser conferido entre as máquinas. Comandas
+# anteriores a ele simplesmente não têm a linha, e extrair_campo devolve "".
+PADRAO_ID_PEDIDO = re.compile(r"^ID:[ \t]*(.*)$", re.MULTILINE)
 
 _PADRAO_STATUS_PAGAMENTO = re.compile(r"^Status:[ \t]*(.*)$", re.MULTILINE)
 # balcaoController imprime o status colado no fim da linha do valor total

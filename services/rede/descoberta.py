@@ -150,8 +150,16 @@ class Descoberta(QObject):
     responsabilidade de quem recebe (RedeService), que é quem sabe com
     quem já está conectado."""
 
-    # (id da instância remota, endereço IP, porta TCP da malha)
-    peerDescoberto = pyqtSignal(str, str, int)
+    # (id da instância remota, endereços IP anunciados, porta TCP da malha)
+    #
+    # É uma LISTA de endereços, não um só: enderecos_para_anunciar() publica
+    # todas as interfaces ativas justamente porque a que sai pra internet não
+    # é necessariamente a que enxerga as outras máquinas da pizzaria — mas o
+    # consumidor tentava só o primeiro, então uma máquina cujo primeiro
+    # endereço fosse o de uma bridge do Docker/VirtualBox ou de uma VPN
+    # ficava inalcançável mesmo anunciando o endereço bom logo em seguida.
+    # Quem recebe tenta todos (ver RedeService._tentar_conectar_a_peer).
+    peerDescoberto = pyqtSignal(str, list, int)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -275,7 +283,7 @@ class DescobertaZeroconf(Descoberta):
         # Emitido de dentro desta thread; como o objeto vive na thread
         # principal, o Qt entrega o sinal lá (conexão em fila), então quem
         # recebe pode mexer nos sockets sem se preocupar com thread.
-        self.peerDescoberto.emit(id_remoto, enderecos[0], info.port)
+        self.peerDescoberto.emit(id_remoto, list(enderecos), info.port)
 
     def _parar(self) -> None:
         if self._zeroconf is None:
@@ -343,7 +351,10 @@ class DescobertaBroadcast(Descoberta):
             if not id_remoto or not porta_tcp:
                 continue
 
-            self.peerDescoberto.emit(id_remoto, endereco.toString(), int(porta_tcp))
+            # Aqui só existe um endereço mesmo — o de origem do datagrama —,
+            # mas o sinal é uma lista pra ter a mesma forma nas duas
+            # estratégias de descoberta.
+            self.peerDescoberto.emit(id_remoto, [endereco.toString()], int(porta_tcp))
 
     def _parar(self) -> None:
         if self._timer is not None:

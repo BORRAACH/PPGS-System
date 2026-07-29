@@ -1,0 +1,201 @@
+"""Dá a cada comanda um lugar na linha do tempo comum da malha (o id de
+`services/rede/relogio.py`) e guarda os conflitos que a sincronização não
+pode resolver sozinha.
+
+Por que uma comanda precisa disso. Mesas e cardápio já carregam um
+`idEvento` dentro do próprio arquivo, e é ele que decide quem ganha quando
+duas máquinas divergem. Comandas não tinham nada disso: a versão comparada
+na anti-entropy era o sha256 do conteúdo, o que só responde "é igual ou
+diferente", nunca "qual veio antes". Sem uma resposta pra segunda pergunta
+não dá pra dizer se uma exclusão vinda de outra máquina é mais nova que a
+comanda que existe aqui, nem apresentar ao usuário qual das duas versões é
+a recente. E não dá pra embutir esse id no arquivo da comanda: ele é o
+cupom ESC/POS impresso, byte a byte — mexer nele muda o que sai no papel e
+quebra os parsers de `services/comandaParserService.py`. Daí o sidecar,
+mesmo padrão que `services/cardapioService.py` já usa pro cardápio.
+
+Dois arquivos, ambos em `pedidos/.sync/` (ver services/rede/caminhos.py):
+
+- `eventos.json` — `{nome_arquivo: {"idEvento", "maquina"}}`. Gravado por
+  quem cria a comanda (com um id novo) e por quem a recebe da rede (com o
+  id que veio junto, nunca um novo — é isso que faz as máquinas
+  concordarem sobre a mesma comanda).
+- `conflitos.json` — o que precisa de decisão humana. Nada aqui é resolvido
+  automaticamente: comanda é dinheiro, e sobrescrever a versão de uma
+  máquina pela da outra pode mudar o caixa do dia sem ninguém perceber.
+  Guarda o conteúdo da versão divergente pra Consulta poder mostrá-la e o
+  usuário escolher (ver ConsultaController.adotarVersaoRemota/manterVersaoLocal).
+
+Comandas antigas (as que já estavam em disco antes deste módulo existir)
+não têm entrada em `eventos.json`. Pra elas, `id_evento()` sintetiza um id
+a partir do carimbo de data/hora que já está no nome do arquivo — o mesmo
+truque de `tombstones._migrar_valor_antigo`. O cálculo é determinístico e
+não depende do fuso da máquina, então as duas máquinas chegam ao MESMO id
+sintético pra mesma comanda antiga e nenhuma delas vê conflito onde não
+há."""
+
+import os
+import re
+import time
+from datetime import datetime, timezone
+
+from services.rede import caminhos, relogio
+
+# "pedido_20260729_124230_07fe75.txt" -> "20260729_124230". Os três
+# prefixos (pedido_/entrega_/mesa_) são os de balcaoController,
+# entregaController e salaoController.
+_PADRAO_CARIMBO = re.compile(r"^(?:pedido|entrega|mesa)_(\d{8})_(\d{6})_")
+
+_ROTULO = "indicePedidos"
+
+
+def _caminho_eventos():
+    return os.path.join(caminhos.pasta_sincronizacao(), "eventos.json")
+
+
+def _caminho_conflitos():
+    return os.path.join(caminhos.pasta_sincronizacao(), "conflitos.json")
+
+
+# ---------- Índice de eventos ----------
+
+
+def carregar_indice():
+    """Todo o índice — `{nome_arquivo: {"idEvento", "maquina"}}`. Exposto
+    porque a Consulta precisa varrê-lo inteiro (ver
+    ConsultaController._nomes_maquinas_conhecidas), não só consultar uma
+    chave."""
+    return caminhos.carregar_json(_caminho_eventos(), _ROTULO)
+
+
+def _carregar():
+    return carregar_indice()
+
+
+def _salvar(dados):
+    caminhos.salvar_json(_caminho_eventos(), dados, _ROTULO)
+
+
+def _id_sintetico(nome_arquivo):
+    """Id de linha do tempo deduzido do nome do arquivo, pras comandas
+    anteriores a este módulo. UTC explícito (e não o fuso local) pra duas
+    máquinas configuradas em fusos diferentes não deduzirem ids diferentes
+    pra mesma comanda — o que apareceria pro usuário como um conflito
+    inventado. Devolve "" se o nome não tiver o carimbo esperado; `relogio`
+    trata "" como "mais antigo que qualquer id real"."""
+    correspondencia = _PADRAO_CARIMBO.match(nome_arquivo)
+    if correspondencia is None:
+        return ""
+
+    try:
+        momento = datetime.strptime(
+            f"{correspondencia.group(1)}{correspondencia.group(2)}", "%Y%m%d%H%M%S"
+        ).replace(tzinfo=timezone.utc)
+    except ValueError:
+        return ""
+
+    return relogio.id_para_instante(momento)
+
+
+def id_evento(nome_arquivo):
+    """Id de linha do tempo da comanda. Nunca grava nada — é chamado a cada
+    ciclo de anti-entropy, pra toda comanda da janela."""
+    entrada = _carregar().get(nome_arquivo)
+    if isinstance(entrada, dict) and entrada.get("idEvento"):
+        return entrada["idEvento"]
+    return _id_sintetico(nome_arquivo)
+
+
+def maquina(nome_arquivo):
+    """Nome da máquina onde a comanda foi lançada, ou "" quando
+    desconhecido (comanda anterior a este módulo)."""
+    entrada = _carregar().get(nome_arquivo)
+    if isinstance(entrada, dict):
+        return entrada.get("maquina") or ""
+    return ""
+
+
+def registrar(nome_arquivo, id_recebido="", maquina_recebida=""):
+    """Anota a comanda no índice e devolve (idEvento, maquina).
+
+    Sem `id_recebido`, gera um id novo desta máquina — é o caminho de quem
+    está criando a comanda. Com `id_recebido` (comanda vinda da rede),
+    reusa o id de origem e chama `relogio.observar` pra que o próximo id
+    gerado aqui fique depois dele na linha do tempo comum."""
+    if id_recebido:
+        relogio.observar(id_recebido)
+        id_final = id_recebido
+        maquina_final = maquina_recebida or (relogio.maquina_do_id(id_recebido) or "")
+    else:
+        id_final = relogio.novo_id()
+        maquina_final = relogio.maquina_do_id(id_final) or ""
+
+    dados = _carregar()
+    dados[nome_arquivo] = {"idEvento": id_final, "maquina": maquina_final}
+    _salvar(dados)
+    return id_final, maquina_final
+
+
+def remover(nome_arquivo):
+    dados = _carregar()
+    if dados.pop(nome_arquivo, None) is not None:
+        _salvar(dados)
+
+
+def purgar_ausentes(nomes_existentes):
+    """Descarta entradas de comandas que não estão mais em disco — o índice
+    não deve crescer para sempre. `nomes_existentes` é um conjunto/lista de
+    nomes de arquivo. Chamado junto do ciclo de anti-entropy."""
+    dados = _carregar()
+    existentes = set(nomes_existentes)
+    sobrando = [nome for nome in dados if nome not in existentes]
+    if not sobrando:
+        return
+    for nome in sobrando:
+        del dados[nome]
+    _salvar(dados)
+
+
+# ---------- Conflitos ----------
+
+
+def carregar_conflitos():
+    return caminhos.carregar_json(_caminho_conflitos(), _ROTULO)
+
+
+def _salvar_conflitos(dados):
+    caminhos.salvar_json(_caminho_conflitos(), dados, _ROTULO)
+
+
+def registrar_conflito(nome_arquivo, motivo, id_local="", id_remoto="", maquina_remota="", conteudo_remoto_b64=""):
+    """Marca a comanda como divergente entre máquinas. Idempotente pelo par
+    (motivo, idRemoto): a anti-entropy roda a cada 2 min e reencontraria o
+    mesmo conflito indefinidamente — regravar a cada ciclo só gastaria
+    disco e faria a data de detecção mentir."""
+    dados = carregar_conflitos()
+    atual = dados.get(nome_arquivo)
+    if isinstance(atual, dict) and atual.get("motivo") == motivo and atual.get("idRemoto") == id_remoto:
+        return False
+
+    dados[nome_arquivo] = {
+        "motivo": motivo,
+        "idLocal": id_local,
+        "idRemoto": id_remoto,
+        "maquinaRemota": maquina_remota,
+        "conteudoRemoto_b64": conteudo_remoto_b64,
+        "detectadoEm": time.time(),
+    }
+    _salvar_conflitos(dados)
+    print(f"[{_ROTULO}] Conflito em '{nome_arquivo}': {motivo} (máquina remota: {maquina_remota or 'desconhecida'}).")
+    return True
+
+
+def conflito(nome_arquivo):
+    entrada = carregar_conflitos().get(nome_arquivo)
+    return entrada if isinstance(entrada, dict) else None
+
+
+def resolver_conflito(nome_arquivo):
+    dados = carregar_conflitos()
+    if dados.pop(nome_arquivo, None) is not None:
+        _salvar_conflitos(dados)

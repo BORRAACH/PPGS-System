@@ -179,6 +179,116 @@ rede.iniciar()
   visibilidade de que a sincronização está de fato funcionando (peça
   invisível por natureza — vale o custo baixo de adicionar).
 
+## Correção: comandas paravam de sincronizar entre as máquinas
+
+Depois de rodando em duas máquinas (uma Windows, uma Linux), comandas
+lançadas numa não apareciam na outra e o caixa do dia divergia. Eram três
+defeitos independentes, mais dois correlatos:
+
+1. **O catch-up de handshake estava morto.**
+   `RedeService._pasta_pedidos()` contava dois `os.path.dirname` a partir do
+   próprio arquivo. Isso estava certo quando ele era `services/redeService.py`;
+   ao ser movido para `services/rede/redeService.py` (commit `d8503d0`) o
+   caminho passou a apontar para `<raiz>/services/pedidos`, que não existe.
+   Como `_listar_arquivos_locais()` devolve `[]` quando a pasta não existe, a
+   falha foi silenciosa: toda máquina anunciava `meus_arquivos: []` e nenhum
+   `pedir_arquivo` era respondido. O cálculo da raiz agora vive num lugar só,
+   `services/rede/caminhos.py`, usado também por `tombstones.py` e
+   `impressoraFixada.py` — mover um arquivo de pasta não quebra mais isso.
+
+2. **A discagem TCP tentava um endereço só, sem retry.**
+   `enderecos_para_anunciar()` publica todas as interfaces ativas desde o
+   commit `b1fcceb`, mas o consumidor usava só `parsed_addresses()[0]`. O
+   sinal `peerDescoberto` agora carrega a lista inteira e o `RedeService`
+   tenta todos os endereços; conexões redundantes são descartadas pelo
+   tratamento de `identificar`, que já existia. Um `_timer_reconexao`
+   (base de 5s, backoff exponencial até 5 min) refaz as tentativas que
+   falharam, e a regra "só o lado de id menor disca" deixou de ser absoluta:
+   ela continua valendo na primeira tentativa (é o que evita conexão dupla no
+   caminho feliz), mas o lado de id maior passa a discar a partir do primeiro
+   ciclo do timer — antes, bastava a descoberta funcionar num sentido só
+   (firewall bloqueando mDNS de entrada num dos lados) pra malha nunca se
+   formar.
+
+3. **A janela de reconciliação usava `mtime`.** `_resumo_pedidos` recorta
+   agora pela data embutida no NOME do arquivo
+   (`comandaParserService.data_arquivo_aaaammdd`): restaurar backup, copiar a
+   pasta sem preservar data ou um relógio errado deslocavam a janela em
+   silêncio.
+
+4. **Comandas apagadas ressuscitavam.** `aplicarPedidoRemoto` gravava sem
+   consultar os tombstones (assimétrico com
+   `SalaoController._ao_receber_mesa_remota`), e a máquina ficava num estado
+   que nada corrigia: o arquivo de volta em `pedidos/`, contando no caixa, e a
+   mesma chave listada como apagada no resumo de reconciliação.
+
+5. **O cache de fechamento ficava em ping-pong.**
+   `_ao_receber_fechamento_remoto` copiava o resumo do peer por cima do local
+   sem comparar nada, com o argumento de que o cálculo é determinístico — o
+   que só vale se as duas máquinas tiverem as mesmas comandas. Enquanto não
+   tinham, A copiava de B e B copiava de A a cada 2 min, e como
+   `obterFechamento` devolve o cache pra dias passados sem recalcular, o valor
+   do caixa daquele dia alternava indefinidamente. Agora a mensagem é tratada
+   como um AVISO de que o dia mudou: quem recebe **recalcula com as próprias
+   comandas** e ignora os números do peer. Ninguém impõe um total a ninguém, e
+   quando as comandas convergem os dois lados chegam sozinhos ao mesmo
+   resultado.
+
+### Sincronização de comandas decidida por id de evento
+
+Comandas eram o único domínio sem lugar na linha do tempo comum: a versão
+comparada na anti-entropy era o sha256 do conteúdo, que só responde "igual ou
+diferente", nunca "qual veio antes". `services/rede/indicePedidos.py` passa a
+dar a cada comanda um id de `relogio.py`, num sidecar
+`pedidos/.sync/eventos.json` — dentro do arquivo é impossível, ele é o cupom
+ESC/POS impresso byte a byte. O id é gerado em `transmitir_pedido` (único
+ponto por onde Balcão, Entrega e Salão passam) e viaja no gossip, no catch-up
+e na reconciliação; quem recebe grava o id de origem, nunca um novo, e chama
+`relogio.observar`. Comandas anteriores a isso recebem um id sintetizado a
+partir do carimbo de data/hora do nome do arquivo, em UTC explícito, pra duas
+máquinas deduzirem sempre o mesmo valor.
+
+`registrarDominioSincronizado` ganhou um parâmetro opcional `comparar` — os
+outros domínios seguem com o comportamento anterior. Comanda é imutável
+(editar pela Consulta apaga o arquivo e grava outro, com nome novo), então
+"o peer tem uma versão diferente" nunca é atualização legítima: é divergência
+real sobre uma venda. **Nada é sobrescrito automaticamente.** A versão
+divergente é puxada uma vez só, pra ficar guardada junto do conflito em
+`pedidos/.sync/conflitos.json`, e a decisão é do usuário na Consulta. Pelo
+mesmo princípio, um tombstone só apaga a comanda local se for mais novo que
+ela; se a comanda for mais nova que a exclusão, o arquivo fica e vira
+conflito.
+
+### Consulta: código, máquina de origem e conflito
+
+O código curto impresso no cabeçalho (`ID: A291201`, ver
+`comandaSequencialService.py`) estava no arquivo desde o commit `1369311` mas
+nunca era lido de volta. `PADRAO_ID_PEDIDO` foi para
+`comandaParserService.py`, e `listarComandas` passou a devolver `codigo`,
+`maquinaOrigem`, `emConflito`. A lista mostra `A291201 · archlinux` — o mesmo
+código que está no papel, pra conferir uma comanda entre duas máquinas sem
+depender de nome de arquivo. Comandas sem o código caem no sufixo aleatório
+do nome (também idêntico em todas as máquinas), e a máquina de origem, quando
+não está no índice, é deduzida da inicial do código contra as máquinas já
+vistas na malha — lista que sai dos ids já gravados em disco, e não só dos
+peers conectados agora, porque a conferência manual costuma acontecer
+justamente com a outra máquina fora do ar.
+
+Comanda em conflito aparece com fundo e borda amarelos, e o painel de detalhe
+mostra uma faixa com a versão da outra máquina e dois botões: "Manter esta
+versão" (reanuncia a local e, no conflito de exclusão, desfaz o tombstone) e
+"Adotar a da outra máquina".
+
+### Observabilidade
+
+O `RedeService` não logava nada sobre peers, o que tornava impossível saber se
+a malha estava de pé — os `print()` já vão para `logs/app.log` via
+`Config/logConfig.py`. Agora registra: porta local ao iniciar, peer
+descoberto, falha de conexão (só a primeira de cada peer, senão o backoff
+encheria o log), handshake concluído, desconexão, resultado do catch-up
+("o peer tem N comandas; M faltam aqui" — era exatamente a linha que teria
+denunciado o defeito 1) e o que cada ciclo de anti-entropy pediu/aplicou.
+
 ## Fora do escopo (mencionar, não implementar agora)
 
 - Sem autenticação/senha para entrar na rede — qualquer instância deste app

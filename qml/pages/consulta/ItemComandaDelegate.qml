@@ -22,12 +22,23 @@ Rectangle {
     // "Editar" ao lado da barra de pesquisa.
     signal alternarModoEdicao
 
+    // Comanda sobre a qual as máquinas da rede discordam (ver
+    // services/rede/indicePedidos.py). O amarelo vence o estado de seleção
+    // e o de hover: é a informação mais importante do item — enquanto o
+    // conflito não for resolvido, o valor do caixa do dia pode estar
+    // diferente em cada máquina.
+    readonly property bool emConflito: model.emConflito === true
+
     width: ListView.view.width - (ListView.view.ScrollBar.vertical.visible ? ListView.view.ScrollBar.vertical.width : 0)
     height: colunaItem.implicitHeight + 20
     radius: Estilo.rounding.grande
-    color: selecionado ? "#ede9fe" : (mouseAreaItem.containsMouse ? "#f5f5f5" : "#ffffff")
-    border.color: selecionado ? "#7c3aed" : Estilo.cores.bordaCard
-    border.width: selecionado ? 2 : 1
+    color: emConflito
+        ? Estilo.cores.avisoFundo
+        : (selecionado ? "#ede9fe" : (mouseAreaItem.containsMouse ? "#f5f5f5" : "#ffffff"))
+    border.color: emConflito
+        ? Estilo.cores.avisoBorda
+        : (selecionado ? "#7c3aed" : Estilo.cores.bordaCard)
+    border.width: (emConflito || selecionado) ? 2 : 1
 
     MouseArea {
         id: mouseAreaItem
@@ -132,15 +143,38 @@ Rectangle {
                 }
             }
 
+            // Código impresso no cabeçalho da comanda (o mesmo que está no
+            // papel) + máquina onde ela foi lançada. É o que permite
+            // conferir uma comanda entre duas máquinas sem depender de
+            // nomes de arquivo: o código é idêntico nas duas.
             Text {
-                text: pagina.tituloComanda(model)
-                font.pixelSize: 12
-                font.bold: true
-                color: Estilo.cores.texto
+                text: model.maquinaOrigem
+                    ? model.codigo + " · " + model.maquinaOrigem
+                    : model.codigo
+                visible: model.codigo !== ""
+                font.pixelSize: 11
+                font.family: "monospace"
+                color: itemComanda.emConflito ? Estilo.cores.avisoTexto : Estilo.cores.textoSecundario
                 elide: Text.ElideRight
-                width: colunaItem.width - 70
                 anchors.verticalCenter: parent.verticalCenter
             }
+
+            Icone {
+                nome: "fa6s.triangle-exclamation"
+                cor: Estilo.cores.avisoBorda
+                tamanho: 12
+                visible: itemComanda.emConflito
+                anchors.verticalCenter: parent.verticalCenter
+            }
+        }
+
+        Text {
+            text: pagina.tituloComanda(model)
+            font.pixelSize: 12
+            font.bold: true
+            color: Estilo.cores.texto
+            elide: Text.ElideRight
+            width: colunaItem.width
         }
     }
 }

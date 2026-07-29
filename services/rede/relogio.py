@@ -120,6 +120,15 @@ def _analisar(id_evento):
         return None
 
 
+def maquina_do_id(id_evento) -> str:
+    """Nome da máquina que gerou `id_evento`, ou "" se o id for vazio/
+    malformado (ou for um limiar fictício de `id_para_instante`, que não
+    tem máquina). Evita que quem só quer essa informação — a Consulta, pra
+    mostrar de onde veio cada comanda — precise conhecer o formato do id."""
+    partes = _analisar(id_evento)
+    return partes[2] if partes is not None else ""
+
+
 def mais_novo(id_a, id_b) -> bool:
     """True se `id_a` é estritamente mais recente que `id_b`. Único ponto
     de comparação do projeto — quem usa este módulo nunca deveria comparar

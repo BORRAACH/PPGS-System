@@ -77,13 +77,35 @@ class FechamentoController(QObject):
         return {"itens": itens}
 
     def _obter_fechamento_reconciliacao(self, data_iso):
-        resumo = fechamentoCache.carregar(data_iso)
-        if resumo is None:
+        """Payload deliberadamente vazio de números: quem recebe recalcula o
+        dia com as próprias comandas (ver _ao_receber_fechamento_remoto), e
+        mandar o resumo inteiro só gastaria banda com um valor que o outro
+        lado vai descartar. O que importa é a mensagem chegar — ela é o
+        aviso de "este dia mudou aqui, confira o seu"."""
+        if fechamentoCache.carregar(data_iso) is None:
             return None
-        return {"resumo": resumo}
+        return {"data": data_iso}
 
-    def _aplicar_fechamento_reconciliacao(self, data_iso, payload):
-        self._ao_receber_fechamento_remoto({"data": data_iso, "resumo": (payload or {}).get("resumo")})
+    def _aplicar_fechamento_reconciliacao(self, data_iso, _payload):
+        self._ao_receber_fechamento_remoto({"data": data_iso})
+
+    def _recalcular_e_cachear(self, data_iso):
+        """Recalcula o dia a partir das comandas desta máquina e atualiza o
+        cache local. Não publica nada na rede — é a reação a uma novidade
+        que veio de lá, e republicar aqui faria as máquinas ficarem se
+        cutucando de volta indefinidamente.
+
+        Só grava e avisa a tela se o resultado mudou de verdade: enquanto as
+        comandas não convergirem, os resumos das duas máquinas continuam
+        diferentes e este caminho roda a cada ciclo — sem essa checagem, a
+        página de Fechamento se recarregaria sozinha a cada 2 minutos sem
+        nada ter mudado."""
+        resumo = self._calcular_resumo_dia(data_iso)
+        if resumo == fechamentoCache.carregar(data_iso):
+            return
+
+        fechamentoCache.salvar(data_iso, resumo)
+        self.fechamentoAtualizado.emit(data_iso)
 
     def _listar_arquivos_do_dia(self, data_iso):
         """Nomes de arquivo cuja data embutida bate com `data_iso`, sem
@@ -187,25 +209,34 @@ class FechamentoController(QObject):
         return self.calcularFechamento(data_iso)
 
     def _ao_receber_fechamento_remoto(self, payload):
-        """Reação a um "fechamento_atualizado" publicado por OUTRA máquina
-        — grava o resumo recebido no cache local desta máquina também
-        (sem recalcular: confia no cálculo de quem publicou, mesmo espírito
-        de SalaoController._ao_receber_mesa_remota) e avisa a tela, se
-        estiver aberta nesse dia.
+        """Reação a um "fechamento_atualizado" vindo de OUTRA máquina.
 
-        Sobrescreve sempre, sem comparar idEvento/versão nenhuma (ao
-        contrário de mesas/cardápio, que usam services/rede/relogio.py
-        pra um LWW real) — de propósito: este cache não é a fonte de
-        verdade, é 100% recalculável a partir de pedidos/*.txt (que já
-        converge corretamente via o domínio "pedidos" + tombstones), então
-        não existe um conflito de verdade pra arbitrar aqui — reexecutar o
-        cálculo pra um mesmo dia, em qualquer máquina, sempre dá o mesmo
-        resultado determinístico."""
+        A mensagem é tratada como um AVISO de que aquele dia mudou em algum
+        lugar, não como um valor a copiar: o que se faz aqui é recalcular o
+        dia a partir das comandas desta máquina. Os números do peer são
+        ignorados de propósito.
+
+        Antes se gravava o resumo recebido direto por cima do local, com o
+        argumento de que o cache é 100% recalculável e o cálculo é
+        determinístico — o que só vale se as duas máquinas tiverem as MESMAS
+        comandas. Quando não têm (justamente o problema que a sincronização
+        de comandas resolve, e que existe de verdade enquanto uma máquina
+        está se atualizando), o resultado era um ping-pong permanente: A
+        anunciava seu resumo, B copiava; B anunciava o dele, A copiava; e
+        como obterFechamento devolve o cache pra dias passados sem nunca
+        recalcular, o valor do caixa daquele dia ficava alternando entre as
+        duas máquinas a cada ciclo de 2 min, sem nada pra desempatar.
+
+        Recalcular localmente resolve os dois lados: nenhuma máquina impõe
+        um número à outra, e assim que as comandas convergirem (pelo domínio
+        "pedidos" + tombstones) as duas chegam ao mesmo resultado sozinhas —
+        aí os resumos passam a bater e o tráfego cessa. Também é o
+        comportamento mais seguro no meio do caminho: uma máquina que ainda
+        não recebeu 3 comandas do dia não consegue mais sobrescrever com um
+        total menor o caixa de quem já as tem."""
         payload = payload or {}
         data_iso = payload.get("data")
-        resumo = payload.get("resumo")
-        if not data_iso or resumo is None:
+        if not data_iso:
             return
 
-        fechamentoCache.salvar(data_iso, resumo)
-        self.fechamentoAtualizado.emit(data_iso)
+        self._recalcular_e_cachear(data_iso)

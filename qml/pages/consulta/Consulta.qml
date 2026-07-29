@@ -53,16 +53,25 @@ Page {
         return posicao !== -1 ? posicao : 100000;
     }
 
-    // Combina o nome exibido (cliente + horário) e o conteúdo do cupom,
-    // com uma leve penalidade para matches que só aparecem no conteúdo —
-    // pesquisar pelo nome do cliente deve priorizar aquele cliente.
+    // Combina o nome exibido (cliente + horário), o código da comanda e o
+    // conteúdo do cupom, com uma leve penalidade para matches que só
+    // aparecem no conteúdo — pesquisar pelo nome do cliente deve priorizar
+    // aquele cliente.
+    //
+    // O código entra sem penalidade nenhuma (é o campo mais específico que
+    // existe: quem digita "A291201" quer exatamente aquela comanda). Ele
+    // aparece no conteúdo do cupom também, mas só por lá herdaria a
+    // penalidade de 500 e afundaria abaixo de qualquer comanda cujo nome de
+    // cliente casasse por acaso — justo no caso em que a busca é mais
+    // precisa, que é conferir uma comanda entre duas máquinas.
     function pontuarComanda(item, busca) {
         if (busca === "")
             return 0;
 
         var pontoTitulo = telaConsulta.pontuarTexto(telaConsulta.tituloComanda(item), busca);
+        var pontoCodigo = item.codigo ? telaConsulta.pontuarTexto(item.codigo, busca) : 100000;
         var pontoConteudo = telaConsulta.pontuarTexto(item.conteudo, busca) + 500;
-        return Math.min(pontoTitulo, pontoConteudo);
+        return Math.min(pontoTitulo, pontoCodigo, pontoConteudo);
     }
 
     // Reordena _todasComandas pela proximidade com o texto pesquisado (sem
@@ -112,7 +121,11 @@ Page {
             "arquivo": item.arquivo,
             "conteudo": item.conteudo,
             "cliente": item.cliente,
-            "dataHora": item.dataHora
+            "dataHora": item.dataHora,
+            "codigo": item.codigo,
+            "maquinaOrigem": item.maquinaOrigem,
+            "emConflito": item.emConflito === true,
+            "motivoConflito": item.motivoConflito
         };
     }
 
@@ -247,7 +260,13 @@ Page {
                 spacing: 6
                 Icone { nome: "fa6s.globe"; cor: Estilo.cores.textoSecundario; tamanho: Estilo.fonte.padrao; anchors.verticalCenter: parent.verticalCenter }
                 Text {
-                    text: redeController.quantidadeConectados + " conectado(s)"
+                    // O guard existe porque, no encerramento do app, as
+                    // context properties são destruídas antes das telas: sem
+                    // ele este binding roda uma última vez com
+                    // redeController já nulo e deixa um TypeError no
+                    // logs/app.log a cada fechamento — ruído bem no arquivo
+                    // que se usa pra diagnosticar problema de rede.
+                    text: (redeController ? redeController.quantidadeConectados : 0) + " conectado(s)"
                     font.pixelSize: Estilo.fonte.padrao
                     color: Estilo.cores.textoSecundario
                     anchors.verticalCenter: parent.verticalCenter

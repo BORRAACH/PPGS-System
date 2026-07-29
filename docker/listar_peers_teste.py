@@ -29,5 +29,9 @@ def mostrar():
     app.quit()
 
 
-QTimer.singleShot(4000, mostrar)
+# Espera mais que a descoberta + handshake puros: quando esta instância tem
+# o id maior que a do peer, ela só disca depois do primeiro ciclo do timer de
+# reconexão (ver RedeService._tentar_conectar_a_peer), então uma janela curta
+# demais mediria "0 peers" sem que houvesse nada de errado com a malha.
+QTimer.singleShot(12000, mostrar)
 sys.exit(app.exec())

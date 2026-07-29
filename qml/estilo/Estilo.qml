@@ -63,6 +63,16 @@ QtObject {
         // Mesma história para o texto de dica (placeholderText), que vem de
         // palette.placeholderText.
         readonly property color placeholderInput: "#95a5a6"
+
+        // ===== Aviso (amarelo) =====
+        // Usado pelas comandas em conflito de sincronização na Consulta (ver
+        // ItemComandaDelegate.qml/PainelDetalhe.qml): as máquinas da rede
+        // discordam sobre aquela comanda e alguém precisa decidir. Amarelo
+        // de propósito, e não vermelho: nada foi perdido nem deu erro — só
+        // está esperando uma escolha.
+        readonly property color avisoFundo: "#fef3c7"
+        readonly property color avisoBorda: "#f59e0b"
+        readonly property color avisoTexto: "#92400e"
     }
 
     // ===== Botão Confirmar / Sucesso (verde) =====

@@ -12,13 +12,11 @@ de rede local, não código-fonte), igual a Config/estilo_impressao.json
 import json
 import os
 
-
-def _raiz_projeto():
-    return os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from services.rede import caminhos
 
 
 def _caminho_arquivo():
-    return os.path.join(_raiz_projeto(), "Config", "impressora_fixada.json")
+    return os.path.join(caminhos.raiz_projeto(), "Config", "impressora_fixada.json")
 
 
 def carregar_nome_fixado():
