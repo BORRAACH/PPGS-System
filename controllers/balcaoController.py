@@ -6,6 +6,7 @@ from datetime import datetime
 from PyQt6.QtCore import QObject, pyqtSignal, pyqtSlot
 
 from Config import impressoraWindows
+from Config.logConfig import protegido
 from services import comandaEstiloService as estilo
 from services import comandaTextoService as texto
 from services.printerService import PrinterService
@@ -125,6 +126,7 @@ class BalcaoController(QObject):
 
     @pyqtSlot("QVariantMap", result=bool)
     @pyqtSlot("QVariantMap", int, result=bool)
+    @protegido(False)
     def enviarPedido(self, dados, copias=1):
         """Gera o arquivo .txt do pedido e pede a impressão pela malha local
         `copias` vezes (padrão 1) — a comanda é salva uma única vez (ver
@@ -148,6 +150,7 @@ class BalcaoController(QObject):
         return True
 
     @pyqtSlot("QVariantMap", result=bool)
+    @protegido(False)
     def lancarPedido(self, dados):
         """Igual a enviarPedido, mas nunca tenta imprimir — usado pelo botão
         'Lançar', que só grava o .txt e propaga para a rede local."""
@@ -155,6 +158,7 @@ class BalcaoController(QObject):
         return sucesso
 
     @pyqtSlot()
+    @protegido()
     def consultarImpressoraAtual(self):
         """Dispara em segundo plano a busca pela impressora que esta
         máquina usaria para imprimir agora (a configurada em

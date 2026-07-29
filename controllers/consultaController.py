@@ -6,6 +6,7 @@ import time
 
 from PyQt6.QtCore import QByteArray, QObject, pyqtSignal, pyqtSlot
 
+from Config.logConfig import protegido
 from services import comandaParserService as parser
 from services.comandaTextoService import PREFIXO_ADICIONAL, PREFIXO_BORDA
 from services.rede import rede, tombstones
@@ -271,6 +272,7 @@ class ConsultaController(QObject):
         self.removerPedidoRemoto(nome_arquivo)
 
     @pyqtSlot(result="QVariantList")
+    @protegido([])
     def listarComandas(self):
         """Lê todos os .txt salvos em pedidos/ e retorna seus dados já
         prontos para exibição (sem os códigos de controle da impressora),
@@ -308,6 +310,7 @@ class ConsultaController(QObject):
         return comandas
 
     @pyqtSlot(str, result="QVariantMap")
+    @protegido({})
     def reconstruirComanda(self, nome_arquivo):
         """Lê uma comanda já salva e desfaz a formatação de impressão,
         devolvendo os campos prontos para preencher de novo o formulário de
@@ -351,6 +354,7 @@ class ConsultaController(QObject):
         }
 
     @pyqtSlot(str, result=bool)
+    @protegido(False)
     def apagarComanda(self, nome_arquivo):
         """Remove o .txt da comanda. Retorna True em caso de sucesso."""
         nome_arquivo = os.path.basename(nome_arquivo)
@@ -367,6 +371,7 @@ class ConsultaController(QObject):
         return True
 
     @pyqtSlot(str, QByteArray)
+    @protegido()
     def aplicarPedidoRemoto(self, nome_arquivo, conteudo):
         """Grava localmente um pedido recebido de outra máquina da rede e
         avisa a tela de Consulta para recarregar a lista."""
@@ -384,6 +389,7 @@ class ConsultaController(QObject):
         self.comandasAtualizadas.emit()
 
     @pyqtSlot(str)
+    @protegido()
     def removerPedidoRemoto(self, nome_arquivo):
         """Apaga localmente um pedido removido em outra máquina da rede e
         avisa a tela de Consulta para recarregar a lista."""

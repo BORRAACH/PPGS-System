@@ -4,6 +4,7 @@ from datetime import datetime
 
 from PyQt6.QtCore import QObject, pyqtSlot
 
+from Config.logConfig import protegido
 from services import comandaEstiloService as estilo
 from services import comandaTextoService as texto
 from services.rede import rede
@@ -129,6 +130,7 @@ class EntregaController(QObject):
 
     @pyqtSlot("QVariantMap", result=bool)
     @pyqtSlot("QVariantMap", int, result=bool)
+    @protegido(False)
     def enviarPedido(self, dados, copias=1):
         """Gera o arquivo .txt do pedido de entrega e pede a impressão pela
         malha local `copias` vezes (padrão 1) — a comanda é salva uma única
@@ -151,6 +153,7 @@ class EntregaController(QObject):
         return True
 
     @pyqtSlot("QVariantMap", result=bool)
+    @protegido(False)
     def lancarPedido(self, dados):
         """Igual a enviarPedido, mas nunca tenta imprimir — usado pelo botão
         'Lançar', que só grava o .txt e propaga para a rede local."""

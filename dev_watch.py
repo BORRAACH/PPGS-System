@@ -45,6 +45,11 @@ EXTENSOES_OBSERVADAS = {".py", ".qml", ".json", ".qmldir"}
 ARQUIVOS_IGNORADOS = {
     os.path.join("Config", "estilo_impressao.json"),
     os.path.join("Config", ".versao"),
+    # Escolha de qual máquina da malha imprime (ver
+    # services/rede/impressoraFixada.py). É gravado/apagado sozinho quando
+    # um peer entra na rede anunciando uma fixação — ou seja, o app se
+    # reiniciava sozinho, no meio do uso, sem ninguém ter tocado em código.
+    os.path.join("Config", "impressora_fixada.json"),
 }
 
 INTERVALO_POLL = 0.5  # segundos entre verificações

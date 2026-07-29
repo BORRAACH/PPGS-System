@@ -80,6 +80,12 @@ except ImportError as erro:
     print(f"[main] Alternativa: pip install {pacote}")
     sys.exit(1)
 
+# Só agora, com o PyQt6 garantidamente importado: manda os erros/avisos de
+# QML (que o Qt escreve no stderr do sistema, fora do alcance do
+# logConfig) também pro logs/app.log — sem isso, uma tela que não carrega
+# ou um binding quebrado não deixa rastro nenhum no log.
+logConfig.instalar_captura_de_mensagens_qt()
+
 # Loga nome/porta/tipo_porta de cada impressora instalada (ver
 # Config/diagnosticar_impressora.py) — mesma info que services/printer/
 # windows.py/redeService.py já usam pra decidir a máquina que imprime na

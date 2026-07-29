@@ -10,6 +10,7 @@ import uuid
 from PyQt6.QtCore import QObject, QByteArray, QTimer, pyqtProperty, pyqtSignal, pyqtSlot
 from PyQt6.QtNetwork import QHostAddress, QTcpServer, QTcpSocket
 
+from Config.logConfig import protegido
 from services.printerService import PrinterService
 from services.rede import impressoraFixada, tombstones
 from services.rede.descoberta import criar_descoberta
@@ -146,6 +147,7 @@ class RedeService(QObject):
         return self._nome_local
 
     @pyqtSlot(result="QVariantList")
+    @protegido([])
     def listarPeers(self):
         """Máquinas atualmente conectadas na malha, mais recente primeiro."""
         peers = list(self._info_peers.values())
@@ -592,6 +594,7 @@ class RedeService(QObject):
     # ---------- Impressora local e eleição da máquina que imprime ----------
 
     @pyqtSlot()
+    @protegido()
     def verificarImpressoraLocal(self):
         """Força uma nova checagem da impressora local agora, em vez de
         esperar o próximo tique de _timer_impressora (30s) — usado pelo
@@ -789,6 +792,7 @@ class RedeService(QObject):
         return self._nome_maquina_fixada or ""
 
     @pyqtSlot(result="QVariantList")
+    @protegido([])
     def candidatosImpressora(self):
         """Máquinas que anunciam impressora agora (esta + peers) — as
         opções disponíveis pra fixar manualmente em Rede.qml. Mesmo filtro
@@ -810,6 +814,7 @@ class RedeService(QObject):
         return candidatos
 
     @pyqtSlot(str)
+    @protegido()
     def fixarImpressoraPrincipal(self, nomeMaquina: str):
         """Fixa manualmente `nomeMaquina` como a máquina que imprime pra
         malha inteira (string vazia = volta pra eleição automática por
@@ -862,6 +867,7 @@ class RedeService(QObject):
         self.impressoraPrincipalMudou.emit()
 
     @pyqtSlot(result="QVariantMap")
+    @protegido({})
     def impressoraPrincipal(self):
         """Info da impressora que a malha está usando pra imprimir agora (a
         máquina eleita por _recalcular_maquina_impressora) — pra exibir em

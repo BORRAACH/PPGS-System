@@ -56,6 +56,57 @@ PREFIXO_ADICIONAL = "+ "
 PREFIXO_BORDA = "* "
 
 
+def _linhas_de_list_model(modelo):
+    """Lê um ListModel da QML (que chega aqui como QAbstractListModel) linha
+    a linha, devolvendo uma lista de dicts — ou None se `modelo` não for um.
+
+    Só olha os métodos que precisa (duck typing), sem importar PyQt6: este
+    módulo é usado também por scripts e testes que rodam sem Qt carregado."""
+    try:
+        contar = modelo.rowCount
+        indice_de = modelo.index
+        ler = modelo.data
+        papeis = modelo.roleNames()
+    except AttributeError:
+        return None
+
+    nomes = {numero: bytes(nome).decode("utf-8", errors="replace") for numero, nome in papeis.items()}
+    linhas = []
+    for i in range(contar()):
+        indice = indice_de(i, 0)
+        linhas.append({nome: ler(indice, numero) for numero, nome in nomes.items()})
+    return linhas
+
+
+def _como_lista_de_dicts(valor):
+    """Normaliza o que a QML mandou num campo que deveria ser uma lista de
+    objetos (hoje: "adicionais").
+
+    Existe porque um array atribuído a um role de ListModel não continua
+    sendo um array: vira um list-model aninhado, que chega no Python como
+    QAbstractListModel. Iterar nisso levanta TypeError — e uma exceção
+    escapando de um slot chamado pela QML derrubava o app inteiro (ver
+    Config/logConfig.protegido). As telas de Balcão/Entrega/Salão evitam
+    isso guardando os adicionais como string JSON no ListModel, mas essa
+    convenção é fácil de esquecer numa tela nova, então a conversão é feita
+    aqui também — assim o pior caso vira "os adicionais saem certos do
+    mesmo jeito", não "a comanda inteira se perde"."""
+    if not valor:
+        return []
+
+    if isinstance(valor, dict):
+        return [valor]
+
+    if not isinstance(valor, (list, tuple)):
+        linhas = _linhas_de_list_model(valor)
+        if linhas is None:
+            print(f"[comandaTextoService] Campo de adicionais em formato inesperado ({type(valor).__name__}) — ignorado.")
+            return []
+        valor = linhas
+
+    return [item for item in valor if isinstance(item, dict)]
+
+
 def montar_grupos(itens):
     """Converte os itens do pedido em grupos (um por item; uma pizza meio a
     meio gera várias linhas — uma por sabor/fração — mas continua sendo um
@@ -75,7 +126,7 @@ def montar_grupos(itens):
         pedido = item.get("pedido", "").upper()
         observacao = item.get("observacao", "").upper()
         valor = item.get("valor", "")
-        adicionais = item.get("adicionais") or []
+        adicionais = _como_lista_de_dicts(item.get("adicionais"))
 
         sabores, tamanho = dividir_sabores(pedido)
 
@@ -118,6 +169,12 @@ def _extras_adicionais(adicionais, sabor):
 
 def _formatar_borda(borda):
     if not borda:
+        return ""
+
+    if not isinstance(borda, dict):
+        # Mesmo motivo de _como_lista_de_dicts: o que a QML manda nem sempre
+        # é o dict simples que este código espera.
+        print(f"[comandaTextoService] Campo de borda em formato inesperado ({type(borda).__name__}) — ignorado.")
         return ""
 
     nome = (borda.get("nome") or "").strip()

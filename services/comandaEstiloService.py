@@ -16,6 +16,8 @@ import os
 
 from PyQt6.QtCore import QObject, pyqtSignal, pyqtSlot
 
+from Config.logConfig import protegido
+
 # Comandos ESC/POS. A Bematech MP-4200 TH (e impressoras térmicas em geral)
 # entendem esses comandos em modo de emulação ESC/POS/Epson — mesma base já
 # usada para negrito e corte em balcaoController.py/printerService.py.
@@ -253,14 +255,17 @@ class ComandaEstiloController(QObject):
     configuracaoAlterada = pyqtSignal()
 
     @pyqtSlot(result="QVariantMap")
+    @protegido({})
     def obterConfiguracao(self):
         return _config
 
     @pyqtSlot(result="QVariantList")
+    @protegido([])
     def listarCampos(self):
         return [{"chave": campo, "rotulo": RODULOS_CAMPOS[campo]} for campo in CAMPOS]
 
     @pyqtSlot(result="QVariantList")
+    @protegido([])
     def listarAtributos(self):
         return [{"chave": atributo, "rotulo": RODULOS_ATRIBUTOS[atributo]} for atributo in ATRIBUTOS_BOOLEANOS]
 
@@ -269,6 +274,7 @@ class ComandaEstiloController(QObject):
         return TAMANHO_FONTE_BASE_PX
 
     @pyqtSlot("QVariantMap")
+    @protegido()
     def salvarConfiguracaoCompleta(self, config):
         """Grava de uma vez a configuração inteira vinda da tela (chamado ao
         sair da tela de Configurações, não a cada clique/edição) — gravar em
@@ -289,6 +295,7 @@ class ComandaEstiloController(QObject):
         self.configuracaoAlterada.emit()
 
     @pyqtSlot()
+    @protegido()
     def restaurarPadroes(self):
         global _config
         _config = _padrao()
