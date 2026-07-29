@@ -14,6 +14,20 @@ ApplicationWindow {
     color: Qt.darker(Estilo.cores.fundoPagina, 1.8)
     title: "Sistema de Pedidos"
 
+    // Paleta fixa para a janela inteira (herdada por todos os controles,
+    // inclusive os popups de ComboBox/Menu, que não são filhos visuais das
+    // páginas). No Windows, a paleta padrão vem do tema do sistema: em
+    // máquinas com tema escuro, "text" e "placeholderText" chegavam claros e
+    // sumiam no fundo branco dos inputs.
+    //
+    // Isto é a rede de segurança; cada input também declara a própria "color"
+    // (ver Estilo.cores.textoInput), de modo que nenhum campo dependa só
+    // desta herança.
+    palette.text: Estilo.cores.textoInput
+    palette.placeholderText: Estilo.cores.placeholderInput
+    palette.base: "#ffffff"
+    palette.windowText: Estilo.cores.texto
+
     RowLayout {
         anchors.fill: parent
         spacing: 0
@@ -41,6 +55,26 @@ ApplicationWindow {
                 id: stackView
 
                 anchors.fill: parent
+
+                // Volta para a tela inicial a partir de qualquer página (é o
+                // que os botões "Voltar para o Menu" chamam, via
+                // StackView.view.irParaInicio()).
+                //
+                // Precisa ser replace(null, ...), não pop(): desde que a
+                // navegação passou a trocar a pilha inteira a cada tela (ver
+                // LateralBar.qml), esta pilha vive permanentemente com
+                // profundidade 1 — não existe mais nada "embaixo" para onde
+                // voltar, e o pop() que estas telas usavam era um no-op
+                // silencioso (devolve null e deixa a tela como está).
+                //
+                // O caminho é resolvido a partir DESTE arquivo, então fica
+                // igual para todas as páginas, não importa a pasta delas.
+                function irParaInicio() {
+                    if (currentItem && currentItem.objectName === "pageHome")
+                        return;
+
+                    replace(null, "pages/inicio/Inicio.qml", {}, StackView.Immediate);
+                }
 
                 // Sem animação de transição entre páginas — o app roda em
                 // computadores fracos, e o slide padrão do StackView (dois

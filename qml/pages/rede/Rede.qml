@@ -491,9 +491,19 @@ Page {
                     }
                     onActivated: telaRede.selecionarImpressoraPrincipal(currentIndex)
 
+                    // Ver o comentário do mesmo delegate em
+                    // components/CamposPagamento.qml.
+                    delegate: ItemDelegate {
+                        width: comboImpressoraPrincipal.width
+                        text: modelData
+                        highlighted: comboImpressoraPrincipal.highlightedIndex === index
+                        palette.text: Estilo.cores.textoInput
+                        palette.highlightedText: Estilo.cores.textoInput
+                    }
+
                     contentItem: Text {
                         text: comboImpressoraPrincipal.displayText
-                        color: Estilo.cores.texto
+                        color: Estilo.cores.textoInput
                         leftPadding: 10
                         rightPadding: 10
                         verticalAlignment: Text.AlignVCenter

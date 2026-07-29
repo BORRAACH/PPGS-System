@@ -50,10 +50,7 @@ Page {
         target: redeController
 
         function onImpressaoResultado(sucesso, mensagem) {
-            telaBalcao.mostrarNotificacao(
-                sucesso ? ("Comanda impressa (" + mensagem + ")") : ("Falha ao imprimir: " + mensagem),
-                sucesso
-            );
+            telaBalcao.mostrarNotificacao(sucesso ? ("Comanda impressa (" + mensagem + ")") : ("Falha ao imprimir: " + mensagem), sucesso);
         }
     }
 
@@ -65,7 +62,7 @@ Page {
                     "pedido": itensIniciais[i].pedido || "",
                     "observacao": itensIniciais[i].observacao || "",
                     "valor": itensIniciais[i].valor || "",
-                    "borda": itensIniciais[i].borda || null,
+                    "borda": JSON.stringify(itensIniciais[i].borda || null),
                     // Guardado como string, não array: um array atribuído a um
                     // role de ListModel vira um list-model aninhado (não um
                     // JS array de verdade), e isso quebra tanto a leitura em
@@ -81,12 +78,22 @@ Page {
     ListModel {
         id: modeloPedidos
 
+        // Todos os roles precisam existir já no primeiro elemento:
+        // ListModel.setProperty() NÃO cria role novo quando o valor é um
+        // objeto (só quando é tipo simples), e append() com um valor null
+        // também não cria. Sem declarar aqui, "borda" nunca chegava a
+        // existir e a borda escolhida sumia da comanda sem aviso nenhum.
+        //
+        // "borda" e "adicionais" são STRING JSON, não objeto/array: um
+        // array ou objeto atribuído a um role vira um model aninhado, que
+        // chega no Python como QAbstractListModel em vez de lista/dict.
         ListElement {
             pedido: ""
             observacao: ""
             valor: ""
+            borda: "null"
+            adicionais: "[]"
         }
-
     }
 
     // --- TECLAS DE ATALHO GLOBAIS DA TELA ---
@@ -119,7 +126,6 @@ Page {
                 }
                 if (linhaParaRemover !== -1)
                     break;
-
             }
             if (linhaParaRemover !== -1)
                 modeloPedidos.remove(linhaParaRemover);
@@ -133,9 +139,9 @@ Page {
         id: popupSelecaoPedido
 
         pilha: stackViewLocal
-        onPedidoSelecionado: function(nomePedido, valorPedido) {
+        onPedidoSelecionado: function (nomePedido, valorPedido) {
             if (telaBalcao.indicePedidoAtual === -1)
-                return ;
+                return;
 
             // Quando mais de um lanche é selecionado de uma vez, Lanches.qml
             // envia um array de itens em vez de nome/valor — a primeira
@@ -144,12 +150,12 @@ Page {
             if (Array.isArray(nomePedido)) {
                 var itens = nomePedido;
                 if (itens.length === 0)
-                    return ;
+                    return;
 
                 modeloPedidos.setProperty(telaBalcao.indicePedidoAtual, "pedido", itens[0].nome);
                 modeloPedidos.setProperty(telaBalcao.indicePedidoAtual, "valor", itens[0].valor);
                 modeloPedidos.setProperty(telaBalcao.indicePedidoAtual, "observacao", itens[0].observacao || "");
-                modeloPedidos.setProperty(telaBalcao.indicePedidoAtual, "borda", itens[0].borda || null);
+                modeloPedidos.setProperty(telaBalcao.indicePedidoAtual, "borda", JSON.stringify(itens[0].borda || null));
                 // Ver o comentário em Component.onCompleted sobre por que
                 // "adicionais" precisa ser string (JSON), não array.
                 modeloPedidos.setProperty(telaBalcao.indicePedidoAtual, "adicionais", JSON.stringify(itens[0].adicionais || []));
@@ -158,17 +164,16 @@ Page {
                         "pedido": itens[i].nome,
                         "observacao": itens[i].observacao || "",
                         "valor": itens[i].valor,
-                        "borda": itens[i].borda || null,
+                        "borda": JSON.stringify(itens[i].borda || null),
                         "adicionais": JSON.stringify(itens[i].adicionais || [])
                     });
                 }
-                return ;
+                return;
             }
 
             modeloPedidos.setProperty(telaBalcao.indicePedidoAtual, "pedido", nomePedido);
             if (valorPedido !== undefined && valorPedido !== "")
                 modeloPedidos.setProperty(telaBalcao.indicePedidoAtual, "valor", valorPedido);
-
         }
     }
 
@@ -226,7 +231,7 @@ Page {
                         "pedido": item.pedido,
                         "observacao": item.observacao,
                         "valor": item.valor,
-                        "borda": item.borda || null,
+                        "borda": JSON.parse(item.borda || "null"),
                         // item.adicionais é a string JSON guardada no
                         // ListModel (ver Component.onCompleted) — desfaz aqui
                         // pra virar array de novo antes de mandar pro Python.
@@ -311,7 +316,7 @@ Page {
                     "pedido": "",
                     "observacao": "",
                     "valor": "",
-                    "borda": null,
+                    "borda": "null",
                     "adicionais": "[]"
                 });
                 camposPagamento.redefinirPadrao();
@@ -336,328 +341,367 @@ Page {
                     policy: ScrollBar.AsNeeded
                 }
 
-            Row {
-                id: rowConteudo
+                Row {
+                    id: rowConteudo
 
-                anchors.horizontalCenter: parent.horizontalCenter
-                anchors.verticalCenter: parent.verticalCenter
-                spacing: 30
-
-                Column {
+                    anchors.horizontalCenter: parent.horizontalCenter
                     anchors.verticalCenter: parent.verticalCenter
-                    spacing: 20
+                    spacing: 30
 
-                    Row {
-                        spacing: 10
-                        anchors.horizontalCenter: parent
-                        Icone { nome: "fa6s.building"; cor: Estilo.confirmar.normal; tamanho: Estilo.fonte.titulo; anchors.verticalCenter: parent.verticalCenter }
-                        Text {
-                            text: "ATENDIMENTO BALCÃO"
-                            font.pixelSize: Estilo.fonte.titulo
-                            font.bold: true
-                            color: Estilo.confirmar.normal
-                            anchors.verticalCenter: parent.verticalCenter
-                        }
-                    }
-
-                    // Campo Nome do Cliente
                     Column {
-                        anchors.horizontalCenter: parent
-                        spacing: 4
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: 20
 
-                        Text {
-                            text: "Nome do Cliente"
-                            font.pixelSize: 12
-                            font.bold: true
-                            color: Estilo.cores.textoSecundario
-                        }
-
-                        TextField {
-                            id: inputNomeCliente
-
-                            placeholderText: "NOME DO CLIENTE"
-                            width: 420
-                            topPadding: 10
-                            bottomPadding: 10
-                            leftPadding: 10
-                            rightPadding: 10
-                            text: clienteNome
-                            focus: true
-                            KeyNavigation.backtab: btnVoltar
-                            // Tab/Enter chamam primeiroCampoPedido() na hora (não
-                            // usam "KeyNavigation.tab: primeiroCampoPedido()"):
-                            // esse binding é avaliado só uma vez, cedo demais —
-                            // antes do primeiro delegate da lista existir — e
-                            // nunca mais é reavaliado, ficando preso apontando
-                            // para "null"/o próprio campo.
-                            Keys.onTabPressed: primeiroCampoPedido().forceActiveFocus()
-                            Keys.onReturnPressed: primeiroCampoPedido().forceActiveFocus()
-
-                            background: Rectangle {
-                                radius: Estilo.rounding.padrao
-                                color: "#ffffff"
-                                border.color: parent.activeFocus ? Estilo.confirmar.normal : Estilo.cores.borda
-                                border.width: 1
+                        Row {
+                            spacing: 10
+                            anchors.horizontalCenter: parent
+                            Icone {
+                                nome: "fa6s.building"
+                                cor: Estilo.confirmar.normal
+                                tamanho: Estilo.fonte.titulo
+                                anchors.verticalCenter: parent.verticalCenter
                             }
-
-                        }
-                    }
-
-                    // --- CABEÇALHO DA LISTA DE PEDIDOS (rótulo das colunas, uma vez só —
-                    // repetir em cada linha do delegate abaixo poluiria a lista) ---
-                    Row {
-                        width: 690
-                        anchors.horizontalCenter: parent
-                        spacing: 10
-
-                        Text { text: "Pedido"; width: 200; font.pixelSize: 12; font.bold: true; color: Estilo.cores.textoSecundario }
-                        Text { text: "Observação"; width: 180; font.pixelSize: 12; font.bold: true; color: Estilo.cores.textoSecundario }
-                        Text { text: "Valor"; width: 110; font.pixelSize: 12; font.bold: true; color: Estilo.cores.textoSecundario }
-                    }
-
-                    // --- LISTA DINÂMICA DE PEDIDOS ---
-                    ListView {
-                        id: listaPedidos
-
-                        width: 690
-                        height: Math.min(count * 60, 240)
-                        clip: true
-                        model: modeloPedidos // Consome o modelo declarado na raiz da Page
-                        spacing: 10
-                        anchors.horizontalCenter: parent
-
-                        ScrollBar.vertical: ScrollBar {
-                            policy: ScrollBar.AsNeeded
-                        }
-
-                        // modeloPedidos é declarado na raiz da Page (fora deste
-                        // Component), então é o único jeito seguro de reagir a
-                        // novas linhas aqui dentro — referenciar "listaPedidos" a
-                        // partir de fora deste Component (ex: no popup de seleção
-                        // de pedido) lança ReferenceError, pois o id não é
-                        // visível fora da árvore em que foi declarado.
-                        Connections {
-                            function onCountChanged() {
-                                listaPedidos.positionViewAtEnd();
-                            }
-
-                            target: modeloPedidos
-                        }
-
-                        delegate: LinhaPedido {
-                            corDestaque: Estilo.confirmar.normal
-                            campoExternoAnterior: inputNomeCliente
-                            campoExternoProximo: camposPagamento.primeiroCampo
-                            onSelecionarPedido: function(indice) {
-                                telaBalcao.indicePedidoAtual = indice;
-                                popupSelecaoPedido.open();
+                            Text {
+                                text: "ATENDIMENTO BALCÃO"
+                                font.pixelSize: Estilo.fonte.titulo
+                                font.bold: true
+                                color: Estilo.confirmar.normal
+                                anchors.verticalCenter: parent.verticalCenter
                             }
                         }
 
-                    }
-
-                    // --- SEÇÃO DE PAGAMENTO ---
-                    Row {
-                        spacing: 8
-                        anchors.horizontalCenter: parent
-                        Icone { nome: "fa6s.credit-card"; cor: Estilo.confirmar.normal; tamanho: 16; anchors.verticalCenter: parent.verticalCenter }
-                        Text {
-                            text: "PAGAMENTO"
-                            font.pixelSize: 16
-                            font.bold: true
-                            color: Estilo.confirmar.normal
-                            anchors.verticalCenter: parent.verticalCenter
-                        }
-                    }
-
-                    Row {
-                        spacing: 10
-                        anchors.horizontalCenter: parent
-
-                        CamposPagamento {
-                            id: camposPagamento
-
-                            corDestaque: Estilo.confirmar.normal
-                            formaPagamentoInicial: telaBalcao.formaPagamentoInicial
-                            trocoInicial: telaBalcao.trocoInicial
-                            statusPagamentoInicial: telaBalcao.statusPagamentoInicial
-                            obterCampoAnterior: function() {
-                                return ultimoCampoValor();
-                            }
-                            proximoCampo: spinnerCopias
-                        }
-
-                        // Quantas vezes "Imprimir" pede a impressão da mesma
-                        // comanda (o arquivo é salvo uma única vez — ver
-                        // BalcaoController.enviarPedido) — útil quando o
-                        // balcão precisa de mais de uma via da mesma comanda.
+                        // Campo Nome do Cliente
                         Column {
+                            anchors.horizontalCenter: parent
                             spacing: 4
 
                             Text {
-                                text: "Cópias"
+                                text: "Nome do Cliente"
                                 font.pixelSize: 12
                                 font.bold: true
                                 color: Estilo.cores.textoSecundario
                             }
 
-                            SpinnerCopias {
-                                id: spinnerCopias
+                            TextField {
+                                id: inputNomeCliente
 
-                                value: 1
+                                color: Estilo.cores.textoInput
+                                placeholderTextColor: Estilo.cores.placeholderInput
+                                placeholderText: "NOME DO CLIENTE"
+                                width: 420
+                                topPadding: 10
+                                bottomPadding: 10
+                                leftPadding: 10
+                                rightPadding: 10
+                                text: clienteNome
+                                focus: true
+                                KeyNavigation.backtab: btnVoltar
+                                // Tab/Enter chamam primeiroCampoPedido() na hora (não
+                                // usam "KeyNavigation.tab: primeiroCampoPedido()"):
+                                // esse binding é avaliado só uma vez, cedo demais —
+                                // antes do primeiro delegate da lista existir — e
+                                // nunca mais é reavaliado, ficando preso apontando
+                                // para "null"/o próprio campo.
+                                Keys.onTabPressed: primeiroCampoPedido().forceActiveFocus()
+                                Keys.onReturnPressed: primeiroCampoPedido().forceActiveFocus()
+
+                                background: Rectangle {
+                                    radius: Estilo.rounding.padrao
+                                    color: "#ffffff"
+                                    border.color: parent.activeFocus ? Estilo.confirmar.normal : Estilo.cores.borda
+                                    border.width: 1
+                                }
+                            }
+                        }
+
+                        // --- CABEÇALHO DA LISTA DE PEDIDOS (rótulo das colunas, uma vez só —
+                        // repetir em cada linha do delegate abaixo poluiria a lista) ---
+                        Row {
+                            width: 690
+                            anchors.horizontalCenter: parent
+                            spacing: 10
+
+                            Text {
+                                text: "Pedido"
+                                width: 200
+                                font.pixelSize: 12
+                                font.bold: true
+                                color: Estilo.cores.textoSecundario
+                            }
+                            Text {
+                                text: "Observação"
+                                width: 180
+                                font.pixelSize: 12
+                                font.bold: true
+                                color: Estilo.cores.textoSecundario
+                            }
+                            Text {
+                                text: "Valor"
+                                width: 110
+                                font.pixelSize: 12
+                                font.bold: true
+                                color: Estilo.cores.textoSecundario
+                            }
+                        }
+
+                        // --- LISTA DINÂMICA DE PEDIDOS ---
+                        ListView {
+                            id: listaPedidos
+
+                            width: 690
+                            height: Math.min(count * 60, 240)
+                            clip: true
+                            model: modeloPedidos // Consome o modelo declarado na raiz da Page
+                            spacing: 10
+                            anchors.horizontalCenter: parent
+
+                            ScrollBar.vertical: ScrollBar {
+                                policy: ScrollBar.AsNeeded
+                            }
+
+                            // modeloPedidos é declarado na raiz da Page (fora deste
+                            // Component), então é o único jeito seguro de reagir a
+                            // novas linhas aqui dentro — referenciar "listaPedidos" a
+                            // partir de fora deste Component (ex: no popup de seleção
+                            // de pedido) lança ReferenceError, pois o id não é
+                            // visível fora da árvore em que foi declarado.
+                            Connections {
+                                function onCountChanged() {
+                                    listaPedidos.positionViewAtEnd();
+                                }
+
+                                target: modeloPedidos
+                            }
+
+                            delegate: LinhaPedido {
                                 corDestaque: Estilo.confirmar.normal
-                                KeyNavigation.tab: btnImprimir
-                                KeyNavigation.backtab: camposPagamento.ultimoCampo
+                                campoExternoAnterior: inputNomeCliente
+                                campoExternoProximo: camposPagamento.primeiroCampo
+                                onSelecionarPedido: function (indice) {
+                                    telaBalcao.indicePedidoAtual = indice;
+                                    popupSelecaoPedido.open();
+                                }
                             }
                         }
 
+                        // --- SEÇÃO DE PAGAMENTO ---
+                        Row {
+                            spacing: 8
+                            anchors.horizontalCenter: parent
+                            Icone {
+                                nome: "fa6s.credit-card"
+                                cor: Estilo.confirmar.normal
+                                tamanho: 16
+                                anchors.verticalCenter: parent.verticalCenter
+                            }
+                            Text {
+                                text: "PAGAMENTO"
+                                font.pixelSize: 16
+                                font.bold: true
+                                color: Estilo.confirmar.normal
+                                anchors.verticalCenter: parent.verticalCenter
+                            }
+                        }
+
+                        Row {
+                            spacing: 10
+                            anchors.horizontalCenter: parent
+
+                            CamposPagamento {
+                                id: camposPagamento
+
+                                corDestaque: Estilo.confirmar.normal
+                                formaPagamentoInicial: telaBalcao.formaPagamentoInicial
+                                trocoInicial: telaBalcao.trocoInicial
+                                statusPagamentoInicial: telaBalcao.statusPagamentoInicial
+                                obterCampoAnterior: function () {
+                                    return ultimoCampoValor();
+                                }
+                                proximoCampo: spinnerCopias
+                            }
+
+                            // Quantas vezes "Imprimir" pede a impressão da mesma
+                            // comanda (o arquivo é salvo uma única vez — ver
+                            // BalcaoController.enviarPedido) — útil quando o
+                            // balcão precisa de mais de uma via da mesma comanda.
+                            Column {
+                                spacing: 4
+
+                                Text {
+                                    text: "Cópias"
+                                    font.pixelSize: 12
+                                    font.bold: true
+                                    color: Estilo.cores.textoSecundario
+                                }
+
+                                SpinnerCopias {
+                                    id: spinnerCopias
+
+                                    value: 1
+                                    corDestaque: Estilo.confirmar.normal
+                                    KeyNavigation.tab: btnImprimir
+                                    KeyNavigation.backtab: camposPagamento.ultimoCampo
+                                }
+                            }
+                        }
+
+                        // --- BOTÕES DE AÇÃO INFERIORES ---
+                        Row {
+                            spacing: 15
+                            anchors.horizontalCenter: parent
+
+                            // Botão Imprimir
+                            Button {
+                                id: btnImprimir
+
+                                padding: 10
+                                width: 200
+                                focusPolicy: Qt.StrongFocus
+                                KeyNavigation.tab: btnLancar
+                                KeyNavigation.backtab: spinnerCopias
+                                Keys.onReturnPressed: clicked()
+                                onClicked: {
+                                    var dados = coletarDadosPedido();
+                                    if (comandaVazia(dados)) {
+                                        popupComandaTeste.abrirPara("imprimir", dados);
+                                        return;
+                                    }
+                                    prosseguirImprimir(dados);
+                                }
+
+                                contentItem: Row {
+                                    spacing: 6
+                                    anchors.centerIn: parent
+                                    Icone {
+                                        nome: "fa6s.print"
+                                        cor: "#ffffff"
+                                        tamanho: Estilo.fonte.padrao
+                                        anchors.verticalCenter: parent.verticalCenter
+                                    }
+                                    Text {
+                                        text: "Imprimir"
+                                        font.bold: true
+                                        color: "#ffffff"
+                                        anchors.verticalCenter: parent.verticalCenter
+                                    }
+                                }
+
+                                background: Rectangle {
+                                    radius: Estilo.rounding.padrao
+                                    color: parent.down ? Estilo.confirmar.pressionado : (parent.hovered ? Estilo.confirmar.hover : Estilo.confirmar.normal)
+                                    // Anel de foco mais grosso: só aparece navegando
+                                    // por teclado, para dar pra ver onde o Tab chegou.
+                                    border.color: parent.activeFocus ? Estilo.cores.texto : Estilo.confirmar.pressionado
+                                    border.width: parent.activeFocus ? 3 : 1
+                                }
+                            }
+
+                            // Botão Lançar — só salva o .txt da comanda (aparece em
+                            // Consulta.qml) e propaga pela rede local, sem imprimir.
+                            Button {
+                                id: btnLancar
+
+                                padding: 10
+                                width: 200
+                                focusPolicy: Qt.StrongFocus
+                                KeyNavigation.tab: btnVoltar
+                                KeyNavigation.backtab: btnImprimir
+                                Keys.onReturnPressed: clicked()
+                                onClicked: {
+                                    var dados = coletarDadosPedido();
+                                    if (comandaVazia(dados)) {
+                                        popupComandaTeste.abrirPara("lancar", dados);
+                                        return;
+                                    }
+                                    prosseguirLancar(dados);
+                                }
+
+                                contentItem: Row {
+                                    spacing: 6
+                                    anchors.centerIn: parent
+                                    Icone {
+                                        nome: "fa6s.floppy-disk"
+                                        cor: "#ffffff"
+                                        tamanho: Estilo.fonte.padrao
+                                        anchors.verticalCenter: parent.verticalCenter
+                                    }
+                                    Text {
+                                        text: "Lançar"
+                                        font.bold: true
+                                        color: "#ffffff"
+                                        anchors.verticalCenter: parent.verticalCenter
+                                    }
+                                }
+
+                                background: Rectangle {
+                                    radius: Estilo.rounding.padrao
+                                    color: parent.down ? "#1d4ed8" : (parent.hovered ? "#1e40af" : "#2563eb")
+                                    // Anel de foco mais grosso: só aparece navegando
+                                    // por teclado, para dar pra ver onde o Tab chegou.
+                                    border.color: parent.activeFocus ? Estilo.cores.texto : "#1d4ed8"
+                                    border.width: parent.activeFocus ? 3 : 1
+                                }
+                            }
+
+                            // Botão Voltar
+                            Button {
+                                id: btnVoltar
+
+                                padding: 10
+                                width: 200
+                                focusPolicy: Qt.StrongFocus
+                                KeyNavigation.tab: inputNomeCliente
+                                KeyNavigation.backtab: btnLancar
+                                Keys.onReturnPressed: clicked()
+                                onClicked: {
+                                    // Dentro de uma tela de seleção de item
+                                    // (Pizzas, Açaí...), volta para o
+                                    // formulário; já no formulário, sai para
+                                    // o menu inicial.
+                                    if (stackViewLocal.depth > 1)
+                                        stackViewLocal.pop();
+                                    else if (telaBalcao.StackView.view)
+                                        telaBalcao.StackView.view.irParaInicio();
+                                }
+
+                                contentItem: Row {
+                                    spacing: 6
+                                    anchors.centerIn: parent
+                                    Icone {
+                                        nome: "fa6s.arrow-left"
+                                        cor: "#ffffff"
+                                        tamanho: Estilo.fonte.padrao
+                                        anchors.verticalCenter: parent.verticalCenter
+                                    }
+                                    Text {
+                                        text: "Voltar para o Menu"
+                                        font.bold: true
+                                        color: "#ffffff"
+                                        anchors.verticalCenter: parent.verticalCenter
+                                    }
+                                }
+
+                                background: Rectangle {
+                                    radius: Estilo.rounding.padrao
+                                    color: parent.down ? Estilo.cancelar.pressionado : (parent.hovered ? Estilo.cancelar.hover : Estilo.cancelar.normal)
+                                    // Anel de foco mais grosso: só aparece navegando
+                                    // por teclado, para dar pra ver onde o Tab chegou.
+                                    border.color: parent.activeFocus ? Estilo.cores.texto : Estilo.cancelar.pressionado
+                                    border.width: parent.activeFocus ? 3 : 1
+                                }
+                            }
+                        }
                     }
 
-                    // --- BOTÕES DE AÇÃO INFERIORES ---
-                    Row {
-                        spacing: 15
-                        anchors.horizontalCenter: parent
-
-                        // Botão Imprimir
-                        Button {
-                            id: btnImprimir
-
-                            padding: 10
-                            width: 200
-                            focusPolicy: Qt.StrongFocus
-                            KeyNavigation.tab: btnLancar
-                            KeyNavigation.backtab: spinnerCopias
-                            Keys.onReturnPressed: clicked()
-                            onClicked: {
-                                var dados = coletarDadosPedido();
-                                if (comandaVazia(dados)) {
-                                    popupComandaTeste.abrirPara("imprimir", dados);
-                                    return ;
-                                }
-                                prosseguirImprimir(dados);
-                            }
-
-                            contentItem: Row {
-                                spacing: 6
-                                anchors.centerIn: parent
-                                Icone { nome: "fa6s.print"; cor: "#ffffff"; tamanho: Estilo.fonte.padrao; anchors.verticalCenter: parent.verticalCenter }
-                                Text {
-                                    text: "Imprimir"
-                                    font.bold: true
-                                    color: "#ffffff"
-                                    anchors.verticalCenter: parent.verticalCenter
-                                }
-                            }
-
-                            background: Rectangle {
-                                radius: Estilo.rounding.padrao
-                                color: parent.down ? Estilo.confirmar.pressionado : (parent.hovered ? Estilo.confirmar.hover : Estilo.confirmar.normal)
-                                // Anel de foco mais grosso: só aparece navegando
-                                // por teclado, para dar pra ver onde o Tab chegou.
-                                border.color: parent.activeFocus ? Estilo.cores.texto : Estilo.confirmar.pressionado
-                                border.width: parent.activeFocus ? 3 : 1
-                            }
-
-                        }
-
-                        // Botão Lançar — só salva o .txt da comanda (aparece em
-                        // Consulta.qml) e propaga pela rede local, sem imprimir.
-                        Button {
-                            id: btnLancar
-
-                            padding: 10
-                            width: 200
-                            focusPolicy: Qt.StrongFocus
-                            KeyNavigation.tab: btnVoltar
-                            KeyNavigation.backtab: btnImprimir
-                            Keys.onReturnPressed: clicked()
-                            onClicked: {
-                                var dados = coletarDadosPedido();
-                                if (comandaVazia(dados)) {
-                                    popupComandaTeste.abrirPara("lancar", dados);
-                                    return ;
-                                }
-                                prosseguirLancar(dados);
-                            }
-
-                            contentItem: Row {
-                                spacing: 6
-                                anchors.centerIn: parent
-                                Icone { nome: "fa6s.floppy-disk"; cor: "#ffffff"; tamanho: Estilo.fonte.padrao; anchors.verticalCenter: parent.verticalCenter }
-                                Text {
-                                    text: "Lançar"
-                                    font.bold: true
-                                    color: "#ffffff"
-                                    anchors.verticalCenter: parent.verticalCenter
-                                }
-                            }
-
-                            background: Rectangle {
-                                radius: Estilo.rounding.padrao
-                                color: parent.down ? "#1d4ed8" : (parent.hovered ? "#1e40af" : "#2563eb")
-                                // Anel de foco mais grosso: só aparece navegando
-                                // por teclado, para dar pra ver onde o Tab chegou.
-                                border.color: parent.activeFocus ? Estilo.cores.texto : "#1d4ed8"
-                                border.width: parent.activeFocus ? 3 : 1
-                            }
-
-                        }
-
-                        // Botão Voltar
-                        Button {
-                            id: btnVoltar
-
-                            padding: 10
-                            width: 200
-                            focusPolicy: Qt.StrongFocus
-                            KeyNavigation.tab: inputNomeCliente
-                            KeyNavigation.backtab: btnLancar
-                            Keys.onReturnPressed: clicked()
-                            onClicked: {
-                                if (stackViewLocal.depth > 1)
-                                    stackViewLocal.pop();
-                                else if (telaBalcao.StackView.view)
-                                    telaBalcao.StackView.view.pop();
-                            }
-
-                            contentItem: Row {
-                                spacing: 6
-                                anchors.centerIn: parent
-                                Icone { nome: "fa6s.arrow-left"; cor: "#ffffff"; tamanho: Estilo.fonte.padrao; anchors.verticalCenter: parent.verticalCenter }
-                                Text {
-                                    text: "Voltar para o Menu"
-                                    font.bold: true
-                                    color: "#ffffff"
-                                    anchors.verticalCenter: parent.verticalCenter
-                                }
-                            }
-
-                            background: Rectangle {
-                                radius: Estilo.rounding.padrao
-                                color: parent.down ? Estilo.cancelar.pressionado : (parent.hovered ? Estilo.cancelar.hover : Estilo.cancelar.normal)
-                                // Anel de foco mais grosso: só aparece navegando
-                                // por teclado, para dar pra ver onde o Tab chegou.
-                                border.color: parent.activeFocus ? Estilo.cores.texto : Estilo.cancelar.pressionado
-                                border.width: parent.activeFocus ? 3 : 1
-                            }
-
-                        }
-
+                    ResumoComanda {
+                        anchors.verticalCenter: parent.verticalCenter
+                        itens: modeloPedidos
+                        corDestaque: Estilo.confirmar.normal
+                        formaPagamento: camposPagamento.formaPagamento
+                        troco: camposPagamento.formaPagamento === "Dinheiro" ? camposPagamento.troco : ""
+                        pago: camposPagamento.pago
                     }
-
                 }
-
-                ResumoComanda {
-                    anchors.verticalCenter: parent.verticalCenter
-                    itens: modeloPedidos
-                    corDestaque: Estilo.confirmar.normal
-                    formaPagamento: camposPagamento.formaPagamento
-                    troco: camposPagamento.formaPagamento === "Dinheiro" ? camposPagamento.troco : ""
-                    pago: camposPagamento.pago
-                }
-
-            }
-
             }
 
             // Só abre quando comandaVazia() barra o clique em Imprimir/Lançar
@@ -666,7 +710,7 @@ Page {
             PopupComandaTeste {
                 id: popupComandaTeste
 
-                onRespondido: function(teste) {
+                onRespondido: function (teste) {
                     var dadosPedido = dados;
                     if (teste) {
                         dadosPedido.cliente = "Teste";
@@ -678,9 +722,7 @@ Page {
                         prosseguirLancar(dadosPedido);
                 }
             }
-
         }
-
     }
 
     // --- NOTIFICAÇÕES TEMPORÁRIAS (SALVAR/LANÇAR O PEDIDO, RESULTADO DA IMPRESSÃO) ---
@@ -692,5 +734,4 @@ Page {
         color: Estilo.cores.fundoPagina
         radius: Estilo.rounding.popup
     }
-
 }

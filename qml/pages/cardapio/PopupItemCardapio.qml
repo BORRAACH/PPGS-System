@@ -181,11 +181,11 @@ Popup {
                         height: 40
                         text: model.valor
                         font.pixelSize: Estilo.fonte.padrao
-                        color: Estilo.cores.texto
+                        color: Estilo.cores.textoInput
                         leftPadding: 12
                         rightPadding: 12
                         selectByMouse: true
-                        placeholderTextColor: "#95a5a6"
+                        placeholderTextColor: Estilo.cores.placeholderInput
                         placeholderText: model.tipo === "preco" ? "0,00" : ""
                         onTextChanged: raiz.valores[blocoCampo.chave] = text
                         onAccepted: raiz.confirmar()
@@ -216,11 +216,12 @@ Popup {
                         TextArea {
                             id: campoTexto
 
+                            placeholderTextColor: Estilo.cores.placeholderInput
                             anchors.fill: parent
                             anchors.margins: 4
                             text: model.valor
                             font.pixelSize: Estilo.fonte.padrao
-                            color: Estilo.cores.texto
+                            color: Estilo.cores.textoInput
                             wrapMode: TextArea.Wrap
                             selectByMouse: true
                             background: null

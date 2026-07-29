@@ -76,7 +76,7 @@ Page {
             Layout.preferredWidth: 200
             onClicked: {
                 if (telaConfiguracoes.StackView.view)
-                    telaConfiguracoes.StackView.view.pop();
+                    telaConfiguracoes.StackView.view.irParaInicio();
             }
 
             contentItem: Row {

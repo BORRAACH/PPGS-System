@@ -59,6 +59,8 @@ Row {
     TextField {
         id: campoPedido
 
+        color: Estilo.cores.textoInput
+        placeholderTextColor: Estilo.cores.placeholderInput
         placeholderText: "SELECIONAR PEDIDO"
         width: 200
         topPadding: 10
@@ -98,6 +100,8 @@ Row {
     TextField {
         id: campoObservacao
 
+        color: Estilo.cores.textoInput
+        placeholderTextColor: Estilo.cores.placeholderInput
         placeholderText: "OBSERVAÇÃO"
         width: 180
         topPadding: 10
@@ -122,6 +126,8 @@ Row {
     TextField {
         id: campoValor
 
+        color: Estilo.cores.textoInput
+        placeholderTextColor: Estilo.cores.placeholderInput
         placeholderText: "R$ 0,00"
         width: 110
         topPadding: 10
@@ -182,7 +188,9 @@ Row {
                 "pedido": "",
                 "observacao": "",
                 "valor": "",
-                "borda": null,
+                // String JSON, não objeto/array — ver o comentário no
+                // ListElement de Balcao.qml/Entrega.qml/Salao.qml.
+                "borda": "null",
                 "adicionais": "[]"
             });
         }

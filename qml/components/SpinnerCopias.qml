@@ -21,7 +21,7 @@ SpinBox {
     contentItem: TextInput {
         text: spinnerCopias.textFromValue(spinnerCopias.value, spinnerCopias.locale)
         font.pixelSize: Estilo.fonte.padrao
-        color: Estilo.cores.texto
+        color: Estilo.cores.textoInput
         horizontalAlignment: Qt.AlignHCenter
         verticalAlignment: Qt.AlignVCenter
         readOnly: !spinnerCopias.editable

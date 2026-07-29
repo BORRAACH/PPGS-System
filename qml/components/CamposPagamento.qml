@@ -84,11 +84,23 @@ Row {
 
             contentItem: Text {
                 text: comboFormaPagamento.displayText
-                color: Estilo.cores.texto
+                color: Estilo.cores.textoInput
                 leftPadding: 10
                 rightPadding: 10
                 verticalAlignment: Text.AlignVCenter
                 elide: Text.ElideRight
+            }
+
+            // O ItemDelegate padrão da lista suspensa pinta o texto com
+            // palette.text — mesma herança do tema do sistema que deixava os
+            // campos brancos no Windows. Fixa a cor aqui também, senão as
+            // opções abrem invisíveis mesmo com o campo legível.
+            delegate: ItemDelegate {
+                width: comboFormaPagamento.width
+                text: modelData
+                highlighted: comboFormaPagamento.highlightedIndex === index
+                palette.text: Estilo.cores.textoInput
+                palette.highlightedText: Estilo.cores.textoInput
             }
 
             background: Rectangle {
@@ -116,6 +128,8 @@ Row {
         TextField {
             id: inputTroco
 
+            color: Estilo.cores.textoInput
+            placeholderTextColor: Estilo.cores.placeholderInput
             placeholderText: "TROCO PARA"
             width: 150
             topPadding: 10
@@ -167,6 +181,8 @@ Row {
         TextField {
             id: inputTaxaEntrega
 
+            color: Estilo.cores.textoInput
+            placeholderTextColor: Estilo.cores.placeholderInput
             placeholderText: "TAXA DE ENTREGA"
             width: 150
             topPadding: 10

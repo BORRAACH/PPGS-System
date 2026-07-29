@@ -60,7 +60,7 @@ Page {
                     "pedido": itensIniciais[i].pedido || "",
                     "observacao": itensIniciais[i].observacao || "",
                     "valor": itensIniciais[i].valor || "",
-                    "borda": itensIniciais[i].borda || null,
+                    "borda": JSON.stringify(itensIniciais[i].borda || null),
                     // Guardado como string, não array: um array atribuído a um
                     // role de ListModel vira um list-model aninhado (não um
                     // JS array de verdade), e isso quebra tanto a leitura em
@@ -76,10 +76,21 @@ Page {
     ListModel {
         id: modeloPedidos
 
+        // Todos os roles precisam existir já no primeiro elemento:
+        // ListModel.setProperty() NÃO cria role novo quando o valor é um
+        // objeto (só quando é tipo simples), e append() com um valor null
+        // também não cria. Sem declarar aqui, "borda" nunca chegava a
+        // existir e a borda escolhida sumia da comanda sem aviso nenhum.
+        //
+        // "borda" e "adicionais" são STRING JSON, não objeto/array: um
+        // array ou objeto atribuído a um role vira um model aninhado, que
+        // chega no Python como QAbstractListModel em vez de lista/dict.
         ListElement {
             pedido: ""
             observacao: ""
             valor: ""
+            borda: "null"
+            adicionais: "[]"
         }
 
     }
@@ -144,7 +155,7 @@ Page {
                 modeloPedidos.setProperty(telaEntrega.indicePedidoAtual, "pedido", itens[0].nome);
                 modeloPedidos.setProperty(telaEntrega.indicePedidoAtual, "valor", itens[0].valor);
                 modeloPedidos.setProperty(telaEntrega.indicePedidoAtual, "observacao", itens[0].observacao || "");
-                modeloPedidos.setProperty(telaEntrega.indicePedidoAtual, "borda", itens[0].borda || null);
+                modeloPedidos.setProperty(telaEntrega.indicePedidoAtual, "borda", JSON.stringify(itens[0].borda || null));
                 // Ver o comentário em Component.onCompleted sobre por que
                 // "adicionais" precisa ser string (JSON), não array.
                 modeloPedidos.setProperty(telaEntrega.indicePedidoAtual, "adicionais", JSON.stringify(itens[0].adicionais || []));
@@ -153,7 +164,7 @@ Page {
                         "pedido": itens[i].nome,
                         "observacao": itens[i].observacao || "",
                         "valor": itens[i].valor,
-                        "borda": itens[i].borda || null,
+                        "borda": JSON.stringify(itens[i].borda || null),
                         "adicionais": JSON.stringify(itens[i].adicionais || [])
                     });
                 }
@@ -221,7 +232,7 @@ Page {
                         "pedido": item.pedido,
                         "observacao": item.observacao,
                         "valor": item.valor,
-                        "borda": item.borda || null,
+                        "borda": JSON.parse(item.borda || "null"),
                         // item.adicionais é a string JSON guardada no
                         // ListModel (ver Component.onCompleted) — desfaz aqui
                         // pra virar array de novo antes de mandar pro Python.
@@ -317,7 +328,7 @@ Page {
                     "pedido": "",
                     "observacao": "",
                     "valor": "",
-                    "borda": null,
+                    "borda": "null",
                     "adicionais": "[]"
                 });
                 camposPagamento.redefinirPadrao();
@@ -384,6 +395,8 @@ Page {
                             TextField {
                                 id: inputTelefone
 
+                                color: Estilo.cores.textoInput
+                                placeholderTextColor: Estilo.cores.placeholderInput
                                 // Evita recursão: reformatar o texto abaixo dispara
                                 // onTextChanged de novo, então ignoramos essa segunda
                                 // chamada enquanto a primeira ainda está ajustando o texto.
@@ -443,6 +456,8 @@ Page {
                             TextField {
                                 id: inputNomeCliente
 
+                                color: Estilo.cores.textoInput
+                                placeholderTextColor: Estilo.cores.placeholderInput
                                 placeholderText: "NOME DO CLIENTE"
                                 width: 220
                                 topPadding: 10
@@ -484,6 +499,8 @@ Page {
                             TextField {
                                 id: inputEndereco
 
+                                color: Estilo.cores.textoInput
+                                placeholderTextColor: Estilo.cores.placeholderInput
                                 placeholderText: "ENDEREÇO"
                                 width: 320
                                 topPadding: 10
@@ -518,6 +535,8 @@ Page {
                             TextField {
                                 id: inputNumero
 
+                                color: Estilo.cores.textoInput
+                                placeholderTextColor: Estilo.cores.placeholderInput
                                 placeholderText: "NÚMERO"
                                 width: 90
                                 topPadding: 10
@@ -561,6 +580,8 @@ Page {
                         TextField {
                             id: inputBairro
 
+                            color: Estilo.cores.textoInput
+                            placeholderTextColor: Estilo.cores.placeholderInput
                             placeholderText: "BAIRRO"
                             width: 420
                             topPadding: 10
@@ -597,6 +618,8 @@ Page {
                         TextField {
                             id: inputObservacao
 
+                            color: Estilo.cores.textoInput
+                            placeholderTextColor: Estilo.cores.placeholderInput
                             placeholderText: "OBSERVAÇÃO"
                             width: 420
                             topPadding: 10
@@ -856,10 +879,11 @@ Page {
                             KeyNavigation.backtab: btnLancar
                             Keys.onReturnPressed: clicked()
                             onClicked: {
+                                // Ver o mesmo comentário em Balcao.qml.
                                 if (stackViewLocal.depth > 1)
                                     stackViewLocal.pop();
                                 else if (telaEntrega.StackView.view)
-                                    telaEntrega.StackView.view.pop();
+                                    telaEntrega.StackView.view.irParaInicio();
                             }
 
                             contentItem: Row {

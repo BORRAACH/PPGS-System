@@ -77,10 +77,21 @@ Page {
     ListModel {
         id: modeloPedidos
 
+        // Todos os roles precisam existir já no primeiro elemento:
+        // ListModel.setProperty() NÃO cria role novo quando o valor é um
+        // objeto (só quando é tipo simples), e append() com um valor null
+        // também não cria. Sem declarar aqui, "borda" nunca chegava a
+        // existir e a borda escolhida sumia da comanda sem aviso nenhum.
+        //
+        // "borda" e "adicionais" são STRING JSON, não objeto/array: um
+        // array ou objeto atribuído a um role vira um model aninhado, que
+        // chega no Python como QAbstractListModel em vez de lista/dict.
         ListElement {
             pedido: ""
             observacao: ""
             valor: ""
+            borda: "null"
+            adicionais: "[]"
         }
     }
 
@@ -162,7 +173,7 @@ Page {
                 modeloPedidos.setProperty(telaSalao.indicePedidoAtual, "pedido", itens[0].nome);
                 modeloPedidos.setProperty(telaSalao.indicePedidoAtual, "valor", itens[0].valor);
                 modeloPedidos.setProperty(telaSalao.indicePedidoAtual, "observacao", itens[0].observacao || "");
-                modeloPedidos.setProperty(telaSalao.indicePedidoAtual, "borda", itens[0].borda || null);
+                modeloPedidos.setProperty(telaSalao.indicePedidoAtual, "borda", JSON.stringify(itens[0].borda || null));
                 // Guardado como string, não array: um array atribuído a um
                 // role de ListModel vira um list-model aninhado (não um JS
                 // array de verdade), e isso quebra tanto a leitura em
@@ -174,7 +185,7 @@ Page {
                         "pedido": itens[i].nome,
                         "observacao": itens[i].observacao || "",
                         "valor": itens[i].valor,
-                        "borda": itens[i].borda || null,
+                        "borda": JSON.stringify(itens[i].borda || null),
                         "adicionais": JSON.stringify(itens[i].adicionais || [])
                     });
                 }
@@ -226,7 +237,7 @@ Page {
                         "pedido": item.pedido,
                         "observacao": item.observacao,
                         "valor": item.valor,
-                        "borda": item.borda || null,
+                        "borda": JSON.parse(item.borda || "null"),
                         // item.adicionais é a string JSON guardada no
                         // ListModel (ver onPedidoSelecionado) — desfaz aqui
                         // pra virar array de novo antes de mandar pro Python.
@@ -306,7 +317,7 @@ Page {
                             "pedido": itens[i].pedido || "",
                             "observacao": itens[i].observacao || "",
                             "valor": itens[i].valor || "",
-                            "borda": itens[i].borda || null,
+                            "borda": JSON.stringify(itens[i].borda || null),
                             "adicionais": JSON.stringify(itens[i].adicionais || [])
                         });
                     }
@@ -387,6 +398,8 @@ Page {
                                 TextField {
                                     id: inputNomeCliente
 
+                                    color: Estilo.cores.textoInput
+                                    placeholderTextColor: Estilo.cores.placeholderInput
                                     placeholderText: "NOME DO CLIENTE (opcional)"
                                     width: 280
                                     topPadding: 10
@@ -433,7 +446,7 @@ Page {
                                     contentItem: TextInput {
                                         text: inputMesa.textFromValue(inputMesa.value, inputMesa.locale)
                                         font.pixelSize: Estilo.fonte.padrao
-                                        color: Estilo.cores.texto
+                                        color: Estilo.cores.textoInput
                                         horizontalAlignment: Qt.AlignHCenter
                                         verticalAlignment: Qt.AlignVCenter
                                         readOnly: !inputMesa.editable
@@ -602,10 +615,11 @@ Page {
                                 KeyNavigation.backtab: btnFecharConta
                                 Keys.onReturnPressed: clicked()
                                 onClicked: {
+                                    // Ver o mesmo comentário em Balcao.qml.
                                     if (stackViewLocal.depth > 1)
                                         stackViewLocal.pop();
                                     else if (telaSalao.StackView.view)
-                                        telaSalao.StackView.view.pop();
+                                        telaSalao.StackView.view.irParaInicio();
                                 }
 
                                 contentItem: Row {

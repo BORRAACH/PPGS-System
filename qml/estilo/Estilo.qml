@@ -50,6 +50,19 @@ QtObject {
         readonly property color texto: "#2c3e50" // texto padrão
         readonly property color textoSecundario: "#7f8c8d" // texto secundário/desabilitado
         readonly property color fundoPagina: "#f8f9fa" // fundo das páginas e popups
+
+        // Texto DIGITADO dentro de inputs (TextField/TextArea/SpinBox/
+        // ComboBox). Preto fixo, e sempre declarado explicitamente em cada
+        // input: sem "color:", o Qt usa palette.text, que no Windows vem do
+        // tema do sistema — em máquinas com tema escuro o texto saía branco
+        // sobre o fundo branco do input, ficando invisível enquanto o
+        // atendente digitava o pedido. Como o fundo dos inputs é sempre
+        // branco (fixo no background de cada um), a cor do texto também
+        // precisa ser fixa, não herdada.
+        readonly property color textoInput: "#000000"
+        // Mesma história para o texto de dica (placeholderText), que vem de
+        // palette.placeholderText.
+        readonly property color placeholderInput: "#95a5a6"
     }
 
     // ===== Botão Confirmar / Sucesso (verde) =====

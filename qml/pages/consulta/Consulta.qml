@@ -297,7 +297,7 @@ Page {
             Layout.preferredWidth: 200
             onClicked: {
                 if (telaConsulta.StackView.view)
-                    telaConsulta.StackView.view.pop();
+                    telaConsulta.StackView.view.irParaInicio();
             }
 
             contentItem: Row {

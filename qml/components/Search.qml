@@ -12,11 +12,11 @@ TextField {
     property color corDestaque: Estilo.cores.borda
 
     height: 42
-    placeholderTextColor: "#95a5a6"
+    placeholderTextColor: Estilo.cores.placeholderInput
     font.pixelSize: Estilo.fonte.padrao
     leftPadding: 14
     rightPadding: 14
-    color: Estilo.cores.texto
+    color: Estilo.cores.textoInput
     selectByMouse: true
 
     background: Rectangle {

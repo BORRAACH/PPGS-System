@@ -540,7 +540,7 @@ Page {
             Layout.preferredWidth: 200
             onClicked: {
                 if (telaFechamento.StackView.view)
-                    telaFechamento.StackView.view.pop();
+                    telaFechamento.StackView.view.irParaInicio();
             }
 
             contentItem: Row {

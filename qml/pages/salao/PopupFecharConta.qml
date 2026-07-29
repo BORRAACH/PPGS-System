@@ -256,7 +256,7 @@ Popup {
                 contentItem: TextInput {
                     text: spinnerPessoas.textFromValue(spinnerPessoas.value, spinnerPessoas.locale)
                     font.pixelSize: Estilo.fonte.padrao
-                    color: Estilo.cores.texto
+                    color: Estilo.cores.textoInput
                     horizontalAlignment: Qt.AlignHCenter
                     verticalAlignment: Qt.AlignVCenter
                     readOnly: !spinnerPessoas.editable
@@ -320,6 +320,19 @@ Popup {
                 delegate: ColumnLayout {
                     id: linhaDivisao
 
+                    // O índice desta pessoa, guardado num nome próprio: dentro
+                    // de onActivated(index) do ComboBox abaixo, o "index" do
+                    // sinal esconde o do delegate, e a escolha ia parar na
+                    // linha errada (escolher "Débito" — 3ª opção — na 1ª
+                    // pessoa gravava na 3ª pessoa).
+                    readonly property int indiceDivisao: index
+                    // Mesma armadilha com o nome "model": dentro do ComboBox,
+                    // "model" é a lista de opções DELE, não a linha do
+                    // Repeater — "model.formaPagamento" saía undefined e o
+                    // combo abria vazio (currentIndex -1), em vez de mostrar a
+                    // forma já escolhida. Lido aqui, onde nada sombreia.
+                    readonly property string formaDaDivisao: model.formaPagamento
+
                     width: colunaDivisoes.width
                     spacing: 4
 
@@ -330,6 +343,8 @@ Popup {
                     TextField {
                         id: campoNomeDivisao
 
+                        color: Estilo.cores.textoInput
+                        placeholderTextColor: Estilo.cores.placeholderInput
                         Layout.fillWidth: true
                         // Responsivo: nunca menor que 15 caracteres (ver
                         // fontMetricsNome abaixo), mas cresce além disso se
@@ -364,6 +379,8 @@ Popup {
                     TextField {
                         id: inputValorDivisao
 
+                        color: Estilo.cores.textoInput
+                        placeholderTextColor: Estilo.cores.placeholderInput
                         Layout.preferredWidth: 100
                         text: model.valor
                         readOnly: popupFecharConta.modoIgual
@@ -392,18 +409,30 @@ Popup {
                     }
 
                     ComboBox {
+                        id: comboFormaDivisao
+
                         Layout.preferredWidth: 110
                         model: popupFecharConta.opcoesPagamento
-                        currentIndex: popupFecharConta.opcoesPagamento.indexOf(model.formaPagamento)
-                        onActivated: modeloDivisoes.setProperty(index, "formaPagamento", currentText)
+                        currentIndex: popupFecharConta.opcoesPagamento.indexOf(linhaDivisao.formaDaDivisao)
+                        onActivated: modeloDivisoes.setProperty(linhaDivisao.indiceDivisao, "formaPagamento", currentText)
 
                         contentItem: Text {
-                            text: parent.displayText
-                            color: Estilo.cores.texto
+                            text: comboFormaDivisao.displayText
+                            color: Estilo.cores.textoInput
                             leftPadding: 10
                             rightPadding: 10
                             verticalAlignment: Text.AlignVCenter
                             elide: Text.ElideRight
+                        }
+
+                        // Ver o comentário do mesmo delegate em
+                        // components/CamposPagamento.qml.
+                        delegate: ItemDelegate {
+                            width: comboFormaDivisao.width
+                            text: modelData
+                            highlighted: comboFormaDivisao.highlightedIndex === index
+                            palette.text: Estilo.cores.textoInput
+                            palette.highlightedText: Estilo.cores.textoInput
                         }
 
                         background: Rectangle {
@@ -424,7 +453,7 @@ Popup {
                         focusPolicy: Qt.StrongFocus
                         text: model.status === "PG" ? "PG" : "NP"
                         Keys.onReturnPressed: clicked()
-                        onClicked: modeloDivisoes.setProperty(index, "status", model.status === "PG" ? "NP" : "PG")
+                        onClicked: modeloDivisoes.setProperty(linhaDivisao.indiceDivisao, "status", model.status === "PG" ? "NP" : "PG")
 
                         contentItem: Text {
                             text: btnStatusDivisao.text
@@ -449,7 +478,7 @@ Popup {
                         Layout.preferredWidth: 34
                         visible: !popupFecharConta.modoIgual && modeloDivisoes.count > 1
                         focusPolicy: Qt.StrongFocus
-                        onClicked: modeloDivisoes.remove(index)
+                        onClicked: modeloDivisoes.remove(linhaDivisao.indiceDivisao)
 
                         contentItem: Text {
                             text: "×"
@@ -486,6 +515,8 @@ Popup {
                         TextField {
                             id: campoTrocoRecebido
 
+                            color: Estilo.cores.textoInput
+                            placeholderTextColor: Estilo.cores.placeholderInput
                             Layout.preferredWidth: 100
                             text: model.trocoRecebido
                             placeholderText: "R$ 0,00"

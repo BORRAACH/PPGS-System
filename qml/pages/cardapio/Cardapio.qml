@@ -509,7 +509,7 @@ Page {
             Layout.preferredWidth: 200
             onClicked: {
                 if (telaCardapio.StackView.view)
-                    telaCardapio.StackView.view.pop();
+                    telaCardapio.StackView.view.irParaInicio();
             }
 
             contentItem: Row {
