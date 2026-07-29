@@ -74,6 +74,7 @@ FONTE_NORMAL_DESLIGA = _GS + "!" + "\x00"
 # diferença nenhuma pro outro tipo, que nunca chama formatar_campo com esse
 # nome.
 CAMPOS = [
+    "id_pedido",
     "cliente",
     "mesa",
     "telefone",
@@ -95,6 +96,7 @@ CAMPOS = [
 ATRIBUTOS_BOOLEANOS = ["negrito", "sublinhado", "fundo_preto"]
 
 RODULOS_CAMPOS = {
+    "id_pedido": "Código do pedido",
     "cliente": "Nome do cliente",
     "mesa": "Número da mesa",
     "telefone": "Telefone",
@@ -141,6 +143,10 @@ def _padrao():
     # saíam em negrito antes de existir essa tela de configuração).
     config["campos"]["pedido"]["negrito"] = True
     config["campos"]["observacao_item"]["negrito"] = True
+    # Pedido explícito do dono: o código do pedido sempre sai em negrito no
+    # cabeçalho por padrão (continua editável em Configurações, como todo
+    # outro campo desta lista).
+    config["campos"]["id_pedido"]["negrito"] = True
     return config
 
 

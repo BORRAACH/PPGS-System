@@ -8,6 +8,7 @@ from PyQt6.QtCore import QObject, pyqtSignal, pyqtSlot
 from Config import impressoraWindows
 from Config.logConfig import protegido
 from services import comandaEstiloService as estilo
+from services import comandaSequencialService as sequencial
 from services import comandaTextoService as texto
 from services.printerService import PrinterService
 from services.rede import rede
@@ -67,6 +68,12 @@ class BalcaoController(QObject):
         if teste:
             linhas_arquivo.append(_MARCA_COMANDA_TESTE)
             linhas_arquivo.extend(estilo.linhas_espacamento_secoes())
+        else:
+            # Só consome um número da sequência diária pra comanda de
+            # verdade — uma comanda de teste não deve "furar" a numeração
+            # que o dono acompanha (ver docstring desta função).
+            codigo_pedido = sequencial.gerar_codigo_pedido(agora)
+            linhas_arquivo.append(f"ID: {estilo.formatar_campo(codigo_pedido, 'id_pedido')}")
         linhas_arquivo.extend([
             f"Cliente: {estilo.formatar_campo(cliente, 'cliente')}",
             f"Data: {estilo.formatar_campo(agora.strftime('%d/%m/%Y %H:%M:%S'), 'data')}",

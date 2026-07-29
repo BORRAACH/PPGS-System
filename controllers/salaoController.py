@@ -7,6 +7,7 @@ from PyQt6.QtCore import QObject, pyqtSignal, pyqtSlot
 
 from Config.logConfig import protegido
 from services import comandaEstiloService as estilo
+from services import comandaSequencialService as sequencial
 from services import comandaTextoService as texto
 from services.rede import relogio, rede, tombstones
 
@@ -263,7 +264,10 @@ class SalaoController(QObject):
         valor_total = _valor_total_itens(itens)
         agora = datetime.now()
 
+        codigo_pedido = sequencial.gerar_codigo_pedido(agora)
+
         linhas_arquivo = [
+            f"ID: {estilo.formatar_campo(codigo_pedido, 'id_pedido')}",
             f"Mesa: {estilo.formatar_campo(str(mesa.get('mesa', '')), 'mesa')}",
             f"Cliente: {estilo.formatar_campo(mesa.get('cliente', ''), 'cliente')}",
             f"Data: {estilo.formatar_campo(agora.strftime('%d/%m/%Y %H:%M:%S'), 'data')}",
