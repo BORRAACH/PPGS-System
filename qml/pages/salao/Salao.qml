@@ -161,6 +161,9 @@ Page {
         pilha: stackViewLocal
         // Comanda de mesa não usa a promoção de pizza do dia.
         usarPromocoes: false
+        // Alguns itens de bebida têm um preço maior específico pra mesa
+        // (ver qml/pages/pedidos/bebidas/Bebidas.qml).
+        comandaDeMesa: true
         onPedidoSelecionado: function(nomePedido, valorPedido) {
             if (telaSalao.indicePedidoAtual === -1)
                 return ;

@@ -33,43 +33,53 @@
   },
   {
     "nome": "Coca-Cola Tradicional 2L",
-    "valor": "14,00"
+    "valor": "14,00",
+    "valorMesa": "17,00"
   },
   {
     "nome": "Coca-Cola Sem Açúcar 2L",
-    "valor": "14,00"
+    "valor": "14,00",
+    "valorMesa": "17,00"
   },
   {
     "nome": "Guaraná Antarctica 2L",
-    "valor": "14,00"
+    "valor": "14,00",
+    "valorMesa": "17,00"
   },
   {
     "nome": "Guaraná Antarctica Zero 2L",
-    "valor": "14,00"
+    "valor": "14,00",
+    "valorMesa": "17,00"
   },
   {
     "nome": "Frutuba Laranja 2L",
-    "valor": "8,00"
+    "valor": "8,00",
+    "valorMesa": "10,00"
   },
   {
     "nome": "Frutuba Guaraná 2L",
-    "valor": "8,00"
+    "valor": "8,00",
+    "valorMesa": "10,00"
   },
   {
     "nome": "Frutuba Limão 2L",
-    "valor": "8,00"
+    "valor": "8,00",
+    "valorMesa": "10,00"
   },
   {
     "nome": "Sukita Laranja 2L",
-    "valor": "12,00"
+    "valor": "12,00",
+    "valorMesa": "14,00"
   },
   {
     "nome": "Sukita Limão 2L",
-    "valor": "12,00"
+    "valor": "12,00",
+    "valorMesa": "14,00"
   },
   {
     "nome": "Sukita Uva 2L",
-    "valor": "12,00"
+    "valor": "12,00",
+    "valorMesa": "14,00"
   },
   {
     "nome": "Coca-Cola 350ml",
@@ -113,19 +123,27 @@
   },
   {
     "nome": "Coca-Cola 1 Litro",
-    "valor": "10,00"
+    "valor": "10,00",
+    "valorMesa": "12,00"
   },
   {
     "nome": "Guaraná 1 Litro",
     "valor": "6,00"
   },
   {
+    "nome": "Guaraná Antarctica 1L",
+    "valor": "10,00",
+    "valorMesa": "12,00"
+  },
+  {
     "nome": "Del Valle Laranja 1,5 Litro",
-    "valor": "8,00"
+    "valor": "8,00",
+    "valorMesa": "10,00"
   },
   {
     "nome": "Del Valle Uva 1,5 Litro",
-    "valor": "8,00"
+    "valor": "8,00",
+    "valorMesa": "10,00"
   },
   {
     "nome": "Coca-Cola 600ml Original",
@@ -145,6 +163,7 @@
   },
   {
     "nome": "Coca retornável 2L",
-    "valor": "12,00"
+    "valor": "12,00",
+    "valorMesa": "15,00"
   }
 ]

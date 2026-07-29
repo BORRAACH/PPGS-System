@@ -15,6 +15,11 @@ Page {
 
     property var onPedidoSelecionado: null
     property var pilha: null
+    // true só quando aberta a partir de Salao.qml (via Pedido.qml) — alguns
+    // itens de bebida têm um preço maior específico pra comanda de mesa
+    // (campo opcional "valorMesa" em data/cardapio/bebidas.json), usado em
+    // vez do preço normal só quando isto está ligado (ver precoEfetivo()).
+    property bool comandaDeMesa: false
     // Lista para guardar as bebidas selecionadas — cada entrada é única por
     // nome e guarda a quantidade escolhida, permitindo pedir a mesma bebida
     // mais de uma vez (ex: 2 Coca-Cola) sem reabrir esta tela.
@@ -72,6 +77,7 @@ Page {
                 resultados.push({
                     "nome": item.nome,
                     "valor": item.valor,
+                    "valorMesa": item.valorMesa || "",
                     "prioridade": nomeLower.startsWith(busca) ? 0 : 1
                 });
         }
@@ -84,13 +90,21 @@ Page {
         for (var j = 0; j < resultados.length; j++) {
             modeloFiltrado.append({
                 "nome": resultados[j].nome,
-                "valor": resultados[j].valor
+                "valor": resultados[j].valor,
+                "valorMesa": resultados[j].valorMesa
             });
         }
     }
 
     function parseValor(strValor) {
         return parseFloat(strValor.replace(",", "."));
+    }
+
+    // Preço de fato cobrado por este item: o de mesa, só quando esta tela
+    // foi aberta a partir do Salão (comandaDeMesa) e o item tem um preço de
+    // mesa cadastrado — senão, o preço normal de Balcão/Entrega.
+    function precoEfetivo(item) {
+        return (comandaDeMesa && item.valorMesa) ? item.valorMesa : item.valor;
     }
 
     // Quantidade atualmente escolhida de uma bebida (0 se não selecionada)
@@ -221,7 +235,7 @@ Page {
                 onAccepted: {
                     if (modeloFiltrado.count === 1) {
                         var item = modeloFiltrado.get(0);
-                        adicionarItem(item.nome, parseValor(item.valor));
+                        adicionarItem(item.nome, parseValor(precoEfetivo(item)));
                         campoBusca.text = "";
                     }
                 }
@@ -275,7 +289,7 @@ Page {
                         }
 
                         Text {
-                            text: "R$ " + model.valor
+                            text: "R$ " + precoEfetivo(model)
                             font.pixelSize: Estilo.fonte.padrao
                             color: Estilo.confirmar.normal
                             font.bold: true
@@ -327,7 +341,7 @@ Page {
                             width: 26
                             height: 26
                             padding: 0
-                            onClicked: adicionarItem(model.nome, parseValor(model.valor))
+                            onClicked: adicionarItem(model.nome, parseValor(precoEfetivo(model)))
 
                             contentItem: Text {
                                 text: "+"
