@@ -115,25 +115,43 @@ def maquina(nome_arquivo):
     return ""
 
 
-def registrar(nome_arquivo, id_recebido="", maquina_recebida=""):
-    """Anota a comanda no índice e devolve (idEvento, maquina).
+def _gravar(nome_arquivo, id_evento, maquina_origem):
+    dados = _carregar()
+    dados[nome_arquivo] = {"idEvento": id_evento, "maquina": maquina_origem}
+    _salvar(dados)
+    return id_evento, maquina_origem
 
-    Sem `id_recebido`, gera um id novo desta máquina — é o caminho de quem
-    está criando a comanda. Com `id_recebido` (comanda vinda da rede),
-    reusa o id de origem e chama `relogio.observar` pra que o próximo id
-    gerado aqui fique depois dele na linha do tempo comum."""
+
+def registrar_local(nome_arquivo):
+    """Anota uma comanda criada NESTA máquina: id novo do relógio local e a
+    máquina local como origem. Só deve ser chamado por quem de fato acabou
+    de criar a comanda (ver RedeService.transmitir_pedido)."""
+    id_evento = relogio.novo_id()
+    return _gravar(nome_arquivo, id_evento, relogio.maquina_do_id(id_evento) or "")
+
+
+def registrar_recebido(nome_arquivo, id_recebido="", maquina_recebida=""):
+    """Anota uma comanda que veio da rede, preservando a identidade de
+    origem — é o que faz as máquinas concordarem sobre a mesma comanda.
+
+    Quando o peer NÃO manda o id (versão antiga, sem este mecanismo, ou
+    qualquer lacuna futura no protocolo), o certo é assumir que a origem é
+    desconhecida: grava o id sintetizado do nome do arquivo, que as duas
+    máquinas calculam igual, e deixa a máquina vazia — a Consulta então
+    deduz a origem pela inicial do código impresso (ver
+    ConsultaController._maquina_origem).
+
+    Antes isto caía no mesmo caminho de `registrar_local` e a máquina que
+    RECEBIA se declarava autora: uma comanda tirada no Windows aparecia na
+    Consulta do Linux como se tivesse sido lançada no Linux. Pior que o
+    rótulo errado, o id inventado localmente não bate com o que a outra
+    máquina calcula pra mesma comanda — o que transformaria cada uma delas
+    num conflito falso assim que as duas versões se encontrassem."""
     if id_recebido:
         relogio.observar(id_recebido)
-        id_final = id_recebido
-        maquina_final = maquina_recebida or (relogio.maquina_do_id(id_recebido) or "")
-    else:
-        id_final = relogio.novo_id()
-        maquina_final = relogio.maquina_do_id(id_final) or ""
+        return _gravar(nome_arquivo, id_recebido, maquina_recebida or relogio.maquina_do_id(id_recebido) or "")
 
-    dados = _carregar()
-    dados[nome_arquivo] = {"idEvento": id_final, "maquina": maquina_final}
-    _salvar(dados)
-    return id_final, maquina_final
+    return _gravar(nome_arquivo, _id_sintetico(nome_arquivo), maquina_recebida or "")
 
 
 def remover(nome_arquivo):

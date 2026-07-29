@@ -1151,7 +1151,7 @@ class RedeService(QObject):
         um deles significaria que um caminho novo de venda poderia nascer
         sem id de linha do tempo, e a comanda ficaria invisível pra toda a
         arbitragem de conflito sem nada indicar o porquê."""
-        id_evento, maquina = indicePedidos.registrar(nome_arquivo)
+        id_evento, maquina = indicePedidos.registrar_local(nome_arquivo)
         self._eventos.publicar("pedido_novo", {
             "arquivo": nome_arquivo,
             "conteudo_b64": base64.b64encode(conteudo_bytes).decode("ascii"),

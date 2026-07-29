@@ -236,6 +236,63 @@ class ConsultaController(QObject):
             self._comparar_pedido_reconciliacao,
         )
 
+        self._migrar_atribuicoes_incorretas()
+
+    def _codigo_impresso(self, nome_arquivo):
+        """Só o código da linha "ID:" da comanda, sem o fallback pro sufixo
+        do nome do arquivo que _codigo_comanda usa — aqui a primeira letra
+        precisa ser mesmo a inicial da máquina que lançou a comanda (ver
+        services/comandaSequencialService.py), e o sufixo aleatório não
+        carrega essa informação."""
+        caminho = os.path.join(self.pasta_pedidos, nome_arquivo)
+        try:
+            with open(caminho, "rb") as arquivo:
+                conteudo = arquivo.read()
+        except OSError:
+            return ""
+
+        texto = conteudo.decode(parser.CODEPAGE_IMPRESSORA, errors="replace")
+        return parser.extrair_campo(parser.PADRAO_ID_PEDIDO, parser.limpar_codigos_impressora(texto))
+
+    def _migrar_atribuicoes_incorretas(self):
+        """Descarta entradas do índice que dizem que esta máquina lançou uma
+        comanda que na verdade veio de outra.
+
+        Elas foram gravadas por uma versão em que receber uma comanda sem
+        idEvento (de um peer ainda desatualizado) caía no mesmo caminho de
+        criar uma comanda nova — ver indicePedidos.registrar_recebido. Além
+        do rótulo errado na Consulta, o id inventado aqui não bate com o que
+        a máquina de origem calcula pra mesma comanda: quando as duas
+        versões se encontrarem, cada uma dessas comandas viraria um conflito
+        falso, e o usuário teria que resolver na mão um por um.
+
+        O critério é a inicial do código impresso, que identifica a máquina
+        que lançou a comanda. Entradas sem código impresso (comandas
+        antigas) ficam como estão — não há como julgar, e errar pro lado de
+        preservar é o certo. Idempotente: rodar de novo não faz nada,
+        porque o que sobra já é consistente."""
+        indice = indicePedidos.carregar_indice()
+        if not indice:
+            return
+
+        inicial_local = (rede.nomeLocal or "?")[:1].upper()
+        incorretas = []
+        for nome_arquivo, entrada in indice.items():
+            if not isinstance(entrada, dict) or entrada.get("maquina") != rede.nomeLocal:
+                continue
+            codigo = self._codigo_impresso(nome_arquivo)
+            if codigo and codigo[:1].upper() != inicial_local:
+                incorretas.append(nome_arquivo)
+
+        for nome_arquivo in incorretas:
+            indicePedidos.remover(nome_arquivo)
+
+        if incorretas:
+            print(
+                f"[ConsultaController] {len(incorretas)} comanda(s) estavam registradas como lançadas nesta "
+                f"máquina mas vieram de outra — atribuição corrigida (ver indicePedidos.registrar_recebido)."
+            )
+
     # ---------- Anti-entropy (ver services/rede/redeService.py:registrarDominioSincronizado) ----------
 
     def _nomes_comandas_locais(self):
@@ -552,7 +609,7 @@ class ConsultaController(QObject):
             print(f"Falha ao salvar pedido recebido da rede em {caminho}: {erro}")
             return
 
-        indicePedidos.registrar(nome_arquivo, id_evento, maquina)
+        indicePedidos.registrar_recebido(nome_arquivo, id_evento, maquina)
         self.comandasAtualizadas.emit()
 
     @pyqtSlot(str, str)
@@ -690,7 +747,7 @@ class ConsultaController(QObject):
             print(f"Falha ao gravar a versão remota em {caminho}: {erro}")
             return False
 
-        indicePedidos.registrar(nome_arquivo, conflito.get("idRemoto", ""), conflito.get("maquinaRemota", ""))
+        indicePedidos.registrar_recebido(nome_arquivo, conflito.get("idRemoto", ""), conflito.get("maquinaRemota", ""))
         indicePedidos.resolver_conflito(nome_arquivo)
         self.comandasAtualizadas.emit()
         return True
