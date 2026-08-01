@@ -4,7 +4,7 @@
     "ingredientes": "Molho, mussarela, lombo, calabresa, catupiry, cebola e bacon",
     "valorMini": "24,90",
     "valorBroto": "34,90",
-    "valorGrande": "54,90",
+    "valorGrande": "59,90",
     "id": 1
   },
   {
@@ -12,7 +12,7 @@
     "ingredientes": "Molho, mussarela, calabresa, palmito e provolone",
     "valorMini": "24,90",
     "valorBroto": "34,90",
-    "valorGrande": "54,90",
+    "valorGrande": "59,90",
     "id": 2
   },
   {
@@ -52,7 +52,7 @@
     "ingredientes": "Molho, mussarela, strogonoff de frango, champion, cheddar e batata palha",
     "valorMini": "24,90",
     "valorBroto": "34,90",
-    "valorGrande": "54,90",
+    "valorGrande": "59,90",
     "id": 7
   },
   {
@@ -84,7 +84,7 @@
     "ingredientes": "Molho, mussarela, palmito e tomate",
     "valorMini": "24,90",
     "valorBroto": "34,90",
-    "valorGrande": "54,90",
+    "valorGrande": "59,90",
     "id": 11
   },
   {
@@ -219,7 +219,7 @@
     "ingredientes": "Molho, mussarela, frango e catupiry",
     "valorMini": "24,90",
     "valorBroto": "34,90",
-    "valorGrande": "54,90",
+    "valorGrande": "59,90",
     "id": 28
   },
   {
@@ -227,7 +227,7 @@
     "ingredientes": "Molho, mussarela, brócolis, catupiry, bacon e alho",
     "valorMini": "24,90",
     "valorBroto": "34,90",
-    "valorGrande": "54,90",
+    "valorGrande": "59,90",
     "id": 29
   },
   {
@@ -259,7 +259,7 @@
     "ingredientes": "Molho, mussarela, calabresa e cebola",
     "valorMini": "24,90",
     "valorBroto": "34,90",
-    "valorGrande": "54,90",
+    "valorGrande": "59,90",
     "id": 33
   },
   {
@@ -315,7 +315,7 @@
     "ingredientes": "Molho, mussarela e champion",
     "valorMini": "24,90",
     "valorBroto": "34,90",
-    "valorGrande": "54,90",
+    "valorGrande": "59,90",
     "id": 40
   },
   {
@@ -561,5 +561,12 @@
     "valorBroto": "39,90",
     "valorGrande": "59,90",
     "id": 72
+  },
+  {
+    "nome": "TESTE-SYNC-CARDAPIO",
+    "ingredientes": "marcador de teste",
+    "valorBroto": "1,00",
+    "valorGrande": "2,00",
+    "id": 73
   }
 ]
