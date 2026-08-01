@@ -60,6 +60,23 @@ def _rodar_git(*args):
             cwd=_raiz_projeto(),
             capture_output=True,
             text=True,
+            # Sem isto, text=True decodifica com o encoding do LOCALE — no
+            # Windows pt-BR, cp1252 — e "git show HEAD:data/cardapio/*.json"
+            # (ver _atualizar) despeja um arquivo UTF-8 cheio de acentos. O
+            # byte 0x81 (segundo byte de "Á" em UTF-8) é indefinido em
+            # cp1252, e o UnicodeDecodeError estourava DENTRO da thread que
+            # o subprocess usa pra ler o pipe no Windows: a thread morria,
+            # resultado.stdout voltava None e o .strip() aqui embaixo virava
+            # AttributeError — a atualização abortava antes do merge, e a
+            # máquina ficava presa na versão antiga a cada abertura.
+            #
+            # git fala UTF-8: tanto as mensagens dele quanto (aqui, o que
+            # importa) o conteúdo cru dos arquivos que "git show" imprime.
+            # errors="replace" é rede de segurança — decodificar a saída do
+            # git nunca mais pode derrubar a atualização, mesmo que algum
+            # arquivo do repositório deixe de ser UTF-8 válido um dia.
+            encoding="utf-8",
+            errors="replace",
             timeout=_TIMEOUT_GIT,
             env=env,
         )
@@ -68,10 +85,14 @@ def _rodar_git(*args):
         return None
 
     if resultado.returncode != 0:
-        print(f"[atualizador] 'git {' '.join(args)}' falhou: {resultado.stderr.strip()}")
+        print(f"[atualizador] 'git {' '.join(args)}' falhou: {(resultado.stderr or '').strip()}")
         return None
 
-    return resultado.stdout.strip()
+    # stdout/stderr podem vir None se a leitura do pipe falhar por um motivo
+    # que não seja decodificação (o caso acima já não acontece mais). Tratar
+    # como saída vazia mantém o contrato de "None só quando o comando
+    # falhou" — um AttributeError aqui abortaria a atualização inteira.
+    return (resultado.stdout or "").strip()
 
 
 def _eh_repositorio_git():

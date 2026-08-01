@@ -219,6 +219,7 @@ def _configurar_porta_serial(porta_com: str) -> None:
             ],
             capture_output=True,
             text=True,
+            errors="replace",
             timeout=10,
         )
     except (OSError, subprocess.TimeoutExpired) as erro:
@@ -226,7 +227,7 @@ def _configurar_porta_serial(porta_com: str) -> None:
         return
 
     if resultado.returncode != 0:
-        _log(f"'mode' retornou erro ao configurar {porta_com}: {resultado.stderr.strip() or resultado.stdout.strip()}")
+        _log(f"'mode' retornou erro ao configurar {porta_com}: {(resultado.stderr or '').strip() or (resultado.stdout or '').strip()}")
         return
 
     _log(f"Porta {porta_com} configurada em 9600 8N1, sem controle de fluxo por hardware.")
@@ -252,13 +253,18 @@ def garantir_impressora_bematech() -> None:
             [executavel, "-NoProfile", "-NonInteractive", "-Command", _SCRIPT_PS],
             capture_output=True,
             text=True,
+            # Um byte fora da codepage do locale levantaria
+            # UnicodeDecodeError dentro da thread de leitura do pipe, longe
+            # deste try/except — ver o comentário em
+            # services/printer/windows.py:_executar_powershell.
+            errors="replace",
             timeout=_TIMEOUT_PS,
         )
     except (subprocess.TimeoutExpired, OSError) as erro:
         _log(f"Falha ao rodar o PowerShell ({erro}) — seguindo sem configurar a impressora.")
         return
 
-    saida = resultado.stdout.strip()
+    saida = (resultado.stdout or "").strip()
     if not saida:
         _log(f"PowerShell não retornou nada (stderr: {resultado.stderr.strip()!r}) — seguindo sem configurar a impressora.")
         return

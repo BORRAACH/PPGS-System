@@ -108,13 +108,17 @@ def _verificar_fila_windows(nome_impressora: str, espera_segundos: int = 3) -> N
             [executavel, "-NoProfile", "-NonInteractive", "-Command", script],
             capture_output=True,
             text=True,
+            # Ver services/printer/windows.py:_executar_powershell — nome de
+            # documento/impressora com acento fora da codepage do locale
+            # estouraria na thread de leitura do pipe, longe deste except.
+            errors="replace",
             timeout=15,
         )
     except (subprocess.TimeoutExpired, OSError) as erro:
         log(f"Falha ao consultar a fila via PowerShell: {erro}")
         return
 
-    saida = resultado.stdout.strip()
+    saida = (resultado.stdout or "").strip()
     if saida:
         log(
             f"Ainda há job(s) na fila de '{nome_impressora}' — ISSO GERALMENTE SIGNIFICA que a "

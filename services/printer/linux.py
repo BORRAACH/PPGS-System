@@ -17,10 +17,18 @@ def _executar(comando):
             comando,
             capture_output=True,
             text=True,
+            # LC_ALL=C acima só muda o idioma das MENSAGENS do comando; nome
+            # de fila com acento ("Impressão") continua saindo como está no
+            # CUPS, em UTF-8. Se o locale do processo Python for ASCII (LANG
+            # não definido, app rodando como serviço), decodificar isso
+            # levantaria UnicodeDecodeError dentro da thread que o
+            # subprocess usa pra ler o pipe — fora do alcance destes except
+            # (mesmo caso de services/printer/windows.py).
+            errors="replace",
             env=ambiente,
             timeout=10,
         )
-        return resultado.stdout
+        return resultado.stdout or ""
     except FileNotFoundError:
         print(f"[printer/linux] Comando '{comando[0]}' não encontrado (CUPS/cups-client instalado?).")
         return ""
@@ -205,7 +213,9 @@ def _garantir_fila_habilitada(nome_impressora: str) -> None:
 
     print(f"[printer/linux] Fila '{nome_impressora}' está desabilitada — tentando reabilitar (cupsenable)...")
     try:
-        resultado = subprocess.run(["cupsenable", nome_impressora], capture_output=True, text=True, timeout=10)
+        resultado = subprocess.run(
+            ["cupsenable", nome_impressora], capture_output=True, text=True, errors="replace", timeout=10
+        )
     except (FileNotFoundError, subprocess.TimeoutExpired) as erro:
         print(f"[printer/linux] Falha ao rodar 'cupsenable {nome_impressora}': {erro}")
         return

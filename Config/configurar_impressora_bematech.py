@@ -67,6 +67,10 @@ def executar(comando, **kwargs):
     que fazer com o returncode)."""
     kwargs.setdefault("capture_output", True)
     kwargs.setdefault("text", True)
+    # Nome de fila/impressora com acento fora da tabela do locale levantaria
+    # UnicodeDecodeError na thread de leitura do pipe, longe de qualquer
+    # try/except deste script — ver services/printer/linux.py:_rodar.
+    kwargs.setdefault("errors", "replace")
     return subprocess.run(comando, **kwargs)
 
 

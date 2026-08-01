@@ -93,13 +93,30 @@ def _executar_powershell():
             [executavel, "-NoProfile", "-NonInteractive", "-Command", _SCRIPT_PS],
             capture_output=True,
             text=True,
+            # Nome de impressora com acento ("Impressora Padrão") sai na
+            # codepage do console (cp850 no Windows pt-BR), e um byte que
+            # não exista na tabela do locale levantava UnicodeDecodeError
+            # DENTRO da thread que o subprocess usa pra ler o pipe — fora
+            # do alcance do try/except de quem chama (ver
+            # RedeService._detectar_impressora_em_thread). Sem encoding=
+            # explícito de propósito: o locale já é a codepage certa aqui,
+            # ao contrário do git (ver Config/atualizador.py:_rodar_git,
+            # que fala UTF-8); o que faltava era só nunca estourar.
+            errors="replace",
             timeout=20,
         )
         if resultado.returncode != 0:
-            print(f"[printer/windows] PowerShell terminou com returncode={resultado.returncode}: {resultado.stderr.strip()}")
-        return resultado.stdout
+            print(f"[printer/windows] PowerShell terminou com returncode={resultado.returncode}: {(resultado.stderr or '').strip()}")
+        return resultado.stdout or ""
     except subprocess.TimeoutExpired:
         print("[printer/windows] PowerShell expirou (timeout de 20s) ao consultar Win32_Printer.")
+        return ""
+    except OSError as erro:
+        # Mesmo tratamento que Config/impressoraWindows.py e
+        # Config/diagnosticar_impressora.py já davam nos PowerShell deles —
+        # este era o único que deixava um OSError escapar, e escapava pra
+        # dentro de uma thread.
+        print(f"[printer/windows] Falha ao rodar o PowerShell: {erro}")
         return ""
 
 
