@@ -20,10 +20,21 @@ from services.comandaTextoService import valor_para_float
 CODEPAGE_IMPRESSORA = "cp850"
 
 ESC = "\x1b"
-# Remove os códigos ESC/POS de negrito (ESC E 0x01 / ESC E 0x00) embutidos no
-# .txt pelos controllers de venda — só fazem sentido para a impressora
-# térmica, não para exibição em tela nem para extrair campos.
-_PADRAO_NEGRITO = re.compile(re.escape(ESC) + r"E[\x00\x01]")
+GS = "\x1d"
+# Remove os códigos ESC/POS de estilo embutidos no .txt pelos controllers de
+# venda — só fazem sentido para a impressora térmica, não para exibição em
+# tela nem para extrair campos.
+#
+# São os quatro comandos que comandaEstiloService.formatar_campo emite, cada
+# um com um byte de parâmetro logo depois: negrito (ESC E n), sublinhado
+# (ESC - n), fundo preto/modo reverso (GS B n) e tamanho da fonte (GS ! n).
+# Por muito tempo só o negrito era removido aqui, porque só ele existia; os
+# outros três chegaram com a tela Configurações > Estilo e passaram
+# despercebidos, então os campos configurados com eles (endereco e bairro
+# saem sublinhados e maiores por padrão) voltavam de reconstruirComanda com
+# os bytes de controle no meio do texto — e eram reimpressos assim,
+# aninhando um estilo dentro do outro a cada edição da mesma comanda.
+_PADRAO_ESTILO = re.compile(r"(?:" + re.escape(ESC) + r"[E\-]|" + re.escape(GS) + r"[B!])[\s\S]")
 
 # Sem underscore: usadas de fora (ConsultaController) via extrair_campo(),
 # diferente das de baixo, que só interessam às funções desta própria
@@ -55,10 +66,16 @@ _PADRAO_VALOR_TOTAL = re.compile(r"^Valor do pedido:.*?R\$\s*([\d.,]+)", re.MULT
 # arquivo: "pedido_AAAAMMDD_HHMMSS_hash.txt" (Balcão), "entrega_..." e
 # "mesa_..." — ver data_arquivo_aaaammdd.
 _PADRAO_PREFIXO_ARQUIVO = re.compile(r"^(mesa|entrega|pedido)_(\d{8})_")
+# O mesmo carimbo, agora com a hora junto — ver carimbo_arquivo.
+_PADRAO_CARIMBO_ARQUIVO = re.compile(r"^(?:mesa|entrega|pedido)_(\d{8})_(\d{6})_")
+
+# Sufixo aleatório do nome do arquivo ("..._07fe75.txt") — ver
+# balcaoController._salvarComanda.
+_PADRAO_SUFIXO_ARQUIVO = re.compile(r"_([0-9a-f]{6})\.txt$")
 
 
 def limpar_codigos_impressora(texto):
-    return _PADRAO_NEGRITO.sub("", texto)
+    return _PADRAO_ESTILO.sub("", texto)
 
 
 def extrair_campo(padrao, texto):
@@ -95,6 +112,36 @@ def tipo_comanda(nome_arquivo):
     if nome_arquivo.startswith("entrega_"):
         return "Entrega"
     return "Balcão"
+
+
+def carimbo_arquivo(nome_arquivo):
+    """"AAAAMMDD_HHMMSS" embutido no nome do arquivo — chave de ordenação
+    cronológica que não depende de abrir a comanda nem do mtime (que é o
+    momento da gravação LOCAL: numa comanda recebida pela rede ele difere de
+    máquina pra máquina).
+
+    Existe separado de data_arquivo_aaaammdd porque ordenar pelo nome inteiro
+    NÃO ordena por tempo: o prefixo vem antes do carimbo, então
+    "pedido_..._190001" ordena depois de "mesa_..._190003" só por causa da
+    letra. Devolve "" quando o nome não bate com o padrão — esses vão pro fim
+    de uma ordenação decrescente, que é o lugar certo pra uma comanda de
+    origem desconhecida."""
+    correspondencia = _PADRAO_CARIMBO_ARQUIVO.match(nome_arquivo)
+    return correspondencia.group(1) + correspondencia.group(2) if correspondencia else ""
+
+
+def codigo_comanda(nome_arquivo, conteudo):
+    """Código curto pra identificar a comanda ao conferir duas máquinas na
+    mão. É o mesmo que está impresso no papel (linha "ID:", ver
+    services/comandaSequencialService.py); comandas anteriores a esse código
+    caem no sufixo aleatório do nome do arquivo, que também é idêntico em
+    todas as máquinas por ser parte da identidade da comanda."""
+    codigo = extrair_campo(PADRAO_ID_PEDIDO, conteudo)
+    if codigo:
+        return codigo
+
+    correspondencia = _PADRAO_SUFIXO_ARQUIVO.search(nome_arquivo)
+    return correspondencia.group(1).upper() if correspondencia else ""
 
 
 def data_arquivo_aaaammdd(nome_arquivo):

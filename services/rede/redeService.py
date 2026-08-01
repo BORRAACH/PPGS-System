@@ -12,7 +12,7 @@ from PyQt6.QtNetwork import QHostAddress, QTcpServer, QTcpSocket
 
 from Config.logConfig import protegido
 from services.printerService import PrinterService
-from services.rede import caminhos, impressoraFixada, indicePedidos, tombstones
+from services.rede import caminhos, impressoraFixada, indicePedidos, registroMaquinas, tombstones
 from services.rede.descoberta import criar_descoberta
 from services.rede.eventos import BarramentoEventos
 
@@ -151,6 +151,12 @@ class RedeService(QObject):
         # propagado/atualizado depois via gossip (evento "impressora_fixada").
         self._nome_maquina_fixada = impressoraFixada.carregar_nome_fixado()
         self._jobs_impressao = {}  # job_id -> {"timer": QTimer, "concluido": bool}
+
+        # Garante que esta máquina já está na própria tabela de ordem de
+        # entrada (ver services/rede/registroMaquinas.py) antes do primeiro
+        # handshake sair — é o que dá a letra do código da comanda (ver
+        # services/comandaSequencialService.py).
+        registroMaquinas.registrar_local()
 
         # Domínios de estado inscritos na camada de anti-entropy periódica
         # (ver registrarDominioSincronizado) — nome -> {"resumo", "obter",
@@ -339,6 +345,15 @@ class RedeService(QObject):
             # disso fica salvo no disco DELA até ela mesma receber o aviso
             # ao menos uma vez — ver _ao_receber_identificar_fixacao).
             "nomeMaquinaFixada": self._nome_maquina_fixada,
+            # Mesmo motivo/mecanismo de "nomeMaquinaFixada" acima: vai no
+            # handshake (não só num evento de gossip) pra uma máquina que
+            # conecta bem depois de outra ter entrado na malha aprender a
+            # ordem de entrada dela também. Tabela inteira, não só a desta
+            # máquina — como a malha é sempre full-mesh, isso já é
+            # suficiente pra espalhar o conhecimento completo sem precisar
+            # de um domínio de anti-entropy à parte (ver
+            # services/rede/registroMaquinas.py).
+            "registrosMaquinas": registroMaquinas.todos(),
         }
 
     def _preparar_socket(self, socket: QTcpSocket, destino: str = "", id_remoto: str = ""):
@@ -454,6 +469,9 @@ class RedeService(QObject):
                 "temImpressora": bool(mensagem.get("temImpressora")),
                 "infoImpressora": mensagem.get("infoImpressora"),
             }
+            novos = registroMaquinas.mesclar(mensagem.get("registrosMaquinas") or {})
+            if novos:
+                print(f"[RedeService] Registro de entrada na malha aprendido de {len(novos)} máquina(s) via handshake.")
             print(f"[RedeService] Conectado a '{self._info_peers[id_remoto]['nome']}' ({self._info_peers[id_remoto]['endereco']}) — {len(self._peers)} peer(s) na malha.")
             # Handshake concluído: o peer está vivo, então o backoff de
             # reconexão dele volta ao início (importante pra uma queda futura

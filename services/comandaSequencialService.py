@@ -8,14 +8,20 @@ Cada caractere carrega uma informação (ver gerar_codigo_pedido): a máquina
 onde o pedido foi lançado, o dia e a hora, e por último a ordem de chegada
 do pedido NESTA MÁQUINA no dia — reiniciada a cada dia novo.
 
-Deliberadamente NÃO sincronizado pela rede nem coordenado entre máquinas:
-um contador realmente único pra loja inteira (contando junto pedidos de
-Balcão/Entrega/Salão não importa em qual máquina) exigiria uma máquina
-"líder" distribuindo cada número pela rede — e lançar uma comanda não pode
-ficar esperando isso responder (mesmo princípio de
-RedeService.solicitar_impressao ser assíncrono: uma operação local nunca
-deve travar por causa da rede). Como a letra da máquina já entra no
-código, dois pedidos nunca saem com o código idêntico mesmo que a
+A letra da máquina vem da ordem em que ela entrou na malha local (ver
+services/rede/registroMaquinas.py) — primeira máquina que já existiu na
+malha é "A", segunda é "B", etc. — não mais da inicial do hostname: duas
+máquinas podiam ter hostname começando pela mesma letra, colidindo. A
+leitura em si continua 100% local (nunca espera resposta de rede).
+
+O NÚMERO do dia continua deliberadamente NÃO sincronizado pela rede nem
+coordenado entre máquinas: um contador realmente único pra loja inteira
+(contando junto pedidos de Balcão/Entrega/Salão não importa em qual
+máquina) exigiria uma máquina "líder" distribuindo cada número pela rede —
+e lançar uma comanda não pode ficar esperando isso responder (mesmo
+princípio de RedeService.solicitar_impressao ser assíncrono: uma operação
+local nunca deve travar por causa da rede). Como a letra da máquina já
+entra no código, dois pedidos nunca saem com o código idêntico mesmo que a
 "ordem do dia" numérica coincida.
 
 Persistido na pasta de cache do SO (QStandardPaths), mesmo lugar/motivo de
@@ -24,10 +30,11 @@ sozinho a cada dia), não configuração nem comanda de verdade."""
 
 import json
 import os
-import platform
 from datetime import date
 
 from PyQt6.QtCore import QStandardPaths
+
+from services.rede import registroMaquinas
 
 
 def _caminho_arquivo():
@@ -76,13 +83,15 @@ def gerar_codigo_pedido(agora):
     recebido como parâmetro em vez de chamar datetime.now() de novo aqui,
     pra nunca poder divergir do horário realmente impresso na comanda:
 
-    - 1 letra: início do nome desta máquina (platform.node()).
+    - 1 letra: ordem de entrada desta máquina na malha local (ver
+      services/rede/registroMaquinas.py) — A para a primeira máquina que já
+      existiu na malha, B para a segunda, etc.
     - 2 dígitos: dia do mês.
     - 2 dígitos: hora (24h).
     - 2 dígitos: ordem de chegada do pedido nesta máquina hoje (01, 02...).
 
-    Ex: "C291401" = máquina começando com "C", dia 29, 14h, 1º pedido
+    Ex: "C291401" = 3ª máquina a entrar na malha, dia 29, 14h, 1º pedido
     lançado nesta máquina no dia."""
-    maquina = (platform.node() or "?")[:1].upper()
+    maquina = registroMaquinas.letra()
     numero = _proximo_numero_do_dia(agora.date())
     return f"{maquina}{agora.day:02d}{agora.hour:02d}{numero:02d}"
