@@ -6,7 +6,8 @@ import "../../components"
 // Um item da lista de comandas em ColunaEsquerda.qml: mostra o resumo
 // (tipo + cliente/hora), serve de atalho no botão direito para o botão
 // "Editar" ao lado da barra de pesquisa e, no modo de edição, os botões de
-// editar/apagar rápidos.
+// editar/apagar rápidos — comanda já fechada não mostra nenhum dos dois
+// aqui; corrigi-la é só pelo botão "Editar caixa" em Fechamento.qml.
 Rectangle {
     id: itemComanda
 
@@ -72,8 +73,10 @@ Rectangle {
             // Comanda de Mesa já fechada (com a divisão da conta já
             // impressa) não tem como reabrir de volta num formulário
             // estruturado — ver o guard equivalente em
-            // Consulta.qml:editarComanda().
-            visible: model.tipo !== "Mesa"
+            // Consulta.qml:editarComanda(). Comanda já fechada (qualquer
+            // tipo) não edita mais por aqui — só pelo botão "Editar caixa"
+            // em Fechamento.qml, que sabe lidar com a baixa já dada.
+            visible: model.tipo !== "Mesa" && !model.fechada
             implicitWidth: 32
             implicitHeight: 32
             padding: 0
@@ -95,6 +98,9 @@ Rectangle {
         Button {
             id: btnApagarItem
 
+            // Mesma restrição do lápis acima: comanda já fechada só se
+            // corrige pelo Fechamento, nunca apaga direto pela Consulta.
+            visible: !model.fechada
             implicitWidth: 32
             implicitHeight: 32
             padding: 0
@@ -136,6 +142,29 @@ Rectangle {
                     id: textoBadgeItem
 
                     text: model.tipo
+                    color: "#ffffff"
+                    font.bold: true
+                    font.pixelSize: 11
+                    anchors.centerIn: parent
+                }
+            }
+
+            // Aberta = ainda sem baixa, fora do caixa do dia; fechada = já
+            // conferida no fechamento rápido (ver
+            // services/rede/baixaComandas.py). Verde só na fechada: é o
+            // estado "resolvido", e o cinza deixa a aberta parecer o que ela
+            // é — pendente, sem ser um alerta.
+            Rectangle {
+                radius: 6
+                width: textoBadgeStatus.implicitWidth + 14
+                height: textoBadgeStatus.implicitHeight + 6
+                color: model.fechada ? Estilo.confirmar.normal : Estilo.cores.textoSecundario
+                anchors.verticalCenter: parent.verticalCenter
+
+                Text {
+                    id: textoBadgeStatus
+
+                    text: model.fechada ? "Fechada" : "Aberta"
                     color: "#ffffff"
                     font.bold: true
                     font.pixelSize: 11

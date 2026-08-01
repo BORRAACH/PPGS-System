@@ -25,6 +25,17 @@ Page {
     // carga.
     property var resumoAtual: ({})
 
+    // Comandas do dia que ainda não receberam baixa — vendas que existem mas
+    // estão fora do caixa (ver services/rede/baixaComandas.py). A chave
+    // "abertas" não existe em resumos gravados em cache por versões
+    // anteriores, daí o valor padrão.
+    readonly property var _abertas: telaFechamento.resumoAtual.abertas || ({
+        "quantidade": 0,
+        "total": 0
+    })
+    readonly property int quantidadeAberta: telaFechamento._abertas.quantidade || 0
+    readonly property real totalAberto: telaFechamento._abertas.total || 0
+
     readonly property var ordemTipos: ["Balcão", "Entrega", "Mesa"]
     readonly property var coresTipo: ({
         "Balcão": "#16a34a",
@@ -86,6 +97,20 @@ Page {
         telaFechamento.mostrarNotificacao("Caixa de " + telaFechamento.formatarDataExibicao(telaFechamento.dataSelecionada) + " recalculado e salvo.", true);
     }
 
+    function abrirFechamentoRapido() {
+        if (!popupFechamentoRapido.abrirPara(telaFechamento.dataSelecionada))
+            telaFechamento.mostrarNotificacao("Nenhuma comanda em aberto em " + telaFechamento.formatarDataExibicao(telaFechamento.dataSelecionada) + ".", true);
+    }
+
+    // Correção de uma comanda já fechada — único caminho pra isso agora
+    // (ver ItemComandaDelegate.qml, que escondeu lápis/lixeira de comandas
+    // fechadas na Consulta). Fila espelhada da de "Fechamento rápido", só
+    // que sobre as que já têm baixa.
+    function abrirEditarCaixa() {
+        if (!popupFechamentoRapido.abrirParaFechadas(telaFechamento.dataSelecionada))
+            telaFechamento.mostrarNotificacao("Nenhuma comanda fechada em " + telaFechamento.formatarDataExibicao(telaFechamento.dataSelecionada) + ".", true);
+    }
+
     // Conexão declarativa, não um .connect() solto em Component.onCompleted
     // — mesmo motivo documentado em Balcao.qml/Rede.qml: fechamentoController
     // é global e vive pra sempre, então a conexão precisa estar presa ao
@@ -99,6 +124,29 @@ Page {
         function onFechamentoAtualizado(data) {
             if (data === telaFechamento.dataSelecionada)
                 telaFechamento.carregarDia(data);
+        }
+
+        // Qualquer baixa (aqui ou em outra máquina da malha) muda o total do
+        // dia e o contador de abertas. Recarregar o dia exibido cobre os
+        // dois casos; o daqui só recarrega o que darBaixa() acabou de
+        // recalcular, o que é barato e mantém um caminho só.
+        function onBaixasAtualizadas() {
+            telaFechamento.carregarDia(telaFechamento.dataSelecionada);
+        }
+    }
+
+    // A reimpressão pedida pelo popup é assíncrona e pode acontecer em outra
+    // máquina da malha (ver rede.solicitar_impressao) — o resultado só chega
+    // por aqui, do mesmo jeito que em Balcao.qml/Entrega.qml.
+    Connections {
+        target: redeController
+        // Só enquanto esta página está à vista: redeController é global e o
+        // sinal é o mesmo de qualquer impressão do app — sem isto, imprimir
+        // um pedido no Balcão enfileiraria um "Comanda reimpressa" aqui.
+        enabled: telaFechamento.visible
+
+        function onImpressaoResultado(sucesso, mensagem) {
+            telaFechamento.mostrarNotificacao(sucesso ? ("Comanda reimpressa (" + mensagem + ")") : ("Falha ao reimprimir: " + mensagem), sucesso);
         }
     }
 
@@ -203,6 +251,72 @@ Page {
             }
 
             Button {
+                id: btnEditarCaixa
+
+                padding: 10
+                focusPolicy: Qt.StrongFocus
+                enabled: telaFechamento.resumoAtual.quantidade > 0
+                onClicked: telaFechamento.abrirEditarCaixa()
+
+                contentItem: Row {
+                    spacing: 6
+                    anchors.centerIn: parent
+                    Icone { nome: "fa6s.pen-to-square"; cor: "#ffffff"; tamanho: Estilo.fonte.padrao; anchors.verticalCenter: parent.verticalCenter }
+                    Text {
+                        text: "Editar caixa"
+                        font.bold: true
+                        color: "#ffffff"
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
+                }
+
+                background: Rectangle {
+                    radius: Estilo.rounding.padrao
+                    color: {
+                        if (!btnEditarCaixa.enabled)
+                            return Estilo.cores.borda;
+                        return btnEditarCaixa.down ? "#1d4ed8" : (btnEditarCaixa.hovered ? "#3b82f6" : "#2563eb");
+                    }
+                    border.color: btnEditarCaixa.activeFocus ? Estilo.cores.texto : "transparent"
+                    border.width: btnEditarCaixa.activeFocus ? 3 : 1
+                }
+            }
+
+            Button {
+                id: btnFechamentoRapido
+
+                padding: 10
+                focusPolicy: Qt.StrongFocus
+                enabled: telaFechamento.quantidadeAberta > 0
+                onClicked: telaFechamento.abrirFechamentoRapido()
+
+                contentItem: Row {
+                    spacing: 6
+                    anchors.centerIn: parent
+                    Icone { nome: "fa6s.list-check"; cor: "#ffffff"; tamanho: Estilo.fonte.padrao; anchors.verticalCenter: parent.verticalCenter }
+                    Text {
+                        text: telaFechamento.quantidadeAberta > 0
+                            ? "Fechamento rápido (" + telaFechamento.quantidadeAberta + ")"
+                            : "Fechamento rápido"
+                        font.bold: true
+                        color: "#ffffff"
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
+                }
+
+                background: Rectangle {
+                    radius: Estilo.rounding.padrao
+                    color: {
+                        if (!btnFechamentoRapido.enabled)
+                            return Estilo.cores.borda;
+                        return btnFechamentoRapido.down ? "#6d28d9" : (btnFechamentoRapido.hovered ? "#8b5cf6" : "#7c3aed");
+                    }
+                    border.color: btnFechamentoRapido.activeFocus ? Estilo.cores.texto : "transparent"
+                    border.width: btnFechamentoRapido.activeFocus ? 3 : 1
+                }
+            }
+
+            Button {
                 id: btnFecharCaixa
 
                 padding: 10
@@ -267,6 +381,22 @@ Page {
                     font.pixelSize: 13
                     color: Estilo.cores.textoSecundario
                 }
+
+                // O que foi vendido mas ainda não entrou no caixa. Fica
+                // junto do total de propósito: sem isto, um dia com metade
+                // das comandas sem baixa mostraria um total menor sem
+                // nenhuma pista do motivo.
+                Text {
+                    Layout.alignment: Qt.AlignHCenter
+                    Layout.topMargin: 6
+                    visible: telaFechamento.quantidadeAberta > 0
+                    text: telaFechamento.quantidadeAberta
+                        + (telaFechamento.quantidadeAberta === 1 ? " comanda em aberto · " : " comandas em aberto · ")
+                        + "R$ " + telaFechamento.totalAberto.toFixed(2).replace(".", ",") + " fora do caixa"
+                    font.pixelSize: 13
+                    font.bold: true
+                    color: "#b45309"
+                }
             }
         }
 
@@ -313,6 +443,9 @@ Page {
                                 id: blocoTipo
 
                                 readonly property var info: telaFechamento.infoTipo(modelData)
+                                // Preso aqui porque lá dentro, na ListView de
+                                // comandas, "modelData" já é a comanda.
+                                readonly property string nomeTipo: modelData
 
                                 Layout.fillWidth: true
                                 visible: info.quantidade > 0
@@ -368,7 +501,7 @@ Page {
                                 ListView {
                                     Layout.fillWidth: true
                                     Layout.leftMargin: 18
-                                    height: Math.min(blocoTipo.info.comandas.length * 44, 220)
+                                    Layout.preferredHeight: Math.min(blocoTipo.info.comandas.length * 44, 220)
                                     clip: true
                                     spacing: 4
                                     model: blocoTipo.info.comandas
@@ -382,9 +515,25 @@ Page {
                                         width: ListView.view.width
                                         height: 40
                                         radius: Estilo.rounding.padrao
-                                        color: Estilo.cores.fundoPagina
-                                        border.color: Estilo.cores.bordaCard
+                                        color: areaComanda.containsMouse ? "#ffffff" : Estilo.cores.fundoPagina
+                                        border.color: areaComanda.containsMouse ? (telaFechamento.coresTipo[blocoTipo.nomeTipo] || Estilo.cores.borda) : Estilo.cores.bordaCard
                                         border.width: 1
+
+                                        // Abre a comanda pra conferir e, se
+                                        // preciso, corrigir. Estas são as já
+                                        // baixadas — as em aberto têm o botão
+                                        // "Fechamento rápido" lá em cima — e
+                                        // são justamente as que o caixa do
+                                        // dia já está contando, ou seja, as
+                                        // que um erro de digitação afeta.
+                                        MouseArea {
+                                            id: areaComanda
+
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: popupFechamentoRapido.abrirComanda(modelData.arquivo, telaFechamento.dataSelecionada)
+                                        }
 
                                         RowLayout {
                                             anchors.fill: parent
@@ -489,9 +638,21 @@ Page {
                             width: ListView.view.width
                             height: colunaSuspeita.implicitHeight + 16
                             radius: Estilo.rounding.padrao
-                            color: "#ffffff"
-                            border.color: "#ffa8a8"
+                            color: areaSuspeita.containsMouse ? "#fff0f0" : "#ffffff"
+                            border.color: areaSuspeita.containsMouse ? Estilo.cancelar.normal : "#ffa8a8"
                             border.width: 1
+
+                            // O motivo de a comanda estar nesta lista é a
+                            // suspeita de erro ao tirar o pedido — poder
+                            // clicar e corrigir é o desfecho natural dela.
+                            MouseArea {
+                                id: areaSuspeita
+
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: popupFechamentoRapido.abrirComanda(modelData.arquivo, telaFechamento.dataSelecionada)
+                            }
 
                             ColumnLayout {
                                 id: colunaSuspeita
@@ -562,6 +723,17 @@ Page {
                 border.width: 1
             }
         }
+    }
+
+    PopupFechamentoRapido {
+        id: popupFechamentoRapido
+
+        // O popup vive em Overlay.overlay, fora da hierarquia visual desta
+        // página, então não alcança o StackView sozinho — e ele precisa da
+        // pilha pra empurrar o formulário de edição.
+        pilhaPrincipal: telaFechamento.StackView.view
+
+        onConcluido: telaFechamento.carregarDia(telaFechamento.dataSelecionada)
     }
 
     FilaNotificacoes {

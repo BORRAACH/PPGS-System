@@ -4,6 +4,7 @@ import QtQuick.Layouts
 import estilo 1.0
 import "../../components"
 import "../../components/Texto.js" as Texto
+import "../../components/EdicaoComanda.js" as EdicaoComanda
 
 Page {
     id: telaConsulta
@@ -26,6 +27,11 @@ Page {
     // Texto de busca atual: o campo de texto vive em ColunaEsquerda.qml, mas
     // o filtro precisa sobreviver a um "Atualizar" (que recarrega o disco).
     property string buscaAtual: ""
+    // "todas" | "abertas" | "fechadas" — comanda aberta ainda não recebeu
+    // baixa e está fora do caixa do dia (ver services/rede/baixaComandas.py).
+    // O seletor vive em ColunaEsquerda.qml, mas o valor fica aqui pelo mesmo
+    // motivo de buscaAtual: precisa sobreviver a um "Atualizar".
+    property string filtroStatus: "todas"
 
     // Exposto para AreaPrincipal.qml/ColunaEsquerda.qml preencherem a lista.
     property alias modelo: modeloComandas
@@ -76,9 +82,21 @@ Page {
 
     // Reordena _todasComandas pela proximidade com o texto pesquisado (sem
     // esconder nenhuma comanda) e repopula o modelo exibido na lista.
+    //
+    // O filtro por status é a única coisa aqui que de fato ESCONDE comandas —
+    // é uma escolha explícita do usuário no seletor, diferente da busca, que
+    // só reordena.
     function aplicarFiltro() {
         var busca = Texto.normalizar(telaConsulta.buscaAtual.trim());
         var lista = telaConsulta._todasComandas;
+
+        if (telaConsulta.filtroStatus !== "todas") {
+            var querFechadas = telaConsulta.filtroStatus === "fechadas";
+            lista = lista.filter(function (item) {
+                return (item.fechada === true) === querFechadas;
+            });
+        }
+
         if (busca !== "") {
             // Calcula a pontuação de cada comanda uma única vez — O(n) — em
             // vez de deixar o comparador do sort recalculá-la a cada
@@ -133,48 +151,10 @@ Page {
     // original) já preenchida, para edição estruturada e reimpressão. O
     // formulário guarda "arquivoOriginal" e apaga esse arquivo assim que a
     // versão editada é impressa com sucesso, para não deixar duplicata.
+    // O mapeamento dos campos está em components/EdicaoComanda.js, que o
+    // popup de fechamento rápido também usa.
     function editarComanda(nomeArquivo) {
-        var dados = consultaController.reconstruirComanda(nomeArquivo);
-        if (!dados || !dados.itens)
-            return;
-
-        // Comanda de Mesa já fechada (com a divisão da conta já impressa)
-        // não tem como reabrir de volta num formulário estruturado — nem
-        // Balcao.qml nem Entrega.qml sabem o que fazer com "mesa"/divisão.
-        // O botão "Editar" já não aparece pra ela (ver
-        // ItemComandaDelegate.qml), isto é só defesa a mais.
-        if (dados.tipo === "Mesa")
-            return;
-
-        var pilhaPrincipal = telaConsulta.StackView.view;
-        if (!pilhaPrincipal)
-            return;
-
-        if (dados.tipo === "Entrega") {
-            pilhaPrincipal.push("../entrega/Entrega.qml", {
-                "clienteNome": dados.cliente,
-                "telefoneInicial": dados.telefone,
-                "enderecoInicial": dados.endereco,
-                "numeroInicial": dados.numero,
-                "bairroInicial": dados.bairro,
-                "observacaoInicial": dados.observacaoGeral,
-                "formaPagamentoInicial": dados.formaPagamento,
-                "trocoInicial": dados.troco,
-                "statusPagamentoInicial": dados.statusPagamento,
-                "taxaEntregaInicial": dados.taxaEntrega,
-                "itensIniciais": dados.itens,
-                "arquivoOriginal": nomeArquivo
-            });
-        } else {
-            pilhaPrincipal.push("../balcao/Balcao.qml", {
-                "clienteNome": dados.cliente,
-                "formaPagamentoInicial": dados.formaPagamento,
-                "trocoInicial": dados.troco,
-                "statusPagamentoInicial": dados.statusPagamento,
-                "itensIniciais": dados.itens,
-                "arquivoOriginal": nomeArquivo
-            });
-        }
+        EdicaoComanda.abrir(telaConsulta.StackView.view, nomeArquivo);
     }
 
     // Permite digitar direto na tela para pesquisar, sem precisar clicar
@@ -200,6 +180,18 @@ Page {
         // Recarrega sozinho quando um pedido de outra máquina da rede
         // chega/some (ver redeController/consultaController.aplicarPedidoRemoto).
         function onComandasAtualizadas() {
+            carregarComandas();
+        }
+    }
+
+    // O selo Aberta/Fechada muda por uma ação que acontece na página de
+    // Fechamento (ou em outra máquina da malha), não aqui — daí o segundo
+    // controller. Sem isto, uma comanda baixada continuaria aparecendo como
+    // aberta até alguém clicar em "Atualizar".
+    Connections {
+        target: fechamentoController
+
+        function onBaixasAtualizadas() {
             carregarComandas();
         }
     }

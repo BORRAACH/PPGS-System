@@ -26,6 +26,11 @@ Page {
     // Consulta para editar uma comanda existente ("" = comanda nova). Ao
     // imprimir com sucesso, o arquivo antigo é apagado para não duplicar.
     property string arquivoOriginal: ""
+    // A comanda que está sendo editada já tinha baixa, e o atendente escolheu
+    // mantê-la conferida (ver o popup da página de Fechamento). Como editar é
+    // apagar-e-recriar, a comanda nova nasceria fora do caixa do dia — isto
+    // pede que a baixa seja transferida pra ela assim que for salva.
+    property bool manterBaixaAoSalvar: false
     // Índice da linha de modeloPedidos que está sendo editada pelo popup de
     // seleção — precisa ficar fora do delegate porque o popup é um único
     // item reaproveitado, não recriado a cada clique.
@@ -292,9 +297,27 @@ Page {
             // foi checada (e, se vazia, o popup de comanda de teste já
             // respondeu) — chamadas tanto direto pelos botões quanto pelo
             // handler de popupComandaTeste.respondido.
+            // Devolve pra comanda recém-gravada a baixa que a comanda editada
+            // tinha. Chamada ANTES de limparFormularioPedido(), que zera
+            // manterBaixaAoSalvar junto com arquivoOriginal.
+            //
+            // O nome do arquivo novo vem do controller (ultimoArquivoSalvo) e
+            // não daqui: editar gera um .txt com carimbo e sufixo aleatório
+            // novos, que a QML não tem como saber. darBaixa cuida do resto —
+            // registra, propaga pra malha e recalcula o caixa do dia.
+            function transferirBaixa() {
+                if (!telaEntrega.manterBaixaAoSalvar)
+                    return;
+
+                var novoArquivo = entregaController.ultimoArquivoSalvo();
+                if (novoArquivo !== "")
+                    fechamentoController.darBaixa(novoArquivo);
+            }
+
             function prosseguirImprimir(dadosPedido) {
                 var sucesso = entregaController.enviarPedido(dadosPedido, spinnerCopias.value);
                 if (sucesso) {
+                    transferirBaixa();
                     limparFormularioPedido();
                     telaEntrega.mostrarNotificacao(dadosPedido.teste ? "Comanda de teste impressa." : "Pedido salvo com sucesso!", true);
                 } else {
@@ -305,6 +328,7 @@ Page {
             function prosseguirLancar(dadosPedido) {
                 var sucesso = entregaController.lancarPedido(dadosPedido);
                 if (sucesso) {
+                    transferirBaixa();
                     limparFormularioPedido();
                     telaEntrega.mostrarNotificacao(dadosPedido.teste ? "Comanda de teste registrada (não aparece na Consulta)." : "Comanda lançada com sucesso!", true);
                 } else {
@@ -317,6 +341,7 @@ Page {
                     consultaController.apagarComanda(telaEntrega.arquivoOriginal);
                     telaEntrega.arquivoOriginal = "";
                 }
+                telaEntrega.manterBaixaAoSalvar = false;
                 inputNomeCliente.text = "";
                 inputTelefone.text = "";
                 inputEndereco.text = "";

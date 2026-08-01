@@ -113,11 +113,63 @@ Column {
         }
     }
 
+    // --- FILTRO POR STATUS ---
+    // Aberta = ainda sem baixa, fora do caixa do dia; fechada = já conferida
+    // e contando no fechamento (ver services/rede/baixaComandas.py). É o
+    // único controle da tela que esconde comandas — a busca ao lado só
+    // reordena.
+    Row {
+        id: linhaFiltroStatus
+
+        spacing: 6
+
+        Repeater {
+            model: [
+                { "rotulo": "Todas", "valor": "todas" },
+                { "rotulo": "Abertas", "valor": "abertas" },
+                { "rotulo": "Fechadas", "valor": "fechadas" }
+            ]
+
+            delegate: Button {
+                id: botaoFiltro
+
+                required property var modelData
+
+                readonly property bool ativo: colunaEsquerda.pagina.filtroStatus === modelData.valor
+
+                height: 28
+                padding: 12
+                onClicked: {
+                    colunaEsquerda.pagina.filtroStatus = modelData.valor;
+                    colunaEsquerda.pagina.aplicarFiltro();
+                }
+
+                contentItem: Text {
+                    text: botaoFiltro.modelData.rotulo
+                    font.pixelSize: 12
+                    font.bold: botaoFiltro.ativo
+                    color: botaoFiltro.ativo ? "#ffffff" : Estilo.cores.textoSecundario
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+
+                background: Rectangle {
+                    radius: Estilo.rounding.cheio
+                    color: botaoFiltro.ativo
+                        ? (botaoFiltro.down ? "#6d28d9" : "#7c3aed")
+                        : (botaoFiltro.hovered ? "#ede9fe" : "transparent")
+                    border.color: botaoFiltro.ativo ? "#6d28d9" : Estilo.cores.borda
+                    border.width: 1
+                }
+            }
+        }
+    }
+
     ListView {
         id: listaComandas
 
         width: parent.width
-        height: parent.height - 30 - campoBusca.height - 10
+        height: parent.height - 30 - campoBusca.height - linhaFiltroStatus.height - 2 * colunaEsquerda.spacing
         clip: true
         spacing: 8
 

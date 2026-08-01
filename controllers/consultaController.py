@@ -8,7 +8,7 @@ from PyQt6.QtCore import QByteArray, QObject, pyqtSignal, pyqtSlot
 from Config.logConfig import protegido
 from services import comandaParserService as parser
 from services.comandaTextoService import PREFIXO_ADICIONAL, PREFIXO_BORDA
-from services.rede import indicePedidos, rede, relogio, tombstones
+from services.rede import baixaComandas, indicePedidos, rede, relogio, tombstones
 
 # Janela (em dias) que o resumo periódico de anti-entropy compara pra este
 # domínio (ver _resumo_pedidos/RedeService.registrarDominioSincronizado) —
@@ -63,25 +63,6 @@ _PADRAO_SUFIXO_TAMANHO = re.compile(r"^(.*)\s\(([^)]+)\)$")
 # açaí editado via Consulta perderiam a associação com o item ao reimprimir.
 _TAMANHOS_VALIDOS = ("Grande", "Broto", "Mini", "300 ML", "500 ML", "700 ML")
 _TAMANHOS_VALIDOS_UPPER = tuple(t.upper() for t in _TAMANHOS_VALIDOS)
-
-
-# Sufixo aleatório do nome do arquivo ("..._07fe75.txt") — ver
-# balcaoController._salvarComanda.
-_PADRAO_SUFIXO_ARQUIVO = re.compile(r"_([0-9a-f]{6})\.txt$")
-
-
-def _codigo_comanda(nome_arquivo, conteudo):
-    """Código curto pra identificar a comanda ao conferir duas máquinas na
-    mão. É o mesmo que está impresso no papel (linha "ID:", ver
-    services/comandaSequencialService.py); comandas anteriores a esse código
-    caem no sufixo aleatório do nome do arquivo, que também é idêntico em
-    todas as máquinas por ser parte da identidade da comanda."""
-    codigo = parser.extrair_campo(parser.PADRAO_ID_PEDIDO, conteudo)
-    if codigo:
-        return codigo
-
-    correspondencia = _PADRAO_SUFIXO_ARQUIVO.search(nome_arquivo)
-    return correspondencia.group(1).upper() if correspondencia else ""
 
 
 def _dividir_endereco_numero(endereco_completo):
@@ -412,6 +393,11 @@ class ConsultaController(QObject):
 
         conflitos = indicePedidos.carregar_conflitos()
         nomes_maquinas = self._nomes_maquinas_conhecidas()
+        # Uma leitura só do mapa de baixas pra lista inteira — o mesmo
+        # cuidado que já vale pra `conflitos` acima. Consultar
+        # baixaComandas.esta_fechada() por comanda releria o JSON a cada
+        # volta do laço.
+        baixas = baixaComandas.carregar()
 
         comandas = []
         for nome_arquivo in os.listdir(self.pasta_pedidos):
@@ -430,7 +416,7 @@ class ConsultaController(QObject):
             conteudo = conteudo_bytes.decode(parser.CODEPAGE_IMPRESSORA, errors="replace")
             conteudo = parser.limpar_codigos_impressora(conteudo).strip("\n")
             tipo = parser.tipo_comanda(nome_arquivo)
-            codigo = _codigo_comanda(nome_arquivo, conteudo)
+            codigo = parser.codigo_comanda(nome_arquivo, conteudo)
             conflito = conflitos.get(nome_arquivo) or {}
 
             comandas.append({
@@ -441,6 +427,10 @@ class ConsultaController(QObject):
                 "dataHora": parser.extrair_campo(parser.PADRAO_DATA, conteudo),
                 "modificadoEm": modificado_em,
                 "codigo": codigo,
+                # Aberta (ainda não conferida, fora do caixa) x fechada (com
+                # baixa dada, contando no fechamento do dia) — ver
+                # services/rede/baixaComandas.py. Sem registro = aberta.
+                "fechada": nome_arquivo in baixas,
                 "maquinaOrigem": self._maquina_origem(nome_arquivo, codigo, nomes_maquinas),
                 "emConflito": bool(conflito),
                 "motivoConflito": conflito.get("motivo", ""),

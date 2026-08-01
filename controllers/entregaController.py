@@ -25,6 +25,8 @@ class EntregaController(QObject):
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         self.pasta_pedidos = os.path.join(base_dir, "pedidos")
         os.makedirs(self.pasta_pedidos, exist_ok=True)
+        # Nome do último .txt gravado — ver ultimoArquivoSalvo().
+        self._ultimo_arquivo = ""
 
     def _salvarComanda(self, dados):
         """Monta o texto da comanda, grava o .txt e propaga para a rede
@@ -38,6 +40,12 @@ class EntregaController(QObject):
         propagada pela rede — não deve aparecer na Consulta. conteudo_bytes
         ainda volta preenchido, porque enviarPedido() precisa dele pra
         pedir a impressão mesmo nesse caso."""
+        # Zerado já na entrada, não só em caso de erro: comanda de teste
+        # devolve sucesso sem gravar nada, e deixar aqui o nome da comanda
+        # anterior faria ultimoArquivoSalvo() apontar pra uma comanda que não
+        # tem nada a ver com esta chamada.
+        self._ultimo_arquivo = ""
+
         teste = bool(dados.get("teste", False))
         cliente = "Teste" if teste else dados.get("cliente", "")
         telefone = dados.get("telefone", "")
@@ -131,9 +139,24 @@ class EntregaController(QObject):
             return False, b""
 
         print(f"Pedido salvo em: {caminho_arquivo}")
+        self._ultimo_arquivo = nome_arquivo
         rede.transmitir_pedido(nome_arquivo, conteudo_bytes)
 
         return True, conteudo_bytes
+
+    @pyqtSlot(result=str)
+    def ultimoArquivoSalvo(self):
+        """Nome do .txt gravado pela última chamada bem-sucedida de
+        enviarPedido/lancarPedido.
+
+        Existe porque os dois devolvem só um bool, e quem edita uma comanda
+        já baixada precisa do nome NOVO pra transferir a baixa pra ele (ver
+        Entrega.qml:prosseguirLancar): editar é apagar-e-recriar, então o
+        arquivo resultante tem outro nome, que a QML não teria como adivinhar.
+
+        Vazio quando a última comanda foi de teste (não é gravada em disco) ou
+        quando nada foi salvo ainda nesta sessão."""
+        return self._ultimo_arquivo
 
     @pyqtSlot("QVariantMap", result=bool)
     @pyqtSlot("QVariantMap", int, result=bool)
