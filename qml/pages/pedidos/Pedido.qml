@@ -213,7 +213,7 @@ Popup {
                             radius: Estilo.rounding.medio
                             color: btnCategoria.down ? Qt.darker(model.cor, 1.2) : (btnCategoria.emFoco ? Qt.lighter(model.cor, 1.1) : model.cor)
                             border.width: btnCategoria.emFoco ? 3 : 0
-                            border.color: "#ffffff"
+                            border.color: "#000"
 
                             Behavior on color {
                                 ColorAnimation {
