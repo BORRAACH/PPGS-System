@@ -29,6 +29,7 @@ cada máquina/commit.
 import os
 import subprocess
 import sys
+import traceback
 
 from Config import mesclarCardapio
 
@@ -146,11 +147,48 @@ def _resumo_commits_novos(branch, upstream, limite=8):
     return _rodar_git("log", "--oneline", f"{branch}..{upstream}", f"-{limite}") or ""
 
 
+def _qapplication_existente():
+    """A QApplication já criada neste processo, se houver — usada só pelo
+    fallback de erro abaixo, pra main.py continuar recebendo a instância
+    mesmo quando a atualização falhou depois de tê-la criado."""
+    try:
+        from PyQt6.QtWidgets import QApplication
+    except ImportError:
+        return None
+    return QApplication.instance()
+
+
 def verificar_atualizacoes():
     """Ponto de entrada chamado por main.py. Devolve a instância de
     QApplication criada pra mostrar a pergunta, se alguma foi criada (pra
     main.py reaproveitar em vez de tentar criar uma segunda — só é possível
-    existir uma por processo), ou None se não precisou perguntar nada."""
+    existir uma por processo), ou None se não precisou perguntar nada.
+
+    Nunca levanta exceção. Isto não é zelo genérico: o atualizador é o
+    único componente do app que, quando quebra, não consegue entregar a
+    própria correção — uma exceção aqui aborta o update, a máquina fica
+    presa na versão antiga e passa a falhar exatamente igual em TODA
+    abertura seguinte, sem chance de se recuperar sozinha por mais commits
+    que sejam publicados. Foi o que aconteceu de verdade com o
+    UnicodeDecodeError de _rodar_git (ver o comentário lá): as máquinas só
+    voltaram a atualizar com um `git pull` feito na mão em cada uma.
+
+    Falhar aqui vira "abre com a versão atual" + traceback no log
+    (logs/app.log, ver Config/logConfig.py), que é sempre recuperável: o
+    app abre normal e a atualização é tentada de novo na próxima abertura,
+    já com o código novo se ele tiver entrado."""
+    try:
+        return _verificar_atualizacoes()
+    except Exception:
+        print(
+            "[atualizador] Falha inesperada ao checar/aplicar a atualização — abrindo com a "
+            f"versão atual. Detalhes:\n{traceback.format_exc().rstrip()}",
+            file=sys.stderr,
+        )
+        return _qapplication_existente()
+
+
+def _verificar_atualizacoes():
     if not _eh_repositorio_git():
         return None
 
