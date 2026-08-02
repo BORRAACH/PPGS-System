@@ -418,12 +418,13 @@ class ConsultaController(QObject):
             tipo = parser.tipo_comanda(nome_arquivo)
             codigo = parser.codigo_comanda(nome_arquivo, conteudo)
             conflito = conflitos.get(nome_arquivo) or {}
+            cliente = parser.extrair_campo(parser.PADRAO_CLIENTE, conteudo)
 
             comandas.append({
                 "arquivo": nome_arquivo,
                 "tipo": tipo,
                 "conteudo": conteudo,
-                "cliente": parser.extrair_campo(parser.PADRAO_CLIENTE, conteudo),
+                "cliente": cliente,
                 "dataHora": parser.extrair_campo(parser.PADRAO_DATA, conteudo),
                 "modificadoEm": modificado_em,
                 "codigo": codigo,
@@ -435,6 +436,19 @@ class ConsultaController(QObject):
                 "emConflito": bool(conflito),
                 "motivoConflito": conflito.get("motivo", ""),
                 "maquinaConflito": conflito.get("maquinaRemota", ""),
+                # Borda vermelha em ItemComandaDelegate.qml — ver
+                # comandaParserService.eh_suspeita. Calculado independente
+                # de aberta/fechada: um erro de digitação vale a pena
+                # sinalizar assim que a comanda existe, não só depois de
+                # baixada (diferente do fechamento, que só soma o que já
+                # tem baixa).
+                "suspeita": parser.eh_suspeita(
+                    tipo,
+                    cliente,
+                    parser.extrair_campo(parser.PADRAO_FORMA_PAGAMENTO, conteudo),
+                    parser.extrair_status_pagamento(conteudo),
+                    parser.extrair_campo(parser.PADRAO_ENDERECO, conteudo),
+                ),
             })
 
         comandas.sort(key=lambda c: c["modificadoEm"], reverse=True)

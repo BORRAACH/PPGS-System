@@ -43,6 +43,10 @@ _PADRAO_ESTILO = re.compile(r"(?:" + re.escape(ESC) + r"[E\-]|" + re.escape(GS) 
 PADRAO_CLIENTE = re.compile(r"^Cliente:[ \t]*(.*)$", re.MULTILINE)
 PADRAO_DATA = re.compile(r"^Data:[ \t]*(.*)$", re.MULTILINE)
 PADRAO_FORMA_PAGAMENTO = re.compile(r"^Forma de pagamento:[ \t]*(.*)$", re.MULTILINE)
+# Só entregaController imprime esta linha (ver EntregaController._salvarComanda)
+# — Balcão/Mesa não têm endereço, e extrair_campo devolve "" pra eles, o que
+# é o comportamento certo (ver eh_suspeita abaixo).
+PADRAO_ENDERECO = re.compile(r"^Endereço:[ \t]*(.*)$", re.MULTILINE)
 # Código curto do cabeçalho (ver services/comandaSequencialService.py), ex:
 # "ID: A291201". Está no arquivo desde que passou a ser impresso, mas até
 # agora ninguém o lia de volta — a Consulta o mostra pra que o mesmo código
@@ -72,6 +76,13 @@ _PADRAO_CARIMBO_ARQUIVO = re.compile(r"^(?:mesa|entrega|pedido)_(\d{8})_(\d{6})_
 # Sufixo aleatório do nome do arquivo ("..._07fe75.txt") — ver
 # balcaoController._salvarComanda.
 _PADRAO_SUFIXO_ARQUIVO = re.compile(r"_([0-9a-f]{6})\.txt$")
+
+# Uma linha por pessoa na seção "DIVISÃO DA CONTA" de uma comanda de Mesa
+# (ver salaoController._montarCupomFinal), ex: "Fulano: R$ 45,00 [Pix] [PG]".
+# É o único lugar onde uma comanda de Mesa registra forma de pagamento — o
+# cabeçalho dela não tem "Forma de pagamento:" porque cada divisão pode ser
+# paga de um jeito diferente (ver eh_suspeita, que por isso pula Mesa).
+_PADRAO_DIVISAO_MESA = re.compile(r"^(.+): (R\$\s*[\d.,]+) \[([^\]]*)\] \[(NP|PG)\]$", re.MULTILINE)
 
 
 def limpar_codigos_impressora(texto):
@@ -104,6 +115,49 @@ def extrair_valor_total(texto):
     if not match:
         return 0.0
     return valor_para_float("R$ " + match.group(1))
+
+
+def eh_suspeita(tipo, cliente, forma_pagamento, status, endereco=""):
+    """Sinaliza uma comanda que provavelmente teve um erro de digitação na
+    hora do pedido, pra revisão manual em Consulta/Fechamento (borda
+    vermelha nas duas telas, ver ItemComandaDelegate.qml e Fechamento.qml).
+
+    Dois critérios independentes (OR), qualquer um basta:
+    - Sem nome do cliente + status NP + forma de pagamento Pix, em
+      Balcão/Entrega. Mesa não entra aqui: cada divisão da conta tem seu
+      próprio nome/status/forma, sem um único valor no nível do cabeçalho
+      (ver FechamentoController._calcular_resumo_dia).
+    - Entrega sem nome OU sem endereço — os dois são obrigatórios pra
+      entregar de verdade, então a ausência de qualquer um dos dois é sinal
+      de pedido incompleto, independente da forma de pagamento."""
+    cliente = (cliente or "").strip()
+    endereco = (endereco or "").strip()
+
+    if tipo != "Mesa" and cliente == "" and status == "NP" and forma_pagamento == "Pix":
+        return True
+
+    if tipo == "Entrega" and (cliente == "" or endereco == ""):
+        return True
+
+    return False
+
+
+def extrair_divisoes_mesa(texto):
+    """Cada linha da seção "DIVISÃO DA CONTA" de uma comanda de Mesa como
+    {"nome", "valor", "formaPagamento", "status"} — usado pra saber quanto
+    de uma Mesa foi pago em dinheiro/Pix/cartão no cupom de "Fechar Caixa"
+    (ver FechamentoController._somar_por_forma_pagamento). [] para
+    comandas sem essa seção (Balcão/Entrega, ou Mesa fechada sem
+    divisão)."""
+    resultado = []
+    for correspondencia in _PADRAO_DIVISAO_MESA.finditer(texto):
+        resultado.append({
+            "nome": correspondencia.group(1).strip(),
+            "valor": valor_para_float(correspondencia.group(2)),
+            "formaPagamento": correspondencia.group(3),
+            "status": correspondencia.group(4),
+        })
+    return resultado
 
 
 def tipo_comanda(nome_arquivo):

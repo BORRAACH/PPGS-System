@@ -30,6 +30,12 @@ Rectangle {
     // diferente em cada máquina.
     readonly property bool emConflito: model.emConflito === true
 
+    // Provável erro de digitação no pedido (ver
+    // comandaParserService.eh_suspeita) — só um aviso visual, não impede
+    // nada; emConflito continua tendo prioridade porque ali o próprio valor
+    // do caixa pode estar divergindo entre máquinas.
+    readonly property bool suspeita: model.suspeita === true
+
     width: ListView.view.width - (ListView.view.ScrollBar.vertical.visible ? ListView.view.ScrollBar.vertical.width : 0)
     height: colunaItem.implicitHeight + 20
     radius: Estilo.rounding.grande
@@ -38,8 +44,8 @@ Rectangle {
         : (selecionado ? "#ede9fe" : (mouseAreaItem.containsMouse ? "#f5f5f5" : "#ffffff"))
     border.color: emConflito
         ? Estilo.cores.avisoBorda
-        : (selecionado ? "#7c3aed" : Estilo.cores.bordaCard)
-    border.width: (emConflito || selecionado) ? 2 : 1
+        : (suspeita ? "#dc2626" : (selecionado ? "#7c3aed" : Estilo.cores.bordaCard))
+    border.width: (emConflito || selecionado || suspeita) ? 2 : 1
 
     MouseArea {
         id: mouseAreaItem

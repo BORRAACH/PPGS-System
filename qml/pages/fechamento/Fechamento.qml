@@ -5,9 +5,10 @@ import estilo 1.0
 import "../../components"
 
 // Fechamento de caixa diário — soma o total de todas as comandas lançadas
-// no dia (Balcão/Entrega/Mesa, ver controllers/fechamentoController.py),
-// mostra de onde cada valor vem, e separa comandas suspeitas (sem nome do
-// cliente + NP + Pix) pra revisão manual.
+// no dia (Balcão/Entrega/Mesa, ver controllers/fechamentoController.py) e
+// mostra de onde cada valor vem. Comandas suspeitas (ver
+// comandaParserService.eh_suspeita) ganham borda vermelha na própria lista,
+// em vez de uma área separada.
 //
 // O resumo é recalculado sozinho ao abrir a página (ou trocar de dia) —
 // "hoje" sempre ao vivo, dias passados usam o cache local quando já existe
@@ -21,8 +22,8 @@ Page {
 
     // "AAAA-MM-DD" — sempre preenchida (ver hojeIso()/carregarDia()).
     property string dataSelecionada: ""
-    // {data, total, quantidade, porTipo, suspeitas} — {} antes da primeira
-    // carga.
+    // {data, total, quantidade, porTipo, abertas, extras} — {} antes da
+    // primeira carga.
     property var resumoAtual: ({})
 
     // Comandas do dia que ainda não receberam baixa — vendas que existem mas
@@ -35,6 +36,54 @@ Page {
     })
     readonly property int quantidadeAberta: telaFechamento._abertas.quantidade || 0
     readonly property real totalAberto: telaFechamento._abertas.total || 0
+
+    // Pagamentos de diária a funcionários lançados no dia — dinheiro que
+    // sai do caixa fora de qualquer venda (ver services/rede/extrasCaixa.py
+    // e FechamentoController._calcular_resumo_dia). A chave "extras" não
+    // existe em resumos gravados em cache antes desta feature existir, daí
+    // o valor padrão — mesmo cuidado de "_abertas" acima.
+    readonly property var _extras: telaFechamento.resumoAtual.extras || ({
+        "quantidade": 0,
+        "total": 0,
+        "itens": []
+    })
+    readonly property int quantidadeExtras: telaFechamento._extras.quantidade || 0
+    readonly property real totalExtras: telaFechamento._extras.total || 0
+
+    // Contagem manual de Cartão/Dinheiro/Pix do dia (ver
+    // services/rede/contagemCaixa.py) — diferente de resumoAtual, não vem
+    // do recálculo das comandas: é preenchida à parte por carregarDia() e
+    // sobrescrita pelo popup de Contagem.
+    property var contagemAtual: ({
+        "cartao": 0,
+        "dinheiro": 0,
+        "pix": 0
+    })
+    readonly property real totalContagem: (telaFechamento.contagemAtual.cartao || 0)
+        + (telaFechamento.contagemAtual.dinheiro || 0)
+        + (telaFechamento.contagemAtual.pix || 0)
+
+    // Fórmula de como o Lucro é calculado (ver
+    // services/formulaLucroService.py e PopupFormulaLucro.qml) — não é por
+    // dia, é uma configuração única da malha inteira; carregada uma vez e
+    // atualizada sozinha quando muda (aqui ou em outra máquina).
+    property var formulaAtual: ({
+        "contagem": "somar",
+        "extras": "subtrair",
+        "bruto": "subtrair"
+    })
+
+    function _multiplicadorSinal(sinal) {
+        if (sinal === "somar")
+            return 1;
+        if (sinal === "subtrair")
+            return -1;
+        return 0;
+    }
+
+    readonly property real lucro: telaFechamento.totalContagem * telaFechamento._multiplicadorSinal(telaFechamento.formulaAtual.contagem)
+        + telaFechamento.totalExtras * telaFechamento._multiplicadorSinal(telaFechamento.formulaAtual.extras)
+        + (telaFechamento.resumoAtual.total || 0) * telaFechamento._multiplicadorSinal(telaFechamento.formulaAtual.bruto)
 
     readonly property var ordemTipos: ["Balcão", "Entrega", "Mesa"]
     readonly property var coresTipo: ({
@@ -90,16 +139,41 @@ Page {
     function carregarDia(iso) {
         telaFechamento.dataSelecionada = iso;
         telaFechamento.resumoAtual = fechamentoController.obterFechamento(iso);
+        telaFechamento.contagemAtual = fechamentoController.obterContagem(iso);
+    }
+
+    // Chamado pelos campos de Cartão/Dinheiro/Pix (botão "Salvar
+    // contagem") — sobrescreve a contagem do dia visualizado e atualiza a
+    // tela na hora com o que foi de fato salvo.
+    function salvarContagem(cartaoTexto, dinheiroTexto, pixTexto) {
+        telaFechamento.contagemAtual = fechamentoController.registrarContagem(telaFechamento.dataSelecionada, cartaoTexto, dinheiroTexto, pixTexto);
+        telaFechamento.mostrarNotificacao("Contagem de " + telaFechamento.formatarDataExibicao(telaFechamento.dataSelecionada) + " salva.", true);
+    }
+
+    function _carregarFormula() {
+        telaFechamento.formulaAtual = formulaLucroController.obterConfiguracao();
+    }
+
+    function abrirFormulaLucro() {
+        popupFormulaLucro.abrirCom(telaFechamento.formulaAtual);
     }
 
     function fecharCaixa() {
         telaFechamento.resumoAtual = fechamentoController.calcularFechamento(telaFechamento.dataSelecionada);
-        telaFechamento.mostrarNotificacao("Caixa de " + telaFechamento.formatarDataExibicao(telaFechamento.dataSelecionada) + " recalculado e salvo.", true);
+        fechamentoController.imprimirFechamentoCaixa(telaFechamento.dataSelecionada);
+        telaFechamento.mostrarNotificacao("Caixa de " + telaFechamento.formatarDataExibicao(telaFechamento.dataSelecionada) + " recalculado, salvo e enviado para impressão.", true);
     }
 
     function abrirFechamentoRapido() {
         if (!popupFechamentoRapido.abrirPara(telaFechamento.dataSelecionada))
             telaFechamento.mostrarNotificacao("Nenhuma comanda em aberto em " + telaFechamento.formatarDataExibicao(telaFechamento.dataSelecionada) + ".", true);
+    }
+
+    // Age sobre o dia visualizado (dataSelecionada), não necessariamente
+    // hoje — permite lançar uma diária esquecida de um dia anterior, mesmo
+    // comportamento do botão "Fechar Caixa".
+    function abrirExtras() {
+        popupExtras.abrirPara(telaFechamento.dataSelecionada);
     }
 
     // Correção de uma comanda já fechada — único caminho pra isso agora
@@ -133,6 +207,23 @@ Page {
         function onBaixasAtualizadas() {
             telaFechamento.carregarDia(telaFechamento.dataSelecionada);
         }
+
+        // Contagem editada em outra máquina, pro mesmo dia sendo exibido
+        // aqui agora — mesmo espírito de onFechamentoAtualizado.
+        function onContagemAtualizada(data) {
+            if (data === telaFechamento.dataSelecionada)
+                telaFechamento.carregarDia(data);
+        }
+    }
+
+    // formulaLucroController é global e a fórmula não é por dia — trocada
+    // em outra máquina, precisa recarregar aqui mesmo sem trocar de dia.
+    Connections {
+        target: formulaLucroController
+
+        function onFormulaAlterada() {
+            telaFechamento._carregarFormula();
+        }
     }
 
     // A reimpressão pedida pelo popup é assíncrona e pode acontecer em outra
@@ -150,7 +241,19 @@ Page {
         }
     }
 
+    // Os campos de Cartão/Dinheiro/Pix são TextField comuns (não bindings
+    // declarativos): assim que o usuário digita algo, QML desfaz o binding
+    // daquele campo com contagemAtual pra sempre (comportamento normal de
+    // TextField) — sem isto, trocar de dia e voltar mostraria o valor
+    // digitado no dia anterior em vez do que está salvo pra este dia.
+    onContagemAtualChanged: {
+        inputCartao.text = "R$ " + Number(telaFechamento.contagemAtual.cartao || 0).toFixed(2).replace(".", ",");
+        inputDinheiro.text = "R$ " + Number(telaFechamento.contagemAtual.dinheiro || 0).toFixed(2).replace(".", ",");
+        inputPix.text = "R$ " + Number(telaFechamento.contagemAtual.pix || 0).toFixed(2).replace(".", ",");
+    }
+
     Component.onCompleted: {
+        _carregarFormula();
         carregarDia(hojeIso());
     }
     StackView.onActivated: {
@@ -317,6 +420,33 @@ Page {
             }
 
             Button {
+                id: btnExtras
+
+                padding: 10
+                focusPolicy: Qt.StrongFocus
+                onClicked: telaFechamento.abrirExtras()
+
+                contentItem: Row {
+                    spacing: 6
+                    anchors.centerIn: parent
+                    Icone { nome: "fa6s.hand-holding-dollar"; cor: "#ffffff"; tamanho: Estilo.fonte.padrao; anchors.verticalCenter: parent.verticalCenter }
+                    Text {
+                        text: "Extras"
+                        font.bold: true
+                        color: "#ffffff"
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
+                }
+
+                background: Rectangle {
+                    radius: Estilo.rounding.padrao
+                    color: btnExtras.down ? "#92400e" : (btnExtras.hovered ? "#c2660a" : "#b45309")
+                    border.color: btnExtras.activeFocus ? Estilo.cores.texto : "transparent"
+                    border.width: btnExtras.activeFocus ? 3 : 1
+                }
+            }
+
+            Button {
                 id: btnFecharCaixa
 
                 padding: 10
@@ -446,6 +576,10 @@ Page {
                                 // Preso aqui porque lá dentro, na ListView de
                                 // comandas, "modelData" já é a comanda.
                                 readonly property string nomeTipo: modelData
+                                // Fechado por padrão — a lista de comandas só
+                                // aparece quando o box do tipo é clicado (ver
+                                // areaCabecalhoTipo abaixo).
+                                property bool expandido: false
 
                                 Layout.fillWidth: true
                                 visible: info.quantidade > 0
@@ -458,6 +592,15 @@ Page {
                                     color: "#ffffff"
                                     border.color: Estilo.cores.bordaCard
                                     border.width: 1
+
+                                    MouseArea {
+                                        id: areaCabecalhoTipo
+
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: blocoTipo.expandido = !blocoTipo.expandido
+                                    }
 
                                     RowLayout {
                                         id: linhaCabecalhoTipo
@@ -495,29 +638,48 @@ Page {
                                             font.pixelSize: Estilo.fonte.padrao
                                             color: telaFechamento.coresTipo[modelData] || Estilo.cores.texto
                                         }
+
+                                        Icone {
+                                            nome: blocoTipo.expandido ? "fa6s.chevron-up" : "fa6s.chevron-down"
+                                            cor: Estilo.cores.textoSecundario
+                                            tamanho: 12
+                                            anchors.verticalCenter: parent.verticalCenter
+                                        }
                                     }
                                 }
 
+                                // Altura = conteúdo inteiro (sem limite/scroll
+                                // próprio) — quem rola é só o Flickable de
+                                // fora, um scroll só pra "Mapeamento por
+                                // origem" inteiro, em vez de uma caixinha de
+                                // rolagem dentro da outra.
                                 ListView {
                                     Layout.fillWidth: true
                                     Layout.leftMargin: 18
-                                    Layout.preferredHeight: Math.min(blocoTipo.info.comandas.length * 44, 220)
+                                    Layout.preferredHeight: contentHeight
+                                    visible: blocoTipo.expandido
+                                    interactive: false
                                     clip: true
                                     spacing: 4
                                     model: blocoTipo.info.comandas
                                     boundsBehavior: Flickable.StopAtBounds
 
-                                    ScrollBar.vertical: ScrollBar {
-                                        policy: ScrollBar.AsNeeded
-                                    }
-
                                     delegate: Rectangle {
+                                        id: itemComandaTipo
+
+                                        // Provável erro de digitação no pedido
+                                        // (ver comandaParserService.eh_suspeita)
+                                        // — só um aviso visual.
+                                        readonly property bool suspeita: modelData.suspeita === true
+
                                         width: ListView.view.width
                                         height: 40
                                         radius: Estilo.rounding.padrao
                                         color: areaComanda.containsMouse ? "#ffffff" : Estilo.cores.fundoPagina
-                                        border.color: areaComanda.containsMouse ? (telaFechamento.coresTipo[blocoTipo.nomeTipo] || Estilo.cores.borda) : Estilo.cores.bordaCard
-                                        border.width: 1
+                                        border.color: itemComandaTipo.suspeita
+                                            ? "#dc2626"
+                                            : (areaComanda.containsMouse ? (telaFechamento.coresTipo[blocoTipo.nomeTipo] || Estilo.cores.borda) : Estilo.cores.bordaCard)
+                                        border.width: itemComandaTipo.suspeita ? 2 : 1
 
                                         // Abre a comanda pra conferir e, se
                                         // preciso, corrigir. Estas são as já
@@ -575,117 +737,355 @@ Page {
                         }
                     }
                 }
+
+                // --- EXTRAS (pagamento de diária, descontado do caixa) ---
+                Rectangle {
+                    Layout.fillWidth: true
+                    visible: telaFechamento.quantidadeExtras > 0
+                    implicitHeight: colunaExtras.implicitHeight + 20
+                    radius: Estilo.rounding.padrao
+                    color: "#fff7ed"
+                    border.color: "#fed7aa"
+                    border.width: 1
+
+                    ColumnLayout {
+                        id: colunaExtras
+
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.top: parent.top
+                        anchors.margins: 10
+                        spacing: 6
+
+                        Row {
+                            spacing: 6
+                            Icone { nome: "fa6s.hand-holding-dollar"; cor: "#b45309"; tamanho: 14; anchors.verticalCenter: parent.verticalCenter }
+                            Text {
+                                text: "Pagamentos de diária (descontados do caixa)"
+                                font.bold: true
+                                font.pixelSize: 13
+                                color: "#b45309"
+                                anchors.verticalCenter: parent.verticalCenter
+                            }
+                        }
+
+                        Repeater {
+                            model: telaFechamento._extras.itens
+
+                            delegate: RowLayout {
+                                Layout.fillWidth: true
+                                spacing: 8
+
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: modelData.funcionario
+                                    font.pixelSize: 12
+                                    color: Estilo.cores.texto
+                                    elide: Text.ElideRight
+                                }
+
+                                Text {
+                                    text: modelData.dataHora
+                                    font.pixelSize: 11
+                                    color: Estilo.cores.textoSecundario
+                                }
+
+                                Text {
+                                    text: "R$ " + Number(modelData.valor).toFixed(2).replace(".", ",")
+                                    font.bold: true
+                                    font.pixelSize: 12
+                                    color: "#b45309"
+                                }
+
+                                Button {
+                                    id: btnEditarExtra
+
+                                    implicitWidth: 24
+                                    implicitHeight: 24
+                                    padding: 0
+                                    onClicked: popupExtras.abrirParaEditar(modelData)
+
+                                    contentItem: Icone {
+                                        nome: "fa6s.pen"
+                                        cor: Estilo.cores.textoSecundario
+                                        tamanho: 11
+                                        anchors.centerIn: parent
+                                    }
+
+                                    background: Rectangle {
+                                        radius: Estilo.rounding.cheio
+                                        color: btnEditarExtra.down ? "#e5e7eb" : (btnEditarExtra.hovered ? "#f1f5f9" : "transparent")
+                                    }
+                                }
+                            }
+                        }
+
+                        Text {
+                            Layout.fillWidth: true
+                            Layout.topMargin: 2
+                            text: "Total descontado: R$ " + telaFechamento.totalExtras.toFixed(2).replace(".", ",")
+                            font.bold: true
+                            font.pixelSize: 13
+                            color: "#b45309"
+                        }
+                    }
+                }
             }
 
-            // --- COMANDAS SUSPEITAS ---
+            // --- CONTAGEM DE CAIXA ---
             ColumnLayout {
                 Layout.preferredWidth: 340
                 Layout.fillHeight: true
                 Layout.alignment: Qt.AlignTop
                 spacing: 10
 
-                Row {
-                    spacing: 6
-                    Icone { nome: "fa6s.triangle-exclamation"; cor: Estilo.cancelar.normal; tamanho: 16; anchors.verticalCenter: parent.verticalCenter }
-                    Text {
-                        text: "Comandas suspeitas"
-                        font.pixelSize: Estilo.fonte.padrao
-                        font.bold: true
-                        color: Estilo.cancelar.normal
-                        anchors.verticalCenter: parent.verticalCenter
-                    }
-                }
-
-                Text {
+                RowLayout {
                     Layout.fillWidth: true
-                    text: "Sem nome do cliente, status NP e forma de pagamento Pix — pode ter sido um erro na hora de tirar o pedido."
-                    font.pixelSize: 11
-                    color: Estilo.cores.textoSecundario
-                    wrapMode: Text.WordWrap
+
+                    Row {
+                        spacing: 6
+                        Icone { nome: "fa6s.calculator"; cor: "#0d9488"; tamanho: 16; anchors.verticalCenter: parent.verticalCenter }
+                        Text {
+                            text: "Contagem de caixa"
+                            font.pixelSize: Estilo.fonte.padrao
+                            font.bold: true
+                            color: "#0d9488"
+                            anchors.verticalCenter: parent.verticalCenter
+                        }
+                    }
+
+                    Item { Layout.fillWidth: true }
+
+                    // Muda a lógica de como o Lucro abaixo é calculado (ver
+                    // PopupFormulaLucro.qml) — engrenagem, não um botão de
+                    // texto, porque é uma configuração da malha inteira, não
+                    // uma ação do dia visualizado.
+                    Button {
+                        id: btnFormulaLucro
+
+                        padding: 6
+                        focusPolicy: Qt.StrongFocus
+                        onClicked: telaFechamento.abrirFormulaLucro()
+
+                        contentItem: Icone {
+                            nome: "fa6s.gear"
+                            cor: Estilo.cores.textoSecundario
+                            tamanho: 14
+                            anchors.centerIn: parent
+                        }
+
+                        background: Rectangle {
+                            radius: Estilo.rounding.cheio
+                            color: btnFormulaLucro.down ? "#e5e7eb" : (btnFormulaLucro.hovered ? "#f1f5f9" : "transparent")
+                            border.color: Estilo.cores.borda
+                            border.width: 1
+                        }
+                    }
                 }
 
                 Rectangle {
                     Layout.fillWidth: true
-                    Layout.fillHeight: true
+                    implicitHeight: colunaContagem.implicitHeight + 20
                     radius: Estilo.rounding.grande
-                    color: "#fff5f5"
-                    border.color: "#ffc9c9"
+                    color: "#ffffff"
+                    border.color: Estilo.cores.bordaCard
                     border.width: 1
 
-                    Text {
-                        anchors.centerIn: parent
-                        visible: (telaFechamento.resumoAtual.suspeitas || []).length === 0
-                        text: "Nenhuma comanda suspeita neste dia."
-                        font.italic: true
-                        color: Estilo.cores.textoSecundario
-                        width: parent.width - 20
-                        wrapMode: Text.WordWrap
-                        horizontalAlignment: Text.AlignHCenter
-                    }
+                    ColumnLayout {
+                        id: colunaContagem
 
-                    ListView {
-                        anchors.fill: parent
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.top: parent.top
                         anchors.margins: 10
-                        clip: true
-                        spacing: 6
-                        model: telaFechamento.resumoAtual.suspeitas || []
+                        spacing: 10
 
-                        ScrollBar.vertical: ScrollBar {
-                            policy: ScrollBar.AsNeeded
+                        Column {
+                            Layout.fillWidth: true
+                            spacing: 4
+
+                            Text {
+                                text: "Cartão (crédito/débito)"
+                                font.pixelSize: 12
+                                font.bold: true
+                                color: Estilo.cores.textoSecundario
+                            }
+
+                            TextField {
+                                id: inputCartao
+
+                                width: parent.width
+                                color: Estilo.cores.textoInput
+                                placeholderTextColor: Estilo.cores.placeholderInput
+                                placeholderText: "VALOR"
+                                topPadding: 10
+                                bottomPadding: 10
+                                leftPadding: 10
+                                rightPadding: 10
+                                validator: DoubleValidator {
+                                    bottom: 0
+                                    decimals: 2
+                                    notation: DoubleValidator.StandardNotation
+                                }
+                                // Mesmo padrão de inputTroco/inputTaxaEntrega
+                                // em CamposPagamento.qml.
+                                onEditingFinished: {
+                                    if (text !== "") {
+                                        var numLimpo = text.replace("R$", "").replace(" ", "").replace(",", ".");
+                                        var valorFloat = parseFloat(numLimpo);
+                                        if (!isNaN(valorFloat))
+                                            text = "R$ " + valorFloat.toFixed(2).replace(".", ",");
+                                    }
+                                }
+
+                                background: Rectangle {
+                                    radius: Estilo.rounding.padrao
+                                    color: "#ffffff"
+                                    border.color: inputCartao.activeFocus ? "#0d9488" : Estilo.cores.borda
+                                    border.width: 1
+                                }
+                            }
                         }
 
-                        delegate: Rectangle {
-                            width: ListView.view.width
-                            height: colunaSuspeita.implicitHeight + 16
-                            radius: Estilo.rounding.padrao
-                            color: areaSuspeita.containsMouse ? "#fff0f0" : "#ffffff"
-                            border.color: areaSuspeita.containsMouse ? Estilo.cancelar.normal : "#ffa8a8"
-                            border.width: 1
+                        Column {
+                            Layout.fillWidth: true
+                            spacing: 4
 
-                            // O motivo de a comanda estar nesta lista é a
-                            // suspeita de erro ao tirar o pedido — poder
-                            // clicar e corrigir é o desfecho natural dela.
-                            MouseArea {
-                                id: areaSuspeita
-
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: popupFechamentoRapido.abrirComanda(modelData.arquivo, telaFechamento.dataSelecionada)
+                            Text {
+                                text: "Dinheiro (no caixa)"
+                                font.pixelSize: 12
+                                font.bold: true
+                                color: Estilo.cores.textoSecundario
                             }
 
-                            ColumnLayout {
-                                id: colunaSuspeita
+                            TextField {
+                                id: inputDinheiro
 
-                                anchors.left: parent.left
-                                anchors.right: parent.right
-                                anchors.verticalCenter: parent.verticalCenter
-                                anchors.margins: 8
-                                spacing: 2
-
-                                Text {
-                                    Layout.fillWidth: true
-                                    text: modelData.dataHora
-                                    font.bold: true
-                                    font.pixelSize: 12
-                                    color: Estilo.cores.texto
+                                width: parent.width
+                                color: Estilo.cores.textoInput
+                                placeholderTextColor: Estilo.cores.placeholderInput
+                                placeholderText: "VALOR"
+                                topPadding: 10
+                                bottomPadding: 10
+                                leftPadding: 10
+                                rightPadding: 10
+                                validator: DoubleValidator {
+                                    bottom: 0
+                                    decimals: 2
+                                    notation: DoubleValidator.StandardNotation
+                                }
+                                onEditingFinished: {
+                                    if (text !== "") {
+                                        var numLimpo = text.replace("R$", "").replace(" ", "").replace(",", ".");
+                                        var valorFloat = parseFloat(numLimpo);
+                                        if (!isNaN(valorFloat))
+                                            text = "R$ " + valorFloat.toFixed(2).replace(".", ",");
+                                    }
                                 }
 
-                                Text {
-                                    Layout.fillWidth: true
-                                    text: "Pix · NP · R$ " + Number(modelData.valor).toFixed(2).replace(".", ",")
-                                    font.pixelSize: 12
-                                    color: Estilo.cancelar.normal
-                                }
-
-                                Text {
-                                    Layout.fillWidth: true
-                                    text: modelData.arquivo
-                                    font.pixelSize: 10
-                                    color: Estilo.cores.textoSecundario
-                                    elide: Text.ElideMiddle
+                                background: Rectangle {
+                                    radius: Estilo.rounding.padrao
+                                    color: "#ffffff"
+                                    border.color: inputDinheiro.activeFocus ? "#0d9488" : Estilo.cores.borda
+                                    border.width: 1
                                 }
                             }
+                        }
+
+                        Column {
+                            Layout.fillWidth: true
+                            spacing: 4
+
+                            Text {
+                                text: "Pix"
+                                font.pixelSize: 12
+                                font.bold: true
+                                color: Estilo.cores.textoSecundario
+                            }
+
+                            TextField {
+                                id: inputPix
+
+                                width: parent.width
+                                color: Estilo.cores.textoInput
+                                placeholderTextColor: Estilo.cores.placeholderInput
+                                placeholderText: "VALOR"
+                                topPadding: 10
+                                bottomPadding: 10
+                                leftPadding: 10
+                                rightPadding: 10
+                                validator: DoubleValidator {
+                                    bottom: 0
+                                    decimals: 2
+                                    notation: DoubleValidator.StandardNotation
+                                }
+                                onEditingFinished: {
+                                    if (text !== "") {
+                                        var numLimpo = text.replace("R$", "").replace(" ", "").replace(",", ".");
+                                        var valorFloat = parseFloat(numLimpo);
+                                        if (!isNaN(valorFloat))
+                                            text = "R$ " + valorFloat.toFixed(2).replace(".", ",");
+                                    }
+                                }
+
+                                background: Rectangle {
+                                    radius: Estilo.rounding.padrao
+                                    color: "#ffffff"
+                                    border.color: inputPix.activeFocus ? "#0d9488" : Estilo.cores.borda
+                                    border.width: 1
+                                }
+                            }
+                        }
+
+                        Button {
+                            id: btnSalvarContagem
+
+                            Layout.fillWidth: true
+                            padding: 10
+                            onClicked: telaFechamento.salvarContagem(inputCartao.text, inputDinheiro.text, inputPix.text)
+
+                            contentItem: Text {
+                                text: "Salvar contagem"
+                                font.bold: true
+                                color: "#ffffff"
+                                horizontalAlignment: Text.AlignHCenter
+                            }
+
+                            background: Rectangle {
+                                radius: Estilo.rounding.padrao
+                                color: btnSalvarContagem.down ? "#0f766e" : (btnSalvarContagem.hovered ? "#0f8a80" : "#0d9488")
+                            }
+                        }
+                    }
+                }
+
+                // --- LUCRO ---
+                Rectangle {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    radius: Estilo.rounding.grande
+                    color: telaFechamento.lucro >= 0 ? "#f0fdf4" : "#fff5f5"
+                    border.color: telaFechamento.lucro >= 0 ? "#bbf7d0" : "#ffc9c9"
+                    border.width: 1
+
+                    ColumnLayout {
+                        anchors.centerIn: parent
+                        spacing: 4
+
+                        Text {
+                            Layout.alignment: Qt.AlignHCenter
+                            text: "LUCRO"
+                            font.pixelSize: 13
+                            font.bold: true
+                            color: Estilo.cores.textoSecundario
+                        }
+
+                        Text {
+                            Layout.alignment: Qt.AlignHCenter
+                            text: "R$ " + telaFechamento.lucro.toFixed(2).replace(".", ",")
+                            font.pixelSize: 30
+                            font.bold: true
+                            color: telaFechamento.lucro >= 0 ? "#16a34a" : Estilo.cancelar.normal
                         }
                     }
                 }
@@ -734,6 +1134,19 @@ Page {
         pilhaPrincipal: telaFechamento.StackView.view
 
         onConcluido: telaFechamento.carregarDia(telaFechamento.dataSelecionada)
+    }
+
+    PopupExtras {
+        id: popupExtras
+        objectName: "popupExtras"
+
+        onConcluido: telaFechamento.carregarDia(telaFechamento.dataSelecionada)
+    }
+
+    PopupFormulaLucro {
+        id: popupFormulaLucro
+
+        onConcluido: telaFechamento._carregarFormula()
     }
 
     FilaNotificacoes {

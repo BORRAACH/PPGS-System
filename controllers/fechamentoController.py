@@ -6,8 +6,11 @@ from datetime import datetime, timedelta
 from PyQt6.QtCore import QObject, pyqtSignal, pyqtSlot
 
 from Config.logConfig import protegido
+from services import comandaEstiloService as estilo
 from services import comandaParserService as parser
-from services.rede import baixaComandas, fechamentoCache, rede
+from services import comandaTextoService as texto
+from services import formulaLucroService
+from services.rede import baixaComandas, contagemCaixa, extrasCaixa, fechamentoCache, rede, tombstones
 
 # Tipo de evento de gossip (ver services/rede/eventos.py:BarramentoEventos)
 # usado pra propagar o resumo de um dia recém-calculado pra malha inteira —
@@ -27,6 +30,27 @@ _EVENTO_COMANDA_BAIXADA = "comanda_baixada"
 # em vez de crescer pra sempre conforme os dias de operação se acumulam.
 _JANELA_RECONCILIACAO_FECHAMENTO_DIAS = 30
 
+# Pagamento de diária a um funcionário — dinheiro que sai do caixa fora de
+# qualquer venda (ver services/rede/extrasCaixa.py). Mesmo raciocínio de
+# _EVENTO_COMANDA_BAIXADA: o payload é o fato em si (quem, quanto, quando),
+# não um aviso de "recalcule aí", porque a outra máquina não tem como
+# deduzir esse lançamento sozinha a partir de nenhuma comanda.
+_EVENTO_EXTRA_LANCADO = "extra_lancado"
+
+# Exclusão de um pagamento de diária (ver excluirExtraDiaria) — mesmo
+# raciocínio de _EVENTO_COMANDA_BAIXADA: o payload é o fato em si (qual id,
+# quando), porque a outra máquina não tem como deduzir uma exclusão
+# sozinha.
+_EVENTO_EXTRA_APAGADO = "extra_apagado"
+
+# Contagem manual de Cartão/Dinheiro/Pix, usada pra calcular o "Lucro" (ver
+# services/rede/contagemCaixa.py). Ao contrário dos dois eventos acima, uma
+# gravação de contagem SOBRESCREVE a anterior do mesmo dia — o payload
+# carrega o idEvento pra quem recebe arbitrar qual versão é mais nova (ver
+# services/rede/contagemCaixa.py:aplicar_remoto), mesmo desenho de
+# services/cardapioService.py.
+_EVENTO_CONTAGEM_ATUALIZADA = "contagem_caixa_atualizada"
+
 
 def _hoje_iso():
     return datetime.now().strftime("%Y-%m-%d")
@@ -34,8 +58,10 @@ def _hoje_iso():
 
 class FechamentoController(QObject):
     """Fechamento de caixa diário: soma o valor das comandas **fechadas**
-    (Balcão/Entrega/Mesa) lançadas num dia, agrupadas por origem, e separa
-    comandas suspeitas (sem nome + NP + Pix) pra revisão manual.
+    (Balcão/Entrega/Mesa) lançadas num dia, agrupadas por origem. Cada
+    comanda carrega um flag "suspeita" (ver comandaParserService.eh_suspeita)
+    pra revisão manual — sinalizada com borda vermelha em Consulta e
+    Fechamento, não mais numa lista separada.
 
     Comanda aberta é uma venda que ainda não foi conferida: ela existe, está
     na Consulta e pode ser editada, mas não entra no caixa enquanto alguém
@@ -60,6 +86,20 @@ class FechamentoController(QObject):
     # Fechamento.qml pra recarregar o dia exibido.
     baixasAtualizadas = pyqtSignal()
 
+    # Emitido quando um pagamento de diária é lançado em OUTRA máquina e
+    # aprendido aqui (gossip/reconciliação, ver _registrar_extra_aprendido).
+    # Um lançamento feito NESTA máquina não passa por aqui — quem chama
+    # registrarExtraDiaria já recebe o registro de volta e decide sozinho
+    # como reagir (ver PopupExtras.qml/concluido), mesmo raciocínio de
+    # baixasAtualizadas/darBaixa.
+    extrasAtualizados = pyqtSignal()
+
+    # Emitido quando a contagem de Cartão/Dinheiro/Pix de um dia muda em
+    # OUTRA máquina e é aprendida aqui — mesmo raciocínio de
+    # extrasAtualizados: uma gravação feita NESTA máquina não passa por
+    # aqui (ver registrarContagem).
+    contagemAtualizada = pyqtSignal(str)
+
     def __init__(self):
         super().__init__()
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -67,6 +107,9 @@ class FechamentoController(QObject):
 
         rede.registrarEvento(_EVENTO_FECHAMENTO_ATUALIZADO, self._ao_receber_fechamento_remoto)
         rede.registrarEvento(_EVENTO_COMANDA_BAIXADA, self._ao_receber_baixa_remota)
+        rede.registrarEvento(_EVENTO_EXTRA_LANCADO, self._ao_receber_extra_remoto)
+        rede.registrarEvento(_EVENTO_EXTRA_APAGADO, self._ao_receber_extra_apagado_remoto)
+        rede.registrarEvento(_EVENTO_CONTAGEM_ATUALIZADA, self._ao_receber_contagem_remota)
         rede.registrarDominioSincronizado(
             "fechamento",
             self._resumo_fechamento,
@@ -80,6 +123,19 @@ class FechamentoController(QObject):
             self._aplicar_baixa_reconciliacao,
             None,
             self._comparar_baixa_reconciliacao,
+        )
+        rede.registrarDominioSincronizado(
+            "extras",
+            self._resumo_extras,
+            self._obter_extra_reconciliacao,
+            self._aplicar_extra_reconciliacao,
+            self._apagar_extra_reconciliacao,
+        )
+        rede.registrarDominioSincronizado(
+            "contagem",
+            self._resumo_contagem,
+            self._obter_contagem_reconciliacao,
+            self._aplicar_contagem_reconciliacao,
         )
 
     # ---------- Anti-entropy (ver services/rede/redeService.py:registrarDominioSincronizado) ----------
@@ -199,6 +255,198 @@ class FechamentoController(QObject):
             self._recalcular_e_cachear(data_iso)
         self.baixasAtualizadas.emit()
 
+    # ---------- Anti-entropy do domínio "extras" (pagamentos de diária) ----------
+    # O CONJUNTO só cresce (não há "apagar"), mas o CONTEÚDO de um
+    # lançamento pode ser corrigido depois (ver editarExtraDiaria) — por
+    # isso a versão comparada é "idEventoRevisao", não o id do lançamento
+    # em si, e o comparador é o padrão (versao_local != versao_peer):
+    # tanto um lançamento novo quanto uma edição de um já existente batem
+    # nessa condição, e _registrar_extra_aprendido decide qual dos dois
+    # casos é, olhando se o id já existe aqui.
+
+    def _resumo_extras(self):
+        """Anuncia os pagamentos de diária recentes, na mesma janela do
+        domínio "fechamento"/"baixas" — um lançamento mais antigo que isso
+        não muda mais nenhum resumo comparado entre as máquinas. Os
+        "apagados" (ver tombstones.py) viajam junto e não têm janela
+        própria: são purgados globalmente por
+        RedeService._disparar_reconciliacao (tombstones.purgar_antigos),
+        mesmo mecanismo que já vale pro domínio "pedidos"."""
+        limite = (datetime.now() - timedelta(days=_JANELA_RECONCILIACAO_FECHAMENTO_DIAS)).strftime("%Y-%m-%d")
+        itens = {}
+        for id_evento, registro in extrasCaixa.carregar().items():
+            if registro.get("dataIso", "") < limite:
+                continue
+            itens[id_evento] = registro.get("idEventoRevisao", id_evento)
+        return {"itens": itens, "apagados": tombstones.carregar("extras")}
+
+    def _obter_extra_reconciliacao(self, id_evento):
+        registro = extrasCaixa.carregar().get(id_evento)
+        if not registro:
+            return None
+        return dict(registro, id=id_evento)
+
+    def _aplicar_extra_reconciliacao(self, id_evento, payload):
+        self._registrar_extra_aprendido(id_evento, payload or {})
+
+    def _apagar_extra_reconciliacao(self, id_evento):
+        # tombstones.mesclar já gravou o tombstone (com o id de quem
+        # apagou) antes de chamar aqui — mesmo padrão de
+        # ConsultaController._apagar_pedido_reconciliacao.
+        quando = tombstones.carregar("extras").get(id_evento, "")
+        self._aplicar_exclusao_extra(id_evento, quando)
+
+    def _ao_receber_extra_remoto(self, payload):
+        """Reação ao gossip "extra_lancado" — o caminho rápido, pra um
+        lançamento novo OU uma edição feita em outra máquina aparecer aqui
+        na hora, sem esperar o próximo ciclo de reconciliação."""
+        payload = payload or {}
+        id_evento = payload.get("id")
+        if id_evento:
+            self._registrar_extra_aprendido(id_evento, payload)
+
+    def _ao_receber_extra_apagado_remoto(self, payload):
+        """Reação ao gossip "extra_apagado" — o caminho rápido pra uma
+        exclusão feita em outra máquina aparecer aqui na hora."""
+        payload = payload or {}
+        id_evento = payload.get("id")
+        if id_evento:
+            self._aplicar_exclusao_extra(id_evento, payload.get("quando", ""))
+
+    def _aplicar_exclusao_extra(self, id_evento, quando):
+        """Aplica uma exclusão aprendida de fora (gossip ou reconciliação).
+        Registra o tombstone mesmo se o lançamento já não existir aqui —
+        é o que impede um terceiro nó desatualizado de reintroduzi-lo
+        depois (mesmo raciocínio de tombstones.registrar)."""
+        registro = extrasCaixa.carregar().get(id_evento)
+        data_iso = registro.get("dataIso", "") if registro else ""
+
+        extrasCaixa.apagar(id_evento, quando=quando or None)
+
+        if data_iso:
+            self._recalcular_e_cachear(data_iso)
+        self.extrasAtualizados.emit()
+
+    def _registrar_extra_aprendido(self, id_evento, payload):
+        """Grava um lançamento novo OU aplica uma edição vinda de fora,
+        conforme o id já seja conhecido aqui ou não. Idempotente nos dois
+        casos: um lançamento novo que já existe não é regravado
+        (extrasCaixa.registrar), e uma edição mais antiga que a revisão já
+        aplicada aqui é ignorada (extrasCaixa.aplicar_edicao_remota) — a
+        mesma novidade chega pelos dois caminhos (gossip e reconciliação),
+        e reaplicar a cada reentrega só faria a tela piscar à toa.
+
+        Um lançamento apagado aqui não pode voltar por um anúncio de um
+        peer que ainda não soube da exclusão — mesmo cuidado de
+        ConsultaController.aplicarPedidoRemoto."""
+        if id_evento in tombstones.carregar("extras"):
+            return
+
+        data_iso = payload.get("dataIso")
+        mudou = False
+
+        if id_evento in extrasCaixa.carregar():
+            mudou = extrasCaixa.aplicar_edicao_remota(
+                id_evento,
+                payload.get("funcionario", ""),
+                payload.get("valor", 0),
+                payload.get("idEventoRevisao", ""),
+            )
+        else:
+            extrasCaixa.registrar(
+                data_iso or "",
+                payload.get("funcionario", ""),
+                payload.get("valor", 0),
+                payload.get("dataHora", ""),
+                quando=id_evento,
+            )
+            mudou = True
+
+        if not mudou:
+            return
+
+        if data_iso:
+            self._recalcular_e_cachear(data_iso)
+        self.extrasAtualizados.emit()
+
+    # ---------- Anti-entropy do domínio "contagem" (Cartão/Dinheiro/Pix) ----------
+    # Ao contrário de "baixas"/"extras" (que só crescem), aqui um mesmo dia
+    # pode ser regravado — a arbitração de qual versão vale é feita por
+    # services/rede/contagemCaixa.py:aplicar_remoto via idEvento/mais_novo,
+    # mesmo desenho de services/cardapioService.py.
+
+    def _resumo_contagem(self):
+        limite = (datetime.now() - timedelta(days=_JANELA_RECONCILIACAO_FECHAMENTO_DIAS)).strftime("%Y-%m-%d")
+        itens = {}
+        for data_iso, registro in contagemCaixa.carregar().items():
+            if data_iso < limite:
+                continue
+            itens[data_iso] = registro.get("idEvento", "")
+        return {"itens": itens}
+
+    def _obter_contagem_reconciliacao(self, data_iso):
+        registro = contagemCaixa.obter_dia(data_iso)
+        if not registro:
+            return None
+        return dict(registro, dataIso=data_iso)
+
+    def _aplicar_contagem_reconciliacao(self, data_iso, payload):
+        self._aplicar_contagem_remota(data_iso, payload or {})
+
+    def _ao_receber_contagem_remota(self, payload):
+        """Reação ao gossip "contagem_caixa_atualizada" — o caminho rápido,
+        pra uma contagem editada em outra máquina aparecer aqui na hora."""
+        payload = payload or {}
+        data_iso = payload.get("dataIso")
+        if data_iso:
+            self._aplicar_contagem_remota(data_iso, payload)
+
+    def _aplicar_contagem_remota(self, data_iso, payload):
+        aplicado = contagemCaixa.aplicar_remoto(
+            data_iso,
+            payload.get("cartao", 0),
+            payload.get("dinheiro", 0),
+            payload.get("pix", 0),
+            payload.get("idEvento", ""),
+        )
+        if aplicado:
+            self.contagemAtualizada.emit(data_iso)
+
+    @pyqtSlot(str, result="QVariantMap")
+    @protegido({})
+    def obterContagem(self, data_iso):
+        """Contagem de Cartão/Dinheiro/Pix já salva para `data_iso`, ou
+        zerada se o dia nunca foi contado."""
+        registro = contagemCaixa.obter_dia(data_iso)
+        if not registro:
+            return {"cartao": 0, "dinheiro": 0, "pix": 0}
+        return {
+            "cartao": registro.get("cartao", 0),
+            "dinheiro": registro.get("dinheiro", 0),
+            "pix": registro.get("pix", 0),
+        }
+
+    @pyqtSlot(str, str, str, str, result="QVariantMap")
+    @protegido({})
+    def registrarContagem(self, data_iso, cartao_texto, dinheiro_texto, pix_texto):
+        """Grava (sobrescrevendo) a contagem de `data_iso` e propaga pra
+        malha. Devolve a contagem salva, já convertida pra número — o
+        popup usa o retorno pra atualizar a tela na hora."""
+        cartao = texto.valor_para_float(cartao_texto)
+        dinheiro = texto.valor_para_float(dinheiro_texto)
+        pix = texto.valor_para_float(pix_texto)
+
+        id_evento = contagemCaixa.registrar(data_iso, cartao, dinheiro, pix)
+        rede.publicarEvento(_EVENTO_CONTAGEM_ATUALIZADA, {
+            "dataIso": data_iso,
+            "cartao": cartao,
+            "dinheiro": dinheiro,
+            "pix": pix,
+            "idEvento": id_evento,
+        })
+
+        return {"cartao": cartao, "dinheiro": dinheiro, "pix": pix}
+
     def _data_iso_da_comanda(self, nome_arquivo):
         """"AAAA-MM-DD" do dia da comanda, deduzido do nome do arquivo (que
         já embute a data — ver comandaParserService.data_arquivo_aaaammdd).
@@ -259,23 +507,29 @@ class FechamentoController(QObject):
         conteudo = conteudo_bytes.decode(parser.CODEPAGE_IMPRESSORA, errors="replace")
         conteudo = parser.limpar_codigos_impressora(conteudo)
 
+        tipo = parser.tipo_comanda(nome_arquivo)
+        cliente = parser.extrair_campo(parser.PADRAO_CLIENTE, conteudo)
+        forma_pagamento = parser.extrair_campo(parser.PADRAO_FORMA_PAGAMENTO, conteudo)
+        status = parser.extrair_status_pagamento(conteudo)
+        endereco = parser.extrair_campo(parser.PADRAO_ENDERECO, conteudo)
+
         return {
             "arquivo": nome_arquivo,
-            "tipo": parser.tipo_comanda(nome_arquivo),
+            "tipo": tipo,
             "codigo": parser.codigo_comanda(nome_arquivo, conteudo),
-            "cliente": parser.extrair_campo(parser.PADRAO_CLIENTE, conteudo),
+            "cliente": cliente,
             "valor": parser.extrair_valor_total(conteudo),
-            "formaPagamento": parser.extrair_campo(parser.PADRAO_FORMA_PAGAMENTO, conteudo),
-            "status": parser.extrair_status_pagamento(conteudo),
+            "formaPagamento": forma_pagamento,
+            "status": status,
             "dataHora": parser.extrair_campo(parser.PADRAO_DATA, conteudo),
             "conteudo": conteudo.strip("\n"),
+            "suspeita": parser.eh_suspeita(tipo, cliente, forma_pagamento, status, endereco),
         }
 
     def _calcular_resumo_dia(self, data_iso):
         total = 0.0
         quantidade = 0
         por_tipo = {}
-        suspeitas = []
         total_aberto = 0.0
         quantidade_aberta = 0
 
@@ -287,23 +541,24 @@ class FechamentoController(QObject):
                 continue
 
             tipo = dados["tipo"]
-            cliente = dados["cliente"]
-            forma_pagamento = dados["formaPagamento"]
-            status = dados["status"]
             valor = dados["valor"]
 
             item = {
                 "arquivo": nome_arquivo,
-                "cliente": cliente,
+                "cliente": dados["cliente"],
                 "valor": valor,
-                "formaPagamento": forma_pagamento,
-                "status": status,
+                "formaPagamento": dados["formaPagamento"],
+                "status": dados["status"],
                 "dataHora": dados["dataHora"],
+                # Ver comandaParserService.eh_suspeita — a tela marca com
+                # borda vermelha em vez de listar à parte (ver
+                # Fechamento.qml).
+                "suspeita": dados["suspeita"],
             }
 
             # Comanda sem baixa é venda ainda não conferida: fica fora de
-            # total/porTipo/suspeitas e só é contada à parte, pra tela poder
-            # mostrar o quanto ainda não entrou no caixa (ver
+            # total/porTipo e só é contada à parte, pra tela poder mostrar o
+            # quanto ainda não entrou no caixa (ver
             # services/rede/baixaComandas.py).
             if nome_arquivo not in baixas:
                 total_aberto += valor
@@ -318,22 +573,16 @@ class FechamentoController(QObject):
             grupo["quantidade"] += 1
             grupo["comandas"].append(item)
 
-            # Mesa não tem uma única forma/status no nível do cabeçalho —
-            # cada divisão da conta é paga por uma pessoa diferente, com
-            # sua própria forma/status (ver
-            # comandaParserService.extrair_status_pagamento) — então essa
-            # checagem só faz sentido pra Balcão/Entrega, que têm um único
-            # pagante por comanda.
-            if tipo != "Mesa" and cliente.strip() == "" and status == "NP" and forma_pagamento == "Pix":
-                suspeitas.append(item)
+        extras = extrasCaixa.listar_do_dia(data_iso)
+        total_extras = sum(item["valor"] for item in extras)
 
         return {
             "data": data_iso,
             "total": total,
             "quantidade": quantidade,
             "porTipo": por_tipo,
-            "suspeitas": suspeitas,
             "abertas": {"quantidade": quantidade_aberta, "total": total_aberto},
+            "extras": {"quantidade": len(extras), "total": total_extras, "itens": extras},
         }
 
     @pyqtSlot(str, result="QVariantMap")
@@ -364,6 +613,135 @@ class FechamentoController(QObject):
             return resumo_em_cache
 
         return self.calcularFechamento(data_iso)
+
+    # ---------- Cupom impresso ao "Fechar Caixa" ----------
+
+    def _somar_por_forma_pagamento(self, tipo, comandas):
+        """{"dinheiro", "pix", "cartao"} com a soma de `comandas` (a lista
+        já filtrada de um tipo, vinda de porTipo[tipo]["comandas"]) por
+        forma de pagamento. "Crédito" e "Débito" caem no mesmo balde
+        "cartao" — o cupom não distingue os dois, só pergunta "cartão".
+
+        Mesa não tem uma forma de pagamento por comanda (ver
+        comandaParserService.eh_suspeita) — cada divisão da conta paga do
+        seu jeito, então aqui a comanda precisa ser relida do disco pra
+        somar por divisão (ver comandaParserService.extrair_divisoes_mesa)."""
+        somas = {"dinheiro": 0.0, "pix": 0.0, "cartao": 0.0}
+
+        def balde(forma):
+            if forma == "Dinheiro":
+                return "dinheiro"
+            if forma == "Pix":
+                return "pix"
+            if forma in ("Crédito", "Débito"):
+                return "cartao"
+            return None
+
+        if tipo == "Mesa":
+            for item in comandas:
+                dados = self._ler_comanda(item["arquivo"])
+                if dados is None:
+                    continue
+                for divisao in parser.extrair_divisoes_mesa(dados["conteudo"]):
+                    chave = balde(divisao["formaPagamento"])
+                    if chave:
+                        somas[chave] += divisao["valor"]
+            return somas
+
+        for item in comandas:
+            chave = balde(item.get("formaPagamento", ""))
+            if chave:
+                somas[chave] += item.get("valor", 0.0)
+        return somas
+
+    def _montar_recibo_fechamento(self, data_iso, resumo):
+        """Monta, em bytes ESC/POS, o cupom-resumo impresso ao clicar
+        "Fechar Caixa": bruto, líquido (bruto menos os pagamentos de
+        diária), o total de cada origem já dividido por forma de
+        pagamento, os pagamentos de diária do dia e o Lucro (ver
+        services/formulaLucroService.py, a mesma fórmula configurável que
+        Fechamento.qml mostra na tela)."""
+
+        def fmt(valor):
+            return f"R$ {valor:.2f}".replace(".", ",")
+
+        partes_data = data_iso.split("-")
+        data_formatada = f"{partes_data[2]}/{partes_data[1]}/{partes_data[0]}" if len(partes_data) == 3 else data_iso
+
+        bruto = resumo.get("total", 0.0)
+        extras_info = resumo.get("extras") or {"total": 0.0, "itens": []}
+        total_extras = extras_info.get("total", 0.0)
+        itens_extras = extras_info.get("itens", [])
+        liquido = bruto - total_extras
+
+        contagem = contagemCaixa.obter_dia(data_iso) or {}
+        total_contagem = contagem.get("cartao", 0) + contagem.get("dinheiro", 0) + contagem.get("pix", 0)
+        lucro = formulaLucroService.calcular_lucro(bruto, total_contagem, total_extras)
+
+        linhas = [
+            f"{estilo.NEGRITO_LIGA}FECHAMENTO DE CAIXA{estilo.NEGRITO_DESLIGA}",
+            f"Data: {data_formatada}",
+            *estilo.linhas_espacamento_secoes(),
+            "-" * 40,
+            *estilo.linhas_espacamento_secoes(),
+            f"Total bruto vendido: {fmt(bruto)}",
+            f"Total líquido (bruto - extras): {fmt(liquido)}",
+            *estilo.linhas_espacamento_secoes(),
+            "-" * 40,
+            f"{estilo.NEGRITO_LIGA}POR ORIGEM{estilo.NEGRITO_DESLIGA}",
+            "-" * 40,
+        ]
+
+        por_tipo = resumo.get("porTipo") or {}
+        algum_tipo = False
+        for tipo in ("Balcão", "Entrega", "Mesa"):
+            info = por_tipo.get(tipo)
+            if not info or info.get("quantidade", 0) == 0:
+                continue
+            algum_tipo = True
+            formas = self._somar_por_forma_pagamento(tipo, info.get("comandas", []))
+            linhas.extend(estilo.linhas_espacamento_secoes())
+            linhas.append(f"{estilo.NEGRITO_LIGA}{tipo}: {fmt(info.get('total', 0.0))}{estilo.NEGRITO_DESLIGA}")
+            linhas.append(f"  Dinheiro: {fmt(formas['dinheiro'])}")
+            linhas.append(f"  Pix: {fmt(formas['pix'])}")
+            linhas.append(f"  Cartão: {fmt(formas['cartao'])}")
+
+        if not algum_tipo:
+            linhas.extend(estilo.linhas_espacamento_secoes())
+            linhas.append("Nenhuma comanda lançada neste dia.")
+
+        linhas.extend(estilo.linhas_espacamento_secoes())
+        linhas.append("-" * 40)
+        linhas.append(f"{estilo.NEGRITO_LIGA}PAGAMENTOS DE DIÁRIA{estilo.NEGRITO_DESLIGA}")
+        linhas.append("-" * 40)
+        if itens_extras:
+            for item in itens_extras:
+                linhas.append(f"{item.get('funcionario', '')} - {item.get('dataHora', '')} - {fmt(item.get('valor', 0.0))}")
+        else:
+            linhas.append("Nenhum pagamento de diária neste dia.")
+
+        linhas.extend(estilo.linhas_espacamento_secoes())
+        linhas.append("-" * 40)
+        linhas.append(f"{estilo.NEGRITO_LIGA}LUCRO: {fmt(lucro)}{estilo.NEGRITO_DESLIGA}")
+        linhas.append("-" * 40)
+
+        conteudo = "\n".join(linhas) + "\n"
+        return conteudo.encode(parser.CODEPAGE_IMPRESSORA, errors="replace")
+
+    @pyqtSlot(str, result=bool)
+    @protegido(False)
+    def imprimirFechamentoCaixa(self, data_iso):
+        """Imprime o cupom-resumo do dia (ver _montar_recibo_fechamento).
+        Chamado só pelo botão "Fechar Caixa" em Fechamento.qml —
+        calcularFechamento sozinho não imprime nada, porque também é
+        chamado por outros fluxos (darBaixa, registrarExtraDiaria,
+        reconciliação com outra máquina) que não devem disparar impressão
+        nenhuma. O resultado chega depois, assíncrono, por
+        redeController.impressaoResultado, igual a qualquer outra
+        impressão do app."""
+        resumo = self._calcular_resumo_dia(data_iso)
+        rede.solicitar_impressao(self._montar_recibo_fechamento(data_iso, resumo))
+        return True
 
     # ---------- Fechamento rápido (ver qml/pages/fechamento/PopupFechamentoRapido.qml) ----------
 
@@ -436,8 +814,9 @@ class FechamentoController(QObject):
 
         Existe porque listarComandasAbertas, por definição, não alcança as
         comandas que JÁ receberam baixa — e são justamente elas que a página
-        de Fechamento precisa abrir pra corrigir: uma comanda suspeita (sem
-        nome, NP, Pix) só entra na lista de suspeitas depois de baixada."""
+        de Fechamento precisa abrir pra corrigir: uma comanda com borda
+        vermelha (ver comandaParserService.eh_suspeita) só aparece na lista
+        de "Mapeamento por origem" depois de baixada."""
         nome_arquivo = os.path.basename(nome_arquivo)
         dados = self._ler_comanda(nome_arquivo)
         if dados is None:
@@ -502,6 +881,150 @@ class FechamentoController(QObject):
         if data_iso:
             self.calcularFechamento(data_iso)
         self.baixasAtualizadas.emit()
+        return True
+
+    # ---------- Extras (pagamento de diária a funcionário, ver qml/pages/fechamento/PopupExtras.qml) ----------
+
+    @pyqtSlot(str, str, str, result="QVariantMap")
+    @protegido({})
+    def registrarExtraDiaria(self, data_iso, funcionario, valor_texto):
+        """Lança um pagamento de diária no dia `data_iso` e devolve o
+        registro gravado (com "id"), ou {} se o nome vier vazio ou o valor
+        não for positivo. O registro devolvido já basta para o popup montar
+        e imprimir o recibo, sem precisar de uma segunda chamada."""
+        funcionario = (funcionario or "").strip()
+        valor = texto.valor_para_float(valor_texto)
+        if not funcionario or valor <= 0:
+            return {}
+
+        agora = datetime.now()
+        data_hora = agora.strftime("%d/%m/%Y %H:%M:%S")
+        id_evento = extrasCaixa.registrar(data_iso, funcionario, valor, data_hora)
+
+        # O id viaja junto pra que todas as máquinas gravem a MESMA marca
+        # pra este lançamento — mesmo cuidado de darBaixa.
+        rede.publicarEvento(_EVENTO_EXTRA_LANCADO, {
+            "id": id_evento,
+            "dataIso": data_iso,
+            "funcionario": funcionario,
+            "valor": valor,
+            "dataHora": data_hora,
+            "idEventoRevisao": id_evento,
+        })
+
+        # calcularFechamento (e não _recalcular_e_cachear): o caixa do dia
+        # mudou por decisão desta máquina, então a malha inteira precisa
+        # saber que aquele dia mudou aqui — mesmo raciocínio de darBaixa.
+        self.calcularFechamento(data_iso)
+        self.extrasAtualizados.emit()
+
+        return {
+            "id": id_evento,
+            "dataIso": data_iso,
+            "funcionario": funcionario,
+            "valor": valor,
+            "dataHora": data_hora,
+        }
+
+    @pyqtSlot(str, str, str, result="QVariantMap")
+    @protegido({})
+    def editarExtraDiaria(self, id_evento, funcionario, valor_texto):
+        """Corrige o nome/valor de um pagamento de diária já lançado —
+        mesmo id, mesma dataHora original (ver
+        services/rede/extrasCaixa.py:editar) — e propaga a edição pra
+        malha. Devolve o registro atualizado (mesmo formato de
+        registrarExtraDiaria), ou {} se o nome vier vazio, o valor não for
+        positivo, ou o lançamento não existir mais."""
+        funcionario = (funcionario or "").strip()
+        valor = texto.valor_para_float(valor_texto)
+        if not funcionario or valor <= 0:
+            return {}
+
+        registro_atual = extrasCaixa.carregar().get(id_evento)
+        if registro_atual is None:
+            return {}
+
+        id_revisao = extrasCaixa.editar(id_evento, funcionario, valor)
+        if id_revisao is None:
+            return {}
+
+        data_iso = registro_atual.get("dataIso", "")
+        data_hora = registro_atual.get("dataHora", "")
+
+        rede.publicarEvento(_EVENTO_EXTRA_LANCADO, {
+            "id": id_evento,
+            "dataIso": data_iso,
+            "funcionario": funcionario,
+            "valor": valor,
+            "dataHora": data_hora,
+            "idEventoRevisao": id_revisao,
+        })
+
+        self.calcularFechamento(data_iso)
+        self.extrasAtualizados.emit()
+
+        return {
+            "id": id_evento,
+            "dataIso": data_iso,
+            "funcionario": funcionario,
+            "valor": valor,
+            "dataHora": data_hora,
+        }
+
+    @pyqtSlot(str, result=bool)
+    @protegido(False)
+    def excluirExtraDiaria(self, id_evento):
+        """Apaga um pagamento de diária já lançado (ver
+        services/rede/extrasCaixa.py:apagar) e propaga a exclusão pra
+        malha. Devolve False se o lançamento já não existir mais aqui."""
+        registro = extrasCaixa.carregar().get(id_evento)
+        if registro is None:
+            return False
+
+        data_iso = registro.get("dataIso", "")
+        quando = extrasCaixa.apagar(id_evento)
+
+        rede.publicarEvento(_EVENTO_EXTRA_APAGADO, {"id": id_evento, "quando": quando})
+
+        # calcularFechamento (e não _recalcular_e_cachear): o caixa do dia
+        # mudou por decisão desta máquina — mesmo raciocínio de
+        # registrarExtraDiaria/darBaixa.
+        if data_iso:
+            self.calcularFechamento(data_iso)
+        self.extrasAtualizados.emit()
+        return True
+
+    def _montar_recibo_extra(self, registro):
+        """Monta o recibo de pagamento de diária em bytes ESC/POS, pronto
+        pra impressora — mesmo padrão de balcaoController._salvarComanda
+        (linhas montadas com comandaEstiloService, depois codificadas na
+        codepage da impressora). Termina com um espaço em branco e uma
+        linha para assinatura, que este tipo de recibo não tinha antes."""
+        linhas = [
+            f"{estilo.NEGRITO_LIGA}PAGAMENTO DE DIÁRIA{estilo.NEGRITO_DESLIGA}",
+            *estilo.linhas_espacamento_secoes(),
+            "-" * 40,
+            *estilo.linhas_espacamento_secoes(),
+            f"Funcionário: {registro.get('funcionario', '')}",
+            f"Valor: R$ {float(registro.get('valor', 0)):.2f}".replace(".", ","),
+            f"Data: {registro.get('dataHora', '')}",
+            *estilo.linhas_espacamento_secoes(),
+            "-" * 40,
+            "",
+            "",
+            "_" * 30,
+            "Assinatura",
+        ]
+        conteudo = "\n".join(linhas) + "\n"
+        return conteudo.encode(parser.CODEPAGE_IMPRESSORA, errors="replace")
+
+    @pyqtSlot("QVariantMap", result=bool)
+    @protegido(False)
+    def imprimirReciboExtra(self, registro):
+        """Pede a impressão do recibo pela malha local, igual a
+        reimprimirComanda — o resultado chega depois, assíncrono, por
+        redeController.impressaoResultado."""
+        rede.solicitar_impressao(self._montar_recibo_extra(registro))
         return True
 
     def _ao_receber_fechamento_remoto(self, payload):

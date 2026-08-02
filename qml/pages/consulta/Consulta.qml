@@ -36,6 +36,88 @@ Page {
     // Exposto para AreaPrincipal.qml/ColunaEsquerda.qml preencherem a lista.
     property alias modelo: modeloComandas
 
+    // Comandas de dias anteriores, agrupadas — [{"dia": "01/08/2026",
+    // "comandas": [...]}], mais recente primeiro. modeloComandas (acima)
+    // passa a valer só para "hoje" (ver _agruparPorDia). Vazio durante uma
+    // busca: pesquisar deve achar a comanda em qualquer dia sem precisar
+    // abrir a caixinha certa primeiro (mesmo espírito de "busca só reordena,
+    // nunca esconde" já documentado em aplicarFiltro).
+    property var gruposAnteriores: []
+
+    // "02/08/2026 10:00:00" -> "02/08/2026"; "" fica "" (comanda sem Data:
+    // no cabeçalho — arquivo muito antigo/corrompido).
+    function _diaDeDataHora(dataHora) {
+        if (!dataHora)
+            return "";
+        var espaco = dataHora.indexOf(" ");
+        return espaco === -1 ? dataHora : dataHora.substring(0, espaco);
+    }
+
+    function _hojeFormatado() {
+        var d = new Date();
+        function doisDigitos(n) {
+            return n < 10 ? "0" + n : String(n);
+        }
+        return doisDigitos(d.getDate()) + "/" + doisDigitos(d.getMonth() + 1) + "/" + d.getFullYear();
+    }
+
+    // "dd/mm/aaaa" -> número comparável, pra ordenar os dias anteriores do
+    // mais recente pro mais antigo mesmo se a lista de entrada não vier
+    // perfeitamente ordenada por dia (uma comanda sincronizada com atraso de
+    // outra máquina tem "modificadoEm" de agora, mas "dataHora" de um dia
+    // passado — ver consultaController.listarComandas).
+    function _chaveDia(dia) {
+        var partes = dia.split("/");
+        if (partes.length !== 3)
+            return 0;
+        return Number(partes[2]) * 10000 + Number(partes[1]) * 100 + Number(partes[0]);
+    }
+
+    // Separa `lista` (já filtrada por status) em "hoje" (vai pro
+    // modeloComandas, exibido direto) e o resto, agrupado por dia em
+    // gruposAnteriores (cada grupo aninhado numa caixinha fechada por
+    // padrão — ver ColunaEsquerda.qml, mesmo padrão de "Mapeamento por
+    // origem" em Fechamento.qml).
+    function _agruparPorDia(lista) {
+        var hojeStr = telaConsulta._hojeFormatado();
+        var hoje = [];
+        var mapaDias = {};
+        var ordemDias = [];
+
+        for (var i = 0; i < lista.length; i++) {
+            var item = lista[i];
+            var dia = telaConsulta._diaDeDataHora(item.dataHora);
+            // Sem data (arquivo antigo/corrompido) cai em "hoje" — melhor
+            // continuar visível direto do que sumir dentro de uma caixinha
+            // sem rótulo nenhum.
+            if (dia === hojeStr || dia === "") {
+                hoje.push(item);
+                continue;
+            }
+            if (!mapaDias[dia]) {
+                mapaDias[dia] = [];
+                ordemDias.push(dia);
+            }
+            mapaDias[dia].push(item);
+        }
+
+        ordemDias.sort(function (a, b) {
+            return telaConsulta._chaveDia(b) - telaConsulta._chaveDia(a);
+        });
+
+        modeloComandas.clear();
+        for (var h = 0; h < hoje.length; h++)
+            modeloComandas.append(hoje[h]);
+
+        var grupos = [];
+        for (var k = 0; k < ordemDias.length; k++)
+            grupos.push({
+                "dia": ordemDias[k],
+                "comandas": mapaDias[ordemDias[k]]
+            });
+        telaConsulta.gruposAnteriores = grupos;
+    }
+
     // Monta "Nome do Cliente - horário" a partir dos campos já extraídos
     // pelo consultaController (lidos do cabeçalho do próprio cupom).
     function tituloComanda(item) {
@@ -114,11 +196,18 @@ Page {
             lista = comPontuacao.map(function (par) {
                 return par.item;
             });
+
+            // Busca mostra tudo achatado, sem agrupar por dia — encontrar a
+            // comanda certa não deveria exigir abrir a caixinha do dia
+            // certo primeiro.
+            modeloComandas.clear();
+            for (var j = 0; j < lista.length; j++)
+                modeloComandas.append(lista[j]);
+            telaConsulta.gruposAnteriores = [];
+            return;
         }
-        modeloComandas.clear();
-        for (var j = 0; j < lista.length; j++) {
-            modeloComandas.append(lista[j]);
-        }
+
+        telaConsulta._agruparPorDia(lista);
     }
 
     function carregarComandas() {

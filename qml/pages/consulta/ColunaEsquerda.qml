@@ -1,10 +1,14 @@
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Layouts
 import estilo 1.0
 import "../../components"
 
 // Coluna esquerda de Consulta.qml: contador de comandas, barra de busca,
-// botão de alternância do modo de edição rápida e a lista de comandas.
+// botão de alternância do modo de edição rápida e a lista de comandas —
+// hoje exibida direto, dias anteriores aninhados numa caixinha por dia
+// (fechada por padrão, mesmo padrão de "Mapeamento por origem" em
+// Fechamento.qml).
 Column {
     id: colunaEsquerda
 
@@ -12,8 +16,17 @@ Column {
     // popup de exclusão, único e compartilhado por todos os itens.
     property var pagina
     property var popupExclusao
-    property alias model: listaComandas.model
-    property alias totalComandas: listaComandas.count
+    property alias model: listaHoje.model
+    // Total exibido (hoje + todos os dias anteriores agrupados), não só o
+    // que está com a caixinha aberta — usado por PainelDetalhe.qml pra
+    // decidir a mensagem de "nenhuma comanda encontrada".
+    readonly property int totalComandas: {
+        var total = listaHoje.count;
+        var grupos = colunaEsquerda.pagina ? colunaEsquerda.pagina.gruposAnteriores : [];
+        for (var i = 0; i < grupos.length; i++)
+            total += grupos[i].comandas.length;
+        return total;
+    }
     // Exposto para Consulta.qml poder focar a busca e já entrar com o
     // caractere digitado, sem precisar clicar antes no campo (ver
     // Consulta.qml Keys.onPressed).
@@ -26,7 +39,7 @@ Column {
     spacing: 10
 
     Text {
-        text: "Comandas (" + listaComandas.count + ")"
+        text: "Comandas (" + colunaEsquerda.totalComandas + ")"
         font.pixelSize: Estilo.fonte.padrao
         font.bold: true
         color: Estilo.cores.textoSecundario
@@ -62,8 +75,8 @@ Column {
             onAccepted: {
                 debounceBusca.stop();
                 colunaEsquerda.pagina.aplicarFiltro();
-                if (colunaEsquerda.pagina.buscaAtual.trim() !== "" && listaComandas.count > 0) {
-                    colunaEsquerda.pagina.selecionarComanda(listaComandas.model.get(0));
+                if (colunaEsquerda.pagina.buscaAtual.trim() !== "" && listaHoje.count > 0) {
+                    colunaEsquerda.pagina.selecionarComanda(listaHoje.model.get(0));
                     campoBusca.text = "";
                 }
             }
@@ -165,23 +178,160 @@ Column {
         }
     }
 
-    ListView {
-        id: listaComandas
+    // Única área de rolagem da coluna — hoje e os dias anteriores rolam
+    // juntos, num scroll só (mesmo raciocínio do Flickable de "Mapeamento
+    // por origem" em Fechamento.qml). As duas ListView internas abaixo não
+    // rolam sozinhas (interactive: false, altura = contentHeight): elas só
+    // existem pra reaproveitar ItemComandaDelegate.qml sem alterá-lo (ele
+    // depende de "ListView.view" pra própria largura).
+    Flickable {
+        id: flickableComandas
 
         width: parent.width
         height: parent.height - 30 - campoBusca.height - linhaFiltroStatus.height - 2 * colunaEsquerda.spacing
         clip: true
-        spacing: 8
+        contentWidth: width
+        contentHeight: colunaListas.implicitHeight
+        boundsBehavior: Flickable.StopAtBounds
 
         ScrollBar.vertical: ScrollBar {
             policy: ScrollBar.AsNeeded
         }
 
-        delegate: ItemComandaDelegate {
-            pagina: colunaEsquerda.pagina
-            popupExclusao: colunaEsquerda.popupExclusao
-            modoEdicao: colunaEsquerda.modoEdicao
-            onAlternarModoEdicao: colunaEsquerda.modoEdicao = !colunaEsquerda.modoEdicao
+        ColumnLayout {
+            id: colunaListas
+
+            width: flickableComandas.width
+            spacing: 12
+
+            // --- HOJE (direto, sem caixinha) ---
+            ListView {
+                id: listaHoje
+
+                Layout.fillWidth: true
+                Layout.preferredHeight: contentHeight
+                interactive: false
+                spacing: 8
+
+                ScrollBar.vertical: ScrollBar {
+                    policy: ScrollBar.AsNeeded
+                }
+
+                delegate: ItemComandaDelegate {
+                    pagina: colunaEsquerda.pagina
+                    popupExclusao: colunaEsquerda.popupExclusao
+                    modoEdicao: colunaEsquerda.modoEdicao
+                    onAlternarModoEdicao: colunaEsquerda.modoEdicao = !colunaEsquerda.modoEdicao
+                }
+            }
+
+            // --- DIAS ANTERIORES (agrupados, uma caixinha fechada por dia) ---
+            Repeater {
+                model: colunaEsquerda.pagina ? colunaEsquerda.pagina.gruposAnteriores : []
+
+                delegate: ColumnLayout {
+                    id: blocoDia
+
+                    required property var modelData
+                    // Fechado por padrão — só abre no clique do box (ver
+                    // areaCabecalhoDia), mesmo padrão de "Mapeamento por
+                    // origem" em Fechamento.qml.
+                    property bool expandido: false
+
+                    Layout.fillWidth: true
+                    spacing: 6
+
+                    // Preenchida uma vez, na criação do delegate — precisa
+                    // ser um ListModel (não o array direto) pra
+                    // ItemComandaDelegate.qml continuar acessando os campos
+                    // via "model.xxx" do mesmo jeito que já faz na lista de
+                    // hoje.
+                    ListModel {
+                        id: modeloDia
+                    }
+
+                    Component.onCompleted: {
+                        for (var i = 0; i < blocoDia.modelData.comandas.length; i++)
+                            modeloDia.append(blocoDia.modelData.comandas[i]);
+                    }
+
+                    Rectangle {
+                        Layout.fillWidth: true
+                        implicitHeight: linhaCabecalhoDia.implicitHeight + 16
+                        radius: Estilo.rounding.padrao
+                        color: "#ffffff"
+                        border.color: Estilo.cores.bordaCard
+                        border.width: 1
+
+                        MouseArea {
+                            id: areaCabecalhoDia
+
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: blocoDia.expandido = !blocoDia.expandido
+                        }
+
+                        RowLayout {
+                            id: linhaCabecalhoDia
+
+                            anchors.fill: parent
+                            anchors.margins: 8
+                            spacing: 8
+
+                            Icone {
+                                nome: "fa6s.calendar-day"
+                                cor: Estilo.cores.textoSecundario
+                                tamanho: 14
+                                anchors.verticalCenter: parent.verticalCenter
+                            }
+
+                            Text {
+                                text: blocoDia.modelData.dia
+                                font.bold: true
+                                font.pixelSize: Estilo.fonte.padrao
+                                color: Estilo.cores.texto
+                            }
+
+                            Item { Layout.fillWidth: true }
+
+                            Text {
+                                text: blocoDia.modelData.comandas.length + (blocoDia.modelData.comandas.length === 1 ? " comanda" : " comandas")
+                                font.pixelSize: 12
+                                color: Estilo.cores.textoSecundario
+                            }
+
+                            Icone {
+                                nome: blocoDia.expandido ? "fa6s.chevron-up" : "fa6s.chevron-down"
+                                cor: Estilo.cores.textoSecundario
+                                tamanho: 12
+                                anchors.verticalCenter: parent.verticalCenter
+                            }
+                        }
+                    }
+
+                    ListView {
+                        Layout.fillWidth: true
+                        Layout.leftMargin: 18
+                        Layout.preferredHeight: contentHeight
+                        visible: blocoDia.expandido
+                        interactive: false
+                        spacing: 8
+                        model: modeloDia
+
+                        ScrollBar.vertical: ScrollBar {
+                            policy: ScrollBar.AsNeeded
+                        }
+
+                        delegate: ItemComandaDelegate {
+                            pagina: colunaEsquerda.pagina
+                            popupExclusao: colunaEsquerda.popupExclusao
+                            modoEdicao: colunaEsquerda.modoEdicao
+                            onAlternarModoEdicao: colunaEsquerda.modoEdicao = !colunaEsquerda.modoEdicao
+                        }
+                    }
+                }
+            }
         }
     }
 }

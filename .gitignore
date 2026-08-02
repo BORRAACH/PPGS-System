@@ -27,6 +27,11 @@ Config/estilo_impressao.json
 # services/rede/impressoraFixada.py.
 Config/impressora_fixada.json
 
+# Fórmula de cálculo do Lucro na tela de Fechamento (Contagem/Extras/Bruto),
+# editada pelo popup de fórmula — dado de configuração sincronizado entre
+# máquinas, não código-fonte. Ver services/formulaLucroService.py.
+Config/formula_lucro.json
+
 # Log de diagnóstico (stdout/stderr redirecionados + rotação) — gerado em
 # tempo de execução, específico de cada máquina. Ver Config/logConfig.py.
 logs/
