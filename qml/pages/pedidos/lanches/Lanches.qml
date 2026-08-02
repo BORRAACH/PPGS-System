@@ -55,9 +55,61 @@ Page {
     readonly property real valorAtual: {
         var soma = 0;
         for (var i = 0; i < selecionados.length; i++) {
-            soma += selecionados[i].valorNum;
+            soma += valorFinalLanche(selecionados[i]);
         }
         return soma;
+    }
+
+    // Soma do valor de todos os adicionais atribuídos a um lanche
+    // selecionado — usado no total do pedido e no cartão da pré-comanda.
+    function valorExtrasLanche(item) {
+        var adicionais = item.adicionais || [];
+        var soma = 0;
+        for (var i = 0; i < adicionais.length; i++) {
+            soma += adicionais[i].valorNum;
+        }
+        return soma;
+    }
+
+    function valorFinalLanche(item) {
+        return item.valorNum + valorExtrasLanche(item);
+    }
+
+    // Resumo textual dos adicionais de um lanche, anexado ao nome dele no
+    // cartão da pré-comanda (mesmo padrão de resumoExtrasPizza em
+    // Pizzas.qml).
+    function resumoAdicionaisLanche(item) {
+        var adicionais = item.adicionais || [];
+        if (adicionais.length === 0)
+            return "";
+        return " — " + adicionais.map(function (a) {
+            return "+ " + a.nome;
+        }).join(", ");
+    }
+
+    // Chamada pelo PopupAdicionaisLanches ao concluir a escolha — sempre
+    // reconstrói o item e reatribui selecionados (em vez de mutar o
+    // array/objeto in-place), porque QML só percebe a mudança de uma
+    // "property var" quando ela é reatribuída, não quando seu conteúdo é
+    // alterado por dentro.
+    function atribuirAdicionalLanche(indice, adicional) {
+        if (indice < 0 || indice >= selecionados.length)
+            return;
+
+        var lista = selecionados.slice();
+        var atual = lista[indice];
+        var adicionaisNovos = (atual.adicionais || []).slice();
+        adicionaisNovos.push({
+            "nome": adicional.nome,
+            "valorNum": adicional.valorNum
+        });
+        lista[indice] = {
+            "nome": atual.nome,
+            "valorNum": atual.valorNum,
+            "paoTipo": atual.paoTipo,
+            "adicionais": adicionaisNovos
+        };
+        selecionados = lista;
     }
 
     // Cor do badge de um tipo de pão, usada na pré-comanda
@@ -101,7 +153,8 @@ Page {
         selecionados = selecionados.concat([{
             "nome": paoPendente.nome,
             "valorNum": parseValor(paoPendente[chavePao(nomePao)]),
-            "paoTipo": nomePao
+            "paoTipo": nomePao,
+            "adicionais": []
         }]);
         paoPendente = null;
         popupPao.close();
@@ -364,6 +417,15 @@ Page {
         }
     }
 
+    PopupAdicionaisLanches {
+        id: popupAdicionaisLanches
+
+        lanchesSelecionados: telaLanches.selecionados
+        onAtribuirAdicional: function (indice, adicional) {
+            telaLanches.atribuirAdicionalLanche(indice, adicional);
+        }
+    }
+
     background: Rectangle {
         color: Estilo.cores.fundoPagina
         radius: Estilo.rounding.popup
@@ -576,13 +638,53 @@ Page {
                 }
             }
 
-            // 3. Pré-comanda: prévia do pedido que será enviado para
+            // 3. Adicionais — opera sobre "selecionados", já que Lanches
+            // não tem uma etapa separada de "montar e fechar" como Pizzas
+            // (cada lanche entra em "selecionados" assim que o pão é
+            // escolhido em popupPao).
+            Button {
+                id: btnAdicionaisLanche
+
+                width: parent.width
+                height: 42
+                enabled: selecionados.length > 0
+                onClicked: popupAdicionaisLanches.open()
+
+                contentItem: Row {
+                    spacing: 6
+                    anchors.centerIn: parent
+                    opacity: btnAdicionaisLanche.enabled ? 1 : 0.6
+
+                    Icone {
+                        nome: "fa6s.plus"
+                        cor: "#ffffff"
+                        tamanho: 14
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
+                    Text {
+                        text: "Adicionais"
+                        font.pixelSize: 14
+                        font.bold: true
+                        color: "#ffffff"
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
+                }
+
+                background: Rectangle {
+                    radius: Estilo.rounding.grande
+                    color: !btnAdicionaisLanche.enabled ? "#bdc3c7" : (btnAdicionaisLanche.down ? "#d35400" : (btnAdicionaisLanche.hovered ? "#f39c12" : "#e67e22"))
+                    border.color: !btnAdicionaisLanche.enabled ? "#bdc3c7" : "#d35400"
+                    border.width: 1
+                }
+            }
+
+            // 4. Pré-comanda: prévia do pedido que será enviado para
             // Balcao.qml/Entrega.qml, no mesmo formato de cartão usado pela
             // lista de comandas em Consulta.qml (badge colorido + título +
             // valor) — aqui o badge mostra o pão escolhido para cada lanche.
             Rectangle {
                 width: parent.width
-                height: parent.height - 210 - 65 - 46 - (12 * 3)
+                height: parent.height - 210 - 65 - 42 - 46 - (12 * 4)
                 color: "#ffffff"
                 radius: Estilo.rounding.medio
                 border.color: Estilo.cores.bordaCard
@@ -696,7 +798,7 @@ Page {
                                     Text {
                                         id: textoValorPreComanda
 
-                                        text: "R$ " + modelData.valorNum.toFixed(2).replace(".", ",")
+                                        text: "R$ " + valorFinalLanche(modelData).toFixed(2).replace(".", ",")
                                         font.pixelSize: 12
                                         color: Estilo.cores.textoSecundario
                                         anchors.right: btnRemoverPreComanda.left
@@ -705,7 +807,7 @@ Page {
                                     }
 
                                     Text {
-                                        text: modelData.nome
+                                        text: modelData.nome + resumoAdicionaisLanche(modelData)
                                         font.pixelSize: 13
                                         font.bold: true
                                         color: Estilo.cores.texto
@@ -723,7 +825,7 @@ Page {
                 }
             }
 
-            // 4. Botões de Ação
+            // 5. Botões de Ação
             Row {
                 width: parent.width
                 spacing: 12
@@ -772,10 +874,24 @@ Page {
                         // de hambúrguer é o padrão e não aparece no nome.
                         var itens = selecionados.map(function(item) {
                             var resumo = resumoPao(item.paoTipo);
+                            // "sabor" usa o nome BASE do lanche (sem o
+                            // sufixo do pão) porque é contra ele que
+                            // comandaTextoService._extras_adicionais casa o
+                            // adicional na hora de imprimir (ver
+                            // dividir_sabores, que trata um sufixo final
+                            // "(...)" como tamanho, não como parte do nome).
+                            var adicionais = (item.adicionais || []).map(function (a) {
+                                return {
+                                    "sabor": item.nome,
+                                    "nome": a.nome,
+                                    "valor": "R$ " + a.valorNum.toFixed(2).replace(".", ",")
+                                };
+                            });
                             return {
                                 "nome": resumo ? (item.nome + " ( " + resumo + " )") : item.nome,
-                                "valor": "R$ " + item.valorNum.toFixed(2).replace(".", ","),
-                                "observacao": ""
+                                "valor": "R$ " + valorFinalLanche(item).toFixed(2).replace(".", ","),
+                                "observacao": "",
+                                "adicionais": adicionais
                             };
                         });
                         if (typeof onPedidoSelecionado === "function")
