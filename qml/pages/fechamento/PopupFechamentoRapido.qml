@@ -262,6 +262,10 @@ Popup {
     padding: 25
     parent: Overlay.overlay
     anchors.centerIn: parent
+    // Dá foco de teclado ao conteúdo assim que o popup abre — sem isso, as
+    // setas ‹ › e o F10 (ver Keys.onPressed em colunaConteudo) só
+    // funcionariam depois de um clique qualquer dentro do popup.
+    onOpened: colunaConteudo.forceActiveFocus()
 
     width: Math.min(760, parent ? parent.width * 0.9 : 760)
     height: Math.min(720, parent ? parent.height * 0.9 : 720)
@@ -277,7 +281,33 @@ Popup {
     }
 
     contentItem: ColumnLayout {
+        id: colunaConteudo
+
         spacing: Estilo.espacamento.maior
+        focus: true
+        // Setas ‹ › (mesma navegação dos botões btnAnterior/btnProxima, só
+        // que sem precisar mirar neles) e F10 como atalho pro botão Baixa —
+        // clicar num Button da QtQuick Controls não rouba o foco de teclado
+        // (focusPolicy padrão é Qt.TabFocus, não Qt.ClickFocus), então isto
+        // continua respondendo mesmo depois de clicar em Reimprimir/Editar/
+        // Excluir dentro do próprio popup.
+        Keys.onPressed: function (event) {
+            if (event.key === Qt.Key_Left) {
+                if (popupFechamentoRapido.modoFila && popupFechamentoRapido.indice > 0)
+                    popupFechamentoRapido.indice--;
+                event.accepted = true;
+            } else if (event.key === Qt.Key_Right) {
+                if (popupFechamentoRapido.modoFila && popupFechamentoRapido.indice < popupFechamentoRapido.comandas.length - 1)
+                    popupFechamentoRapido.indice++;
+                event.accepted = true;
+            } else if (event.key === Qt.Key_F10) {
+                // Mesma condição de visible do btnBaixa: comanda já
+                // conferida não tem baixa a dar.
+                if (popupFechamentoRapido.comandaAtual !== null && !popupFechamentoRapido.comandaAtual.fechada)
+                    popupFechamentoRapido.darBaixaAtual();
+                event.accepted = true;
+            }
+        }
 
         // --- CABEÇALHO: navegação e identificação da comanda ---
         // Item com âncoras, e não um RowLayout: as setas ficam presas às
