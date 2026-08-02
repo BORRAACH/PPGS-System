@@ -17,6 +17,11 @@
 # Pra ver a lista de peers que cada "máquina" enxerga na malha:
 #   docker compose -f docker/docker-compose.yml exec maquina-a \
 #       python3 docker/listar_peers_teste.py
+#
+# Pra observar ao vivo a letra (A, B, C...) de RedeService.letraLocal
+# reagindo a máquinas subindo/caindo (ver services/comandaSequencialService.py):
+#   docker compose -f docker/docker-compose.yml run --rm --no-deps maquina-a \
+#       python3 docker/malha_loop_teste.py
 
 services:
   # As 4 "máquinas" usam a mesma imagem (buildada uma vez só, reaproveitada

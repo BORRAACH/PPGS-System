@@ -21,7 +21,7 @@ rede.iniciar()
 
 
 def mostrar():
-    print(f"Esta máquina: {rede.nomeLocal}")
+    print(f"Esta máquina: {rede.nomeLocal} ({rede.letraLocal})")
     peers = rede.listarPeers()
     print(f"Peers conectados: {len(peers)}")
     for peer in peers:

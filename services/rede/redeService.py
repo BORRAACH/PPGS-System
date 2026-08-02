@@ -12,7 +12,7 @@ from PyQt6.QtNetwork import QHostAddress, QTcpServer, QTcpSocket
 
 from Config.logConfig import protegido
 from services.printerService import PrinterService
-from services.rede import caminhos, impressoraFixada, indicePedidos, registroMaquinas, tombstones
+from services.rede import caminhos, impressoraFixada, indicePedidos, relogio, tombstones
 from services.rede.descoberta import criar_descoberta
 from services.rede.eventos import BarramentoEventos
 
@@ -118,6 +118,16 @@ class RedeService(QObject):
     def __init__(self):
         super().__init__()
         self._id = uuid.uuid4().hex
+        # Marca de "quando este PROCESSO entrou na malha" (ver letraLocal
+        # abaixo) — nunca persistida em disco, fixada uma vez aqui e nunca
+        # regenerada depois: é o próprio reinício do processo (desligar e
+        # ligar a máquina, ou fechar e reabrir o app) que dá uma marca nova
+        # e mais recente, empurrando a letra pro fim da fila — não dá pra
+        # basear isso em "os peers desta máquina zeraram", porque uma
+        # máquina que nunca saiu do ar também fica com zero peers sempre que
+        # TODAS as outras é que estão fora (ex.: só ela ligada no momento),
+        # e nesse caso ela não "reentrou" em lugar nenhum.
+        self._id_entrada = relogio.novo_id()
         self._nome_local = platform.node() or "Máquina desconhecida"
         self._peers = {}  # id da instância -> QTcpSocket
         self._info_peers = {}  # id da instância -> {"nome", "endereco", "conectadoEm", "temImpressora", "infoImpressora"}
@@ -152,12 +162,6 @@ class RedeService(QObject):
         self._nome_maquina_fixada = impressoraFixada.carregar_nome_fixado()
         self._jobs_impressao = {}  # job_id -> {"timer": QTimer, "concluido": bool}
 
-        # Garante que esta máquina já está na própria tabela de ordem de
-        # entrada (ver services/rede/registroMaquinas.py) antes do primeiro
-        # handshake sair — é o que dá a letra do código da comanda (ver
-        # services/comandaSequencialService.py).
-        registroMaquinas.registrar_local()
-
         # Domínios de estado inscritos na camada de anti-entropy periódica
         # (ver registrarDominioSincronizado) — nome -> {"resumo", "obter",
         # "aplicar", "apagar"}. RedeService nunca sabe o que cada domínio
@@ -190,14 +194,27 @@ class RedeService(QObject):
 
     @pyqtProperty(str, notify=peersMudaram)
     def letraLocal(self):
-        """Letra (A, B, C...) desta máquina por ordem de entrada na malha
-        (ver services/comandaSequencialService.py) — a mesma que sai
-        impressa no código da comanda. Pode mudar depois do início se um
-        handshake com um peer (ver _processar_mensagem/
-        registroMaquinas.mesclar, logo acima) trouxer entradas mais antigas
-        que a desta máquina, por isso notifica em peersMudaram em vez de
-        constant=True."""
-        return registroMaquinas.letra()
+        """Letra (A, B, C...) desta máquina por ordem de entrada dos
+        PROCESSOS atualmente na malha (ver
+        services/comandaSequencialService.py) — a mesma que sai impressa no
+        código da comanda. Calculada ao vivo a partir de self._id_entrada
+        (marca de quando ESTE processo nasceu, ver __init__) e do
+        "idEntrada" que cada peer conectado mandou no handshake (ver
+        _processar_mensagem), nunca de um histórico persistido: desligar e
+        religar uma máquina (ou fechar e reabrir o app) cria um processo
+        novo, com uma self._id_entrada mais recente, que entra de novo no
+        fim da fila em vez de reter a posição de antes da queda. Como
+        depende de quem está conectado agora, pode mudar sem esta própria
+        máquina reiniciar — ex.: se a máquina "A" cai de vez, as demais
+        recalculam suas letras uma posição acima — por isso notifica em
+        peersMudaram em vez de constant=True."""
+        entradas = [(self._id, self._id_entrada)]
+        for id_remoto, info in self._info_peers.items():
+            id_entrada = info.get("idEntrada")
+            if id_entrada:
+                entradas.append((id_remoto, id_entrada))
+        entradas.sort(key=lambda par: par[1])
+        return chr(ord("A") + [id_ for id_, _ in entradas].index(self._id))
 
     @pyqtSlot(result="QVariantList")
     @protegido([])
@@ -356,15 +373,11 @@ class RedeService(QObject):
             # disso fica salvo no disco DELA até ela mesma receber o aviso
             # ao menos uma vez — ver _ao_receber_identificar_fixacao).
             "nomeMaquinaFixada": self._nome_maquina_fixada,
-            # Mesmo motivo/mecanismo de "nomeMaquinaFixada" acima: vai no
-            # handshake (não só num evento de gossip) pra uma máquina que
-            # conecta bem depois de outra ter entrado na malha aprender a
-            # ordem de entrada dela também. Tabela inteira, não só a desta
-            # máquina — como a malha é sempre full-mesh, isso já é
-            # suficiente pra espalhar o conhecimento completo sem precisar
-            # de um domínio de anti-entropy à parte (ver
-            # services/rede/registroMaquinas.py).
-            "registrosMaquinas": registroMaquinas.todos(),
+            # Marca de quando ESTA máquina entrou na malha atual (ver
+            # letraLocal) — só a própria, não uma tabela de todo mundo:
+            # como a malha é sempre full-mesh, cada peer já manda a dele
+            # diretamente pra todo mundo, não precisa repassar de terceiros.
+            "idEntrada": self._id_entrada,
         }
 
     def _preparar_socket(self, socket: QTcpSocket, destino: str = "", id_remoto: str = ""):
@@ -479,10 +492,8 @@ class RedeService(QObject):
                 "conectadoEm": time.time(),
                 "temImpressora": bool(mensagem.get("temImpressora")),
                 "infoImpressora": mensagem.get("infoImpressora"),
+                "idEntrada": mensagem.get("idEntrada"),
             }
-            novos = registroMaquinas.mesclar(mensagem.get("registrosMaquinas") or {})
-            if novos:
-                print(f"[RedeService] Registro de entrada na malha aprendido de {len(novos)} máquina(s) via handshake.")
             print(f"[RedeService] Conectado a '{self._info_peers[id_remoto]['nome']}' ({self._info_peers[id_remoto]['endereco']}) — {len(self._peers)} peer(s) na malha.")
             # Handshake concluído: o peer está vivo, então o backoff de
             # reconexão dele volta ao início (importante pra uma queda futura
