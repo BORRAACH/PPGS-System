@@ -188,6 +188,17 @@ class RedeService(QObject):
     def nomeLocal(self):
         return self._nome_local
 
+    @pyqtProperty(str, notify=peersMudaram)
+    def letraLocal(self):
+        """Letra (A, B, C...) desta máquina por ordem de entrada na malha
+        (ver services/comandaSequencialService.py) — a mesma que sai
+        impressa no código da comanda. Pode mudar depois do início se um
+        handshake com um peer (ver _processar_mensagem/
+        registroMaquinas.mesclar, logo acima) trouxer entradas mais antigas
+        que a desta máquina, por isso notifica em peersMudaram em vez de
+        constant=True."""
+        return registroMaquinas.letra()
+
     @pyqtSlot(result="QVariantList")
     @protegido([])
     def listarPeers(self):

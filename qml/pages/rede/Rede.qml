@@ -235,7 +235,7 @@ Page {
                     spacing: 2
 
                     Text {
-                        text: "Esta máquina: " + redeController.nomeLocal
+                        text: "Esta máquina: " + redeController.nomeLocal + " (" + redeController.letraLocal + ")"
                         font.bold: true
                         font.pixelSize: Estilo.fonte.padrao
                         color: Estilo.cores.texto
