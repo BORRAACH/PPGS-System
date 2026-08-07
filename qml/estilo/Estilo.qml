@@ -1,5 +1,5 @@
-pragma Singleton
 import QtQuick
+pragma Singleton
 
 // Configurações de estilo compartilhadas por todas as páginas/componentes do
 // app. Organizadas como sub-objetos temáticos (rounding, cores, fonte, ...),
@@ -11,6 +11,38 @@ import QtQuick
 // qml/ já está no import path, configurado em main.py).
 QtObject {
     id: root
+
+    readonly property Rounding
+    rounding: Rounding {
+    }
+
+    readonly property Espacamento
+    espacamento: Espacamento {
+    }
+
+    readonly property Preenchimento
+    preenchimento: Preenchimento {
+    }
+
+    readonly property Cores
+    cores: Cores {
+    }
+
+    readonly property Confirmar
+    confirmar: Confirmar {
+    }
+
+    readonly property Cancelar
+    cancelar: Cancelar {
+    }
+
+    readonly property Voltar
+    voltar: Voltar {
+    }
+
+    readonly property Fonte
+    fonte: Fonte {
+    }
 
     // ===== Raios (cantos arredondados) =====
     component Rounding: QtObject {
@@ -50,7 +82,6 @@ QtObject {
         readonly property color texto: "#2c3e50" // texto padrão
         readonly property color textoSecundario: "#7f8c8d" // texto secundário/desabilitado
         readonly property color fundoPagina: "#f8f9fa" // fundo das páginas e popups
-
         // Texto DIGITADO dentro de inputs (TextField/TextArea/SpinBox/
         // ComboBox). Preto fixo, e sempre declarado explicitamente em cada
         // input: sem "color:", o Qt usa palette.text, que no Windows vem do
@@ -63,7 +94,6 @@ QtObject {
         // Mesma história para o texto de dica (placeholderText), que vem de
         // palette.placeholderText.
         readonly property color placeholderInput: "#95a5a6"
-
         // ===== Aviso (amarelo) =====
         // Usado pelas comandas em conflito de sincronização na Consulta (ver
         // ItemComandaDelegate.qml/PainelDetalhe.qml): as máquinas da rede
@@ -103,12 +133,4 @@ QtObject {
         readonly property int titulo: 22 * escala // título principal de cada página
     }
 
-    readonly property Rounding rounding: Rounding {}
-    readonly property Espacamento espacamento: Espacamento {}
-    readonly property Preenchimento preenchimento: Preenchimento {}
-    readonly property Cores cores: Cores {}
-    readonly property Confirmar confirmar: Confirmar {}
-    readonly property Cancelar cancelar: Cancelar {}
-    readonly property Voltar voltar: Voltar {}
-    readonly property Fonte fonte: Fonte {}
 }

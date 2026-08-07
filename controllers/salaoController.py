@@ -265,35 +265,28 @@ class SalaoController(QObject):
         agora = datetime.now()
 
         codigo_pedido = sequencial.gerar_codigo_pedido(agora)
-
-        linhas_arquivo = [
-            f"ID: {estilo.formatar_campo(codigo_pedido, 'id_pedido')}",
-            f"Mesa: {estilo.formatar_campo(str(mesa.get('mesa', '')), 'mesa')}",
-            f"Cliente: {estilo.formatar_campo(mesa.get('cliente', ''), 'cliente')}",
-            f"Data: {estilo.formatar_campo(agora.strftime('%d/%m/%Y %H:%M:%S'), 'data')}",
-            *estilo.linhas_espacamento_secoes(),
-            "-" * 40,
-            *estilo.linhas_espacamento_secoes(),
-            *texto.formatar_tabela(grupos),
-            *estilo.linhas_espacamento_secoes(),
-            "-" * 40,
-            *estilo.linhas_espacamento_secoes(),
-        ]
-
         valor_total_formatado = f"R$ {valor_total:.2f}".replace(".", ",")
-        linhas_arquivo.append(f"Valor do pedido: {estilo.formatar_campo(valor_total_formatado, 'valor_total')}")
 
+        divisao_linhas = None
         if divisoes:
-            linhas_arquivo.extend(estilo.linhas_espacamento_secoes())
-            linhas_arquivo.append("-" * 40)
-            linhas_arquivo.extend(estilo.linhas_espacamento_secoes())
-            linhas_arquivo.append("DIVISÃO DA CONTA")
+            divisao_linhas = ["DIVISÃO DA CONTA"]
             for divisao in divisoes:
                 nome = estilo.formatar_campo(divisao.get("nome", ""), "cliente")
                 valor = divisao.get("valor", "")
                 forma = divisao.get("formaPagamento", "")
                 status = estilo.formatar_campo(divisao.get("status", "NP"), "status")
-                linhas_arquivo.append(f"{nome}: {valor} [{forma}] [{status}]")
+                divisao_linhas.append(f"{nome}: {valor} [{forma}] [{status}]")
+
+        renderizadores = {
+            "id_pedido": [f"ID: {estilo.formatar_campo(codigo_pedido, 'id_pedido')}"],
+            "mesa": [f"Mesa: {estilo.formatar_campo(str(mesa.get('mesa', '')), 'mesa')}"],
+            "cliente": [f"Cliente: {estilo.formatar_campo(mesa.get('cliente', ''), 'cliente')}"],
+            "data": [f"Data: {estilo.formatar_campo(agora.strftime('%d/%m/%Y %H:%M:%S'), 'data')}"],
+            "itens": texto.formatar_tabela(grupos),
+            "valor_total": [f"Valor do pedido: {estilo.formatar_campo(valor_total_formatado, 'valor_total')}"],
+            "divisao_conta": divisao_linhas,
+        }
+        linhas_arquivo = texto.montar_linhas_por_ordem(estilo.ordem_secoes(), renderizadores)
 
         conteudo = "\n".join(linhas_arquivo) + "\n"
         return conteudo.encode(texto.CODEPAGE_IMPRESSORA, errors="replace")

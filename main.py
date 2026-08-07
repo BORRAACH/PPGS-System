@@ -20,16 +20,9 @@ from Config import atualizador, impressoraWindows
 # processo.
 _app_atualizador = atualizador.verificar_atualizacoes()
 
-# Só faz algo no Windows (ver Config/impressoraWindows.py) — acha a
-# Bematech MP-4200 TH nas portas USB e garante que existe uma fila de
-# impressão apontando pra ela, já que o Windows não cria essa fila
-# sozinho mesmo reconhecendo o hardware. Melhor esforço: se não achar
-# impressora nenhuma, ou a configuração falhar por qualquer motivo, só
-# loga um aviso e o app continua normalmente sem impressora configurada.
-impressoraWindows.garantir_impressora_bematech()
-
 import sys
 import os
+import threading
 
 try:
     from PyQt6.QtCore import QObject, pyqtSlot, QVariant, QUrl
@@ -87,17 +80,32 @@ except ImportError as erro:
 # ou um binding quebrado não deixa rastro nenhum no log.
 logConfig.instalar_captura_de_mensagens_qt()
 
-# Loga nome/porta/tipo_porta de cada impressora instalada (ver
-# Config/diagnosticar_impressora.py) — mesma info que services/printer/
-# windows.py/redeService.py já usam pra decidir a máquina que imprime na
-# rede, só que aqui aparece sempre, de forma explícita, no console/
-# logs/app.log, sem precisar rodar o diagnóstico à parte pra descobrir por
-# que uma porta caiu como "desconhecido" (ver
-# redeService._detectar_impressora_em_thread).
-diagnosticar_impressora.listar_impressoras()
-
 # codigo perigoso
 os.environ["QML_XHR_ALLOW_FILE_READ"] = "1"
+
+
+def _tarefas_de_fundo():
+    """Chamado numa thread à parte depois que a janela já carregou (ver
+    __main__ abaixo). Só faz configuração/diagnóstico de impressora — nada
+    aqui é necessário para a interface aparecer, e ambos já eram melhor
+    esforço (nunca levantam exceção, só logam avisos)."""
+    # Só faz algo no Windows (ver Config/impressoraWindows.py) — acha a
+    # Bematech MP-4200 TH nas portas USB e garante que existe uma fila de
+    # impressão apontando pra ela, já que o Windows não cria essa fila
+    # sozinho mesmo reconhecendo o hardware. Melhor esforço: se não achar
+    # impressora nenhuma, ou a configuração falhar por qualquer motivo, só
+    # loga um aviso e o app continua normalmente sem impressora configurada.
+    impressoraWindows.garantir_impressora_bematech()
+
+    # Loga nome/porta/tipo_porta de cada impressora instalada (ver
+    # Config/diagnosticar_impressora.py) — mesma info que services/printer/
+    # windows.py/redeService.py já usam pra decidir a máquina que imprime na
+    # rede, só que aqui aparece sempre, de forma explícita, no console/
+    # logs/app.log, sem precisar rodar o diagnóstico à parte pra descobrir por
+    # que uma porta caiu como "desconhecido" (ver
+    # redeService._detectar_impressora_em_thread).
+    diagnosticar_impressora.listar_impressoras()
+
 
 if __name__ == "__main__":
     app = _app_atualizador or QGuiApplication(sys.argv)
@@ -159,5 +167,12 @@ if __name__ == "__main__":
 
     if not engine.rootObjects():
         sys.exit(-1)
+
+    # A janela já está de pé nesse ponto — o que sobra (configurar a
+    # impressora Bematech no Windows, listar as impressoras instaladas) é
+    # só melhor esforço/diagnóstico e não precisa terminar antes do usuário
+    # ver a tela. Roda numa thread separada pra não travar o primeiro
+    # frame nem o resto da abertura esperando o PowerShell/CUPS responder.
+    threading.Thread(target=_tarefas_de_fundo, daemon=True).start()
 
     sys.exit(app.exec())

@@ -1,2 +1,3 @@
 module estilo
 singleton Estilo 1.0 Estilo.qml
+singleton Colors 1.0 Colors.qml

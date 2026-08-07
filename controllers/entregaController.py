@@ -71,50 +71,44 @@ class EntregaController(QObject):
 
         endereco_completo = f"{endereco}, {numero}" if numero else endereco
 
-        linhas_arquivo = []
-        if teste:
-            linhas_arquivo.append(_MARCA_COMANDA_TESTE)
-            linhas_arquivo.extend(estilo.linhas_espacamento_secoes())
-        else:
+        codigo_pedido = ""
+        if not teste:
             # Só consome um número da sequência diária pra comanda de
             # verdade — uma comanda de teste não deve "furar" a numeração
             # que o dono acompanha (ver docstring desta função).
             codigo_pedido = sequencial.gerar_codigo_pedido(agora)
-            linhas_arquivo.append(f"ID: {estilo.formatar_campo(codigo_pedido, 'id_pedido')}")
-        linhas_arquivo.extend([
-            f"Cliente: {estilo.formatar_campo(cliente, 'cliente')}",
-            f"Telefone: {estilo.formatar_campo(telefone, 'telefone')}",
-            f"Endereço: {estilo.formatar_campo(endereco_completo, 'endereco')}",
-            f"Bairro: {estilo.formatar_campo(bairro, 'bairro')}",
-            f"Data: {estilo.formatar_campo(agora.strftime('%d/%m/%Y %H:%M:%S'), 'data')}",
-            *estilo.linhas_espacamento_secoes(),
-            "-" * 40,
-            *estilo.linhas_espacamento_secoes(),
-            *texto.formatar_tabela(grupos),
-            *estilo.linhas_espacamento_secoes(),
-            "-" * 40,
-            *estilo.linhas_espacamento_secoes(),
-        ])
-        if observacaoGeral:
-            linhas_arquivo.append(f"Observação: {estilo.formatar_campo(observacaoGeral, 'observacao_entrega')}")
-            linhas_arquivo.extend(estilo.linhas_espacamento_secoes())
-            linhas_arquivo.append("-" * 40)
-            linhas_arquivo.extend(estilo.linhas_espacamento_secoes())
-        linhas_arquivo.append(f"Forma de pagamento: {estilo.formatar_campo(forma_pagamento, 'forma_pagamento')}")
-        if forma_pagamento == "Dinheiro" and troco:
-            linhas_arquivo.append(f"Troco para: {estilo.formatar_campo(troco, 'troco_para')}")
-        linhas_arquivo.append(f"Status: {estilo.formatar_campo(status_pagamento, 'status')}")
-        linhas_arquivo.extend(estilo.linhas_espacamento_secoes())
-        linhas_arquivo.append("-" * 40)
-        linhas_arquivo.extend(estilo.linhas_espacamento_secoes())
-        if taxa_entrega:
-            linhas_arquivo.append(f"Taxa de entrega: {estilo.formatar_campo(taxa_entrega, 'taxa_entrega')}")
+
+        dinheiro_com_troco = forma_pagamento == "Dinheiro" and troco
         valor_total_formatado = f"R$ {valor_total:.2f}".replace(".", ",")
-        linhas_arquivo.append(f"Valor do pedido: {estilo.formatar_campo(valor_total_formatado, 'valor_total')}")
-        if forma_pagamento == "Dinheiro" and troco:
-            troco_a_dar = texto.valor_para_float(troco) - valor_total
-            troco_a_dar_formatado = f"R$ {troco_a_dar:.2f}".replace(".", ",")
-            linhas_arquivo.append(f"Troco a dar: {estilo.formatar_campo(troco_a_dar_formatado, 'troco_a_dar')}")
+        troco_a_dar_formatado = ""
+        if dinheiro_com_troco:
+            troco_a_dar_formatado = f"R$ {(texto.valor_para_float(troco) - valor_total):.2f}".replace(".", ",")
+
+        renderizadores = {
+            # A marca de comanda de teste (ver _MARCA_COMANDA_TESTE) toma o
+            # lugar do ID sempre no topo/rodapé, fora da ordem configurável
+            # (ver abaixo) — não faz sentido reordenar um aviso pros dois
+            # extremos do cupom.
+            "id_pedido": None if teste else [f"ID: {estilo.formatar_campo(codigo_pedido, 'id_pedido')}"],
+            "cliente": [f"Cliente: {estilo.formatar_campo(cliente, 'cliente')}"],
+            "telefone": [f"Telefone: {estilo.formatar_campo(telefone, 'telefone')}"],
+            "endereco": [f"Endereço: {estilo.formatar_campo(endereco_completo, 'endereco')}"],
+            "bairro": [f"Bairro: {estilo.formatar_campo(bairro, 'bairro')}"],
+            "data": [f"Data: {estilo.formatar_campo(agora.strftime('%d/%m/%Y %H:%M:%S'), 'data')}"],
+            "itens": texto.formatar_tabela(grupos),
+            "observacao_entrega": [f"Observação: {estilo.formatar_campo(observacaoGeral, 'observacao_entrega')}"] if observacaoGeral else None,
+            "forma_pagamento": [f"Forma de pagamento: {estilo.formatar_campo(forma_pagamento, 'forma_pagamento')}"],
+            "troco_para": [f"Troco para: {estilo.formatar_campo(troco, 'troco_para')}"] if dinheiro_com_troco else None,
+            "status": [f"Status: {estilo.formatar_campo(status_pagamento, 'status')}"],
+            "taxa_entrega": [f"Taxa de entrega: {estilo.formatar_campo(taxa_entrega, 'taxa_entrega')}"] if taxa_entrega else None,
+            "valor_total": [f"Valor do pedido: {estilo.formatar_campo(valor_total_formatado, 'valor_total')}"],
+            "troco_a_dar": [f"Troco a dar: {estilo.formatar_campo(troco_a_dar_formatado, 'troco_a_dar')}"] if dinheiro_com_troco else None,
+        }
+        linhas_arquivo = []
+        if teste:
+            linhas_arquivo.append(_MARCA_COMANDA_TESTE)
+            linhas_arquivo.extend(estilo.linhas_espacamento_secoes())
+        linhas_arquivo.extend(texto.montar_linhas_por_ordem(estilo.ordem_secoes(), renderizadores))
         if teste:
             linhas_arquivo.extend(estilo.linhas_espacamento_secoes())
             linhas_arquivo.append(_MARCA_COMANDA_TESTE)

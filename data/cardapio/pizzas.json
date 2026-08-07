@@ -377,9 +377,9 @@
   {
     "nome": "Milho Verde",
     "ingredientes": "Molho, mussarela, catupiry e milho",
-    "valorMini": "19,90",
-    "valorBroto": "29,90",
-    "valorGrande": "49,90",
+    "valorMini": "24,90",
+    "valorBroto": "34,90",
+    "valorGrande": "59,90",
     "id": 48
   },
   {
@@ -395,7 +395,7 @@
     "ingredientes": "Molho, mussarela e lombo canadense",
     "valorMini": "24,90",
     "valorBroto": "34,90",
-    "valorGrande": "54,90",
+    "valorGrande": "59,90",
     "id": 50
   },
   {
@@ -416,49 +416,49 @@
     "nome": "Lagarto Barbecue",
     "ingredientes": "Molho, lagarto desfiado, catupiry, bacon, mussarela e barbecue",
     "valorBroto": "34,90",
-    "valorGrande": "54,90",
+    "valorGrande": "59,90",
     "id": 53
   },
   {
     "nome": "Frango Barbecue",
     "ingredientes": "Molho, frango, mussarela, bacon, catupiry e barbecue",
     "valorBroto": "34,90",
-    "valorGrande": "54,90",
+    "valorGrande": "59,90",
     "id": 54
   },
   {
     "nome": "Batata do Chefe",
     "ingredientes": "Molho, batata frita, mussarela, cheddar e bacon",
     "valorBroto": "34,90",
-    "valorGrande": "54,90",
+    "valorGrande": "59,90",
     "id": 55
   },
   {
     "nome": "Copa Lombo",
     "ingredientes": "Molho, mussarela, copa lombo, catupiry e cebola",
     "valorBroto": "34,90",
-    "valorGrande": "54,90",
+    "valorGrande": "59,90",
     "id": 56
   },
   {
     "nome": "Costelinha",
     "ingredientes": "Molho, mussarela, costelinha e cebola",
     "valorBroto": "34,90",
-    "valorGrande": "54,90",
+    "valorGrande": "59,90",
     "id": 57
   },
   {
     "nome": "Baiana",
     "ingredientes": "Molho, mussarela, calabresa, cebola e molho de pimenta",
     "valorBroto": "34,90",
-    "valorGrande": "54,90",
+    "valorGrande": "59,90",
     "id": 58
   },
   {
     "nome": "Pão de Alho",
     "ingredientes": "Molho, mussarela, pão de alho, catupiry, pasta de alho e alho frito",
     "valorBroto": "34,90",
-    "valorGrande": "54,90",
+    "valorGrande": "59,90",
     "id": 59
   },
   {
@@ -568,5 +568,13 @@
     "valorBroto": "1,00",
     "valorGrande": "2,00",
     "id": 73
+  },
+  {
+    "nome": "massa",
+    "ingredientes": "massa",
+    "valorMini": "5,00",
+    "valorBroto": "5,00",
+    "valorGrande": "5,00",
+    "id": 74
   }
 ]

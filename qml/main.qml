@@ -5,6 +5,12 @@ import QtQuick.Layouts
 import estilo 1.0
 
 ApplicationWindow {
+    // Paleta fixa para a janela inteira (herdada por todos os controles,
+    // inclusive os popups de ComboBox/Menu, que não são filhos visuais das
+    // páginas). No Windows, a paleta padrão vem do tema do sistema: em
+    // máquinas com tema escuro, "text" e "placeholderText" chegavam claros e
+    // sumiam no fundo branco dos inputs.
+
     id: root
 
     width: 600
@@ -13,13 +19,6 @@ ApplicationWindow {
     visibility: Window.Maximized
     color: Qt.darker(Estilo.cores.fundoPagina, 1.8)
     title: "Sistema de Pedidos"
-
-    // Paleta fixa para a janela inteira (herdada por todos os controles,
-    // inclusive os popups de ComboBox/Menu, que não são filhos visuais das
-    // páginas). No Windows, a paleta padrão vem do tema do sistema: em
-    // máquinas com tema escuro, "text" e "placeholderText" chegavam claros e
-    // sumiam no fundo branco dos inputs.
-    //
     // Isto é a rede de segurança; cada input também declara a própria "color"
     // (ver Estilo.cores.textoInput), de modo que nenhum campo dependa só
     // desta herança.
@@ -52,42 +51,29 @@ ApplicationWindow {
             clip: true // Garante o corte dos elementos internos e da sombra
 
             StackView {
-                id: stackView
-
-                anchors.fill: parent
-
                 // Volta para a tela inicial a partir de qualquer página (é o
                 // que os botões "Voltar para o Menu" chamam, via
                 // StackView.view.irParaInicio()).
-                //
                 // Precisa ser replace(null, ...), não pop(): desde que a
                 // navegação passou a trocar a pilha inteira a cada tela (ver
                 // LateralBar.qml), esta pilha vive permanentemente com
                 // profundidade 1 — não existe mais nada "embaixo" para onde
                 // voltar, e o pop() que estas telas usavam era um no-op
                 // silencioso (devolve null e deixa a tela como está).
-                //
+
+                id: stackView
+
                 // O caminho é resolvido a partir DESTE arquivo, então fica
                 // igual para todas as páginas, não importa a pasta delas.
                 function irParaInicio() {
                     if (currentItem && currentItem.objectName === "pageHome")
-                        return;
+                        return ;
 
-                    replace(null, "pages/inicio/Inicio.qml", {}, StackView.Immediate);
+                    replace(null, "pages/inicio/Inicio.qml", {
+                    }, StackView.Immediate);
                 }
 
-                // Sem animação de transição entre páginas — o app roda em
-                // computadores fracos, e o slide padrão do StackView (dois
-                // Item full-screen renderizando ao mesmo tempo durante a
-                // animação) pesa demais neles. Troca instantânea em vez de
-                // deslizar.
-                pushEnter: Transition {}
-                pushExit: Transition {}
-                popEnter: Transition {}
-                popExit: Transition {}
-                replaceEnter: Transition {}
-                replaceExit: Transition {}
-
+                anchors.fill: parent
                 // Extraído para qml/pages/inicio/Inicio.qml: precisa ser um
                 // destino de verdade, carregável por caminho como qualquer
                 // outra página (ver LateralBar.qml) — não um Component
@@ -96,8 +82,34 @@ ApplicationWindow {
                 // replace(null, ...) em vez de push()/pop(null) (ver
                 // comentário em LateralBar.qml).
                 initialItem: "pages/inicio/Inicio.qml"
+
+                // Sem animação de transição entre páginas — o app roda em
+                // computadores fracos, e o slide padrão do StackView (dois
+                // Item full-screen renderizando ao mesmo tempo durante a
+                // animação) pesa demais neles. Troca instantânea em vez de
+                // deslizar.
+                pushEnter: Transition {
+                }
+
+                pushExit: Transition {
+                }
+
+                popEnter: Transition {
+                }
+
+                popExit: Transition {
+                }
+
+                replaceEnter: Transition {
+                }
+
+                replaceExit: Transition {
+                }
+
             }
+
         }
+
     }
 
     // --- NOTIFICAÇÃO GLOBAL DO RESULTADO DA IMPRESSÃO ---
@@ -124,13 +136,6 @@ ApplicationWindow {
         anchors.bottom: parent.bottom
         anchors.bottomMargin: aberta ? 20 : -(height + 20)
 
-        Behavior on anchors.bottomMargin {
-            NumberAnimation {
-                duration: 300
-                easing.type: Easing.OutCubic
-            }
-        }
-
         Row {
             id: linhaNotificacaoImpressao
 
@@ -151,7 +156,17 @@ ApplicationWindow {
                 font.pixelSize: Estilo.fonte.padrao
                 anchors.verticalCenter: parent.verticalCenter
             }
+
         }
+
+        Behavior on anchors.bottomMargin {
+            NumberAnimation {
+                duration: 300
+                easing.type: Easing.OutCubic
+            }
+
+        }
+
     }
 
     Timer {
@@ -163,12 +178,14 @@ ApplicationWindow {
     }
 
     Connections {
-        target: redeController
         function onImpressaoResultado(sucesso, detalhe) {
             notificacaoImpressao.texto = sucesso ? ("Comanda impressa em " + detalhe) : ("Falha ao imprimir: " + detalhe);
             notificacaoImpressao.sucesso = sucesso;
             notificacaoImpressao.aberta = true;
             timerNotificacaoImpressao.restart();
         }
+
+        target: redeController
     }
+
 }

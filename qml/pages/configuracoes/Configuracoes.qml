@@ -55,6 +55,13 @@ Page {
             contentWidth: width
             contentHeight: estiloImpressora.implicitHeight
             boundsBehavior: Flickable.StopAtBounds
+            // O conteúdo encolhe bastante quando um campo da comanda volta de
+            // uma fonte grande (8x = 8 linhas de altura numa linha só) pro
+            // tamanho normal. Com StopAtBounds o Flickable NÃO corrige o
+            // contentY sozinho nesse caso: se a tela estava rolada até o fim,
+            // o usuário fica olhando pro vazio embaixo do conteúdo até
+            // arrastar de volta na mão.
+            onContentHeightChanged: returnToBounds()
 
             ScrollBar.vertical: ScrollBar {
                 policy: ScrollBar.AsNeeded

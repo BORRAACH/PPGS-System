@@ -5,6 +5,9 @@ import estilo 1.0
 
 Rectangle {
     id: sideBar
+
+    property StackView stackView: null
+
     Layout.fillHeight: true
     Layout.preferredWidth: 70
     Layout.rightMargin: Estilo.preenchimento.pequeno
@@ -16,9 +19,9 @@ Rectangle {
     // Balcao.qml, Pedido.qml, Entregarega.qml etc.), em vez de uma cor solta.
     color: Qt.darker(Estilo.cores.fundoPagina, 1.8)
 
-    property StackView stackView: null
-
     ColumnLayout {
+        // Espaçador Flexível
+
         anchors.fill: parent
         // Padding vertical/horizontal e spacing entre os grupos espelham
         // Bar.vPadding (padding.large), BarWrapper.padding (padding.smaller)
@@ -50,17 +53,61 @@ Rectangle {
             // já aberta (ver onClicked abaixo).
             ListModel {
                 id: modeloNavegacao
-                ListElement { icone: "fa6s.house"; textoTooltip: "Início"; pagina: "../pages/inicio/Inicio.qml"; nomeTela: "pageHome" }
-                ListElement { icone: "fa6s.bag-shopping"; textoTooltip: "Balcão"; pagina: "../pages/balcao/Balcao.qml"; nomeTela: "telaBalcao" }
-                ListElement { icone: "fa6s.motorcycle"; textoTooltip: "Entrega"; pagina: "../pages/entrega/Entrega.qml"; nomeTela: "telaEntrega" }
-                ListElement { icone: "fa6s.utensils"; textoTooltip: "Salão"; pagina: "../pages/salao/Salao.qml"; nomeTela: "telaSalao" }
-                ListElement { icone: "fa6s.magnifying-glass"; textoTooltip: "Consulta"; pagina: "../pages/consulta/Consulta.qml"; nomeTela: "telaConsulta" }
-                ListElement { icone: "fa6s.cash-register"; textoTooltip: "Fechamento"; pagina: "../pages/fechamento/Fechamento.qml"; nomeTela: "telaFechamento" }
-                ListElement { icone: "fa6s.globe"; textoTooltip: "Rede"; pagina: "../pages/rede/Rede.qml"; nomeTela: "telaRede" }
+
+                ListElement {
+                    icone: "fa6s.house"
+                    textoTooltip: "Início"
+                    pagina: "../pages/inicio/Inicio.qml"
+                    nomeTela: "pageHome"
+                }
+
+                ListElement {
+                    icone: "fa6s.bag-shopping"
+                    textoTooltip: "Balcão"
+                    pagina: "../pages/balcao/Balcao.qml"
+                    nomeTela: "telaBalcao"
+                }
+
+                ListElement {
+                    icone: "fa6s.motorcycle"
+                    textoTooltip: "Entrega"
+                    pagina: "../pages/entrega/Entrega.qml"
+                    nomeTela: "telaEntrega"
+                }
+
+                ListElement {
+                    icone: "fa6s.utensils"
+                    textoTooltip: "Salão"
+                    pagina: "../pages/salao/Salao.qml"
+                    nomeTela: "telaSalao"
+                }
+
+                ListElement {
+                    icone: "fa6s.magnifying-glass"
+                    textoTooltip: "Consulta"
+                    pagina: "../pages/consulta/Consulta.qml"
+                    nomeTela: "telaConsulta"
+                }
+
+                ListElement {
+                    icone: "fa6s.cash-register"
+                    textoTooltip: "Fechamento"
+                    pagina: "../pages/fechamento/Fechamento.qml"
+                    nomeTela: "telaFechamento"
+                }
+
+                ListElement {
+                    icone: "fa6s.globe"
+                    textoTooltip: "Rede"
+                    pagina: "../pages/rede/Rede.qml"
+                    nomeTela: "telaRede"
+                }
+
             }
 
             ColumnLayout {
                 id: colNavegacao
+
                 anchors.centerIn: parent
                 width: parent.width - Estilo.preenchimento.pequeno * 2
 
@@ -69,44 +116,13 @@ Rectangle {
 
                     delegate: Button {
                         id: btnNav
+
                         Layout.fillWidth: true
                         // Ícone (24) + padding.normal dos dois lados — mesma
                         // relação usada em Power.qml (icon.implicitHeight + padding.small * 2).
                         implicitHeight: 24 + Estilo.preenchimento.normal * 2
-
-                        background: Rectangle {
-                            color: btnNav.hovered ? Qt.darker(capsulaNavegacao.color, 1.4) : "transparent"
-                            radius: Estilo.rounding.cheio
-                        }
-
-                        ToolTip {
-                            text: textoTooltip
-                            visible: btnNav.hovered
-                            delay: 400
-                            padding: Estilo.preenchimento.normal
-                            x: btnNav.width + Estilo.espacamento.pequeno
-                            y: (btnNav.height - height) / 2
-
-                            background: Rectangle {
-                                radius: Estilo.rounding.popup
-                                color: capsulaNavegacao.color
-                                border.color: Estilo.cores.bordaCard
-                                border.width: 1
-                            }
-                        }
-
-                        contentItem: Item {
-                            anchors.fill: parent
-                            Icone {
-                                nome: icone
-                                cor: Estilo.cores.texto
-                                tamanho: 22
-                                anchors.centerIn: parent
-                            }
-                        }
-
                         onClicked: {
-                            if (sideBar.stackView && sideBar.stackView.currentItem && sideBar.stackView.currentItem.objectName !== nomeTela) {
+                            if (sideBar.stackView && sideBar.stackView.currentItem && sideBar.stackView.currentItem.objectName !== nomeTela)
                                 // replace(null, ...) troca a pilha INTEIRA
                                 // pela página nova — não push(), que só
                                 // empilha por cima sem nunca destruir nada.
@@ -124,17 +140,56 @@ Rectangle {
                                 // nunca liberar memória — exatamente o tipo
                                 // de vazamento que trava máquinas fracas ao
                                 // longo do expediente.
-                                sideBar.stackView.replace(null, pagina, {}, StackView.Immediate);
-                            }
+                                sideBar.stackView.replace(null, pagina, {
+                                }, StackView.Immediate);
+
                         }
+
+                        ToolTip {
+                            text: textoTooltip
+                            visible: btnNav.hovered
+                            delay: 400
+                            padding: Estilo.preenchimento.normal
+                            x: btnNav.width + Estilo.espacamento.pequeno
+                            y: (btnNav.height - height) / 2
+
+                            background: Rectangle {
+                                radius: Estilo.rounding.popup
+                                color: capsulaNavegacao.color
+                                border.color: Estilo.cores.bordaCard
+                                border.width: 1
+                            }
+
+                        }
+
+                        background: Rectangle {
+                            color: btnNav.hovered ? Qt.darker(capsulaNavegacao.color, 1.4) : "transparent"
+                            radius: Estilo.rounding.cheio
+                        }
+
+                        contentItem: Item {
+                            anchors.fill: parent
+
+                            Icone {
+                                nome: icone
+                                cor: Estilo.cores.texto
+                                tamanho: 22
+                                anchors.centerIn: parent
+                            }
+
+                        }
+
                     }
+
                 }
+
             }
+
         }
 
         Item {
             Layout.fillHeight: true
-        } // Espaçador Flexível
+        }
 
         // --- CÁPSULA INFERIOR (Atalhos/Rodapé estilo Imagem) ---
         Rectangle {
@@ -152,12 +207,26 @@ Rectangle {
             // clique de modeloNavegacao acima.
             ListModel {
                 id: modeloRodape
-                ListElement { icone: "fa6s.book-open"; textoTooltip: "Cardápio"; pagina: "../pages/cardapio/Cardapio.qml"; nomeTela: "telaCardapio" }
-                ListElement { icone: "fa6s.gear"; textoTooltip: "Configurações"; pagina: "../pages/configuracoes/Configuracoes.qml"; nomeTela: "telaConfiguracoes" }
+
+                ListElement {
+                    icone: "fa6s.book-open"
+                    textoTooltip: "Cardápio"
+                    pagina: "../pages/cardapio/Cardapio.qml"
+                    nomeTela: "telaCardapio"
+                }
+
+                ListElement {
+                    icone: "fa6s.gear"
+                    textoTooltip: "Configurações"
+                    pagina: "../pages/configuracoes/Configuracoes.qml"
+                    nomeTela: "telaConfiguracoes"
+                }
+
             }
 
             ColumnLayout {
                 id: colFooter
+
                 anchors.centerIn: parent
                 width: parent.width - Estilo.preenchimento.pequeno * 2
                 spacing: Estilo.espacamento.menor
@@ -170,10 +239,13 @@ Rectangle {
 
                         Layout.fillWidth: true
                         implicitHeight: 24 + Estilo.preenchimento.normal * 2
+                        onClicked: {
+                            if (sideBar.stackView && sideBar.stackView.currentItem && sideBar.stackView.currentItem.objectName !== nomeTela)
+                                // Ver o mesmo comentário no Repeater de
+                                // modeloNavegacao acima.
+                                sideBar.stackView.replace(null, pagina, {
+                                }, StackView.Immediate);
 
-                        background: Rectangle {
-                            color: btnRodape.hovered ? Qt.darker(capsulaRodape.color, 1.4) : "transparent"
-                            radius: Estilo.rounding.cheio
                         }
 
                         ToolTip {
@@ -190,28 +262,34 @@ Rectangle {
                                 border.color: Estilo.cores.bordaCard
                                 border.width: 1
                             }
+
+                        }
+
+                        background: Rectangle {
+                            color: btnRodape.hovered ? Qt.darker(capsulaRodape.color, 1.4) : "transparent"
+                            radius: Estilo.rounding.cheio
                         }
 
                         contentItem: Item {
                             anchors.fill: parent
+
                             Icone {
                                 nome: icone
                                 cor: Estilo.cores.texto
                                 tamanho: 22
                                 anchors.centerIn: parent
                             }
+
                         }
 
-                        onClicked: {
-                            if (sideBar.stackView && sideBar.stackView.currentItem && sideBar.stackView.currentItem.objectName !== nomeTela) {
-                                // Ver o mesmo comentário no Repeater de
-                                // modeloNavegacao acima.
-                                sideBar.stackView.replace(null, pagina, {}, StackView.Immediate);
-                            }
-                        }
                     }
+
                 }
+
             }
+
         }
+
     }
+
 }
