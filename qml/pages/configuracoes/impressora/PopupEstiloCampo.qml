@@ -87,6 +87,13 @@ Popup {
         Rectangle { width: parent.width; height: 1; color: Estilo.cores.bordaCard }
 
         // --- Atributos booleanos ---
+        // Os três CheckBox fixam implicitWidth/implicitHeight no mesmo 22 do
+        // indicador e zeram o padding porque o estilo Basic monta a largura
+        // do controle a partir do contentItem (vazio aqui, já que o rótulo é
+        // um Text à parte na Row) — só a ALTURA consulta o indicador. Sem
+        // isso o controle nascia com 12px de largura (só o padding) por baixo
+        // de um quadrado de 22px: o desenho aparecia inteiro, mas a metade
+        // direita dele não respondia ao clique.
         Column {
             width: parent.width
             spacing: 14
@@ -97,6 +104,9 @@ Popup {
                 CheckBox {
                     id: chkNegrito
 
+                    padding: 0
+                    implicitWidth: 22
+                    implicitHeight: 22
                     anchors.verticalCenter: parent.verticalCenter
                     onClicked: popup.controlador.definirAtributoLocal(popup.campoChave, "negrito", checked)
 
@@ -133,6 +143,9 @@ Popup {
                 CheckBox {
                     id: chkSublinhado
 
+                    padding: 0
+                    implicitWidth: 22
+                    implicitHeight: 22
                     anchors.verticalCenter: parent.verticalCenter
                     onClicked: popup.controlador.definirAtributoLocal(popup.campoChave, "sublinhado", checked)
 
@@ -169,6 +182,9 @@ Popup {
                 CheckBox {
                     id: chkFundoPreto
 
+                    padding: 0
+                    implicitWidth: 22
+                    implicitHeight: 22
                     anchors.verticalCenter: parent.verticalCenter
                     onClicked: popup.controlador.definirAtributoLocal(popup.campoChave, "fundo_preto", checked)
 

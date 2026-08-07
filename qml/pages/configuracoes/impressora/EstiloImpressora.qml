@@ -4,23 +4,57 @@ import QtQuick.Layouts
 import estilo 1.0
 import "../../../components"
 
-// Configuração de estilo ESC/POS da comanda impressa: quais campos (nome do
-// cliente, do pedido, forma de pagamento etc.) saem em negrito/sublinhado/
-// fonte grande/fundo preto (modo reverso), e o espaçamento entre seções e
-// antes do corte automático. Lida/gravada por comandaEstiloController (ver
-// services/comandaEstiloService.py), que balcaoController.py/
-// entregaController.py consultam ao montar a comanda.
+// Configuração da comanda impressa: a ORDEM em que os campos saem no cupom
+// e o ESTILO ESC/POS de cada um (negrito/sublinhado/fundo preto/fonte
+// grande), mais o espaçamento entre seções e antes do corte automático.
 //
-// Não é uma Page própria — é o conteúdo embutido por
-// ../Configuracoes.qml dentro da área rolável da tela de Configurações.
+// Tudo isso é editado numa peça só: um modelo do cupom desenhado na tela,
+// que é ao mesmo tempo a prévia e a superfície de edição. Clicar numa linha
+// a seleciona e faz os controles (mover pra cima/baixo e "Estilo…")
+// aparecerem ao lado dela, na faixa à direita do papel; mover um campo
+// remonta a comanda na hora — inclusive as linhas tracejadas, que dependem
+// de quais campos ficaram vizinhos (ver separadorEntre() abaixo). A
+// espessura dessas divisórias é o contador do bloco ESPAÇAMENTO, e cada
+// linha pode fugir dele pelos botões "Traços acima" (ver linhasTracoAntes).
+//
+// Antes existiam três blocos separados pra isso (uma lista de 18 campos só
+// pra estilo, uma prévia estática do cupom, e uma lista de 16 campos com
+// dois botões de seta em cada linha). A prévia estática tinha o problema de
+// ser escrita à mão: não seguia a ordem configurada e foi ficando
+// desatualizada em relação ao que a impressora realmente cuspia.
+//
+// Lida/gravada por comandaEstiloController (ver
+// services/comandaEstiloService.py), que balcaoController.py/
+// entregaController.py/salaoController.py consultam ao montar a comanda.
+//
+// Não é uma Page própria — é o conteúdo embutido por ../Configuracoes.qml
+// dentro da área rolável da tela de Configurações.
 Column {
     id: raiz
 
     readonly property color corDestaque: "#475569"
+    // Largura da comanda em caracteres — a mesma de "-" * 40 e do
+    // MARCADOR_ITENS ("=" * 40) em services/comandaTextoService.py. Sai daqui
+    // a largura do papel na tela, então a prévia não pode divergir do que é
+    // impresso (antes o papel desenhava traços de 28 contra 40 do Python).
+    readonly property int colunasPapel: 40
+    readonly property int tamanhoBasePapel: 12
+
     property int espacamentoSecoes: 1
     property int espacamentoCorte: 4
     property int tamanhoFontePadrao: 24
-    // Estado local desta sessão de edição — cliques no popup só mexem aqui
+    // Espessura padrão de cada divisória tracejada, e as exceções por campo
+    // ({chave: nº de traços antes dela}) que ignoram a regra automática de
+    // categoria. Espelham "linhas_separador"/"separadores_campo" do JSON —
+    // ver comandaEstiloService.linhas_separador_antes, que é a mesma regra do
+    // lado do Python.
+    property int linhasSeparadorPadrao: 1
+    property int maxLinhasSeparador: 5
+    // Reatribuído inteiro (nunca mutado no lugar) pelas funções que mexem
+    // nele, pelo mesmo motivo de `separadores` logo abaixo: é um objeto JS
+    // comum, e só a atribuição emite o sinal que faz a prévia se redesenhar.
+    property var separadoresPorCampo: ({})
+    // Estado local desta sessão de edição — cliques só mexem aqui
     // (instantâneo, sem chamar o Python). Só vira gravação em disco de fato
     // em salvarNoBackend(), chamado ao sair da tela (ver
     // Component.onDestruction abaixo e StackView.onDeactivated em
@@ -30,15 +64,86 @@ Column {
     property var configAtual: ({
         "campos": {}
     })
-    // Incrementado a cada mudança local (ver tocar()) só para servir de
-    // dependência de binding — configAtual é um objeto JS comum, então
-    // mutá-lo (definirAtributoLocal/definirTamanhoFonteLocal) não emite
-    // nenhum sinal de mudança de propriedade sozinho. A lista de campos e a
-    // prévia da comanda leem esta propriedade para saber quando reavaliar
-    // suas bindings (ver PreviaCampoTexto.qml).
+    // Incrementado a cada mudança local de ESTILO (ver tocar()) só para
+    // servir de dependência de binding — configAtual é um objeto JS comum,
+    // então mutá-lo (definirAtributoLocal/definirTamanhoFonteLocal) não emite
+    // nenhum sinal de mudança de propriedade sozinho. A prévia lê esta
+    // propriedade para saber quando reavaliar suas bindings (ver
+    // PreviaCampoTexto.qml).
     property int versaoConfig: 0
 
+    // --- Estado da prévia interativa ---
+
+    // Guardada por CHAVE, nunca por índice: com índice o destaque ficaria
+    // preso à posição, e mover um campo faria a seleção "saltar" pro campo
+    // que desceu no lugar dele.
+    property string chaveSelecionada: ""
+    // Linha ordenável que CONTÉM o que está selecionado — as setas mexem
+    // sempre nela. Coincide com chaveSelecionada na maioria dos campos, mas
+    // difere nas sub-linhas da tabela de itens: selecionar "Nome do pedido"
+    // estiliza aquela linha e move a tabela inteira, que é a única coisa que
+    // faz sentido (uma linha da tabela não tem posição própria no cupom).
+    property string donoSelecionado: ""
+    property string tipoComanda: "Entrega"
+    property var tiposComanda: []
+
+    // Posição da linha destacada DENTRO do papel, para os controles
+    // flutuantes (setas + "Estilo…") ficarem na altura dela. Escrita pela
+    // própria sub-linha selecionada, via Binding, somando os y da cadeia
+    // colunaPapel → linhaOrdem → subLinha: escrito assim (e não com
+    // mapToItem, que não é reativo) o valor reavalia sozinho quando qualquer
+    // um desses y muda — reordenar a comanda, mexer no espaçamento entre
+    // seções ou aumentar a fonte de um campo acima empurra a linha, e os
+    // botões acompanham, inclusive durante a animação de troca de posição.
+    property real yLinhaSelecionada: 0
+    property real alturaLinhaSelecionada: 0
+
+    // Divisória que vem ANTES de cada linha da ordem, como
+    // { tipo: "" | "-" | "=", linhas: nº de repetições }.
+    // Recalculado inteiro e ATRIBUÍDO (nunca .push()) — atribuir um array
+    // novo é o que emite separadoresChanged e faz as bindings dos delegates
+    // reavaliarem. Guardar isto aqui, em vez de cada delegate espiar o
+    // vizinho anterior com modeloOrdemSecoes.get(index - 1), é de propósito:
+    // esse proxy de linha não é seguro dentro de binding, e a vizinhança
+    // fica consistente por construção ao ser calculada de uma vez sobre o
+    // modelo inteiro.
+    property var separadores: []
+    // Só a última linha precisa disso: quando a tabela de itens é o último
+    // campo da ordem, ainda sai um "=" de fechamento embaixo dela (ver o
+    // "if itens_anterior:" no fim de montar_linhas_por_ordem). Esse caso não
+    // é expressável como "separador antes de mim", então vira um item extra
+    // depois do Repeater.
+    property string ultimaChaveOrdem: ""
+
+    // Mapas montados em carregarConfiguracao() a partir dos slots do
+    // controller — evita duplicar aqui CATEGORIA_CAMPO/TIPOS_POR_CAMPO/
+    // rótulos, que divergiriam do Python na primeira vez que alguém
+    // acrescentasse um campo lá.
+    property var categoriasPorChave: ({})
+    property var tiposPorChave: ({})
+    property var rotulosPorChave: ({})
+
     spacing: 25
+
+    // Textos de exemplo de cada campo. Os prefixos são os REAIS impressos
+    // pelos controllers ("Forma de pagamento: ", não "Pagamento: ") — a
+    // prévia só vale se o que está na tela for o que sai no papel.
+    readonly property var exemplos: ({
+        "id_pedido": { "prefixo": "ID: ", "valor": "A291201" },
+        "cliente": { "prefixo": "Cliente: ", "valor": "João da Silva" },
+        "mesa": { "prefixo": "Mesa: ", "valor": "5" },
+        "telefone": { "prefixo": "Telefone: ", "valor": "(11) 91234-5678" },
+        "endereco": { "prefixo": "Endereço: ", "valor": "Rua Exemplo, 123" },
+        "bairro": { "prefixo": "Bairro: ", "valor": "Centro" },
+        "data": { "prefixo": "Data: ", "valor": "25/07/2026 20:15:00" },
+        "observacao_entrega": { "prefixo": "Observação: ", "valor": "INTERFONE QUEBRADO" },
+        "forma_pagamento": { "prefixo": "Forma de pagamento: ", "valor": "Dinheiro" },
+        "troco_para": { "prefixo": "Troco para: ", "valor": "R$ 100,00" },
+        "status": { "prefixo": "Status: ", "valor": "NP" },
+        "taxa_entrega": { "prefixo": "Taxa de entrega: ", "valor": "R$ 5,00" },
+        "valor_total": { "prefixo": "Valor do pedido: ", "valor": "R$ 45,00" },
+        "troco_a_dar": { "prefixo": "Troco a dar: ", "valor": "R$ 55,00" }
+    })
 
     function tocar() {
         raiz.versaoConfig += 1;
@@ -55,8 +160,8 @@ Column {
     // de propriedade sozinho. Ler versaoConfig (uma property de verdade)
     // dentro da própria expressão de binding de quem chama esta função é o
     // que cria a dependência que faltava, sem recorrer a um "comma
-    // expression" (que o qmllint reprova). Usadas pela lista de campos e
-    // pela prévia da comanda (PreviaCampoTexto.qml).
+    // expression" (que o qmllint reprova). Usadas pela prévia da comanda
+    // (PreviaCampoTexto.qml).
     function obterAtributoReativo(campo, atributo, versao) {
         return raiz.obterAtributo(campo, atributo);
     }
@@ -112,27 +217,294 @@ Column {
 
         comandaEstiloController.salvarConfiguracaoCompleta({
             "campos": raiz.configAtual.campos,
+            "ordem_secoes": raiz.configAtual.ordem_secoes,
             "espacamento_secoes": raiz.espacamentoSecoes,
-            "espacamento_corte": raiz.espacamentoCorte
+            "espacamento_corte": raiz.espacamentoCorte,
+            "linhas_separador": raiz.linhasSeparadorPadrao,
+            "separadores_campo": raiz.separadoresPorCampo
         });
     }
 
     function carregarConfiguracao() {
         var config = comandaEstiloController.obterConfiguracao();
         var campos = comandaEstiloController.listarCampos();
+        var camposOrdenaveis = comandaEstiloController.listarCamposOrdenaveis();
         raiz.tamanhoFontePadrao = comandaEstiloController.tamanhoFontePadrao();
+        raiz.maxLinhasSeparador = comandaEstiloController.maxLinhasSeparador();
+        raiz.tiposComanda = comandaEstiloController.listarTiposComanda();
         raiz.configAtual = config;
 
-        modeloCampos.clear();
-        for (var i = 0; i < campos.length; i++) {
-            modeloCampos.append({
-                "chave": campos[i].chave,
-                "rotulo": campos[i].rotulo
+        // Rótulos dos 18 campos estilizáveis — inclui os 4 que só existem
+        // dentro da tabela de itens (pedido/observacao_item/borda_item/
+        // adicional_item) e por isso não aparecem no catálogo de ordenáveis.
+        var rotulos = {};
+        for (var i = 0; i < campos.length; i++)
+            rotulos[campos[i].chave] = campos[i].rotulo;
+
+        var categorias = {};
+        var tipos = {};
+        for (var j = 0; j < camposOrdenaveis.length; j++) {
+            var ordenavel = camposOrdenaveis[j];
+            rotulos[ordenavel.chave] = ordenavel.rotulo;
+            categorias[ordenavel.chave] = ordenavel.categoria;
+            tipos[ordenavel.chave] = ordenavel.tipos;
+        }
+        raiz.rotulosPorChave = rotulos;
+        raiz.categoriasPorChave = categorias;
+        raiz.tiposPorChave = tipos;
+
+        // A ordem em si vem de config.ordem_secoes (lista de chaves), não da
+        // ordem devolvida por listarCamposOrdenaveis() — essa é só o
+        // catálogo.
+        var ordem = config.ordem_secoes || [];
+        modeloOrdemSecoes.clear();
+        for (var k = 0; k < ordem.length; k++) {
+            modeloOrdemSecoes.append({
+                "chave": ordem[k],
+                "rotulo": rotulos[ordem[k]] || ordem[k]
             });
         }
 
         raiz.espacamentoSecoes = config.espacamento_secoes !== undefined ? config.espacamento_secoes : 1;
         raiz.espacamentoCorte = config.espacamento_corte !== undefined ? config.espacamento_corte : 4;
+        raiz.linhasSeparadorPadrao = config.linhas_separador !== undefined ? config.linhas_separador : 1;
+        // Cópia, não a referência de dentro de configAtual: as exceções são
+        // editadas por reatribuição (definirExcecaoSeparador) e não devem
+        // mexer no dict que veio do Python.
+        var excecoes = {};
+        var lidas = config.separadores_campo || {};
+        for (var chaveExcecao in lidas)
+            excecoes[chaveExcecao] = lidas[chaveExcecao];
+        raiz.separadoresPorCampo = excecoes;
+
+        raiz.chaveSelecionada = "";
+        raiz.donoSelecionado = "";
+        // Só depois do laço de append(): durante ele o count cresce aos
+        // poucos e o cálculo sairia sobre um modelo pela metade.
+        raiz.recalcularSeparadores();
+    }
+
+    function categoriaDe(chave) {
+        return raiz.categoriasPorChave[chave] || "";
+    }
+
+    // Espelha comandaEstiloService.linhas_separador_antes: quantas linhas de
+    // traço vêm ANTES de `chaveAtual`. Uma exceção gravada para o campo manda
+    // sozinha — inclusive um 0 (tira a divisória que a categoria pediria) e
+    // inclusive na primeira linha da comanda.
+    function linhasTracoAntes(chaveAnterior, chaveAtual) {
+        var excecao = raiz.separadoresPorCampo[chaveAtual];
+        if (excecao !== undefined)
+            return excecao;
+
+        if (chaveAnterior === "")
+            return 0;
+
+        return raiz.categoriaDe(chaveAtual) !== raiz.categoriaDe(chaveAnterior) ? raiz.linhasSeparadorPadrao : 0;
+    }
+
+    // Espelha a regra de separadores de
+    // comandaTextoService.montar_linhas_por_ordem. Função pura de duas
+    // chaves: devolve a divisória que vem ANTES de `chaveAtual`.
+    // A tabela de itens é cercada pelo marcador "=" dos DOIS lados — daí o
+    // teste também olhar `chaveAnterior`.
+    function separadorEntre(chaveAnterior, chaveAtual) {
+        // A tabela de itens vem antes de tudo de propósito: no Python o ramo
+        // `if eh_itens or itens_anterior` nem consulta
+        // linhas_separador_antes, então essas duas posições ignoram a
+        // espessura configurada e qualquer exceção — o marcador sai sempre
+        // uma vez só (é assim que consultaController.reconstruirComanda acha
+        // a tabela depois). A guarda de "primeira linha" também fica de fora:
+        // a tabela ganha o marcador de abertura mesmo sendo a primeira coisa
+        // da comanda.
+        if (chaveAtual === "itens" || chaveAnterior === "itens")
+            return { "tipo": "=", "linhas": 1 };
+
+        var tracos = raiz.linhasTracoAntes(chaveAnterior, chaveAtual);
+        return { "tipo": tracos > 0 ? "-" : "", "linhas": tracos };
+    }
+
+    // Se este campo tem exceção gravada, ou está seguindo a regra automática.
+    function temExcecaoSeparador(chave) {
+        return chave !== "" && raiz.separadoresPorCampo[chave] !== undefined;
+    }
+
+    // Posição cuja divisória é o marcador da tabela de itens: não tem
+    // espessura ajustável (ver separadorEntre acima).
+    function separadorFixo(chave) {
+        var indice = raiz.indiceDaChave(chave);
+        if (indice < 0)
+            return false;
+
+        var divisoria = raiz.separadores[indice];
+        return !!divisoria && divisoria.tipo === "=";
+    }
+
+    // Quantos traços a posição de `chave` mostra hoje — venha de exceção ou
+    // da regra automática. É o número que os botões +/- da prévia partem.
+    function linhasTracoDe(chave) {
+        var indice = raiz.indiceDaChave(chave);
+        if (indice < 0)
+            return 0;
+
+        var divisoria = raiz.separadores[indice];
+        return divisoria && divisoria.tipo === "-" ? divisoria.linhas : 0;
+    }
+
+    // Muda a espessura padrão das divisórias. Precisa recalcular à mão: os
+    // separadores são um array já computado (ver recalcularSeparadores), não
+    // uma binding que reavaliaria sozinha ao ler linhasSeparadorPadrao.
+    function definirLinhasSeparadorPadrao(valor) {
+        raiz.linhasSeparadorPadrao = Math.max(0, Math.min(raiz.maxLinhasSeparador, valor));
+        raiz.recalcularSeparadores();
+    }
+
+    // Grava (ou apaga, com `valor` negativo) a exceção de `chave`. Reatribui
+    // o objeto inteiro em vez de mutá-lo: é isso que emite
+    // separadoresPorCampoChanged e faz a prévia reavaliar.
+    function definirExcecaoSeparador(chave, valor) {
+        if (chave === "")
+            return;
+
+        var novo = {};
+        for (var k in raiz.separadoresPorCampo)
+            novo[k] = raiz.separadoresPorCampo[k];
+
+        if (valor < 0)
+            delete novo[chave];
+        else
+            novo[chave] = Math.min(raiz.maxLinhasSeparador, valor);
+
+        raiz.separadoresPorCampo = novo;
+        raiz.recalcularSeparadores();
+    }
+
+    // Chamada de forma SÍNCRONA por quem mexe na ordem (nunca via
+    // Qt.callLater, que renderizaria um frame com os índices já novos e os
+    // separadores ainda velhos).
+    function recalcularSeparadores() {
+        var novo = [];
+        var anterior = "";
+        for (var i = 0; i < modeloOrdemSecoes.count; i++) {
+            var chave = modeloOrdemSecoes.get(i).chave;
+            novo.push(raiz.separadorEntre(anterior, chave));
+            anterior = chave;
+        }
+        raiz.separadores = novo;
+        raiz.ultimaChaveOrdem = anterior;
+    }
+
+    function indiceDaChave(chave) {
+        for (var i = 0; i < modeloOrdemSecoes.count; i++) {
+            if (modeloOrdemSecoes.get(i).chave === chave)
+                return i;
+        }
+        return -1;
+    }
+
+    // Troca de posição a linha `indice` do modeloOrdemSecoes com sua
+    // vizinha (indice + delta) e reflete a nova ordem em
+    // configAtual.ordem_secoes — só em memória, igual ao resto desta tela
+    // (ver salvarNoBackend()).
+    function moverCampoOrdem(indice, delta) {
+        var novoIndice = indice + delta;
+        if (novoIndice < 0 || novoIndice >= modeloOrdemSecoes.count)
+            return;
+
+        modeloOrdemSecoes.move(indice, novoIndice, 1);
+
+        var nova = [];
+        for (var i = 0; i < modeloOrdemSecoes.count; i++)
+            nova.push(modeloOrdemSecoes.get(i).chave);
+        raiz.configAtual.ordem_secoes = nova;
+        raiz.recalcularSeparadores();
+    }
+
+    function moverSelecionado(delta) {
+        if (raiz.donoSelecionado === "")
+            return;
+
+        var indice = raiz.indiceDaChave(raiz.donoSelecionado);
+        if (indice >= 0)
+            raiz.moverCampoOrdem(indice, delta);
+    }
+
+    function selecionar(chave, dono) {
+        raiz.chaveSelecionada = chave;
+        raiz.donoSelecionado = dono;
+        cartaoComanda.forceActiveFocus(Qt.MouseFocusReason);
+    }
+
+    function podeEstilizar(chave) {
+        // "itens" e "divisao_conta" são âncoras de posição puras: existem no
+        // catálogo de ordenáveis, mas não em CAMPOS (não têm atributos de
+        // estilo próprios). O que tem estilo ali dentro são as sub-linhas.
+        return chave !== "" && chave !== "itens" && chave !== "divisao_conta";
+    }
+
+    function campoNoTipo(chave, tipo) {
+        var lista = raiz.tiposPorChave[chave];
+        if (!lista)
+            return true;
+
+        for (var i = 0; i < lista.length; i++) {
+            if (lista[i] === tipo)
+                return true;
+        }
+        return false;
+    }
+
+    function rotuloDe(chave) {
+        return raiz.rotulosPorChave[chave] || chave;
+    }
+
+    function repetir(caractere) {
+        var texto = "";
+        for (var i = 0; i < raiz.colunasPapel; i++)
+            texto += caractere;
+        return texto;
+    }
+
+    // Cada linha do papel é uma lista de segmentos {t: texto, c: campo de
+    // estilo ou ""}. Um campo comum vira uma linha só, com o prefixo sem
+    // estilo e o valor estilizado; a tabela de itens e a divisão da conta
+    // viram vários. `campoEstilo` é o que o clique naquela sub-linha
+    // seleciona ("" = a sub-linha não tem estilo próprio, então o clique
+    // seleciona a linha ordenável dona dela).
+    function linhasDoCampo(chave) {
+        if (chave === "itens") {
+            return [
+                { "campoEstilo": "pedido", "segmentos": [{ "t": "- PIZZA G. CALABRESA (GRANDE) | R$ 45,00", "c": "pedido" }] },
+                { "campoEstilo": "adicional_item", "segmentos": [{ "t": "  + BACON (R$ 5,00)", "c": "adicional_item" }] },
+                { "campoEstilo": "borda_item", "segmentos": [{ "t": "  * BORDA CATUPIRY (R$ 8,00)", "c": "borda_item" }] },
+                { "campoEstilo": "observacao_item", "segmentos": [{ "t": "  SEM CEBOLA", "c": "observacao_item" }] }
+            ];
+        }
+
+        if (chave === "divisao_conta") {
+            // salaoController monta cada linha de divisão com o nome no
+            // estilo de "cliente" e o status no estilo de "status" — daí os
+            // segmentos misturados. Nenhuma das duas linhas tem estilo
+            // próprio (campoEstilo vazio): clicar nelas seleciona o bloco.
+            return [
+                { "campoEstilo": "", "segmentos": [{ "t": "DIVISÃO DA CONTA", "c": "" }] },
+                { "campoEstilo": "", "segmentos": [
+                    { "t": "João", "c": "cliente" },
+                    { "t": ": R$ 22,50 [Pix] [", "c": "" },
+                    { "t": "PG", "c": "status" },
+                    { "t": "]", "c": "" }
+                ] }
+            ];
+        }
+
+        var exemplo = raiz.exemplos[chave];
+        if (!exemplo)
+            return [];
+
+        return [{ "campoEstilo": chave, "segmentos": [
+            { "t": exemplo.prefixo, "c": "" },
+            { "t": exemplo.valor, "c": chave }
+        ] }];
     }
 
     Component.onCompleted: carregarConfiguracao()
@@ -144,7 +516,18 @@ Column {
     Component.onDestruction: raiz.salvarNoBackend()
 
     ListModel {
-        id: modeloCampos
+        id: modeloOrdemSecoes
+    }
+
+    // Mede uma linha cheia do papel (40 colunas) na fonte monoespaçada da
+    // prévia — de onde saem a largura do papel e a altura de uma linha em
+    // branco, em vez de números mágicos que descolariam da fonte.
+    TextMetrics {
+        id: metricaPapel
+
+        font.family: "monospace"
+        font.pixelSize: raiz.tamanhoBasePapel
+        text: raiz.repetir("0")
     }
 
     // --- CABEÇALHO DA SEÇÃO + RESTAURAR PADRÕES ---
@@ -156,7 +539,7 @@ Column {
             spacing: 8
             Icone { nome: "fa6s.receipt"; cor: raiz.corDestaque; tamanho: Estilo.fonte.padrao; anchors.verticalCenter: parent.verticalCenter }
             Text {
-                text: "ESTILO DA COMANDA IMPRESSA"
+                text: "MODELO DA COMANDA IMPRESSA"
                 font.pixelSize: 16
                 font.bold: true
                 color: raiz.corDestaque
@@ -172,6 +555,7 @@ Column {
             id: btnRestaurar
 
             padding: 8
+            focusPolicy: Qt.NoFocus
             onClicked: {
                 comandaEstiloController.restaurarPadroes();
                 raiz.carregarConfiguracao();
@@ -195,304 +579,802 @@ Column {
         }
     }
 
-    // --- LISTA DE CAMPOS + PRÉVIA DA COMANDA ---
-    Row {
+    // --- CARTÃO DA COMANDA INTERATIVA ---
+    Rectangle {
+        id: cartaoComanda
+
         width: parent.width
-        spacing: Estilo.espacamento.grande
+        height: colunaCartao.implicitHeight + Estilo.preenchimento.grande * 2
+        radius: Estilo.rounding.painel
+        color: "#ffffff"
+        // Anel de foco na convenção do resto do app (border.width 2 quando
+        // focado): comunica que as setas do teclado agora controlam ESTE
+        // cartão. A linha selecionada usa outra afordância (fundo + barra de
+        // acento à esquerda) pros dois estados não se confundirem.
+        border.color: activeFocus ? raiz.corDestaque : Estilo.cores.bordaCard
+        border.width: activeFocus ? 2 : 1
+        activeFocusOnTab: true
 
-        // Lista de campos: cada item abre popupEstiloCampo com as
-        // alterações disponíveis (negrito, sublinhado, fundo preto, tamanho
-        // de fonte) — em vez da tabela antiga com um checkbox por atributo
-        // já visível de cara, o que ficava apertado e difícil de escanear
-        // com 14 campos x 3 atributos + tamanho de fonte.
-        Rectangle {
-            id: cardLista
-
-            width: parent.width - cardPreviaComanda.width - parent.spacing
-            height: colunaLista.implicitHeight + Estilo.preenchimento.grande * 2
-            radius: Estilo.rounding.painel
-            color: "#ffffff"
-            border.color: Estilo.cores.bordaCard
-            border.width: 1
-
-            Column {
-                id: colunaLista
-
-                anchors.fill: parent
-                anchors.margins: Estilo.preenchimento.grande
-                spacing: Estilo.espacamento.normal
-
-                Text {
-                    text: "ESTILO POR CAMPO"
-                    font.pixelSize: 15
-                    font.bold: true
-                    color: raiz.corDestaque
-                }
-
-                Text {
-                    width: parent.width
-                    text: "Toque em um campo para escolher negrito, sublinhado, fundo preto e tamanho da fonte."
-                    font.pixelSize: 12
-                    color: Estilo.cores.textoSecundario
-                    wrapMode: Text.WordWrap
-                }
-
-                Repeater {
-                    model: modeloCampos
-
-                    delegate: Rectangle {
-                        id: linhaCampo
-
-                        // Capturado aqui (em vez de acessar "model" direto lá
-                        // embaixo) porque o Repeater aninhado abaixo tem seu
-                        // próprio "model" (a lista de atributos), que
-                        // esconderia o "model" deste Repeater externo.
-                        property string chave: model.chave
-
-                        // Propriedades QML de verdade (ao contrário de
-                        // configAtual) — os badges abaixo dependem destas,
-                        // então mudanças feitas no popup para este campo
-                        // atualizam os badges sem precisar recriar a linha
-                        // (ver obterAtributoReativo() acima).
-                        readonly property bool _negrito: raiz.obterAtributoReativo(chave, "negrito", raiz.versaoConfig)
-                        readonly property bool _sublinhado: raiz.obterAtributoReativo(chave, "sublinhado", raiz.versaoConfig)
-                        readonly property bool _fundoPreto: raiz.obterAtributoReativo(chave, "fundo_preto", raiz.versaoConfig)
-                        readonly property int _tamanhoFonte: raiz.obterTamanhoFonteReativo(chave, raiz.versaoConfig)
-
-                        width: colunaLista.width
-                        height: 46
-                        radius: Estilo.rounding.padrao
-                        color: areaClique.containsMouse ? Estilo.cores.fundoPagina : "#ffffff"
-                        border.color: Estilo.cores.bordaCard
-                        border.width: 1
-
-                        MouseArea {
-                            id: areaClique
-
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: popupEstiloCampo.abrirPara(linhaCampo.chave, model.rotulo)
-                        }
-
-                        Row {
-                            anchors.fill: parent
-                            anchors.leftMargin: 14
-                            anchors.rightMargin: 14
-                            spacing: 10
-
-                            Text {
-                                width: parent.width - badges.width - iconeAbrir.width - 20
-                                anchors.verticalCenter: parent.verticalCenter
-                                text: model.rotulo
-                                font.pixelSize: 13
-                                color: Estilo.cores.texto
-                                elide: Text.ElideRight
-                            }
-
-                            Row {
-                                id: badges
-
-                                spacing: 6
-                                anchors.verticalCenter: parent.verticalCenter
-
-                                Label {
-                                    visible: linhaCampo._negrito
-                                    text: "N"
-                                    font.pixelSize: 11
-                                    font.bold: true
-                                    color: "#ffffff"
-                                    padding: 4
-                                    background: Rectangle { radius: Estilo.rounding.cheio; color: raiz.corDestaque }
-                                }
-
-                                Label {
-                                    visible: linhaCampo._sublinhado
-                                    text: "S"
-                                    font.pixelSize: 11
-                                    font.bold: true
-                                    color: "#ffffff"
-                                    padding: 4
-                                    background: Rectangle { radius: Estilo.rounding.cheio; color: raiz.corDestaque }
-                                }
-
-                                Label {
-                                    visible: linhaCampo._fundoPreto
-                                    text: "F"
-                                    font.pixelSize: 11
-                                    font.bold: true
-                                    color: "#ffffff"
-                                    padding: 4
-                                    background: Rectangle { radius: Estilo.rounding.cheio; color: raiz.corDestaque }
-                                }
-
-                                Text {
-                                    visible: linhaCampo._tamanhoFonte !== raiz.tamanhoFontePadrao
-                                    text: raiz.multiplicadorFonte(linhaCampo._tamanhoFonte) + "x"
-                                    font.pixelSize: 11
-                                    font.bold: true
-                                    color: Estilo.cores.textoSecundario
-                                }
-                            }
-
-                            Icone {
-                                id: iconeAbrir
-
-                                nome: "fa6s.chevron-right"
-                                cor: Estilo.cores.textoSecundario
-                                tamanho: 13
-                                anchors.verticalCenter: parent.verticalCenter
-                            }
-                        }
-                    }
-                }
-            }
+        // As setas ficam AQUI, não em `raiz`: raiz é o contentItem do
+        // Flickable de ../Configuracoes.qml, então dar foco a ele tornaria
+        // ↑/↓ globais — quem estivesse ajustando "linhas em branco antes do
+        // corte" lá embaixo reordenaria a comanda sem querer.
+        Keys.onUpPressed: function (evento) {
+            raiz.moverSelecionado(-1);
+            evento.accepted = true;
+        }
+        Keys.onDownPressed: function (evento) {
+            raiz.moverSelecionado(1);
+            evento.accepted = true;
+        }
+        Keys.onEscapePressed: function (evento) {
+            raiz.chaveSelecionada = "";
+            raiz.donoSelecionado = "";
+            evento.accepted = true;
         }
 
-        // Comanda teste: prévia lado a lado com a lista, mostrando ao vivo
-        // como cada campo estilizado sai impresso — inclusive o tamanho de
-        // fonte já convertido pro multiplicador ESC/POS real (ver
-        // multiplicadorFonte() acima), não o valor em pixels puro digitado.
-        Rectangle {
-            id: cardPreviaComanda
+        Column {
+            id: colunaCartao
 
-            width: 380
-            height: colunaPreviaComanda.implicitHeight + Estilo.preenchimento.grande * 2
-            radius: Estilo.rounding.painel
-            color: "#ffffff"
-            border.color: Estilo.cores.bordaCard
-            border.width: 1
+            anchors.fill: parent
+            anchors.margins: Estilo.preenchimento.grande
+            spacing: Estilo.espacamento.normal
 
-            Column {
-                id: colunaPreviaComanda
+            // --- Barra de controles ---
+            RowLayout {
+                width: parent.width
+                spacing: Estilo.espacamento.grande
 
-                anchors.fill: parent
-                anchors.margins: Estilo.preenchimento.grande
-                spacing: Estilo.espacamento.normal
-
+                // Seletor de tipo de comanda: troca quais campos aparecem
+                // acesos, porque nenhuma comanda real usa os 16 ao mesmo
+                // tempo (Balcão não tem endereço, Mesa não tem telefone).
                 Row {
-                    spacing: 8
-                    Icone { nome: "fa6s.receipt"; cor: raiz.corDestaque; tamanho: 14; anchors.verticalCenter: parent.verticalCenter }
+                    spacing: 6
+                    Layout.alignment: Qt.AlignVCenter
+
                     Text {
-                        text: "COMANDA TESTE"
-                        font.pixelSize: 15
-                        font.bold: true
-                        color: raiz.corDestaque
+                        text: "Tipo:"
+                        font.pixelSize: 13
+                        color: Estilo.cores.textoSecundario
                         anchors.verticalCenter: parent.verticalCenter
                     }
+
+                    Repeater {
+                        model: raiz.tiposComanda
+
+                        delegate: Button {
+                            id: botaoTipo
+
+                            required property string modelData
+
+                            readonly property bool _ativo: raiz.tipoComanda === botaoTipo.modelData
+
+                            padding: 7
+                            focusPolicy: Qt.NoFocus
+                            anchors.verticalCenter: parent.verticalCenter
+                            onClicked: raiz.tipoComanda = botaoTipo.modelData
+
+                            contentItem: Text {
+                                text: botaoTipo.modelData
+                                font.pixelSize: 13
+                                font.bold: botaoTipo._ativo
+                                color: botaoTipo._ativo ? "#ffffff" : Estilo.cores.texto
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
+                            }
+
+                            background: Rectangle {
+                                radius: Estilo.rounding.padrao
+                                color: botaoTipo._ativo ? raiz.corDestaque : (botaoTipo.hovered ? Estilo.cores.fundoPagina : "#ffffff")
+                                border.color: botaoTipo._ativo ? raiz.corDestaque : Estilo.cores.borda
+                                border.width: 1
+                            }
+                        }
+                    }
                 }
 
-                Rectangle {
-                    width: parent.width
-                    height: 1
-                    color: Estilo.cores.bordaCard
+                Item {
+                    Layout.fillWidth: true
+                }
+            }
+
+            Text {
+                width: parent.width
+                text: raiz.chaveSelecionada === "" ? "Clique numa linha da comanda para selecioná-la; os controles aparecem ao lado dela — as setas mudam a posição, e \"Estilo…\" abre negrito, sublinhado, fundo preto e tamanho da fonte." :("Selecionado: " + raiz.rotuloDe(raiz.chaveSelecionada) + (raiz.donoSelecionado !== raiz.chaveSelecionada ? " — as setas movem a " + raiz.rotuloDe(raiz.donoSelecionado).toLowerCase() + " inteira." : ""))
+                font.pixelSize: 12
+                color: Estilo.cores.textoSecundario
+                wrapMode: Text.WordWrap
+            }
+
+            // --- Papel + painel de espaçamento, lado a lado ---
+            // Duas colunas quando a tela dá conta das duas larguras, uma só
+            // (painel embaixo do papel) quando não dá. A tela de Configurações
+            // não rola na horizontal (contentWidth: width no Flickable de
+            // ../Configuracoes.qml), então sem esse recuo o painel
+            // simplesmente sumiria pela borda direita numa janela estreita.
+            //
+            // `columns` só pode depender de larguras que NÃO saiam deste
+            // layout, senão vira loop de binding: faixaPapel mede o papel (que
+            // vem da métrica da fonte) e os controles, e painelEspacamento tem
+            // largura própria — nenhum dos dois estica com a coluna.
+            GridLayout {
+                id: grade
+
+                // Sem width: parent.width de propósito — o layout fica do
+                // tamanho do conteúdo. Esticado até a borda do cartão ele
+                // reparte a sobra entre as células, e o painel descolava do
+                // papel (as duas colunas ficavam maiores que os itens dentro
+                // delas, mesmo com os itens travados no próprio tamanho).
+                columns: raiz.width >= faixaPapel.implicitWidth + columnSpacing + painelEspacamento.implicitWidth ? 2 : 1
+                columnSpacing: Estilo.espacamento.grande
+                rowSpacing: Estilo.espacamento.grande
+
+                // Reserva a faixa dos controles flutuantes junto do papel: eles
+                // moram AQUI dentro (não no cartão), então a largura da coluna
+                // já os inclui e o painel ao lado nunca cai por cima deles.
+                Item {
+                    id: faixaPapel
+
+                    implicitWidth: papel.width + Estilo.espacamento.normal + controlesLinha.implicitWidth
+                    implicitHeight: papel.height
+                    Layout.alignment: Qt.AlignTop
+
+                    Rectangle {
+                        id: papel
+
+                        anchors.left: parent.left
+                        anchors.top: parent.top
+                        width: Math.ceil(metricaPapel.width) + 30
+                        height: colunaPapel.implicitHeight + 24
+                        radius: 4
+                        color: "#fdfdf7"
+                        border.color: "#e5e0c8"
+                        // Campos com fonte bem maior (multiplicador alto) podem ficar
+                        // mais largos que o papel — contém em vez de vazar
+                        // visualmente pra fora do cartão.
+                        clip: true
+
+                        Column {
+                            id: colunaPapel
+
+                            anchors.top: parent.top
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            anchors.topMargin: 12
+                            width: parent.width - 20
+                            // Zero de propósito: o espaçamento entre seções da
+                            // comanda é dado por linhas em branco de verdade (as
+                            // mesmas que o Python emite), não por spacing do
+                            // Positioner — senão a prévia mostraria um respiro que
+                            // não existe no papel.
+                            spacing: 0
+
+                            // Só `move`: `add` faria a comanda inteira animar
+                            // entrando a cada vez que a tela abre e a cada
+                            // "Restaurar padrões", porque carregarConfiguracao()
+                            // faz clear() + 16 append(). Anima só y (nunca height:
+                            // animar altura faz o contentHeight do Flickable de fora
+                            // tremer junto com a barra de rolagem).
+                            move: Transition {
+                                NumberAnimation {
+                                    property: "y"
+                                    duration: 120
+                                    easing.type: Easing.OutCubic
+                                }
+                            }
+
+                            Repeater {
+                                model: modeloOrdemSecoes
+
+                                delegate: Column {
+                                    id: linhaOrdem
+
+                                    // required é tudo-ou-nada: declarar qualquer
+                                    // propriedade required num delegate faz o Qt
+                                    // parar de injetar "model" (e os nomes dos
+                                    // papéis) como propriedade de contexto. Como aqui
+                                    // ainda há um Repeater aninhado (as sub-linhas),
+                                    // esse é o modo certo — evita que o "model" de
+                                    // dentro esconda o de fora.
+                                    required property int index
+                                    required property string chave
+                                    required property string rotulo
+
+                                    readonly property var _separador: raiz.separadores[linhaOrdem.index] || ({ "tipo": "", "linhas": 0 })
+                                    readonly property bool _noTipo: raiz.campoNoTipo(linhaOrdem.chave, raiz.tipoComanda)
+
+                                    width: colunaPapel.width
+                                    spacing: 0
+                                    // Campo que este tipo de comanda não imprime:
+                                    // continua visível e movível, só apagado.
+                                    opacity: linhaOrdem._noTipo ? 1 : 0.35
+
+                                    SeparadorPapel {
+                                        largura: linhaOrdem.width
+                                        separador: linhaOrdem._separador.tipo
+                                        repeticoes: linhaOrdem._separador.linhas
+                                        linhasEmBranco: raiz.espacamentoSecoes
+                                        alturaLinha: metricaPapel.height
+                                        tamanhoFonte: raiz.tamanhoBasePapel
+                                        traco: raiz.repetir("-")
+                                        marcador: raiz.repetir("=")
+                                    }
+
+                                    Repeater {
+                                        model: raiz.linhasDoCampo(linhaOrdem.chave)
+
+                                        delegate: Item {
+                                            id: subLinha
+
+                                            required property var modelData
+                                            required property int index
+
+                                            // Sub-linha sem estilo próprio (as da
+                                            // divisão da conta) devolve o clique pro
+                                            // bloco que a contém.
+                                            readonly property string _campoClique: subLinha.modelData.campoEstilo !== "" ? subLinha.modelData.campoEstilo : linhaOrdem.chave
+                                            readonly property bool _selecionada: raiz.chaveSelecionada === subLinha._campoClique
+                                            // Quem posiciona os controles flutuantes.
+                                            // Nas sub-linhas sem estilo próprio o
+                                            // _campoClique é o mesmo para todas (o
+                                            // bloco inteiro acende junto), então sem
+                                            // este filtro haveria dois Bindings
+                                            // disputando yLinhaSelecionada — os
+                                            // botões ficariam na linha que o Qt
+                                            // avaliasse por último. A primeira do
+                                            // bloco vence.
+                                            readonly property bool _ancora: subLinha.modelData.campoEstilo !== "" || subLinha.index === 0
+
+                                            width: linhaOrdem.width
+                                            height: Math.max(metricaPapel.height, conteudoSubLinha.implicitHeight)
+
+                                            Binding {
+                                                when: subLinha._selecionada && subLinha._ancora
+                                                target: raiz
+                                                property: "yLinhaSelecionada"
+                                                value: colunaPapel.y + linhaOrdem.y + subLinha.y
+                                                restoreMode: Binding.RestoreNone
+                                            }
+
+                                            Binding {
+                                                when: subLinha._selecionada && subLinha._ancora
+                                                target: raiz
+                                                property: "alturaLinhaSelecionada"
+                                                value: subLinha.height
+                                                restoreMode: Binding.RestoreNone
+                                            }
+
+                                            Rectangle {
+                                                anchors.fill: parent
+                                                anchors.leftMargin: -6
+                                                anchors.rightMargin: -6
+                                                radius: 3
+                                                color: subLinha._selecionada ? "#dbeafe" : (areaSubLinha.containsMouse ? "#f1f5f9" : "transparent")
+                                            }
+
+                                            Rectangle {
+                                                anchors.left: parent.left
+                                                anchors.leftMargin: -6
+                                                anchors.verticalCenter: parent.verticalCenter
+                                                width: 3
+                                                height: parent.height
+                                                radius: 2
+                                                color: raiz.corDestaque
+                                                visible: subLinha._selecionada
+                                            }
+
+                                            Row {
+                                                id: conteudoSubLinha
+
+                                                anchors.left: parent.left
+                                                anchors.verticalCenter: parent.verticalCenter
+                                                spacing: 0
+
+                                                Repeater {
+                                                    model: subLinha.modelData.segmentos
+
+                                                    delegate: Item {
+                                                        id: segmento
+
+                                                        required property var modelData
+
+                                                        width: segmento.modelData.c === "" ? textoSimples.implicitWidth : campoEstilizado.implicitWidth
+                                                        height: segmento.modelData.c === "" ? textoSimples.implicitHeight : campoEstilizado.implicitHeight
+
+                                                        // Trecho sem estilo configurável (o rótulo
+                                                        // "Cliente: ", os colchetes da divisão).
+                                                        Text {
+                                                            id: textoSimples
+
+                                                            visible: segmento.modelData.c === ""
+                                                            text: segmento.modelData.t
+                                                            font.family: "monospace"
+                                                            font.pixelSize: raiz.tamanhoBasePapel
+                                                            color: Estilo.cores.texto
+                                                        }
+
+                                                        PreviaCampoTexto {
+                                                            id: campoEstilizado
+
+                                                            visible: segmento.modelData.c !== ""
+                                                            controlador: raiz
+                                                            campo: segmento.modelData.c
+                                                            texto: segmento.modelData.t
+                                                            tamanhoBase: raiz.tamanhoBasePapel
+                                                        }
+                                                    }
+                                                }
+                                            }
+
+                                            MouseArea {
+                                                id: areaSubLinha
+
+                                                anchors.fill: parent
+                                                anchors.leftMargin: -6
+                                                anchors.rightMargin: -6
+                                                hoverEnabled: true
+                                                cursorShape: Qt.PointingHandCursor
+                                                onClicked: raiz.selecionar(subLinha._campoClique, linhaOrdem.chave)
+                                                // Atalho: quem já sabe o que quer
+                                                // mexer chega no popup direto.
+                                                onDoubleClicked: {
+                                                    raiz.selecionar(subLinha._campoClique, linhaOrdem.chave);
+                                                    if (raiz.podeEstilizar(subLinha._campoClique))
+                                                        popupEstiloCampo.abrirPara(subLinha._campoClique, raiz.rotuloDe(subLinha._campoClique));
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Marcador de fechamento da tabela de itens quando ela é
+                            // o ÚLTIMO campo da ordem — o único separador que não
+                            // vem "antes de alguém" (ver ultimaChaveOrdem).
+                            SeparadorPapel {
+                                largura: colunaPapel.width
+                                separador: raiz.ultimaChaveOrdem === "itens" ? "=" : ""
+                                linhasEmBranco: raiz.espacamentoSecoes
+                                alturaLinha: metricaPapel.height
+                                tamanhoFonte: raiz.tamanhoBasePapel
+                                traco: raiz.repetir("-")
+                                marcador: raiz.repetir("=")
+                            }
+                        }
+                        }
+
+                    // --- Controles da linha selecionada ---
+                    // Irmão do papel dentro de faixaPapel, não filho dele: o
+                    // papel tem clip: true e cortaria os botões, fora que eles
+                    // tapariam o texto do cupom. Como o papel está ancorado em
+                    // (0,0) desta faixa, as coordenadas aqui saem diretas —
+                    // yLinhaSelecionada já é medido dentro do papel.
+                    Column {
+                        id: controlesLinha
+    
+                        readonly property int _lado: 34
+
+                        spacing: 8
+                        visible: raiz.chaveSelecionada !== ""
+                        x: papel.width + Estilo.espacamento.normal
+                        y: raiz.yLinhaSelecionada + (raiz.alturaLinhaSelecionada - height) / 2
+
+                        // Sem Behavior on y aqui, de propósito. O deslizar ao reordenar já
+                        // vem de graça: quem anima é o campo dentro do papel (a Transition
+                        // de move em colunaPapel), e como yLinhaSelecionada é a soma dos y
+                        // dessa cadeia, este binding acompanha quadro a quadro. Um Behavior
+                        // por cima disso não só era redundante como quebrava o
+                        // posicionamento: a animação dele escreve em y enquanto o binding
+                        // ainda está reavaliando (yLinhaSelecionada chega em duas etapas,
+                        // conforme o layout do papel assenta), e essa escrita derruba o
+                        // binding — os botões congelavam na primeira posição intermediária
+                        // e nunca mais achavam a linha.
+
+                        // focusPolicy: Qt.NoFocus em todos os botões daqui: sem isso o
+                        // Button do Controls 2 rouba o activeFocus no clique, o cartão
+                        // perde o anel e as setas do teclado param de funcionar logo
+                        // depois do primeiro clique no ▲.
+                        Row {
+                            spacing: 6
+
+                            Button {
+                                width: controlesLinha._lado
+                                height: controlesLinha._lado
+                                focusPolicy: Qt.NoFocus
+                                enabled: raiz.donoSelecionado !== ""
+                                opacity: enabled ? 1 : 0.4
+                                onClicked: raiz.moverSelecionado(-1)
+
+                                contentItem: Icone {
+                                    nome: "fa6s.chevron-up"
+                                    cor: raiz.corDestaque
+                                    tamanho: 13
+                                    anchors.centerIn: parent
+                                }
+
+                                background: Rectangle {
+                                    radius: Estilo.rounding.padrao
+                                    color: parent.down ? Estilo.cores.bordaCard : "#ffffff"
+                                    border.color: Estilo.cores.borda
+                                    border.width: 1
+                                }
+                            }
+
+                            Button {
+                                width: controlesLinha._lado
+                                height: controlesLinha._lado
+                                focusPolicy: Qt.NoFocus
+                                enabled: raiz.donoSelecionado !== ""
+                                opacity: enabled ? 1 : 0.4
+                                onClicked: raiz.moverSelecionado(1)
+
+                                contentItem: Icone {
+                                    nome: "fa6s.chevron-down"
+                                    cor: raiz.corDestaque
+                                    tamanho: 13
+                                    anchors.centerIn: parent
+                                }
+
+                                background: Rectangle {
+                                    radius: Estilo.rounding.padrao
+                                    color: parent.down ? Estilo.cores.bordaCard : "#ffffff"
+                                    border.color: Estilo.cores.borda
+                                    border.width: 1
+                                }
+                            }
+
+                            Button {
+                                id: btnEstilo
+
+                                height: controlesLinha._lado
+                                padding: 10
+                                focusPolicy: Qt.NoFocus
+                                enabled: raiz.podeEstilizar(raiz.chaveSelecionada)
+                                opacity: enabled ? 1 : 0.4
+                                onClicked: popupEstiloCampo.abrirPara(raiz.chaveSelecionada, raiz.rotuloDe(raiz.chaveSelecionada))
+
+                                contentItem: Row {
+                                    spacing: 6
+                                    Icone { nome: "fa6s.pen"; cor: "#ffffff"; tamanho: 12; anchors.verticalCenter: parent.verticalCenter }
+                                    Text {
+                                        text: "Estilo…"
+                                        font.pixelSize: 13
+                                        font.bold: true
+                                        color: "#ffffff"
+                                        anchors.verticalCenter: parent.verticalCenter
+                                    }
+                                }
+
+                                background: Rectangle {
+                                    radius: Estilo.rounding.padrao
+                                    color: parent.down ? "#334155" : (parent.hovered ? "#64748b" : raiz.corDestaque)
+                                }
+                            }
+                        }
+
+                        // --- Traços da divisória ACIMA desta linha ---
+                        // Mexe sempre no dono (a linha ordenável), nunca na sub-linha:
+                        // uma linha da tabela de itens não tem divisória própria, quem
+                        // tem é a tabela.
+                        Row {
+                            id: ajusteTracos
+
+                            readonly property bool _fixo: raiz.separadorFixo(raiz.donoSelecionado)
+                            readonly property int _atual: raiz.linhasTracoDe(raiz.donoSelecionado)
+
+                            spacing: 6
+
+                            Text {
+                                text: "Traços acima:"
+                                font.pixelSize: 12
+                                color: Estilo.cores.textoSecundario
+                                anchors.verticalCenter: parent.verticalCenter
+                            }
+
+                            Button {
+                                width: 26
+                                height: 26
+                                focusPolicy: Qt.NoFocus
+                                anchors.verticalCenter: parent.verticalCenter
+                                enabled: !ajusteTracos._fixo && ajusteTracos._atual > 0
+                                opacity: enabled ? 1 : 0.4
+                                onClicked: raiz.definirExcecaoSeparador(raiz.donoSelecionado, ajusteTracos._atual - 1)
+
+                                contentItem: Text {
+                                    text: "−"
+                                    font.pixelSize: 14
+                                    color: Estilo.cores.texto
+                                    horizontalAlignment: Text.AlignHCenter
+                                    verticalAlignment: Text.AlignVCenter
+                                }
+
+                                background: Rectangle {
+                                    radius: Estilo.rounding.padrao
+                                    color: parent.down ? Estilo.cores.bordaCard : "#ffffff"
+                                    border.color: Estilo.cores.borda
+                                    border.width: 1
+                                }
+                            }
+
+                            Text {
+                                // "fixo" nas duas bordas da tabela de itens, onde a
+                                // divisória é o marcador "=" e não tem espessura
+                                // ajustável (ver separadorEntre).
+                                width: 24
+                                text: ajusteTracos._fixo ? "—" : ajusteTracos._atual
+                                horizontalAlignment: Text.AlignHCenter
+                                font.pixelSize: 13
+                                // Negrito só quando este campo tem exceção gravada: é o
+                                // que distingue "eu escolhi este número aqui" de "está
+                                // seguindo o padrão de ESPAÇAMENTO lá embaixo".
+                                font.bold: raiz.temExcecaoSeparador(raiz.donoSelecionado)
+                                color: Estilo.cores.texto
+                                anchors.verticalCenter: parent.verticalCenter
+                            }
+
+                            Button {
+                                width: 26
+                                height: 26
+                                focusPolicy: Qt.NoFocus
+                                anchors.verticalCenter: parent.verticalCenter
+                                enabled: !ajusteTracos._fixo && ajusteTracos._atual < raiz.maxLinhasSeparador
+                                opacity: enabled ? 1 : 0.4
+                                onClicked: raiz.definirExcecaoSeparador(raiz.donoSelecionado, ajusteTracos._atual + 1)
+
+                                contentItem: Text {
+                                    text: "+"
+                                    font.pixelSize: 14
+                                    color: Estilo.cores.texto
+                                    horizontalAlignment: Text.AlignHCenter
+                                    verticalAlignment: Text.AlignVCenter
+                                }
+
+                                background: Rectangle {
+                                    radius: Estilo.rounding.padrao
+                                    color: parent.down ? Estilo.cores.bordaCard : "#ffffff"
+                                    border.color: Estilo.cores.borda
+                                    border.width: 1
+                                }
+                            }
+
+                            // Só aparece quando há exceção — no caso comum (tudo
+                            // automático) não ocupa espaço nem pede explicação.
+                            Button {
+                                width: 26
+                                height: 26
+                                focusPolicy: Qt.NoFocus
+                                anchors.verticalCenter: parent.verticalCenter
+                                visible: raiz.temExcecaoSeparador(raiz.donoSelecionado)
+                                onClicked: raiz.definirExcecaoSeparador(raiz.donoSelecionado, -1)
+
+                                contentItem: Icone {
+                                    nome: "fa6s.arrow-rotate-left"
+                                    cor: Estilo.cores.textoSecundario
+                                    tamanho: 11
+                                    anchors.centerIn: parent
+                                }
+
+                                ToolTip {
+                                    text: "Voltar ao padrão automático"
+                                    visible: parent.hovered
+                                    delay: 400
+                                }
+
+                                background: Rectangle {
+                                    radius: Estilo.rounding.padrao
+                                    color: parent.down ? Estilo.cores.bordaCard : "#ffffff"
+                                    border.color: Estilo.cores.borda
+                                    border.width: 1
+                                }
+                            }
+                        }
+                    }
                 }
 
-                // Área com fundo de papel, largura fixa que lembra o rolo
-                // de 40 colunas da impressora térmica.
+                // --- Painel de espaçamento (2ª coluna) ---
                 Rectangle {
-                    width: parent.width
-                    height: colunaPapel.implicitHeight + 20
-                    radius: 4
-                    color: "#fdfdf7"
-                    border.color: "#e5e0c8"
-                    // Campos com fonte bem maior (multiplicador alto) podem
-                    // ficar mais largos que o papel — contém em vez de
-                    // vazar visualmente pra fora do card.
-                    clip: true
+                    id: painelEspacamento
+
+                    // Largura própria, não Layout.fillWidth: é ela que
+                    // `columns` mede pra saber se as duas colunas cabem, e
+                    // esticar com a coluna realimentaria essa conta.
+                    implicitWidth: colunaEspacamento.implicitWidth + Estilo.preenchimento.grande * 2
+                    implicitHeight: colunaEspacamento.implicitHeight + Estilo.preenchimento.grande * 2
+                    Layout.alignment: Qt.AlignTop
+                    radius: Estilo.rounding.painel
+                    color: "#ffffff"
+                    border.color: Estilo.cores.bordaCard
+                    border.width: 1
 
                     Column {
-                        id: colunaPapel
+                        id: colunaEspacamento
 
+                        anchors.left: parent.left
                         anchors.top: parent.top
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        anchors.topMargin: 10
-                        width: parent.width - 20
-                        spacing: 3
+                        anchors.margins: Estilo.preenchimento.grande
+                        spacing: Estilo.espacamento.maior
 
-                        Row {
-                            spacing: 4
-                            Text { text: "Cliente: "; font.family: "monospace"; font.pixelSize: 12; color: Estilo.cores.texto }
-                            PreviaCampoTexto { controlador: raiz; campo: "cliente"; texto: "João da Silva" }
+                        Text {
+                            text: "ESPAÇAMENTO"
+                            font.pixelSize: 15
+                            font.bold: true
+                            color: raiz.corDestaque
                         }
 
+                        // Linhas em branco entre seções da comanda
                         Row {
-                            spacing: 4
-                            Text { text: "Telefone: "; font.family: "monospace"; font.pixelSize: 12; color: Estilo.cores.texto }
-                            PreviaCampoTexto { controlador: raiz; campo: "telefone"; texto: "(11) 91234-5678" }
+                            spacing: 15
+
+                            Text {
+                                width: 300
+                                text: "Linhas em branco entre seções da comanda"
+                                font.pixelSize: 13
+                                color: Estilo.cores.texto
+                                anchors.verticalCenter: parent.verticalCenter
+                            }
+
+                            Button {
+                                text: "-"
+                                width: 32
+                                height: 32
+                                anchors.verticalCenter: parent.verticalCenter
+                                onClicked: {
+                                    if (raiz.espacamentoSecoes > 0)
+                                        raiz.espacamentoSecoes -= 1;
+                                }
+
+                                background: Rectangle {
+                                    radius: Estilo.rounding.padrao
+                                    color: parent.down ? Estilo.cores.bordaCard : "#ffffff"
+                                    border.color: Estilo.cores.borda
+                                    border.width: 1
+                                }
+                            }
+
+                            Text {
+                                width: 30
+                                text: raiz.espacamentoSecoes
+                                horizontalAlignment: Text.AlignHCenter
+                                font.pixelSize: 14
+                                font.bold: true
+                                color: Estilo.cores.texto
+                                anchors.verticalCenter: parent.verticalCenter
+                            }
+
+                            Button {
+                                text: "+"
+                                width: 32
+                                height: 32
+                                anchors.verticalCenter: parent.verticalCenter
+                                onClicked: raiz.espacamentoSecoes += 1
+
+                                background: Rectangle {
+                                    radius: Estilo.rounding.padrao
+                                    color: parent.down ? Estilo.cores.bordaCard : "#ffffff"
+                                    border.color: Estilo.cores.borda
+                                    border.width: 1
+                                }
+                            }
                         }
 
+                        // Espessura padrão das divisórias tracejadas. É só o PADRÃO: uma
+                        // linha com exceção gravada pelos botões da prévia ignora este
+                        // número (ver linhasTracoAntes).
                         Row {
-                            spacing: 4
-                            Text { text: "Endereço: "; font.family: "monospace"; font.pixelSize: 12; color: Estilo.cores.texto }
-                            PreviaCampoTexto { controlador: raiz; campo: "endereco"; texto: "Rua Exemplo, 123" }
+                            spacing: 15
+
+                            Text {
+                                width: 300
+                                text: "Linhas tracejadas em cada divisória"
+                                font.pixelSize: 13
+                                color: Estilo.cores.texto
+                                anchors.verticalCenter: parent.verticalCenter
+                            }
+
+                            Button {
+                                text: "-"
+                                width: 32
+                                height: 32
+                                anchors.verticalCenter: parent.verticalCenter
+                                enabled: raiz.linhasSeparadorPadrao > 0
+                                opacity: enabled ? 1 : 0.4
+                                onClicked: raiz.definirLinhasSeparadorPadrao(raiz.linhasSeparadorPadrao - 1)
+
+                                background: Rectangle {
+                                    radius: Estilo.rounding.padrao
+                                    color: parent.down ? Estilo.cores.bordaCard : "#ffffff"
+                                    border.color: Estilo.cores.borda
+                                    border.width: 1
+                                }
+                            }
+
+                            Text {
+                                width: 30
+                                text: raiz.linhasSeparadorPadrao
+                                horizontalAlignment: Text.AlignHCenter
+                                font.pixelSize: 14
+                                font.bold: true
+                                color: Estilo.cores.texto
+                                anchors.verticalCenter: parent.verticalCenter
+                            }
+
+                            Button {
+                                text: "+"
+                                width: 32
+                                height: 32
+                                anchors.verticalCenter: parent.verticalCenter
+                                enabled: raiz.linhasSeparadorPadrao < raiz.maxLinhasSeparador
+                                opacity: enabled ? 1 : 0.4
+                                onClicked: raiz.definirLinhasSeparadorPadrao(raiz.linhasSeparadorPadrao + 1)
+
+                                background: Rectangle {
+                                    radius: Estilo.rounding.padrao
+                                    color: parent.down ? Estilo.cores.bordaCard : "#ffffff"
+                                    border.color: Estilo.cores.borda
+                                    border.width: 1
+                                }
+                            }
                         }
 
+                        // Linhas em branco antes do corte automático
                         Row {
-                            spacing: 4
-                            Text { text: "Bairro: "; font.family: "monospace"; font.pixelSize: 12; color: Estilo.cores.texto }
-                            PreviaCampoTexto { controlador: raiz; campo: "bairro"; texto: "Centro" }
-                        }
+                            spacing: 15
 
-                        Row {
-                            spacing: 4
-                            Text { text: "Data: "; font.family: "monospace"; font.pixelSize: 12; color: Estilo.cores.texto }
-                            PreviaCampoTexto { controlador: raiz; campo: "data"; texto: "25/07/2026 20:15:00" }
-                        }
+                            Text {
+                                width: 300
+                                text: "Linhas em branco antes do corte automático"
+                                font.pixelSize: 13
+                                color: Estilo.cores.texto
+                                anchors.verticalCenter: parent.verticalCenter
+                            }
 
-                        Text { text: "-".repeat(28); font.family: "monospace"; font.pixelSize: 12; color: Estilo.cores.texto }
+                            Button {
+                                text: "-"
+                                width: 32
+                                height: 32
+                                anchors.verticalCenter: parent.verticalCenter
+                                onClicked: {
+                                    if (raiz.espacamentoCorte > 0)
+                                        raiz.espacamentoCorte -= 1;
+                                }
 
-                        PreviaCampoTexto { controlador: raiz; campo: "pedido"; texto: "- PIZZA G. CALABRESA (GRANDE)" }
-                        PreviaCampoTexto { controlador: raiz; campo: "observacao_item"; texto: "  SEM CEBOLA" }
+                                background: Rectangle {
+                                    radius: Estilo.rounding.padrao
+                                    color: parent.down ? Estilo.cores.bordaCard : "#ffffff"
+                                    border.color: Estilo.cores.borda
+                                    border.width: 1
+                                }
+                            }
 
-                        Text { text: "-".repeat(28); font.family: "monospace"; font.pixelSize: 12; color: Estilo.cores.texto }
+                            Text {
+                                width: 30
+                                text: raiz.espacamentoCorte
+                                horizontalAlignment: Text.AlignHCenter
+                                font.pixelSize: 14
+                                font.bold: true
+                                color: Estilo.cores.texto
+                                anchors.verticalCenter: parent.verticalCenter
+                            }
 
-                        Row {
-                            spacing: 4
-                            Text { text: "Obs.: "; font.family: "monospace"; font.pixelSize: 12; color: Estilo.cores.texto }
-                            PreviaCampoTexto { controlador: raiz; campo: "observacao_entrega"; texto: "Interfone quebrado" }
-                        }
+                            Button {
+                                text: "+"
+                                width: 32
+                                height: 32
+                                anchors.verticalCenter: parent.verticalCenter
+                                onClicked: raiz.espacamentoCorte += 1
 
-                        Text { text: "-".repeat(28); font.family: "monospace"; font.pixelSize: 12; color: Estilo.cores.texto }
-
-                        Row {
-                            spacing: 4
-                            Text { text: "Pagamento: "; font.family: "monospace"; font.pixelSize: 12; color: Estilo.cores.texto }
-                            PreviaCampoTexto { controlador: raiz; campo: "forma_pagamento"; texto: "Dinheiro" }
-                        }
-
-                        Row {
-                            spacing: 4
-                            Text { text: "Troco para: "; font.family: "monospace"; font.pixelSize: 12; color: Estilo.cores.texto }
-                            PreviaCampoTexto { controlador: raiz; campo: "troco_para"; texto: "R$ 100,00" }
-                        }
-
-                        Text { text: "-".repeat(28); font.family: "monospace"; font.pixelSize: 12; color: Estilo.cores.texto }
-
-                        Row {
-                            spacing: 4
-                            Text { text: "Taxa entrega: "; font.family: "monospace"; font.pixelSize: 12; color: Estilo.cores.texto }
-                            PreviaCampoTexto { controlador: raiz; campo: "taxa_entrega"; texto: "R$ 5,00" }
-                        }
-
-                        Row {
-                            spacing: 4
-                            Text { text: "Valor: "; font.family: "monospace"; font.pixelSize: 12; color: Estilo.cores.texto }
-                            PreviaCampoTexto { controlador: raiz; campo: "valor_total"; texto: "R$ 45,00" }
-                            Text { text: " ["; font.family: "monospace"; font.pixelSize: 12; color: Estilo.cores.texto }
-                            PreviaCampoTexto { controlador: raiz; campo: "status"; texto: "NP" }
-                            Text { text: "]"; font.family: "monospace"; font.pixelSize: 12; color: Estilo.cores.texto }
-                        }
-
-                        Row {
-                            spacing: 4
-                            Text { text: "Troco a dar: "; font.family: "monospace"; font.pixelSize: 12; color: Estilo.cores.texto }
-                            PreviaCampoTexto { controlador: raiz; campo: "troco_a_dar"; texto: "R$ 55,00" }
+                                background: Rectangle {
+                                    radius: Estilo.rounding.padrao
+                                    color: parent.down ? Estilo.cores.bordaCard : "#ffffff"
+                                    border.color: Estilo.cores.borda
+                                    border.width: 1
+                                }
+                            }
                         }
                     }
                 }
             }
         }
+
     }
 
     PopupEstiloCampo {
@@ -501,140 +1383,4 @@ Column {
         controlador: raiz
     }
 
-    // --- ESPAÇAMENTO ---
-    Rectangle {
-        width: parent.width
-        height: colunaEspacamento.implicitHeight + Estilo.preenchimento.grande * 2
-        radius: Estilo.rounding.painel
-        color: "#ffffff"
-        border.color: Estilo.cores.bordaCard
-        border.width: 1
-
-        Column {
-            id: colunaEspacamento
-
-            anchors.fill: parent
-            anchors.margins: Estilo.preenchimento.grande
-            spacing: Estilo.espacamento.maior
-
-            Text {
-                text: "ESPAÇAMENTO"
-                font.pixelSize: 15
-                font.bold: true
-                color: raiz.corDestaque
-            }
-
-            // Linhas em branco entre seções da comanda
-            Row {
-                spacing: 15
-
-                Text {
-                    width: 300
-                    text: "Linhas em branco entre seções da comanda"
-                    font.pixelSize: 13
-                    color: Estilo.cores.texto
-                    anchors.verticalCenter: parent.verticalCenter
-                }
-
-                Button {
-                    text: "-"
-                    width: 32
-                    height: 32
-                    anchors.verticalCenter: parent.verticalCenter
-                    onClicked: {
-                        if (raiz.espacamentoSecoes > 0)
-                            raiz.espacamentoSecoes -= 1;
-                    }
-
-                    background: Rectangle {
-                        radius: Estilo.rounding.padrao
-                        color: parent.down ? Estilo.cores.bordaCard : "#ffffff"
-                        border.color: Estilo.cores.borda
-                        border.width: 1
-                    }
-                }
-
-                Text {
-                    width: 30
-                    text: raiz.espacamentoSecoes
-                    horizontalAlignment: Text.AlignHCenter
-                    font.pixelSize: 14
-                    font.bold: true
-                    color: Estilo.cores.texto
-                    anchors.verticalCenter: parent.verticalCenter
-                }
-
-                Button {
-                    text: "+"
-                    width: 32
-                    height: 32
-                    anchors.verticalCenter: parent.verticalCenter
-                    onClicked: raiz.espacamentoSecoes += 1
-
-                    background: Rectangle {
-                        radius: Estilo.rounding.padrao
-                        color: parent.down ? Estilo.cores.bordaCard : "#ffffff"
-                        border.color: Estilo.cores.borda
-                        border.width: 1
-                    }
-                }
-            }
-
-            // Linhas em branco antes do corte automático
-            Row {
-                spacing: 15
-
-                Text {
-                    width: 300
-                    text: "Linhas em branco antes do corte automático"
-                    font.pixelSize: 13
-                    color: Estilo.cores.texto
-                    anchors.verticalCenter: parent.verticalCenter
-                }
-
-                Button {
-                    text: "-"
-                    width: 32
-                    height: 32
-                    anchors.verticalCenter: parent.verticalCenter
-                    onClicked: {
-                        if (raiz.espacamentoCorte > 0)
-                            raiz.espacamentoCorte -= 1;
-                    }
-
-                    background: Rectangle {
-                        radius: Estilo.rounding.padrao
-                        color: parent.down ? Estilo.cores.bordaCard : "#ffffff"
-                        border.color: Estilo.cores.borda
-                        border.width: 1
-                    }
-                }
-
-                Text {
-                    width: 30
-                    text: raiz.espacamentoCorte
-                    horizontalAlignment: Text.AlignHCenter
-                    font.pixelSize: 14
-                    font.bold: true
-                    color: Estilo.cores.texto
-                    anchors.verticalCenter: parent.verticalCenter
-                }
-
-                Button {
-                    text: "+"
-                    width: 32
-                    height: 32
-                    anchors.verticalCenter: parent.verticalCenter
-                    onClicked: raiz.espacamentoCorte += 1
-
-                    background: Rectangle {
-                        radius: Estilo.rounding.padrao
-                        color: parent.down ? Estilo.cores.bordaCard : "#ffffff"
-                        border.color: Estilo.cores.borda
-                        border.width: 1
-                    }
-                }
-            }
-        }
-    }
 }

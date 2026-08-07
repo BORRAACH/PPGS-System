@@ -1,9 +1,12 @@
 """Configurações de estilo ESC/POS (negrito, sublinhado, fundo preto/modo
 reverso, tamanho da fonte em pixels) aplicadas a campos específicos do texto
-da comanda, e espaçamento entre seções/antes do corte — tudo editável pela
-tela Configurações (qml/pages/configuracoes/impressora/EstiloImpressora.qml)
-e usado por balcaoController.py/entregaController.py (montagem do texto) e
-printerService.py (espaçamento antes do corte automático).
+da comanda, espaçamento entre seções/antes do corte, e ordem em que os
+campos aparecem na comanda impressa (ordem_secoes/CAMPOS_ORDENAVEIS) — tudo
+editável pela tela Configurações
+(qml/pages/configuracoes/impressora/EstiloImpressora.qml) e usado por
+balcaoController.py/entregaController.py/salaoController.py (montagem do
+texto, via comandaTextoService.montar_linhas_por_ordem) e printerService.py
+(espaçamento antes do corte automático).
 
 Persistido em Config/estilo_impressao.json — fora do git (é preferência de
 cada máquina/impressora, não código-fonte), igual a Config/.versao (ver
@@ -142,6 +145,126 @@ RODULOS_ATRIBUTOS = {
     "fundo_preto": "Fundo preto",
 }
 
+# Campos que têm posição própria na comanda impressa (fora da tabela de
+# itens) e por isso podem ser reordenados pela tela Configurações > Ordem
+# dos campos. Reaproveita a maioria das chaves de CAMPOS (mesmo campo,
+# estilo e posição são coisas independentes) mais dois "campos" que só
+# existem como âncora de posição — "itens" (a tabela inteira, ver
+# comandaTextoService.montar_linhas_por_ordem) e "divisao_conta" (bloco
+# "DIVISÃO DA CONTA" de uma comanda de Mesa) — nenhum dos dois tem estilo
+# próprio (não entram em CAMPOS/listarCampos), só posição.
+#
+# "pedido", "observacao_item", "borda_item" e "adicional_item" ficam de
+# fora: são estilo de linhas DENTRO da tabela de itens, sem posição própria
+# fora dela.
+CAMPOS_ORDENAVEIS = [
+    "id_pedido",
+    "cliente",
+    "mesa",
+    "telefone",
+    "endereco",
+    "bairro",
+    "data",
+    "itens",
+    "observacao_entrega",
+    "forma_pagamento",
+    "troco_para",
+    "status",
+    "taxa_entrega",
+    "valor_total",
+    "troco_a_dar",
+    "divisao_conta",
+]
+
+RODULOS_CAMPOS_ORDENAVEIS = {
+    **RODULOS_CAMPOS,
+    "itens": "Tabela de itens do pedido",
+    "divisao_conta": "Divisão da conta (Mesa)",
+}
+
+# Categoria de cada campo ordenável — usada só por
+# comandaTextoService.montar_linhas_por_ordem para decidir quando inserir
+# separador (linha de traços + espaçamento) entre dois campos consecutivos:
+# campos da mesma categoria ficam colados, sem separador (ex: Cliente/Data
+# hoje), igual entre categorias diferentes ganha separador. "itens" não
+# aparece aqui porque é sempre tratado à parte (marcador próprio, ver
+# comandaTextoService.MARCADOR_ITENS).
+CATEGORIA_CAMPO = {
+    "id_pedido": "cabecalho",
+    "cliente": "cabecalho",
+    "mesa": "cabecalho",
+    "telefone": "cabecalho",
+    "endereco": "cabecalho",
+    "bairro": "cabecalho",
+    "data": "cabecalho",
+    "observacao_entrega": "observacao",
+    "forma_pagamento": "pagamento",
+    "troco_para": "pagamento",
+    "status": "status",
+    "taxa_entrega": "totais",
+    "valor_total": "totais",
+    "troco_a_dar": "totais",
+    "divisao_conta": "divisao",
+}
+
+# Quais tipos de comanda imprimem cada campo. Usado SÓ pela prévia da tela de
+# Configurações (qml/.../EstiloImpressora.qml), pra apagar visualmente os
+# campos que o tipo escolhido no seletor não usa — quem decide de verdade
+# continua sendo o dict `renderizadores` de cada controller
+# (balcaoController/entregaController/salaoController._salvarComanda /
+# _montarCupomFinal). Um valor errado aqui só acende/apaga um campo na tela;
+# não muda nada do que sai impresso. Se um controller passar a imprimir um
+# campo novo, atualize aqui também — senão a prévia mente.
+TIPOS_COMANDA = ["Balcão", "Entrega", "Mesa"]
+
+TIPOS_POR_CAMPO = {
+    "id_pedido": ["Balcão", "Entrega", "Mesa"],
+    "cliente": ["Balcão", "Entrega", "Mesa"],
+    "mesa": ["Mesa"],
+    "telefone": ["Entrega"],
+    "endereco": ["Entrega"],
+    "bairro": ["Entrega"],
+    "data": ["Balcão", "Entrega", "Mesa"],
+    "itens": ["Balcão", "Entrega", "Mesa"],
+    "observacao_entrega": ["Entrega"],
+    "forma_pagamento": ["Balcão", "Entrega"],
+    "troco_para": ["Balcão", "Entrega"],
+    "status": ["Balcão", "Entrega"],
+    "taxa_entrega": ["Entrega"],
+    "valor_total": ["Balcão", "Entrega", "Mesa"],
+    "troco_a_dar": ["Balcão", "Entrega"],
+    "divisao_conta": ["Mesa"],
+}
+
+# Ordem padrão dos campos na comanda impressa — reproduz o layout visual de
+# antes desta tela existir (ver docstring do módulo e
+# controllers/balcaoController.py/entregaController.py/salaoController.py).
+_ORDEM_PADRAO = [
+    "id_pedido",
+    "cliente",
+    "mesa",
+    "telefone",
+    "endereco",
+    "bairro",
+    "data",
+    "itens",
+    "observacao_entrega",
+    "forma_pagamento",
+    "troco_para",
+    "status",
+    "taxa_entrega",
+    "valor_total",
+    "troco_a_dar",
+    "divisao_conta",
+]
+
+
+# Teto de linhas de traço numa mesma divisória. Existe pra um valor
+# absurdo (JSON editado à mão, ou vindo de uma versão futura com outra
+# escala) não virar uma comanda de metros de papel — 5 já é mais grosso do
+# que qualquer separador que faça sentido num cupom de 40 colunas.
+MAX_LINHAS_SEPARADOR = 5
+
 
 def _atributos_campo_padrao():
     atributos = {atributo: False for atributo in ATRIBUTOS_BOOLEANOS}
@@ -152,8 +275,19 @@ def _atributos_campo_padrao():
 def _padrao():
     config = {
         "campos": {campo: _atributos_campo_padrao() for campo in CAMPOS},
+        "ordem_secoes": list(_ORDEM_PADRAO),
         "espacamento_secoes": 1,
         "espacamento_corte": 4,
+        # Quantas linhas de traço ("-" * 40) saem em cada divisória que a
+        # regra automática de categoria pede. 1 reproduz o comportamento de
+        # antes desta opção existir.
+        "linhas_separador": 1,
+        # Exceções à regra automática, por campo: {chave: nº de linhas de
+        # traço ANTES daquele campo}. Um campo listado aqui ignora a regra de
+        # categoria — é assim que dá pra pôr divisória onde ela não apareceria
+        # (campos da mesma categoria) e tirar onde apareceria (0). Vazio =
+        # tudo automático.
+        "separadores_campo": {},
         # Marca de qual mudança é mais recente entre as máquinas da malha
         # (ver _aplicar_estilo_remoto/relogio.mais_novo) — "" numa
         # instalação nova, ou num arquivo salvo antes deste mecanismo
@@ -194,6 +328,64 @@ def _mesclar_campos(destino, campos_lidos):
             destino[campo]["tamanho_fonte"] = max(1, int(atributos["tamanho_fonte"]))
 
 
+def _mesclar_ordem(ordem_lida):
+    """Valida `ordem_lida` (lista de chaves de CAMPOS_ORDENAVEIS) e devolve
+    uma ordem completa e utilizável: mantém a ordem lida, descartando
+    chaves desconhecidas (versão mais nova do app removeu um campo), e
+    acrescenta ao final — na ordem padrão — qualquer chave de
+    CAMPOS_ORDENAVEIS que não apareça nela (JSON salvo por uma versão do
+    app anterior à introdução de um campo novo). Sem essa segunda parte, um
+    campo novo simplesmente nunca seria impresso em instalações que já
+    tinham um estilo_impressao.json salvo."""
+    if not isinstance(ordem_lida, list):
+        return list(_ORDEM_PADRAO)
+
+    ordem = [chave for chave in ordem_lida if chave in CAMPOS_ORDENAVEIS]
+    vistas = set(ordem)
+    for chave in _ORDEM_PADRAO:
+        if chave not in vistas:
+            ordem.append(chave)
+            vistas.add(chave)
+    return ordem
+
+
+def _limitar_linhas_separador(valor):
+    return max(0, min(MAX_LINHAS_SEPARADOR, int(valor)))
+
+
+def _mesclar_separadores_campo(lidos):
+    """Valida o mapa de exceções {campo: nº de linhas de traço antes dele}.
+
+    Descarta chaves que não são campos ordenáveis (JSON de uma versão do app
+    que ainda tinha um campo removido depois) e valores não numéricos. Aceita
+    float porque um QVariantMap vindo do QML entrega os números assim."""
+    if not isinstance(lidos, dict):
+        return {}
+
+    return {
+        campo: _limitar_linhas_separador(valor)
+        for campo, valor in lidos.items()
+        if campo in CAMPOS_ORDENAVEIS and isinstance(valor, (int, float))
+    }
+
+
+def _mesclar_ajustes(destino, dados):
+    """Copia por cima de `destino` (já nos padrões) os ajustes de espaçamento
+    e de divisórias de `dados` — seja o JSON em disco, um payload vindo de
+    outra máquina da malha ou o dict que a tela de Configurações manda ao
+    sair. Os três precisam exatamente da mesma validação, daí estar aqui num
+    lugar só: uma chave ausente ou de tipo errado apenas mantém o padrão, que
+    é o que faz um arquivo salvo por uma versão mais antiga do app continuar
+    carregando."""
+    if isinstance(dados.get("espacamento_secoes"), int):
+        destino["espacamento_secoes"] = max(0, dados["espacamento_secoes"])
+    if isinstance(dados.get("espacamento_corte"), int):
+        destino["espacamento_corte"] = max(0, dados["espacamento_corte"])
+    if isinstance(dados.get("linhas_separador"), (int, float)):
+        destino["linhas_separador"] = _limitar_linhas_separador(dados["linhas_separador"])
+    destino["separadores_campo"] = _mesclar_separadores_campo(dados.get("separadores_campo"))
+
+
 def _carregar():
     caminho = _caminho_arquivo()
     config = _padrao()
@@ -208,11 +400,9 @@ def _carregar():
         return config
 
     _mesclar_campos(config["campos"], dados.get("campos"))
+    config["ordem_secoes"] = _mesclar_ordem(dados.get("ordem_secoes"))
+    _mesclar_ajustes(config, dados)
 
-    if isinstance(dados.get("espacamento_secoes"), int):
-        config["espacamento_secoes"] = max(0, dados["espacamento_secoes"])
-    if isinstance(dados.get("espacamento_corte"), int):
-        config["espacamento_corte"] = max(0, dados["espacamento_corte"])
     if isinstance(dados.get("idEvento"), str):
         config["idEvento"] = dados["idEvento"]
 
@@ -269,6 +459,53 @@ def linhas_espacamento_secoes():
     """Lista de linhas vazias usada como espaçador entre seções da comanda
     (cliente/itens/pagamento/total) — quantidade configurável."""
     return [""] * _config["espacamento_secoes"]
+
+
+def ordem_secoes():
+    """Ordem atual dos campos na comanda impressa (lista de chaves de
+    CAMPOS_ORDENAVEIS) — consultada por
+    comandaTextoService.montar_linhas_por_ordem através dos controllers de
+    venda (Balcão/Entrega/Mesa) ao montar linhas_arquivo."""
+    return _config["ordem_secoes"]
+
+
+def linhas_separador_antes(campo, categoria_anterior):
+    """Quantas linhas de traço ("-" * 40) entram ANTES de `campo` numa comanda
+    em que o campo anterior impresso era da categoria `categoria_anterior`
+    (None se `campo` é o primeiro com conteúdo).
+
+    Uma exceção gravada para esse campo (ver "separadores_campo") manda
+    sozinha — inclusive um 0, que é como se tira a divisória de um lugar onde
+    a regra automática a colocaria, e inclusive quando não há campo anterior.
+    Sem exceção, vale a regra de sempre: divisória só na troca de categoria, e
+    com a espessura de "linhas_separador".
+
+    Não vale para as bordas da tabela de itens: lá o separador é o
+    MARCADOR_ITENS ("=" * 40) e sai sempre uma vez só, porque
+    consultaController.reconstruirComanda o usa para achar onde a tabela
+    começa e termina ao reabrir a comanda gravada — duas linhas de marcador de
+    cada lado fariam a tabela ser lida como vazia. Quem monta o texto trata
+    esse caso antes de chegar aqui (ver
+    comandaTextoService.montar_linhas_por_ordem)."""
+    excecao = _config["separadores_campo"].get(campo)
+    if excecao is not None:
+        return excecao
+
+    if categoria_anterior is None:
+        return 0
+
+    if categoria_campo(campo) != categoria_anterior:
+        return _config["linhas_separador"]
+
+    return 0
+
+
+def categoria_campo(campo):
+    """Categoria de `campo` (ver CATEGORIA_CAMPO) — "" para uma chave
+    desconhecida, o que faz montar_linhas_por_ordem sempre inserir
+    separador antes dela (mais seguro que presumir que é igual à
+    categoria anterior)."""
+    return CATEGORIA_CAMPO.get(campo, "")
 
 
 def linhas_espacamento_corte():
@@ -347,10 +584,8 @@ def _aplicar_estilo_remoto(payload):
 
     novo = _padrao()
     _mesclar_campos(novo["campos"], payload.get("campos"))
-    if isinstance(payload.get("espacamento_secoes"), int):
-        novo["espacamento_secoes"] = max(0, payload["espacamento_secoes"])
-    if isinstance(payload.get("espacamento_corte"), int):
-        novo["espacamento_corte"] = max(0, payload["espacamento_corte"])
+    novo["ordem_secoes"] = _mesclar_ordem(payload.get("ordem_secoes"))
+    _mesclar_ajustes(novo, payload)
     novo["idEvento"] = id_recebido
 
     _config = novo
@@ -406,9 +641,38 @@ class ComandaEstiloController(QObject):
     def listarAtributos(self):
         return [{"chave": atributo, "rotulo": RODULOS_ATRIBUTOS[atributo]} for atributo in ATRIBUTOS_BOOLEANOS]
 
+    @pyqtSlot(result="QVariantList")
+    @protegido([])
+    def listarCamposOrdenaveis(self):
+        """Catálogo dos campos que têm posição própria na comanda. Devolve
+        também `categoria` e `tipos` para a prévia da tela de Configurações
+        conseguir desenhar os separadores (mesma regra de
+        comandaTextoService.montar_linhas_por_ordem) e apagar os campos que
+        o tipo de comanda escolhido não imprime — sem duplicar
+        CATEGORIA_CAMPO/TIPOS_POR_CAMPO no QML, que divergiriam na primeira
+        vez que alguém acrescentasse um campo aqui."""
+        return [
+            {
+                "chave": campo,
+                "rotulo": RODULOS_CAMPOS_ORDENAVEIS[campo],
+                "categoria": CATEGORIA_CAMPO.get(campo, ""),
+                "tipos": TIPOS_POR_CAMPO.get(campo, list(TIPOS_COMANDA)),
+            }
+            for campo in CAMPOS_ORDENAVEIS
+        ]
+
+    @pyqtSlot(result="QVariantList")
+    @protegido([])
+    def listarTiposComanda(self):
+        return list(TIPOS_COMANDA)
+
     @pyqtSlot(result=int)
     def tamanhoFontePadrao(self):
         return TAMANHO_FONTE_BASE_PX
+
+    @pyqtSlot(result=int)
+    def maxLinhasSeparador(self):
+        return MAX_LINHAS_SEPARADOR
 
     @pyqtSlot("QVariantMap")
     @protegido()
@@ -423,11 +687,8 @@ class ComandaEstiloController(QObject):
         global _config
         novo = _padrao()
         _mesclar_campos(novo["campos"], config.get("campos"))
-
-        if isinstance(config.get("espacamento_secoes"), int):
-            novo["espacamento_secoes"] = max(0, config["espacamento_secoes"])
-        if isinstance(config.get("espacamento_corte"), int):
-            novo["espacamento_corte"] = max(0, config["espacamento_corte"])
+        novo["ordem_secoes"] = _mesclar_ordem(config.get("ordem_secoes"))
+        _mesclar_ajustes(novo, config)
         novo["idEvento"] = relogio.novo_id()
 
         _config = novo

@@ -16,6 +16,71 @@ SEPARADOR_SABORES = " / "
 # Não é UTF-8: se salvar como UTF-8, os acentos saem corrompidos no cupom impresso.
 CODEPAGE_IMPRESSORA = "cp850"
 
+# Linha usada para delimitar a tabela de itens, e só ela — distinta do
+# separador genérico ("-" * 40) usado entre os demais campos por
+# montar_linhas_por_ordem. Como a posição da tabela de itens na comanda
+# agora é configurável (ver comandaEstiloService.ordem_secoes), ela precisa
+# de um marcador só dela para que consultaController.reconstruirComanda
+# consiga achá-la de volta não importa onde esteja — contar "a 1ª e a 2ª
+# linha de traços do arquivo" só funcionava enquanto a tabela de itens tinha
+# posição fixa. Visualmente, no papel, é só mais uma linha de traços (o "="
+# não chama atenção nem confunde quem lê o cupom).
+MARCADOR_ITENS = "=" * 40
+
+
+def montar_linhas_por_ordem(ordem, renderizadores):
+    """Monta a lista final de linhas da comanda (linhas_arquivo) a partir de
+    `ordem` (lista de chaves, ver comandaEstiloService.ordem_secoes()) e
+    `renderizadores` ({chave: lista_de_linhas ou None/[] se não aplicável a
+    este pedido — ex: "troco_para" quando a forma de pagamento não é
+    dinheiro}).
+
+    Compartilhado por balcaoController/entregaController/salaoController
+    para não reimplementar em cada um a mesma regra de espaçamento —
+    mesmo motivo de existir montar_grupos/formatar_tabela acima.
+
+    Regra de separador entre dois campos consecutivos e não vazios:
+    - "itens" sempre entra cercado por MARCADOR_ITENS (antes e depois),
+      não importa a categoria do campo vizinho — é o único jeito de
+      localizá-lo de volta depois, com a posição configurável. Sempre uma
+      linha só de cada lado (ver comandaEstiloService.linhas_separador_antes).
+    - Nos demais pontos, quantas linhas "-" * 40 entram é decisão de
+      comandaEstiloService.linhas_separador_antes: por padrão uma na troca de
+      categoria e nenhuma dentro da mesma categoria (ex: Cliente logo seguido
+      de Data), com a espessura e as exceções por campo que a tela de
+      Configurações grava."""
+    linhas = []
+    categoria_anterior = None
+    itens_anterior = False
+
+    for chave in ordem:
+        conteudo = renderizadores.get(chave)
+        if not conteudo:
+            continue
+
+        eh_itens = chave == "itens"
+        if eh_itens or itens_anterior:
+            linhas.extend(estilo.linhas_espacamento_secoes())
+            linhas.append(MARCADOR_ITENS)
+            linhas.extend(estilo.linhas_espacamento_secoes())
+        else:
+            tracos = estilo.linhas_separador_antes(chave, categoria_anterior)
+            if tracos:
+                linhas.extend(estilo.linhas_espacamento_secoes())
+                linhas.extend(["-" * 40] * tracos)
+                linhas.extend(estilo.linhas_espacamento_secoes())
+
+        linhas.extend(conteudo)
+
+        categoria_anterior = estilo.categoria_campo(chave)
+        itens_anterior = eh_itens
+
+    if itens_anterior:
+        linhas.extend(estilo.linhas_espacamento_secoes())
+        linhas.append(MARCADOR_ITENS)
+
+    return linhas
+
 
 def dividir_sabores(pedido_texto):
     """Separa um pedido em (lista_de_sabores, tamanho).
