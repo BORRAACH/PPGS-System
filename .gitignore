@@ -12,6 +12,11 @@ wheels/
 # Pedidos gerados em tempo de execução
 pedidos/*
 
+# Pedidos/índices das "máquinas" da malha de teste (docker/docker-compose.yml
+# monta uma pasta por container aqui) — o padrão acima não pega, porque começa
+# na raiz do repositório.
+docker/pedidos/
+
 # Versão instalada nessa máquina, gerada automaticamente a cada execução
 # (informativo, não usado pra decidir nada) — ver Config/atualizador.py
 Config/.versao

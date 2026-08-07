@@ -12,7 +12,7 @@ from PyQt6.QtNetwork import QHostAddress, QTcpServer, QTcpSocket
 
 from Config.logConfig import protegido
 from services.printerService import PrinterService
-from services.rede import caminhos, impressoraFixada, indicePedidos, relogio, tombstones
+from services.rede import caminhos, historicoEventos, impressoraFixada, indicePedidos, relogio, tombstones
 from services.rede.descoberta import criar_descoberta
 from services.rede.eventos import BarramentoEventos
 
@@ -180,6 +180,17 @@ class RedeService(QObject):
         self._eventos.registrar("pedido_apagado", self._ao_receber_evento_pedido_apagado)
         self._eventos.registrar("impressora_fixada", self._ao_receber_evento_impressora_fixada)
 
+        # Histórico da malha: eventos são imutáveis, então a reconciliação é a
+        # união dos dois lados e não existe "apagar" (a retenção é local, ver
+        # historicoEventos._purgados). É este registro que faz uma máquina que
+        # entra na malha receber o histórico acumulado por quem já estava lá.
+        self.registrarDominioSincronizado(
+            "historico",
+            historicoEventos.resumo,
+            historicoEventos.obter,
+            historicoEventos.aplicar,
+        )
+
         self._impressoraLocalVerificada.connect(self._ao_verificar_impressora_local)
         self._imprimirRemotoConcluido.connect(self._ao_concluir_imprimir_remoto)
         self._descoberta.peerDescoberto.connect(self._ao_descobrir_peer)
@@ -223,6 +234,23 @@ class RedeService(QObject):
         peers = list(self._info_peers.values())
         peers.sort(key=lambda peer: peer["conectadoEm"], reverse=True)
         return peers
+
+    @pyqtSlot(int, result="QVariantList")
+    @protegido([])
+    def listarHistorico(self, limite=200):
+        """Histórico da malha para a tela de Rede, mais recente primeiro (ver
+        services/rede/historicoEventos.py)."""
+        return historicoEventos.listar(limite)
+
+    @pyqtSlot(result="QVariantList")
+    @protegido([])
+    def categoriasHistorico(self):
+        """Categorias existentes, para montar o filtro da tela sem repetir a
+        lista no QML."""
+        return [
+            {"chave": chave, "rotulo": rotulo}
+            for chave, rotulo in historicoEventos.ROTULOS_CATEGORIAS.items()
+        ]
 
     def iniciar(self):
         """Abre os sockets e começa a anunciar/descobrir peers. Precisa ser
@@ -437,6 +465,7 @@ class RedeService(QObject):
             if id_removido is not None:
                 nome = (self._info_peers.pop(id_removido, None) or {}).get("nome", "máquina desconhecida")
                 print(f"[RedeService] Peer '{nome}' desconectou — {len(self._peers)} peer(s) na malha. Vai ser rediscado a cada {_INTERVALO_RECONEXAO_MS // 1000}s.")
+                historicoEventos.registrar_local("maquina_desconectada", {"nome": nome})
                 self.peersMudaram.emit(len(self._peers))
                 # Se a máquina que caiu era a eleita pra imprimir, reeleger
                 # (ou ficar sem impressora) na hora, sem esperar nada.
@@ -495,6 +524,13 @@ class RedeService(QObject):
                 "idEntrada": mensagem.get("idEntrada"),
             }
             print(f"[RedeService] Conectado a '{self._info_peers[id_remoto]['nome']}' ({self._info_peers[id_remoto]['endereco']}) — {len(self._peers)} peer(s) na malha.")
+            # Entrada/saída de máquina não passa pelo barramento de eventos
+            # (é estado de socket, não uma mudança de dado a propagar), então
+            # é anotada no histórico à mão. Fica local a quem observou: cada
+            # máquina enxerga as conexões pelo seu próprio ponto de vista.
+            historicoEventos.registrar_local(
+                "maquina_conectada", {"nome": self._info_peers[id_remoto]["nome"]}
+            )
             # Handshake concluído: o peer está vivo, então o backoff de
             # reconexão dele volta ao início (importante pra uma queda futura
             # ser tratada rápido, e não herdar a espera longa de uma

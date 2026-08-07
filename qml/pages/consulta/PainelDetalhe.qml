@@ -95,6 +95,12 @@ Rectangle {
             // remota é grande demais pra vir junto de toda a listagem.
             property var detalhe: null
             readonly property bool temVersaoRemota: detalhe !== null && detalhe.temVersaoRemota === true
+            // Campo a campo, o que não bate entre as duas máquinas (ver
+            // ConsultaController.detalheConflito). Conflitos gravados antes
+            // desta comparação existir não têm a lista — nesses, e no caso
+            // "apagada em outra máquina", a faixa cai no cupom inteiro.
+            readonly property var diferencas: detalhe !== null && detalhe.diferencas ? detalhe.diferencas : []
+            readonly property bool temDiferencas: diferencas.length > 0
 
             function recarregar() {
                 var c = painelDetalhe.pagina ? painelDetalhe.pagina.comandaSelecionada : null;
@@ -148,7 +154,12 @@ Rectangle {
                         var maquina = faixaConflito.detalhe.maquinaRemota || "outra máquina";
                         if (faixaConflito.detalhe.motivo === "apagada_em_outra_maquina")
                             return "Esta comanda foi apagada em " + maquina + ", mas a versão daqui é mais recente.";
-                        return "Esta comanda está diferente em " + maquina + ".";
+
+                        var quantos = faixaConflito.diferencas.length;
+                        if (quantos === 0)
+                            return "Esta comanda está diferente em " + maquina + ".";
+                        return "Esta comanda é a mesma de " + maquina + ", mas "
+                            + (quantos === 1 ? "1 campo não bate" : quantos + " campos não batem") + ".";
                     }
                 }
 
@@ -157,9 +168,108 @@ Rectangle {
                     wrapMode: Text.WordWrap
                     font.pixelSize: 12
                     color: Estilo.cores.avisoTexto
-                    text: faixaConflito.temVersaoRemota
-                        ? "Compare as duas versões abaixo e escolha qual vale. Nada foi alterado automaticamente."
-                        : "Escolha se ela deve continuar existindo. Nada foi alterado automaticamente."
+                    text: {
+                        if (faixaConflito.temDiferencas)
+                            return "Confira o que mudou e escolha qual versão vale. Nada foi alterado automaticamente.";
+                        return faixaConflito.temVersaoRemota
+                            ? "Compare as duas versões abaixo e escolha qual vale. Nada foi alterado automaticamente."
+                            : "Escolha se ela deve continuar existindo. Nada foi alterado automaticamente.";
+                    }
+                }
+
+                // --- O que exatamente não bate ---
+                // Só os campos divergentes, lado a lado. É o que responde a
+                // pergunta que a faixa antes deixava no ar ("diferente em quê?")
+                // sem obrigar o usuário a comparar dois cupons inteiros linha
+                // a linha.
+                Rectangle {
+                    width: parent.width
+                    height: colunaDiferencas.implicitHeight + 16
+                    visible: faixaConflito.temDiferencas
+                    radius: Estilo.rounding.padrao
+                    color: "#ffffff"
+                    border.color: Estilo.cores.avisoBorda
+
+                    Column {
+                        id: colunaDiferencas
+
+                        x: 8
+                        y: 8
+                        width: parent.width - 16
+                        spacing: 6
+
+                        Row {
+                            width: parent.width
+                            spacing: 8
+
+                            Text {
+                                width: (parent.width - 16) * 0.3
+                                text: "Campo"
+                                font.pixelSize: 11
+                                font.bold: true
+                                color: Estilo.cores.textoSecundario
+                            }
+                            Text {
+                                width: (parent.width - 16) * 0.35
+                                text: "Esta máquina"
+                                font.pixelSize: 11
+                                font.bold: true
+                                color: Estilo.cores.textoSecundario
+                            }
+                            Text {
+                                width: (parent.width - 16) * 0.35
+                                text: faixaConflito.detalhe && faixaConflito.detalhe.maquinaRemota
+                                    ? faixaConflito.detalhe.maquinaRemota
+                                    : "Outra máquina"
+                                font.pixelSize: 11
+                                font.bold: true
+                                color: Estilo.cores.textoSecundario
+                                elide: Text.ElideRight
+                            }
+                        }
+
+                        Repeater {
+                            model: faixaConflito.diferencas
+
+                            delegate: Row {
+                                id: linhaDiferenca
+
+                                required property var modelData
+
+                                width: colunaDiferencas.width
+                                spacing: 8
+
+                                Text {
+                                    width: (linhaDiferenca.width - 16) * 0.3
+                                    text: linhaDiferenca.modelData.rotulo
+                                    font.pixelSize: 12
+                                    font.bold: true
+                                    color: Estilo.cores.texto
+                                    wrapMode: Text.WordWrap
+                                }
+                                Text {
+                                    width: (linhaDiferenca.width - 16) * 0.35
+                                    // Campo ausente de um dos lados é uma
+                                    // diferença tão real quanto um valor
+                                    // trocado — o travessão evita que a
+                                    // coluna vazia pareça um erro de tela.
+                                    text: linhaDiferenca.modelData.local || "—"
+                                    font.family: "monospace"
+                                    font.pixelSize: 12
+                                    color: Estilo.cores.texto
+                                    wrapMode: Text.Wrap
+                                }
+                                Text {
+                                    width: (linhaDiferenca.width - 16) * 0.35
+                                    text: linhaDiferenca.modelData.remoto || "—"
+                                    font.family: "monospace"
+                                    font.pixelSize: 12
+                                    color: Estilo.cores.avisoTexto
+                                    wrapMode: Text.Wrap
+                                }
+                            }
+                        }
+                    }
                 }
 
                 // Versão da outra máquina, no mesmo formato monoespaçado do
@@ -167,7 +277,9 @@ Rectangle {
                 Rectangle {
                     width: parent.width
                     height: Math.min(140, textoVersaoRemota.implicitHeight + 16)
-                    visible: faixaConflito.temVersaoRemota
+                    // Com a tabela acima, o cupom inteiro só atrapalharia; ele
+                    // fica para os conflitos sem lista de diferenças gravada.
+                    visible: faixaConflito.temVersaoRemota && !faixaConflito.temDiferencas
                     radius: Estilo.rounding.padrao
                     color: "#ffffff"
                     border.color: Estilo.cores.avisoBorda

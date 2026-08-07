@@ -58,8 +58,17 @@ def carregar_json(caminho: str, rotulo: str) -> dict:
 
 
 def salvar_json(caminho: str, dados: dict, rotulo: str) -> None:
-    """Grava `dados` de forma atômica (temporário + os.replace)."""
-    temporario = caminho + ".tmp"
+    """Grava `dados` de forma atômica (temporário + os.replace).
+
+    O temporário leva o PID no nome porque ele já era compartilhado por dois
+    processos na prática: os scripts de docker/ rodam junto do main.py do
+    mesmo container, e ambos gravam nesta mesma pasta. Com um nome fixo, o
+    os.replace de um movia o arquivo que o outro ainda ia mover, e o segundo
+    morria com ENOENT ("historico.json.tmp -> historico.json"), perdendo a
+    gravação. Só apareceu quando o histórico da malha passou a gravar a cada
+    evento; para os demais índices, mais esparsos, a janela era estreita
+    demais para alguém topar com ela."""
+    temporario = f"{caminho}.{os.getpid()}.tmp"
     try:
         os.makedirs(os.path.dirname(caminho), exist_ok=True)
         with open(temporario, "w", encoding="utf-8") as arquivo:

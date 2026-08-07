@@ -25,7 +25,7 @@ alcançam uma terceira)."""
 
 import time
 
-from services.rede import relogio
+from services.rede import historicoEventos, relogio
 
 # Tempo que um id de evento fica guardado só pra descartar reentregas (a
 # mesma mensagem chegando por dois caminhos na malha) — não precisa durar
@@ -66,6 +66,7 @@ class BarramentoEventos:
         sem que quem chama publicar() precise pensar nisso."""
         evento = {"id": relogio.novo_id(), "tipoEvento": tipo_evento, "payload": payload}
         self._marcar_visto(evento["id"])
+        historicoEventos.registrar(evento["id"], tipo_evento, payload)
         self._enviar_para_peers(evento, None)
 
     def receber(self, mensagem, socket_origem):
@@ -92,6 +93,11 @@ class BarramentoEventos:
         self._marcar_visto(id_evento)
 
         payload = mensagem.get("payload")
+        # Depois do dedup, para uma reentrega não virar duas linhas no
+        # histórico. Registrar aqui (e em publicar) cobre TODOS os tipos de
+        # evento de uma vez — comandas, cardápio, caixa, configurações — sem
+        # espalhar chamadas pelos controllers que publicam cada um deles.
+        historicoEventos.registrar(id_evento, tipo_evento, payload)
         for callback in self._manipuladores.get(tipo_evento, []):
             callback(payload)
 

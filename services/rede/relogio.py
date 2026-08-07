@@ -129,6 +129,19 @@ def maquina_do_id(id_evento) -> str:
     return partes[2] if partes is not None else ""
 
 
+def instante_do_id(id_evento) -> float:
+    """Momento (timestamp Unix em segundos) em que `id_evento` foi gerado, ou
+    0.0 se o id for vazio/malformado.
+
+    Usado pelo histórico da malha (services/rede/historicoEventos.py) para
+    mostrar QUANDO cada coisa aconteceu. Tem que sair do id, e não do relógio
+    de quem está exibindo: o mesmo evento é visto por várias máquinas, em
+    momentos diferentes, e todas precisam mostrar o mesmo horário — o da
+    máquina onde a mudança de fato aconteceu."""
+    partes = _analisar(id_evento)
+    return partes[0] / 1_000_000 if partes is not None else 0.0
+
+
 def mais_novo(id_a, id_b) -> bool:
     """True se `id_a` é estritamente mais recente que `id_b`. Único ponto
     de comparação do projeto — quem usa este módulo nunca deveria comparar

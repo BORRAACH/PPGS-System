@@ -1,14 +1,13 @@
 import base64
 import os
-import re
 from datetime import datetime, timedelta
 
 from PyQt6.QtCore import QByteArray, QObject, pyqtSignal, pyqtSlot
 
 from Config.logConfig import protegido
+from services import comandaComparacaoService as comparacao
 from services import comandaParserService as parser
-from services.comandaTextoService import PREFIXO_ADICIONAL, PREFIXO_BORDA
-from services.rede import baixaComandas, indicePedidos, rede, relogio, tombstones
+from services.rede import baixaComandas, historicoEventos, indicePedidos, rede, relogio, tombstones
 
 # Janela (em dias) que o resumo periódico de anti-entropy compara pra este
 # domínio (ver _resumo_pedidos/RedeService.registrarDominioSincronizado) —
@@ -25,176 +24,6 @@ _JANELA_RECONCILIACAO_PEDIDOS_DIAS = 7
 # services/rede/indicePedidos.py e a faixa amarela de PainelDetalhe.qml.
 _CONFLITO_CONTEUDO = "conteudo_divergente"
 _CONFLITO_APAGADA_FORA = "apagada_em_outra_maquina"
-
-# Extraem os campos do cabeçalho do cupom (ver balcaoController/
-# entregaController) para reconstruir os dados ao editar, sem depender do
-# nome do arquivo. Cliente/Data/Forma de pagamento/Status/Valor total vivem
-# em services/comandaParserService.py (compartilhados com
-# FechamentoController) — só os campos exclusivos de Entrega (usados apenas
-# por reconstruirComanda, pra reabrir a comanda num formulário editável)
-# continuam aqui.
-_PADRAO_TELEFONE = re.compile(r"^Telefone:[ \t]*(.*)$", re.MULTILINE)
-_PADRAO_ENDERECO = re.compile(r"^Endereço:[ \t]*(.*)$", re.MULTILINE)
-_PADRAO_BAIRRO = re.compile(r"^Bairro:[ \t]*(.*)$", re.MULTILINE)
-_PADRAO_OBSERVACAO_GERAL = re.compile(r"^Observação:[ \t]*(.*)$", re.MULTILINE)
-_PADRAO_TROCO = re.compile(r"^Troco para:[ \t]*(.*)$", re.MULTILINE)
-_PADRAO_TAXA_ENTREGA = re.compile(r"^Taxa de entrega:[ \t]*(.*)$", re.MULTILINE)
-
-# Linha de um item na tabela do cupom: "coluna_pedido | valor". A observação
-# (quando houver) vem numa linha própria logo abaixo, recuada com 2 espaços
-# (ver balcaoController/entregaController._formatarTabela).
-_PADRAO_LINHA_TABELA = re.compile(r"^(.*)\|(.*)$")
-_PADRAO_LINHA_OBSERVACAO = re.compile(r"^  (.+)$")
-# Linhas de adicional/borda (ver comandaTextoService.montar_grupos) — casadas
-# ANTES de _PADRAO_LINHA_OBSERVACAO (que bateria com qualquer uma delas
-# também, por ser só "recuo + texto"), senão um adicional/borda vira
-# observação na reconstrução.
-_PADRAO_LINHA_ADICIONAL = re.compile(r"^  " + re.escape(PREFIXO_ADICIONAL) + r"(.+?)(?: \((.+)\))?$")
-_PADRAO_LINHA_BORDA = re.compile(r"^  " + re.escape(PREFIXO_BORDA) + r"(.+?)(?: \((.+)\))?$")
-# Fração de sabor de pizza meio a meio: "1/3 - Nome do Sabor".
-_PADRAO_FRACAO_SABOR = re.compile(r"^\d+/\d+ - (.+)$")
-# Sufixo de tamanho no primeiro sabor: "Nome do Sabor (Grande)".
-_PADRAO_SUFIXO_TAMANHO = re.compile(r"^(.*)\s\(([^)]+)\)$")
-# balcaoController/entregaController agora imprimem o nome do item em caixa
-# alta (ex: "(GRANDE)"), então a comparação precisa ignorar maiúsculas/
-# minúsculas para continuar reconhecendo o sufixo em comandas antigas e novas.
-# "300 ML"/"500 ML"/"700 ML" são os tamanhos de Acai.qml (ver
-# data/cardapio/acai.json) — sem eles aqui, os adicionais de um copo de
-# açaí editado via Consulta perderiam a associação com o item ao reimprimir.
-_TAMANHOS_VALIDOS = ("Grande", "Broto", "Mini", "300 ML", "500 ML", "700 ML")
-_TAMANHOS_VALIDOS_UPPER = tuple(t.upper() for t in _TAMANHOS_VALIDOS)
-
-
-def _dividir_endereco_numero(endereco_completo):
-    """Desfaz o "Endereço, Número" montado por entregaController.enviarPedido."""
-    if not endereco_completo:
-        return "", ""
-
-    partes = endereco_completo.rsplit(",", 1)
-    if len(partes) == 2 and partes[1].strip():
-        return partes[0].strip(), partes[1].strip()
-
-    return endereco_completo.strip(), ""
-
-
-def _reconstruir_itens(linhas_tabela):
-    """Desfaz comandaTextoService.montar_grupos/formatar_tabela: volta das
-    linhas já formatadas do cupom para a lista de itens (pedido, observação,
-    valor, borda, adicionais) como ficavam em modeloPedidos antes de
-    imprimir."""
-    itens = []
-    grupo_atual = []
-    # Borda é um extra de nível de grupo (a pizza inteira), não de uma fração
-    # específica — por isso fica fora de grupo_atual, num estado à parte que
-    # fechar_grupo() consome e reseta.
-    borda_atual = {"nome": "", "valor": ""}
-
-    def fechar_grupo():
-        if not grupo_atual:
-            return
-
-        borda = {"nome": borda_atual["nome"], "valor": borda_atual["valor"]} if borda_atual["nome"] else None
-
-        if len(grupo_atual) == 1:
-            coluna_pedido, observacao, valor, adicionais = grupo_atual[0]
-            pedido = coluna_pedido[2:] if coluna_pedido.startswith("- ") else coluna_pedido
-            # O adicional foi salvo (em Pizzas.qml) com o nome do sabor SEM o
-            # sufixo de tamanho — precisa desfazer o mesmo sufixo aqui para
-            # que "sabor" volte a bater com o nome usado ao reimprimir.
-            sabor_sem_tamanho = pedido
-            match_tamanho = _PADRAO_SUFIXO_TAMANHO.match(pedido)
-            if match_tamanho and match_tamanho.group(2).strip().upper() in _TAMANHOS_VALIDOS_UPPER:
-                sabor_sem_tamanho = match_tamanho.group(1)
-            for adicional in adicionais:
-                adicional["sabor"] = sabor_sem_tamanho
-            itens.append({
-                "pedido": pedido,
-                "observacao": observacao,
-                "valor": valor,
-                "borda": borda,
-                "adicionais": adicionais,
-            })
-        else:
-            sabores = []
-            tamanho = ""
-            observacao_final = ""
-            valor_final = ""
-            adicionais_totais = []
-            for indice, (coluna_pedido, observacao, valor, adicionais) in enumerate(grupo_atual):
-                match_fracao = _PADRAO_FRACAO_SABOR.match(coluna_pedido)
-                nome = match_fracao.group(1) if match_fracao else coluna_pedido
-                if indice == 0:
-                    match_tamanho = _PADRAO_SUFIXO_TAMANHO.match(nome)
-                    if match_tamanho and match_tamanho.group(2).strip().upper() in _TAMANHOS_VALIDOS_UPPER:
-                        nome = match_tamanho.group(1)
-                        tamanho = match_tamanho.group(2)
-                    valor_final = valor
-                # A observação do grupo agora é impressa depois de TODAS as
-                # frações (ver formatar_tabela), então fica anexada à última
-                # fração lida, não necessariamente à primeira.
-                if observacao:
-                    observacao_final = observacao
-                for adicional in adicionais:
-                    adicional["sabor"] = nome
-                adicionais_totais.extend(adicionais)
-                sabores.append(nome)
-
-            pedido = " / ".join(sabores)
-            if tamanho:
-                pedido += f" ({tamanho})"
-            itens.append({
-                "pedido": pedido,
-                "observacao": observacao_final,
-                "valor": valor_final,
-                "borda": borda,
-                "adicionais": adicionais_totais,
-            })
-
-        grupo_atual.clear()
-        borda_atual["nome"] = ""
-        borda_atual["valor"] = ""
-
-    for linha in linhas_tabela:
-        if linha.strip() == "":
-            fechar_grupo()
-            continue
-
-        # Adicional (recuado, "+ ..."), pertence à fração imediatamente
-        # acima dele dentro do grupo atual.
-        match_adicional = _PADRAO_LINHA_ADICIONAL.match(linha)
-        if match_adicional and grupo_atual:
-            _coluna_pedido, _observacao, _valor, adicionais = grupo_atual[-1]
-            adicionais.append({
-                "nome": match_adicional.group(1).strip(),
-                "valor": (match_adicional.group(2) or "").strip(),
-            })
-            continue
-
-        # Borda (recuada, "* ..."), pertence ao grupo inteiro — só pode
-        # haver uma por pizza (ver PopupAdicionaisBordas.qml).
-        match_borda = _PADRAO_LINHA_BORDA.match(linha)
-        if match_borda and grupo_atual:
-            borda_atual["nome"] = match_borda.group(1).strip()
-            borda_atual["valor"] = (match_borda.group(2) or "").strip()
-            continue
-
-        # Linha de observação (recuada), pertence ao pedido imediatamente
-        # acima dela dentro do grupo atual.
-        match_observacao = _PADRAO_LINHA_OBSERVACAO.match(linha)
-        if match_observacao and grupo_atual:
-            coluna_pedido, _observacao_antiga, valor, adicionais = grupo_atual[-1]
-            grupo_atual[-1] = (coluna_pedido, match_observacao.group(1).strip(), valor, adicionais)
-            continue
-
-        match_linha = _PADRAO_LINHA_TABELA.match(linha)
-        if not match_linha:
-            continue
-
-        coluna_pedido, valor = (g.strip() for g in match_linha.groups())
-        grupo_atual.append((coluna_pedido, "", valor, []))
-
-    fechar_grupo()
-    return itens
 
 
 class ConsultaController(QObject):
@@ -218,6 +47,7 @@ class ConsultaController(QObject):
         )
 
         self._migrar_atribuicoes_incorretas()
+        self._revalidar_conflitos()
 
     def _codigo_impresso(self, nome_arquivo):
         """Só o código da linha "ID:" da comanda, sem o fallback pro sufixo
@@ -274,6 +104,56 @@ class ConsultaController(QObject):
                 f"máquina mas vieram de outra — atribuição corrigida (ver indicePedidos.registrar_recebido)."
             )
 
+    def _revalidar_conflitos(self):
+        """Descarta os conflitos que a regra antiga gravou sem olhar conteúdo.
+
+        Até aqui bastava o idEvento local diferir do recebido para a comanda
+        ser marcada como divergente — e como `indicePedidos.id_evento` cai num
+        id sintetizado do nome do arquivo quando não há registro em
+        eventos.json, uma máquina com o id real e outra com o sintético
+        marcavam como divergente uma comanda byte a byte idêntica. Só corrigir
+        a regra não bastaria: os conflitos já gravados continuariam em disco, e
+        a Consulta seguiria mostrando em amarelo comandas que nunca
+        divergiram.
+
+        Reexamina cada um comparando de verdade as duas versões (a local e a
+        que ficou guardada junto do conflito) e apaga os que não têm diferença
+        nenhuma. Os que têm ficam, para decisão manual — nenhuma comanda é
+        alterada aqui, só o registro de conflito. Idempotente: rodar de novo
+        não faz nada, porque o que sobra é conflito de verdade."""
+        conflitos = indicePedidos.carregar_conflitos()
+        if not conflitos:
+            return
+
+        resolvidos = 0
+        for nome_arquivo, conflito in conflitos.items():
+            if not isinstance(conflito, dict) or conflito.get("motivo") != _CONFLITO_CONTEUDO:
+                continue
+
+            conteudo_remoto_b64 = conflito.get("conteudoRemoto_b64", "")
+            if not conteudo_remoto_b64:
+                continue
+
+            caminho = os.path.join(self.pasta_pedidos, nome_arquivo)
+            try:
+                with open(caminho, "rb") as arquivo:
+                    conteudo_local = arquivo.read()
+                conteudo_remoto = base64.b64decode(conteudo_remoto_b64)
+            except (OSError, ValueError):
+                continue
+
+            if comparacao.diferencas_entre(conteudo_local, conteudo_remoto, nome_arquivo):
+                continue
+
+            indicePedidos.resolver_conflito(nome_arquivo)
+            resolvidos += 1
+
+        if resolvidos:
+            print(
+                f"[ConsultaController] {resolvidos} comanda(s) estavam marcadas como divergentes mas têm "
+                f"conteúdo idêntico nas duas máquinas — marcação removida (ver comandaComparacaoService)."
+            )
+
     # ---------- Anti-entropy (ver services/rede/redeService.py:registrarDominioSincronizado) ----------
 
     def _nomes_comandas_locais(self):
@@ -282,10 +162,15 @@ class ConsultaController(QObject):
         return [nome for nome in os.listdir(self.pasta_pedidos) if nome.endswith(".txt")]
 
     def _resumo_pedidos(self):
-        """A "versão" de cada comanda é o id de linha do tempo dela (ver
-        services/rede/indicePedidos.py), não mais um hash do conteúdo: o
-        hash só diz "igual ou diferente", e pra decidir um conflito é
-        preciso saber qual das duas versões veio antes.
+        """A "versão" de cada comanda é o id de linha do tempo dela MAIS a
+        impressão digital do conteúdo (ver indicePedidos.versao).
+
+        O id sozinho responde "qual veio antes", que é o que decide um
+        conflito — mas não responde "o conteúdo é o mesmo?". Enquanto a
+        versão era só o id, duas máquinas com o mesmo id e conteúdos
+        diferentes se declaravam iguais, a reconciliação não puxava nada e a
+        divergência ficava invisível. A impressão junto cobre esse caso sem
+        perder a ordenação.
 
         A janela é recortada pela data embutida no NOME do arquivo, não pelo
         mtime. Com mtime, restaurar um backup, copiar a pasta sem preservar
@@ -311,32 +196,28 @@ class ConsultaController(QObject):
             data = parser.data_arquivo_aaaammdd(nome_arquivo)
             if data is not None and data < limite:
                 continue
-            itens[nome_arquivo] = indicePedidos.id_evento(nome_arquivo)
+            itens[nome_arquivo] = indicePedidos.versao(nome_arquivo)
         return {"itens": itens, "apagados": apagados}
 
-    def _comparar_pedido_reconciliacao(self, nome_arquivo, id_local, id_peer):
+    def _comparar_pedido_reconciliacao(self, nome_arquivo, versao_local, versao_peer):
         """Decide se vale puxar do peer a comanda `nome_arquivo`.
 
-        Comanda é imutável: depois de salva, nunca é reescrita no lugar
-        (editar pela Consulta apaga o arquivo e grava um novo, com outro
-        nome — ver Balcao.qml/Entrega.qml). Então "o peer tem uma versão
-        diferente da minha" nunca é uma atualização legítima, e sim uma
-        divergência de verdade: as duas máquinas acham coisas diferentes
-        sobre a mesma venda.
+        Só o transporte decide aqui; quem julga o que fazer com o conteúdo é
+        aplicarPedidoRemoto. Versões diferentes (id ou impressão digital, ver
+        indicePedidos.versao) significam que há algo a olhar — pode ser uma
+        divergência real de valores, ou só um id fora de sincronia numa
+        comanda idêntica, e não dá pra saber sem o conteúdo em mãos.
 
-        Mesmo assim a versão divergente é puxada UMA vez — não pra
-        sobrescrever nada (quem grava é aplicarPedidoRemoto, que se recusa a
-        passar por cima de um arquivo existente), e sim pra ficar guardada
-        junto do conflito: sem ela, a Consulta só poderia dizer "as duas
-        máquinas discordam", sem mostrar o quê, e "adotar a versão da outra
-        máquina" seria impossível. Depois de guardada, não se pede de novo —
-        senão a cada 2 min a mesma comanda trafegaria pra sempre."""
-        if id_local is None:
+        A guarda contra repetir o download existe porque a anti-entropy roda
+        a cada 2 min: uma vez que a versão do peer já está guardada junto do
+        conflito, pedir de novo faria a mesma comanda trafegar para sempre."""
+        if versao_local is None:
             return True
 
-        if id_local == id_peer:
+        if versao_local == versao_peer:
             return False
 
+        id_peer, _impressao_peer = indicePedidos.partes_da_versao(versao_peer)
         conflito = indicePedidos.conflito(nome_arquivo)
         ja_guardada = (
             conflito is not None
@@ -520,28 +401,27 @@ class ConsultaController(QObject):
         conteudo = parser.limpar_codigos_impressora(conteudo)
         linhas = conteudo.split("\n")
 
-        divisorias = [i for i, linha in enumerate(linhas) if linha.startswith("----")]
-        if len(divisorias) < 2:
+        linhas_tabela = parser.linhas_tabela_itens(linhas)
+        if linhas_tabela is None:
             return {}
 
-        linhas_tabela = linhas[divisorias[0] + 1:divisorias[1]]
-        endereco_completo = parser.extrair_campo(_PADRAO_ENDERECO, conteudo)
-        endereco, numero = _dividir_endereco_numero(endereco_completo)
+        endereco_completo = parser.extrair_campo(parser.PADRAO_ENDERECO, conteudo)
+        endereco, numero = parser.dividir_endereco_numero(endereco_completo)
 
         return {
             "arquivo": nome_arquivo,
             "tipo": parser.tipo_comanda(nome_arquivo),
             "cliente": parser.extrair_campo(parser.PADRAO_CLIENTE, conteudo),
-            "telefone": parser.extrair_campo(_PADRAO_TELEFONE, conteudo),
+            "telefone": parser.extrair_campo(parser.PADRAO_TELEFONE, conteudo),
             "endereco": endereco,
             "numero": numero,
-            "bairro": parser.extrair_campo(_PADRAO_BAIRRO, conteudo),
-            "observacaoGeral": parser.extrair_campo(_PADRAO_OBSERVACAO_GERAL, conteudo),
+            "bairro": parser.extrair_campo(parser.PADRAO_BAIRRO, conteudo),
+            "observacaoGeral": parser.extrair_campo(parser.PADRAO_OBSERVACAO_GERAL, conteudo),
             "formaPagamento": parser.extrair_campo(parser.PADRAO_FORMA_PAGAMENTO, conteudo),
-            "troco": parser.extrair_campo(_PADRAO_TROCO, conteudo),
-            "taxaEntrega": parser.extrair_campo(_PADRAO_TAXA_ENTREGA, conteudo),
+            "troco": parser.extrair_campo(parser.PADRAO_TROCO, conteudo),
+            "taxaEntrega": parser.extrair_campo(parser.PADRAO_TAXA_ENTREGA, conteudo),
             "statusPagamento": parser.extrair_status_pagamento(conteudo),
-            "itens": _reconstruir_itens(linhas_tabela),
+            "itens": parser.reconstruir_itens(linhas_tabela),
         }
 
     @pyqtSlot(str, result=bool)
@@ -589,21 +469,8 @@ class ConsultaController(QObject):
         caminho = os.path.join(self.pasta_pedidos, nome_arquivo)
         os.makedirs(self.pasta_pedidos, exist_ok=True)
 
-        # Comanda que já existe aqui com outro conteúdo não é sobrescrita:
-        # vira conflito pra decisão manual (ver
-        # _comparar_pedido_reconciliacao).
         if os.path.isfile(caminho):
-            id_local = indicePedidos.id_evento(nome_arquivo)
-            if id_evento and id_local and id_evento != id_local:
-                indicePedidos.registrar_conflito(
-                    nome_arquivo,
-                    _CONFLITO_CONTEUDO,
-                    id_local=id_local,
-                    id_remoto=id_evento,
-                    maquina_remota=maquina or relogio.maquina_do_id(id_evento),
-                    conteudo_remoto_b64=base64.b64encode(bytes(conteudo)).decode("ascii"),
-                )
-                self.comandasAtualizadas.emit()
+            self._conciliar_com_local(nome_arquivo, caminho, bytes(conteudo), id_evento, maquina)
             return
 
         try:
@@ -614,6 +481,86 @@ class ConsultaController(QObject):
             return
 
         indicePedidos.registrar_recebido(nome_arquivo, id_evento, maquina)
+        self.comandasAtualizadas.emit()
+
+    def _conciliar_com_local(self, nome_arquivo, caminho, conteudo_remoto, id_remoto, maquina):
+        """Decide o que fazer quando a comanda recebida JÁ existe aqui.
+
+        Duas perguntas independentes, nesta ordem:
+
+        1. É a mesma comanda? Sim quando os dois lados têm o mesmo id de linha
+           do tempo — o id nasce na máquina que lançou a venda e viaja junto
+           dela (ver indicePedidos.registrar_recebido), então id igual
+           significa mesma origem e mesma venda.
+        2. Os valores batem? Aí sim compara campo a campo
+           (services/comandaComparacaoService.py).
+
+        Mesma comanda com valores diferentes é a ÚNICA situação que vira
+        conflito: as duas máquinas discordam sobre uma venda que deveria ser a
+        mesma, e nenhuma regra automática pode decidir qual está certa sem
+        arriscar mudar o caixa do dia. As diferenças ficam guardadas junto do
+        conflito para a Consulta poder mostrar exatamente o que não bate.
+
+        Ids diferentes NÃO são conflito: são duas versões numa linha do tempo,
+        e a mais nova vence. Antes disto, qualquer id fora de sincronia virava
+        destaque amarelo — inclusive o caso banal de uma máquina ter o id real
+        e a outra o sintetizado do nome do arquivo, com a comanda idêntica dos
+        dois lados."""
+        id_local = indicePedidos.id_evento(nome_arquivo)
+
+        if id_remoto and id_local and id_remoto == id_local:
+            try:
+                with open(caminho, "rb") as arquivo:
+                    conteudo_local = arquivo.read()
+            except OSError as erro:
+                print(f"Falha ao ler {caminho} para comparar com a versão da rede: {erro}")
+                return
+
+            diferencas = comparacao.diferencas_entre(conteudo_local, conteudo_remoto, nome_arquivo)
+            if not diferencas:
+                return
+
+            novo = indicePedidos.registrar_conflito(
+                nome_arquivo,
+                _CONFLITO_CONTEUDO,
+                id_local=id_local,
+                id_remoto=id_remoto,
+                maquina_remota=maquina or relogio.maquina_do_id(id_remoto),
+                conteudo_remoto_b64=base64.b64encode(conteudo_remoto).decode("ascii"),
+                diferencas=diferencas,
+            )
+            # Só quando o conflito é novo: registrar_conflito é idempotente e
+            # reencontra o mesmo caso a cada ciclo de anti-entropy — sem esta
+            # guarda, o histórico encheria de linhas repetidas.
+            if novo:
+                historicoEventos.registrar_local("conflito_detectado", {"arquivo": nome_arquivo})
+            self.comandasAtualizadas.emit()
+            return
+
+        # Ids diferentes: quem tem o id mais novo manda. A regra é a mesma nas
+        # duas máquinas, então elas convergem sozinhas e param de trocar a
+        # comanda a cada ciclo de anti-entropy.
+        if not relogio.mais_novo(id_remoto, id_local):
+            return
+
+        try:
+            with open(caminho, "rb") as arquivo:
+                conteudo_local = arquivo.read()
+        except OSError:
+            conteudo_local = None
+
+        # Conteúdo idêntico é o caso comum aqui (o id é que estava fora de
+        # sincronia): basta alinhar o índice, sem reescrever o arquivo.
+        if conteudo_local != conteudo_remoto:
+            try:
+                with open(caminho, "wb") as arquivo:
+                    arquivo.write(conteudo_remoto)
+            except OSError as erro:
+                print(f"Falha ao gravar a versão mais nova de {nome_arquivo}: {erro}")
+                return
+
+        indicePedidos.registrar_recebido(nome_arquivo, id_remoto, maquina)
+        indicePedidos.resolver_conflito(nome_arquivo)
         self.comandasAtualizadas.emit()
 
     @pyqtSlot(str, str)
@@ -687,12 +634,27 @@ class ConsultaController(QObject):
                 texto = bruto.decode(parser.CODEPAGE_IMPRESSORA, errors="replace")
                 conteudo_remoto = parser.limpar_codigos_impressora(texto).strip("\n")
 
+        # "maquinaRemota" guarda de onde a COMANDA veio (o sufixo do idEvento,
+        # ver indicePedidos), que não é necessariamente quem mandou a versão
+        # divergente. Quando ela é esta própria máquina — o caso normal de uma
+        # comanda lançada aqui e alterada noutro lugar — dizer o nome faria a
+        # tela afirmar "esta comanda está diferente em <esta máquina>". Vazio
+        # faz o painel cair em "outra máquina", que é vago mas verdadeiro.
+        maquina_remota = conflito.get("maquinaRemota", "")
+        if maquina_remota == rede.nomeLocal:
+            maquina_remota = ""
+
         return {
             "arquivo": os.path.basename(nome_arquivo),
             "motivo": conflito.get("motivo", ""),
-            "maquinaRemota": conflito.get("maquinaRemota", ""),
+            "maquinaRemota": maquina_remota,
             "conteudoRemoto": conteudo_remoto,
             "temVersaoRemota": bool(conteudo_remoto),
+            # Campo a campo, o que difere entre as duas versões (ver
+            # services/comandaComparacaoService.comparar). Vazio em conflitos
+            # gravados antes deste campo existir — a tela cai no cupom inteiro
+            # nesse caso.
+            "diferencas": conflito.get("diferencas") or [],
         }
 
     @pyqtSlot(str, result=bool)
@@ -715,6 +677,9 @@ class ConsultaController(QObject):
 
         tombstones.remover("pedidos", nome_arquivo)
         indicePedidos.resolver_conflito(nome_arquivo)
+        historicoEventos.registrar_local(
+            "conflito_resolvido", {"arquivo": nome_arquivo, "escolha": "versão desta máquina"}
+        )
         rede.transmitir_pedido(nome_arquivo, conteudo)
         self.comandasAtualizadas.emit()
         return True
@@ -753,5 +718,9 @@ class ConsultaController(QObject):
 
         indicePedidos.registrar_recebido(nome_arquivo, conflito.get("idRemoto", ""), conflito.get("maquinaRemota", ""))
         indicePedidos.resolver_conflito(nome_arquivo)
+        historicoEventos.registrar_local(
+            "conflito_resolvido",
+            {"arquivo": nome_arquivo, "escolha": conflito.get("maquinaRemota", "") or "outra máquina"},
+        )
         self.comandasAtualizadas.emit()
         return True

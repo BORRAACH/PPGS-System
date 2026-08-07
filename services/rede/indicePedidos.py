@@ -117,9 +117,95 @@ def maquina(nome_arquivo):
 
 def _gravar(nome_arquivo, id_evento, maquina_origem):
     dados = _carregar()
-    dados[nome_arquivo] = {"idEvento": id_evento, "maquina": maquina_origem}
+    entrada = {"idEvento": id_evento, "maquina": maquina_origem}
+    # A impressão digital é recalculada na próxima leitura (ver impressao()):
+    # gravar o índice é o único momento em que se sabe que o arquivo mudou.
+    dados[nome_arquivo] = entrada
     _salvar(dados)
     return id_evento, maquina_origem
+
+
+# ---------- Impressão digital do conteúdo ----------
+
+
+def _calcular_impressao(nome_arquivo):
+    """Resume a comanda pelos VALORES da venda, não pelos bytes do arquivo.
+
+    Import local de propósito: services/rede/* é importado por redeService,
+    que por sua vez é importado no meio da subida do pacote services.rede —
+    trazer a cadeia do parser aqui no topo daria ciclo. É o mesmo cuidado que
+    services/comandaEstiloService.py já toma com services.rede.
+
+    Comparar os valores (e não sha256 dos bytes) faz duas máquinas com
+    Config/estilo_impressao.json diferentes chegarem à MESMA impressão para a
+    mesma venda — negrito num campo muda os bytes do cupom, não a venda. Com
+    hash de bytes, cada máquina que tivesse mexido no estilo puxaria a comanda
+    inteira do peer a cada ciclo, para no fim concluir que nada mudou."""
+    import hashlib
+    import json
+
+    from services import comandaComparacaoService as comparacao
+
+    caminho = os.path.join(caminhos.pasta_pedidos(), nome_arquivo)
+    try:
+        with open(caminho, "rb") as arquivo:
+            conteudo = arquivo.read()
+    except OSError:
+        return ""
+
+    campos = comparacao.campos_comparaveis(conteudo, nome_arquivo)
+    serializado = json.dumps(campos, sort_keys=True, ensure_ascii=False)
+    return hashlib.sha256(serializado.encode("utf-8")).hexdigest()[:16]
+
+
+def impressao(nome_arquivo):
+    """Impressão digital da comanda, calculada uma vez e guardada no índice.
+
+    Validada pelo mtime do arquivo: sem isso, uma comanda alterada em disco
+    (restauração de backup, edição manual) continuaria anunciando a impressão
+    antiga à malha, e a divergência nunca seria detectada. Comandas que já
+    estavam em disco antes deste campo existir simplesmente não têm a entrada
+    e caem no cálculo na primeira leitura."""
+    dados = _carregar()
+    entrada = dados.get(nome_arquivo)
+    entrada = entrada if isinstance(entrada, dict) else {}
+
+    try:
+        mtime = os.path.getmtime(os.path.join(caminhos.pasta_pedidos(), nome_arquivo))
+    except OSError:
+        return entrada.get("impressao", "")
+
+    if entrada.get("impressao") and entrada.get("mtime") == mtime:
+        return entrada["impressao"]
+
+    calculada = _calcular_impressao(nome_arquivo)
+    entrada["impressao"] = calculada
+    entrada["mtime"] = mtime
+    dados[nome_arquivo] = entrada
+    _salvar(dados)
+    return calculada
+
+
+def versao(nome_arquivo):
+    """A versão anunciada de uma comanda na anti-entropy: id de linha do tempo
+    + impressão digital do conteúdo.
+
+    O id sozinho não bastava. Ele responde "qual veio antes", mas duas
+    máquinas podem ter o MESMO id e conteúdos diferentes (o arquivo de uma
+    delas foi alterado depois de replicado) — e nesse caso o resumo dizia
+    "igual", a reconciliação não puxava nada e a divergência ficava invisível
+    para sempre. Justamente o caso que a Consulta precisa destacar."""
+    return f"{id_evento(nome_arquivo)}|{impressao(nome_arquivo)}"
+
+
+def partes_da_versao(versao_anunciada):
+    """(idEvento, impressao) de uma versão anunciada. Tolera o formato antigo
+    (só o id, sem "|") de um peer ainda não atualizado — nesse caso a
+    impressão vem vazia, e quem compara trata como "desconhecida"."""
+    if not versao_anunciada or not isinstance(versao_anunciada, str):
+        return "", ""
+    id_parte, separador, impressao_parte = versao_anunciada.partition("|")
+    return id_parte, impressao_parte if separador else ""
 
 
 def registrar_local(nome_arquivo):
@@ -185,11 +271,18 @@ def _salvar_conflitos(dados):
     caminhos.salvar_json(_caminho_conflitos(), dados, _ROTULO)
 
 
-def registrar_conflito(nome_arquivo, motivo, id_local="", id_remoto="", maquina_remota="", conteudo_remoto_b64=""):
+def registrar_conflito(
+    nome_arquivo, motivo, id_local="", id_remoto="", maquina_remota="", conteudo_remoto_b64="", diferencas=None
+):
     """Marca a comanda como divergente entre máquinas. Idempotente pelo par
     (motivo, idRemoto): a anti-entropy roda a cada 2 min e reencontraria o
     mesmo conflito indefinidamente — regravar a cada ciclo só gastaria
-    disco e faria a data de detecção mentir."""
+    disco e faria a data de detecção mentir.
+
+    `diferencas` é a lista campo a campo de
+    services/comandaComparacaoService.comparar, guardada junto para a Consulta
+    mostrar o que exatamente não bate sem precisar reprocessar as duas versões
+    a cada vez que o usuário abre o painel."""
     dados = carregar_conflitos()
     atual = dados.get(nome_arquivo)
     if isinstance(atual, dict) and atual.get("motivo") == motivo and atual.get("idRemoto") == id_remoto:
@@ -201,6 +294,7 @@ def registrar_conflito(nome_arquivo, motivo, id_local="", id_remoto="", maquina_
         "idRemoto": id_remoto,
         "maquinaRemota": maquina_remota,
         "conteudoRemoto_b64": conteudo_remoto_b64,
+        "diferencas": diferencas or [],
         "detectadoEm": time.time(),
     }
     _salvar_conflitos(dados)

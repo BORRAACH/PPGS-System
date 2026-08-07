@@ -8,14 +8,18 @@ que já levou comandaTextoService.py a existir (ver o docstring de lá).
 Comportamento idêntico ao que já rodava dentro de ConsultaController; só
 mudou de endereço.
 
-Não inclui aqui o parsing pesado de itens/tabela (`_reconstruir_itens` em
-consultaController.py) — isso só interessa a quem precisa reabrir a comanda
-num formulário editável (Consulta > Editar), não a quem só precisa dos
-campos de cabeçalho (cliente, data, forma de pagamento, status, valor)."""
+Inclui também o parsing pesado da tabela de itens (`reconstruir_itens`), que
+por muito tempo viveu só dentro de consultaController.py: enquanto o único
+consumidor era "reabrir a comanda num formulário editável" (Consulta >
+Editar), deixá-lo lá fazia sentido. Deixou de fazer quando
+services/comandaComparacaoService.py passou a precisar dos MESMOS itens para
+comparar duas versões da mesma comanda campo a campo — duas cópias dessa
+lógica divergiriam na primeira vez que alguém mexesse no formato da tabela, e
+a comparação passaria a acusar diferença onde não há."""
 
 import re
 
-from services.comandaTextoService import valor_para_float
+from services.comandaTextoService import MARCADOR_ITENS, PREFIXO_ADICIONAL, PREFIXO_BORDA, valor_para_float
 
 CODEPAGE_IMPRESSORA = "cp850"
 
@@ -53,6 +57,41 @@ PADRAO_ENDERECO = re.compile(r"^Endereço:[ \t]*(.*)$", re.MULTILINE)
 # que está no papel possa ser conferido entre as máquinas. Comandas
 # anteriores a ele simplesmente não têm a linha, e extrair_campo devolve "".
 PADRAO_ID_PEDIDO = re.compile(r"^ID:[ \t]*(.*)$", re.MULTILINE)
+
+# Campos exclusivos de Entrega (ver EntregaController._salvarComanda). Vieram
+# de consultaController.py junto com reconstruir_itens, pelo mesmo motivo: a
+# comparação entre máquinas precisa deles tanto quanto a tela de edição.
+PADRAO_TELEFONE = re.compile(r"^Telefone:[ \t]*(.*)$", re.MULTILINE)
+# Só o cupom final de Mesa imprime esta linha (ver SalaoController._montarCupomFinal).
+PADRAO_MESA = re.compile(r"^Mesa:[ \t]*(.*)$", re.MULTILINE)
+PADRAO_BAIRRO = re.compile(r"^Bairro:[ \t]*(.*)$", re.MULTILINE)
+PADRAO_OBSERVACAO_GERAL = re.compile(r"^Observação:[ \t]*(.*)$", re.MULTILINE)
+PADRAO_TROCO = re.compile(r"^Troco para:[ \t]*(.*)$", re.MULTILINE)
+PADRAO_TAXA_ENTREGA = re.compile(r"^Taxa de entrega:[ \t]*(.*)$", re.MULTILINE)
+
+# Linha de um item na tabela do cupom: "coluna_pedido | valor". A observação
+# (quando houver) vem numa linha própria logo abaixo, recuada com 2 espaços
+# (ver comandaTextoService.formatar_tabela).
+_PADRAO_LINHA_TABELA = re.compile(r"^(.*)\|(.*)$")
+_PADRAO_LINHA_OBSERVACAO = re.compile(r"^  (.+)$")
+# Linhas de adicional/borda (ver comandaTextoService.montar_grupos) — casadas
+# ANTES de _PADRAO_LINHA_OBSERVACAO (que bateria com qualquer uma delas
+# também, por ser só "recuo + texto"), senão um adicional/borda vira
+# observação na reconstrução.
+_PADRAO_LINHA_ADICIONAL = re.compile(r"^  " + re.escape(PREFIXO_ADICIONAL) + r"(.+?)(?: \((.+)\))?$")
+_PADRAO_LINHA_BORDA = re.compile(r"^  " + re.escape(PREFIXO_BORDA) + r"(.+?)(?: \((.+)\))?$")
+# Fração de sabor de pizza meio a meio: "1/3 - Nome do Sabor".
+_PADRAO_FRACAO_SABOR = re.compile(r"^\d+/\d+ - (.+)$")
+# Sufixo de tamanho no primeiro sabor: "Nome do Sabor (Grande)".
+_PADRAO_SUFIXO_TAMANHO = re.compile(r"^(.*)\s\(([^)]+)\)$")
+# balcaoController/entregaController agora imprimem o nome do item em caixa
+# alta (ex: "(GRANDE)"), então a comparação precisa ignorar maiúsculas/
+# minúsculas para continuar reconhecendo o sufixo em comandas antigas e novas.
+# "300 ML"/"500 ML"/"700 ML" são os tamanhos de Acai.qml (ver
+# data/cardapio/acai.json) — sem eles aqui, os adicionais de um copo de
+# açaí editado via Consulta perderiam a associação com o item ao reimprimir.
+_TAMANHOS_VALIDOS = ("Grande", "Broto", "Mini", "300 ML", "500 ML", "700 ML")
+_TAMANHOS_VALIDOS_UPPER = tuple(t.upper() for t in _TAMANHOS_VALIDOS)
 
 _PADRAO_STATUS_PAGAMENTO = re.compile(r"^Status:[ \t]*(.*)$", re.MULTILINE)
 # balcaoController imprime o status colado no fim da linha do valor total
@@ -206,3 +245,155 @@ def data_arquivo_aaaammdd(nome_arquivo):
     bater com o padrão esperado (arquivo de origem desconhecida)."""
     match = _PADRAO_PREFIXO_ARQUIVO.match(nome_arquivo)
     return match.group(2) if match else None
+
+
+def linhas_tabela_itens(linhas):
+    """As linhas da tabela de itens dentro de `linhas` (o cupom já limpo,
+    quebrado por "\\n"), ou None quando não dá pra localizá-la.
+
+    A tabela é sempre cercada por MARCADOR_ITENS ("="*40), não importa em que
+    posição da comanda ela esteja configurada pra sair (ver
+    comandaEstiloService.ordem_secoes/comandaTextoService.montar_linhas_por_ordem)
+    — diferente do separador genérico ("-"*40) usado entre os demais campos,
+    que pode aparecer em qualquer quantidade e posição. O fallback cobre
+    comandas gravadas antes dessa mudança, quando a tabela de itens sempre
+    ficava entre a 1ª e a 2ª linha de traços do arquivo."""
+    divisorias = [i for i, linha in enumerate(linhas) if linha == MARCADOR_ITENS]
+    if len(divisorias) < 2:
+        divisorias = [i for i, linha in enumerate(linhas) if linha.startswith("----")]
+    if len(divisorias) < 2:
+        return None
+
+    return linhas[divisorias[0] + 1:divisorias[1]]
+
+
+def dividir_endereco_numero(endereco_completo):
+    """Desfaz o "Endereço, Número" montado por entregaController.enviarPedido."""
+    if not endereco_completo:
+        return "", ""
+
+    partes = endereco_completo.rsplit(",", 1)
+    if len(partes) == 2 and partes[1].strip():
+        return partes[0].strip(), partes[1].strip()
+
+    return endereco_completo.strip(), ""
+
+
+def reconstruir_itens(linhas_tabela):
+    """Desfaz comandaTextoService.montar_grupos/formatar_tabela: volta das
+    linhas já formatadas do cupom para a lista de itens (pedido, observação,
+    valor, borda, adicionais) como ficavam em modeloPedidos antes de
+    imprimir."""
+    itens = []
+    grupo_atual = []
+    # Borda é um extra de nível de grupo (a pizza inteira), não de uma fração
+    # específica — por isso fica fora de grupo_atual, num estado à parte que
+    # fechar_grupo() consome e reseta.
+    borda_atual = {"nome": "", "valor": ""}
+
+    def fechar_grupo():
+        if not grupo_atual:
+            return
+
+        borda = {"nome": borda_atual["nome"], "valor": borda_atual["valor"]} if borda_atual["nome"] else None
+
+        if len(grupo_atual) == 1:
+            coluna_pedido, observacao, valor, adicionais = grupo_atual[0]
+            pedido = coluna_pedido[2:] if coluna_pedido.startswith("- ") else coluna_pedido
+            # O adicional foi salvo (em Pizzas.qml) com o nome do sabor SEM o
+            # sufixo de tamanho — precisa desfazer o mesmo sufixo aqui para
+            # que "sabor" volte a bater com o nome usado ao reimprimir.
+            sabor_sem_tamanho = pedido
+            match_tamanho = _PADRAO_SUFIXO_TAMANHO.match(pedido)
+            if match_tamanho and match_tamanho.group(2).strip().upper() in _TAMANHOS_VALIDOS_UPPER:
+                sabor_sem_tamanho = match_tamanho.group(1)
+            for adicional in adicionais:
+                adicional["sabor"] = sabor_sem_tamanho
+            itens.append({
+                "pedido": pedido,
+                "observacao": observacao,
+                "valor": valor,
+                "borda": borda,
+                "adicionais": adicionais,
+            })
+        else:
+            sabores = []
+            tamanho = ""
+            observacao_final = ""
+            valor_final = ""
+            adicionais_totais = []
+            for indice, (coluna_pedido, observacao, valor, adicionais) in enumerate(grupo_atual):
+                match_fracao = _PADRAO_FRACAO_SABOR.match(coluna_pedido)
+                nome = match_fracao.group(1) if match_fracao else coluna_pedido
+                if indice == 0:
+                    match_tamanho = _PADRAO_SUFIXO_TAMANHO.match(nome)
+                    if match_tamanho and match_tamanho.group(2).strip().upper() in _TAMANHOS_VALIDOS_UPPER:
+                        nome = match_tamanho.group(1)
+                        tamanho = match_tamanho.group(2)
+                    valor_final = valor
+                # A observação do grupo agora é impressa depois de TODAS as
+                # frações (ver formatar_tabela), então fica anexada à última
+                # fração lida, não necessariamente à primeira.
+                if observacao:
+                    observacao_final = observacao
+                for adicional in adicionais:
+                    adicional["sabor"] = nome
+                adicionais_totais.extend(adicionais)
+                sabores.append(nome)
+
+            pedido = " / ".join(sabores)
+            if tamanho:
+                pedido += f" ({tamanho})"
+            itens.append({
+                "pedido": pedido,
+                "observacao": observacao_final,
+                "valor": valor_final,
+                "borda": borda,
+                "adicionais": adicionais_totais,
+            })
+
+        grupo_atual.clear()
+        borda_atual["nome"] = ""
+        borda_atual["valor"] = ""
+
+    for linha in linhas_tabela:
+        if linha.strip() == "":
+            fechar_grupo()
+            continue
+
+        # Adicional (recuado, "+ ..."), pertence à fração imediatamente
+        # acima dele dentro do grupo atual.
+        match_adicional = _PADRAO_LINHA_ADICIONAL.match(linha)
+        if match_adicional and grupo_atual:
+            _coluna_pedido, _observacao, _valor, adicionais = grupo_atual[-1]
+            adicionais.append({
+                "nome": match_adicional.group(1).strip(),
+                "valor": (match_adicional.group(2) or "").strip(),
+            })
+            continue
+
+        # Borda (recuada, "* ..."), pertence ao grupo inteiro — só pode
+        # haver uma por pizza (ver PopupAdicionaisBordas.qml).
+        match_borda = _PADRAO_LINHA_BORDA.match(linha)
+        if match_borda and grupo_atual:
+            borda_atual["nome"] = match_borda.group(1).strip()
+            borda_atual["valor"] = (match_borda.group(2) or "").strip()
+            continue
+
+        # Linha de observação (recuada), pertence ao pedido imediatamente
+        # acima dela dentro do grupo atual.
+        match_observacao = _PADRAO_LINHA_OBSERVACAO.match(linha)
+        if match_observacao and grupo_atual:
+            coluna_pedido, _observacao_antiga, valor, adicionais = grupo_atual[-1]
+            grupo_atual[-1] = (coluna_pedido, match_observacao.group(1).strip(), valor, adicionais)
+            continue
+
+        match_linha = _PADRAO_LINHA_TABELA.match(linha)
+        if not match_linha:
+            continue
+
+        coluna_pedido, valor = (g.strip() for g in match_linha.groups())
+        grupo_atual.append((coluna_pedido, "", valor, []))
+
+    fechar_grupo()
+    return itens

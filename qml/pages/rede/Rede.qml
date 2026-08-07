@@ -35,6 +35,19 @@ Page {
         }
     }
 
+    // Lê o histórico da malha (ver services/rede/historicoEventos.py). É um
+    // JSON local pequeno, já limitado pela retenção do próprio módulo, então
+    // pode ser lido direto como a lista de peers.
+    function carregarHistorico() {
+        if (!redeController)
+            return;
+
+        var eventos = redeController.listarHistorico(200);
+        modeloHistorico.clear();
+        for (var i = 0; i < eventos.length; i++)
+            modeloHistorico.append({ "evento": eventos[i] });
+    }
+
     // Local, sem I/O externo (RedeService já mantém a eleição pronta) —
     // pode ser chamada direto, sem precisar de thread nem sinal de retorno.
     function carregarImpressoraPrincipal() {
@@ -87,6 +100,10 @@ Page {
         function onPeersMudaram() {
             carregarPeers();
             carregarCandidatosImpressora();
+            // Entrar/sair da malha é justamente um dos eventos do histórico
+            // (ver historicoEventos.registrar_local em RedeService), então
+            // vale recarregar junto.
+            carregarHistorico();
         }
 
         function onImpressoraPrincipalMudou() {
@@ -109,12 +126,14 @@ Page {
         // a página na hora. A impressora só é buscada depois, em thread,
         // pra não atrasar a abertura da tela.
         carregarPeers();
+        carregarHistorico();
         carregarImpressora();
         carregarImpressoraPrincipal();
         carregarCandidatosImpressora();
     }
     StackView.onActivated: {
         carregarPeers();
+        carregarHistorico();
         carregarImpressora();
         carregarImpressoraPrincipal();
         carregarCandidatosImpressora();
@@ -140,6 +159,10 @@ Page {
 
     ListModel {
         id: modeloPeers
+    }
+
+    ListModel {
+        id: modeloHistorico
     }
 
     ColumnLayout {
@@ -270,7 +293,11 @@ Page {
 
                 ListView {
                     Layout.fillWidth: true
-                    Layout.fillHeight: true
+                    // Só a altura do conteúdo (com um teto): a malha tem no
+                    // máximo 4 máquinas, e deixar esta lista esticar sobrava
+                    // um vão enorme entre ela e o histórico logo abaixo. Quem
+                    // cresce com a janela é o histórico, que é a lista longa.
+                    Layout.preferredHeight: Math.max(90, Math.min(contentHeight, 220))
                     clip: true
                     spacing: 8
                     model: modeloPeers
@@ -337,6 +364,49 @@ Page {
                                 color: Estilo.cores.textoSecundario
                             }
                         }
+                    }
+                }
+
+                // --- HISTÓRICO DA MALHA ---
+                // O que aconteceu na rede, de todas as máquinas, não só desta
+                // (ver services/rede/historicoEventos.py: o histórico é um
+                // domínio sincronizado, então quem entra na malha recebe o
+                // acumulado de quem já estava). Antes desta tela, o único
+                // rastro de "o que aconteceu" eram os prints em logs/app.log.
+                Text {
+                    text: "Histórico da rede"
+                    font.pixelSize: Estilo.fonte.padrao
+                    font.bold: true
+                    color: Estilo.cores.textoSecundario
+                }
+
+                ListView {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    clip: true
+                    spacing: 6
+                    model: modeloHistorico
+
+                    ScrollBar.vertical: ScrollBar {
+                        policy: ScrollBar.AsNeeded
+                    }
+
+                    Text {
+                        anchors.centerIn: parent
+                        visible: modeloHistorico.count === 0
+                        text: "Nada registrado ainda.\nComandas, cardápio, caixa e configurações aparecem aqui conforme forem mudando."
+                        horizontalAlignment: Text.AlignHCenter
+                        color: Estilo.cores.textoSecundario
+                        font.pixelSize: Estilo.fonte.padrao
+                    }
+
+                    // `evento` é preenchido pelo Qt a partir do papel de mesmo
+                    // nome do ListModel, por ser declarado required lá dentro
+                    // (ver ItemHistorico.qml).
+                    delegate: ItemHistorico {
+                        width: ListView.view.width - (ListView.view.ScrollBar.vertical.visible ? ListView.view.ScrollBar.vertical.width : 0)
+                        agoraSegundos: relogio.agora / 1000
+                        formatarDuracao: telaRede.formatarDuracao
                     }
                 }
             }
