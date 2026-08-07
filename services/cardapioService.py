@@ -77,6 +77,39 @@ CATEGORIAS = [
             {"chave": "valorGrande", "rotulo": "Preço (grande)", "tipo": PRECO, "obrigatorio": True, "curto": "Grande"},
         ],
     },
+    # Bordas e adicionais de pizza dividem adicionais.json, do mesmo jeito que
+    # as duas seções de acai.json (ver "secao" acima): a tela de Pizzas lê os
+    # dois grupos numa leitura só (qml/pages/pedidos/pizzas/PopupAdicionaisBordas.qml
+    # espera "bordas" e "adicionais" no mesmo objeto), mas aqui são duas listas
+    # editáveis independentes.
+    {
+        "chave": "pizzaBordas",
+        "rotulo": "Bordas de pizza",
+        "novoRotulo": "Nova borda",
+        "arquivo": "adicionais.json",
+        "secao": "bordas",
+        "icone": "fa6s.circle-notch",
+        "cor": "#d32f2f",
+        "numerado": False,
+        "campos": [
+            {"chave": "nome", "rotulo": "Nome da borda", "tipo": TEXTO, "obrigatorio": True, "curto": ""},
+            {"chave": "valor", "rotulo": "Preço", "tipo": PRECO, "obrigatorio": True, "curto": ""},
+        ],
+    },
+    {
+        "chave": "pizzaAdicionais",
+        "rotulo": "Adicionais de pizza",
+        "novoRotulo": "Novo adicional",
+        "arquivo": "adicionais.json",
+        "secao": "adicionais",
+        "icone": "fa6s.plus",
+        "cor": "#d32f2f",
+        "numerado": False,
+        "campos": [
+            {"chave": "nome", "rotulo": "Nome do adicional", "tipo": TEXTO, "obrigatorio": True, "curto": ""},
+            {"chave": "valor", "rotulo": "Preço", "tipo": PRECO, "obrigatorio": True, "curto": ""},
+        ],
+    },
     {
         "chave": "lanches",
         "rotulo": "Lanches",
@@ -91,6 +124,22 @@ CATEGORIAS = [
             {"chave": "valor.pao_hamburguer", "rotulo": "Preço (pão de hambúrguer)", "tipo": PRECO, "obrigatorio": True, "curto": "Hambúrguer"},
             {"chave": "valor.pao_frances", "rotulo": "Preço (pão francês)", "tipo": PRECO, "obrigatorio": True, "curto": "Francês"},
             {"chave": "valor.pao_baby", "rotulo": "Preço (pão baby)", "tipo": PRECO, "obrigatorio": True, "curto": "Baby"},
+        ],
+    },
+    # Ao contrário dos de pizza, os adicionais de lanche ocupam o arquivo
+    # inteiro (a lista é a raiz de adicionaisLanches.json), então não declaram
+    # "secao" — ver PopupAdicionaisLanches.qml, que itera o JSON direto.
+    {
+        "chave": "lanchesAdicionais",
+        "rotulo": "Adicionais de lanche",
+        "novoRotulo": "Novo adicional",
+        "arquivo": "adicionaisLanches.json",
+        "icone": "fa6s.plus",
+        "cor": "#e67e22",
+        "numerado": False,
+        "campos": [
+            {"chave": "nome", "rotulo": "Nome do adicional", "tipo": TEXTO, "obrigatorio": True, "curto": ""},
+            {"chave": "valor", "rotulo": "Preço", "tipo": PRECO, "obrigatorio": True, "curto": ""},
         ],
     },
     {
