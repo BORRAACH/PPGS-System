@@ -16,16 +16,53 @@ Rectangle {
     property string texto: ""
     property int tamanhoBase: 12
 
-    // Cada propriedade lê controlador.versaoConfig como argumento de
-    // obterAtributoReativo()/obterTamanhoFonteReativo() (ver
-    // EstiloImpressora.qml) — sem isso, mudanças feitas no popup (em outra
-    // instância de componente) não chegariam a esta prévia, já que
-    // configAtual é um objeto JS comum e mutá-lo não emite sinal de mudança
-    // de propriedade sozinho.
-    readonly property bool _negrito: !!(controlador && controlador.obterAtributoReativo(campo, "negrito", controlador.versaoConfig))
-    readonly property bool _sublinhado: !!(controlador && controlador.obterAtributoReativo(campo, "sublinhado", controlador.versaoConfig))
-    readonly property bool _fundoPreto: !!(controlador && controlador.obterAtributoReativo(campo, "fundo_preto", controlador.versaoConfig))
-    readonly property int _multiplicador: controlador ? controlador.multiplicadorFonte(controlador.obterTamanhoFonteReativo(campo, controlador.versaoConfig)) : 1
+    // Estado do estilo deste campo, relido quando o controlador avisa que ESTE
+    // campo mudou (campoEstiloAlterado), em vez de por binding.
+    //
+    // Antes as quatro eram bindings que liam controlador.versaoConfig, um
+    // contador incrementado a cada edição — e como configAtual é um objeto JS
+    // comum, que não emite sinal ao ser mutado, era preciso passar versaoConfig
+    // como argumento de funções que nem o usavam (obterAtributoReativo), só
+    // para criar a dependência. Some esse parâmetro-fantasma, e mudar um campo
+    // deixa de reavaliar as ~80 bindings dos ~20 campos da comanda.
+    //
+    // Não espere ganho de desempenho por isto: medido, sai igual. O que pesa
+    // numa alteração é o relayout (mudar o tamanho do texto reposiciona a
+    // coluna inteira do papel e mexe no contentHeight do Flickable) — ~3ms,
+    // contra ~0,3ms de uma alteração que não mexe no tamanho, como o negrito.
+    //
+    // versaoConfig continua servindo de "invalidar tudo", para quando a
+    // configuração inteira é trocada (carregarConfiguracao/restaurar padrões).
+    property bool _negrito: false
+    property bool _sublinhado: false
+    property bool _fundoPreto: false
+    property int _multiplicador: 1
+
+    function recarregarEstilo() {
+        if (!controlador)
+            return;
+
+        _negrito = !!controlador.obterAtributo(campo, "negrito");
+        _sublinhado = !!controlador.obterAtributo(campo, "sublinhado");
+        _fundoPreto = !!controlador.obterAtributo(campo, "fundo_preto");
+        _multiplicador = controlador.multiplicadorFonte(controlador.obterTamanhoFonte(campo));
+    }
+
+    Component.onCompleted: recarregarEstilo()
+    onCampoChanged: recarregarEstilo()
+
+    Connections {
+        target: raizCampo.controlador
+
+        function onCampoEstiloAlterado(chave) {
+            if (chave === raizCampo.campo)
+                raizCampo.recarregarEstilo();
+        }
+
+        function onVersaoConfigChanged() {
+            raizCampo.recarregarEstilo();
+        }
+    }
 
     implicitWidth: rotulo.implicitWidth + (_fundoPreto ? 8 : 0)
     implicitHeight: rotulo.implicitHeight + (_fundoPreto ? 2 : 0)

@@ -55,21 +55,19 @@ Column {
     // comum, e só a atribuição emite o sinal que faz a prévia se redesenhar.
     property var separadoresPorCampo: ({})
     // Estado local desta sessão de edição — cliques só mexem aqui
-    // (instantâneo, sem chamar o Python). Só vira gravação em disco de fato
-    // em salvarNoBackend(), chamado ao sair da tela (ver
-    // Component.onDestruction abaixo e StackView.onDeactivated em
-    // ../Configuracoes.qml). Gravar a cada clique deixava os controles com
-    // uma sensação de atraso, porque a chamada síncrona pro Python bloqueava
-    // o próximo frame de renderização até terminar.
+    // (instantâneo, sem chamar o Python). Só vira gravação em disco quando o
+    // usuário clica em "Aplicar alterações" (ver ../Configuracoes.qml), ou
+    // quando ele confirma a saída com edições pendentes. Gravar a cada clique
+    // deixava os controles com sensação de atraso, porque a chamada síncrona
+    // pro Python bloqueava o próximo frame de renderização até terminar.
     property var configAtual: ({
         "campos": {}
     })
-    // Incrementado a cada mudança local de ESTILO (ver tocar()) só para
-    // servir de dependência de binding — configAtual é um objeto JS comum,
-    // então mutá-lo (definirAtributoLocal/definirTamanhoFonteLocal) não emite
-    // nenhum sinal de mudança de propriedade sozinho. A prévia lê esta
-    // propriedade para saber quando reavaliar suas bindings (ver
-    // PreviaCampoTexto.qml).
+    // "A configuração inteira foi trocada" — incrementado só por
+    // carregarConfiguracao() (abrir a tela, restaurar padrões), que é quando
+    // TODOS os campos da prévia precisam se reler de uma vez. Uma edição de um
+    // campo só não passa por aqui: emite campoEstiloAlterado, e apenas a
+    // prévia daquele campo se atualiza (ver PreviaCampoTexto.qml).
     property int versaoConfig: 0
 
     // --- Estado da prévia interativa ---
@@ -145,29 +143,29 @@ Column {
         "troco_a_dar": { "prefixo": "Troco a dar: ", "valor": "R$ 55,00" }
     })
 
-    function tocar() {
-        raiz.versaoConfig += 1;
+    // Emitido quando o estilo de UM campo muda, para só a prévia daquele campo
+    // se reler (ver PreviaCampoTexto.recarregarEstilo). versaoConfig continua
+    // existindo para o caso oposto — "mudou tudo", em carregarConfiguracao().
+    signal campoEstiloAlterado(string chave)
+
+    // Há edições que ainda não foram gravadas em disco nem enviadas à malha.
+    // Só o botão "Aplicar alterações" (ver ../Configuracoes.qml) zera isto.
+    property bool alteracoesPendentes: false
+
+    function marcarPendente() {
+        raiz.alteracoesPendentes = true;
     }
+
+    // Os dois espaçamentos são mexidos direto pelos botões -/+ do bloco
+    // ESPAÇAMENTO (raiz.espacamentoSecoes += 1), sem passar por função — daí
+    // a pendência ser marcada aqui. carregarConfiguracao() também os escreve,
+    // e por isso zera a flag no fim.
+    onEspacamentoSecoesChanged: raiz.marcarPendente()
+    onEspacamentoCorteChanged: raiz.marcarPendente()
 
     function obterAtributo(campo, atributo) {
         var atributosCampo = raiz.configAtual.campos[campo];
         return !!(atributosCampo && atributosCampo[atributo]);
-    }
-
-    // Iguais a obterAtributo()/obterTamanhoFonte(), mas recebendo
-    // versaoConfig como argumento extra (sem usá-lo no corpo) — configAtual
-    // é um objeto JS comum, então mutá-lo não emite nenhum sinal de mudança
-    // de propriedade sozinho. Ler versaoConfig (uma property de verdade)
-    // dentro da própria expressão de binding de quem chama esta função é o
-    // que cria a dependência que faltava, sem recorrer a um "comma
-    // expression" (que o qmllint reprova). Usadas pela prévia da comanda
-    // (PreviaCampoTexto.qml).
-    function obterAtributoReativo(campo, atributo, versao) {
-        return raiz.obterAtributo(campo, atributo);
-    }
-
-    function obterTamanhoFonteReativo(campo, versao) {
-        return raiz.obterTamanhoFonte(campo);
     }
 
     function definirAtributoLocal(campo, atributo, valor) {
@@ -175,7 +173,8 @@ Column {
             raiz.configAtual.campos[campo] = {};
 
         raiz.configAtual.campos[campo][atributo] = valor;
-        raiz.tocar();
+        raiz.marcarPendente();
+        raiz.campoEstiloAlterado(campo);
     }
 
     function obterTamanhoFonte(campo) {
@@ -189,7 +188,8 @@ Column {
             raiz.configAtual.campos[campo] = {};
 
         raiz.configAtual.campos[campo].tamanho_fonte = valor;
-        raiz.tocar();
+        raiz.marcarPendente();
+        raiz.campoEstiloAlterado(campo);
     }
 
     // Espelha comandaEstiloService._multiplicador_fonte (Python): o ESC/POS
@@ -223,6 +223,7 @@ Column {
             "linhas_separador": raiz.linhasSeparadorPadrao,
             "separadores_campo": raiz.separadoresPorCampo
         });
+        raiz.alteracoesPendentes = false;
     }
 
     function carregarConfiguracao() {
@@ -282,6 +283,14 @@ Column {
         // Só depois do laço de append(): durante ele o count cresce aos
         // poucos e o cálculo sairia sobre um modelo pela metade.
         raiz.recalcularSeparadores();
+
+        // A prévia inteira precisa se reler: acabou de chegar outra
+        // configuração (abrir a tela, ou "Restaurar padrões").
+        raiz.versaoConfig += 1;
+        // Por último: escrever os espaçamentos acima disparou
+        // onEspacamentoSecoesChanged/onEspacamentoCorteChanged, e o que acabou
+        // de ser lido do disco não é uma edição pendente.
+        raiz.alteracoesPendentes = false;
     }
 
     function categoriaDe(chave) {
@@ -356,6 +365,7 @@ Column {
     // uma binding que reavaliaria sozinha ao ler linhasSeparadorPadrao.
     function definirLinhasSeparadorPadrao(valor) {
         raiz.linhasSeparadorPadrao = Math.max(0, Math.min(raiz.maxLinhasSeparador, valor));
+        raiz.marcarPendente();
         raiz.recalcularSeparadores();
     }
 
@@ -376,6 +386,7 @@ Column {
             novo[chave] = Math.min(raiz.maxLinhasSeparador, valor);
 
         raiz.separadoresPorCampo = novo;
+        raiz.marcarPendente();
         raiz.recalcularSeparadores();
     }
 
@@ -417,6 +428,7 @@ Column {
         for (var i = 0; i < modeloOrdemSecoes.count; i++)
             nova.push(modeloOrdemSecoes.get(i).chave);
         raiz.configAtual.ordem_secoes = nova;
+        raiz.marcarPendente();
         raiz.recalcularSeparadores();
     }
 
@@ -513,7 +525,15 @@ Column {
     // outra tela da barra lateral" (sem ser destruída) é coberto por
     // StackView.onDeactivated em ../Configuracoes.qml, já que este item
     // continua vivo nesse caso.
-    Component.onDestruction: raiz.salvarNoBackend()
+    // Rede de segurança para o fim da vida da tela (Voltar, Início, fechar o
+    // app): fechar o app não dá chance de perguntar nada, e perder o que foi
+    // editado é pior que gravar. Só grava se houver pendência — sem essa
+    // guarda, toda saída de Configurações regravava o arquivo e publicava a
+    // configuração inteira na malha, mesmo sem ninguém ter mexido em nada.
+    Component.onDestruction: {
+        if (raiz.alteracoesPendentes)
+            raiz.salvarNoBackend();
+    }
 
     ListModel {
         id: modeloOrdemSecoes
