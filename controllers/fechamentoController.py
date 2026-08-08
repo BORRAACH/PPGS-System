@@ -1,6 +1,7 @@
 import hashlib
 import json
 import os
+import unicodedata
 from datetime import datetime, timedelta
 
 from PyQt6.QtCore import QObject, pyqtSignal, pyqtSlot
@@ -526,6 +527,56 @@ class FechamentoController(QObject):
             "suspeita": parser.eh_suspeita(tipo, cliente, forma_pagamento, status, endereco),
         }
 
+    @staticmethod
+    def _texto_de_busca(dados, tipo):
+        """Uma linha só, normalizada, com tudo por onde a comanda pode ser
+        procurada na tela de Fechamento: modalidade, código, cliente, forma de
+        pagamento, status, os itens pedidos e o valor.
+
+        Normalizar aqui (minúsculas, sem acento) e não na tela é de propósito:
+        assim "Açaí" acha "acai" e "JOÃO" acha "joao" sem cada comparação ter
+        que refazer esse trabalho — a tela filtra a cada tecla digitada.
+
+        O valor entra em três formas — "45.9", "45,90" e "4590" — porque é
+        assim que as pessoas procuram: quem lembra do valor digita "45,90" ou
+        "45.90", e quem confere pelo cupom às vezes digita só os dígitos. Sem
+        isso, buscar "45,90" não acharia nada, já que o número guardado é um
+        float.
+
+        O cupom inteiro NÃO entra: ele traz prefixos ("Cliente:", "Forma de
+        pagamento:") e linhas de separador que casariam com quase qualquer
+        busca curta, enchendo o resultado de falso positivo."""
+        valor = dados.get("valor") or 0.0
+        com_virgula = f"{valor:.2f}".replace(".", ",")
+
+        partes = [
+            tipo,
+            dados.get("codigo", ""),
+            dados.get("cliente", ""),
+            dados.get("formaPagamento", ""),
+            dados.get("status", ""),
+            dados.get("dataHora", ""),
+            f"{valor:.2f}",
+            com_virgula,
+            com_virgula.replace(",", ""),
+        ]
+
+        conteudo = dados.get("conteudo") or ""
+        linhas_tabela = parser.linhas_tabela_itens(conteudo.split("\n"))
+        for item in parser.reconstruir_itens(linhas_tabela) if linhas_tabela is not None else []:
+            partes.append(item.get("pedido", ""))
+            partes.append(item.get("observacao", ""))
+            borda = item.get("borda")
+            if borda and borda.get("nome"):
+                partes.append(borda["nome"])
+            for adicional in item.get("adicionais") or []:
+                partes.append(adicional.get("nome", ""))
+
+        texto = " ".join(parte for parte in partes if parte)
+        # NFKD + descarte dos acentos: "Açaí" -> "acai".
+        sem_acento = unicodedata.normalize("NFKD", texto)
+        return "".join(c for c in sem_acento if not unicodedata.combining(c)).lower()
+
     def _calcular_resumo_dia(self, data_iso):
         total = 0.0
         quantidade = 0
@@ -550,6 +601,14 @@ class FechamentoController(QObject):
                 "formaPagamento": dados["formaPagamento"],
                 "status": dados["status"],
                 "dataHora": dados["dataHora"],
+                "codigo": dados["codigo"],
+                # Tudo que a busca da tela precisa varrer, já normalizado (ver
+                # _texto_de_busca). Vai pronto do Python porque o cupom inteiro
+                # só existe aqui: o resumo não carrega "conteudo" (seria o
+                # cupom de cada comanda dentro do cache do dia e do payload
+                # que a malha sincroniza), e sem os itens não daria pra achar
+                # uma comanda pelo que foi pedido.
+                "busca": self._texto_de_busca(dados, tipo),
                 # Ver comandaParserService.eh_suspeita — a tela marca com
                 # borda vermelha em vez de listar à parte (ver
                 # Fechamento.qml).
@@ -609,10 +668,25 @@ class FechamentoController(QObject):
             return self.calcularFechamento(data_iso)
 
         resumo_em_cache = fechamentoCache.carregar(data_iso)
-        if resumo_em_cache is not None:
+        if resumo_em_cache is not None and self._cache_tem_busca(resumo_em_cache):
             return resumo_em_cache
 
         return self.calcularFechamento(data_iso)
+
+    @staticmethod
+    def _cache_tem_busca(resumo):
+        """Se o resumo em cache foi gravado por uma versão que já montava o
+        campo "busca" de cada comanda (ver _texto_de_busca).
+
+        Sem esta checagem a busca da tela ficaria cega justamente nos dias
+        passados — que são os que sempre vêm do cache, e onde mais se procura
+        uma comanda. Recalcular o dia é O(k) nas comandas daquele dia e grava
+        o cache novo, então isso acontece uma vez por dia antigo visitado."""
+        for grupo in (resumo.get("porTipo") or {}).values():
+            for comanda in grupo.get("comandas") or []:
+                if "busca" not in comanda:
+                    return False
+        return True
 
     # ---------- Cupom impresso ao "Fechar Caixa" ----------
 

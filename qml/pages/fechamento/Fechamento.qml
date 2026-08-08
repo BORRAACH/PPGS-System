@@ -20,11 +20,45 @@ Page {
 
     objectName: "telaFechamento"
 
+    // Digitar qualquer letra/número em qualquer lugar da tela já começa a
+    // busca, sem precisar clicar na barra primeiro. A página fica com o foco
+    // do teclado (focus + o forceActiveFocus de StackView.onActivated abaixo)
+    // e repassa a primeira tecla para o campo, que assume o foco a partir daí.
+    //
+    // event.text cobre exatamente o que se quer: vem preenchido para teclas
+    // que produzem caractere e vazio para Shift/Ctrl/setas/F5. O filtro de
+    // controle descarta Backspace, Tab, Enter e Esc, que também trazem texto
+    // mas não são "começar a escrever". Ctrl/Alt pressionados ficam de fora
+    // para não sequestrar atalhos.
+    focus: true
+    Keys.onPressed: function (event) {
+        if (event.modifiers & (Qt.ControlModifier | Qt.AltModifier | Qt.MetaModifier))
+            return;
+        if (!event.text || event.text.length === 0)
+            return;
+        if (event.text.charCodeAt(0) < 32 || event.key === Qt.Key_Delete)
+            return;
+
+        telaFechamento.comecarBusca(event.text);
+        event.accepted = true;
+    }
+
     // "AAAA-MM-DD" — sempre preenchida (ver hojeIso()/carregarDia()).
     property string dataSelecionada: ""
     // {data, total, quantidade, porTipo, abertas, extras} — {} antes da
     // primeira carga.
     property var resumoAtual: ({})
+
+    // --- Busca no mapeamento por origem ---
+
+    // O que está digitado na barra de busca. Filtra as comandas de todos os
+    // tipos ao mesmo tempo (ver comandasDoTipo).
+    property string termoBusca: ""
+    // Normalizado uma vez por digitação, e não a cada comanda comparada: o
+    // outro lado da comparação (o campo "busca" de cada comanda) já vem
+    // normalizado do Python — ver FechamentoController._texto_de_busca.
+    readonly property string _termoNormalizado: telaFechamento._normalizar(telaFechamento.termoBusca)
+    readonly property bool buscando: telaFechamento._termoNormalizado !== ""
 
     // Comandas do dia que ainda não receberam baixa — vendas que existem mas
     // estão fora do caixa (ver services/rede/baixaComandas.py). A chave
@@ -136,7 +170,75 @@ Page {
         };
     }
 
+    // "Açaí" -> "acai". Mesma normalização que o Python aplica ao montar o
+    // campo "busca" de cada comanda, para os dois lados da comparação
+    // combinarem sem acento e sem diferença de caixa.
+    function _normalizar(texto) {
+        return (texto || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+    }
+
+    // As comandas de um tipo que casam com a busca atual — todas, quando não
+    // há busca.
+    //
+    // É uma varredura simples pelo campo de busca de cada comanda. Não dá pra
+    // usar busca binária aqui: ela exige dados ordenados pela chave procurada
+    // e só responde "existe este valor exato", enquanto o que se quer é
+    // "contém este trecho" em qualquer posição de qualquer campo — um termo
+    // como "pizza" tem que achar comandas cujo texto NÃO começa por ele. Na
+    // prática o custo não aparece: é um dia de comandas (dezenas a poucas
+    // centenas), refiltrado a cada tecla em menos de um milissegundo.
+    function comandasDoTipo(tipo) {
+        var todas = telaFechamento.infoTipo(tipo).comandas || [];
+        if (!telaFechamento.buscando)
+            return todas;
+
+        var termo = telaFechamento._termoNormalizado;
+        var achadas = [];
+        for (var i = 0; i < todas.length; i++) {
+            // Comandas de um resumo gravado em cache antes desta busca
+            // existir não têm o campo — caem fora em vez de derrubar a tela.
+            var alvo = todas[i].busca || "";
+            if (alvo.indexOf(termo) >= 0)
+                achadas.push(todas[i]);
+        }
+        return achadas;
+    }
+
+    function totalDoTipo(tipo) {
+        if (!telaFechamento.buscando)
+            return telaFechamento.infoTipo(tipo).total || 0;
+
+        var achadas = telaFechamento.comandasDoTipo(tipo);
+        var soma = 0;
+        for (var i = 0; i < achadas.length; i++)
+            soma += Number(achadas[i].valor) || 0;
+        return soma;
+    }
+
+    function totalEncontrado() {
+        var total = 0;
+        for (var i = 0; i < telaFechamento.ordemTipos.length; i++)
+            total += telaFechamento.comandasDoTipo(telaFechamento.ordemTipos[i]).length;
+        return total;
+    }
+
+    // Chamado pela captura de teclado da página: qualquer caractere digitado
+    // fora de um campo de texto começa a busca (ver Keys.onPressed).
+    function comecarBusca(texto) {
+        campoBusca.forceActiveFocus();
+        if (texto)
+            campoBusca.insert(campoBusca.length, texto);
+    }
+
+    function limparBusca() {
+        telaFechamento.termoBusca = "";
+        campoBusca.text = "";
+    }
+
     function carregarDia(iso) {
+        // A busca vale para o dia que está na tela: trocar de dia com um termo
+        // antigo ainda filtrando esconderia comandas sem explicação.
+        telaFechamento.limparBusca();
         telaFechamento.dataSelecionada = iso;
         telaFechamento.resumoAtual = fechamentoController.obterFechamento(iso);
         telaFechamento.contagemAtual = fechamentoController.obterContagem(iso);
@@ -258,6 +360,10 @@ Page {
     }
     StackView.onActivated: {
         carregarDia(telaFechamento.dataSelecionada || hojeIso());
+        // Sem isto, a primeira tecla digitada ao chegar na tela não chega em
+        // Keys.onPressed: o foco do teclado continua em quem estava antes na
+        // pilha de telas.
+        telaFechamento.forceActiveFocus();
     }
 
     background: Rectangle {
@@ -542,11 +648,100 @@ Page {
                 Layout.fillHeight: true
                 spacing: 10
 
-                Text {
-                    text: "Mapeamento por origem"
-                    font.pixelSize: Estilo.fonte.padrao
-                    font.bold: true
-                    color: Estilo.cores.textoSecundario
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 8
+
+                    Text {
+                        text: "Mapeamento por origem"
+                        font.pixelSize: Estilo.fonte.padrao
+                        font.bold: true
+                        color: Estilo.cores.textoSecundario
+                    }
+
+                    Item { Layout.fillWidth: true }
+
+                    Text {
+                        visible: telaFechamento.buscando
+                        text: {
+                            var n = telaFechamento.totalEncontrado();
+                            return n === 1 ? "1 comanda encontrada" : n + " comandas encontradas";
+                        }
+                        font.pixelSize: 12
+                        color: telaFechamento.totalEncontrado() > 0 ? Estilo.cores.textoSecundario : Estilo.cancelar.normal
+                    }
+                }
+
+                // --- BUSCA ---
+                // Aceita modalidade (Balcão/Entrega/Mesa), nome do cliente,
+                // código, forma de pagamento, item pedido e valor — tudo o que
+                // o Python empacotou no campo "busca" de cada comanda.
+                Rectangle {
+                    Layout.fillWidth: true
+                    implicitHeight: 38
+                    radius: Estilo.rounding.padrao
+                    color: "#ffffff"
+                    border.color: campoBusca.activeFocus ? telaFechamento.corDestaque : Estilo.cores.bordaCard
+                    border.width: campoBusca.activeFocus ? 2 : 1
+
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 10
+                        anchors.rightMargin: 6
+                        spacing: 8
+
+                        Icone {
+                            nome: "fa6s.magnifying-glass"
+                            cor: Estilo.cores.textoSecundario
+                            tamanho: 13
+                            Layout.alignment: Qt.AlignVCenter
+                        }
+
+                        TextField {
+                            id: campoBusca
+
+                            Layout.fillWidth: true
+                            placeholderText: "Buscar por modalidade, cliente, pedido ou valor — é só começar a digitar"
+                            font.pixelSize: 13
+                            // Preto explícito: sem isto o Qt usa palette.text,
+                            // que no Windows vem do tema do sistema e some no
+                            // fundo branco quando o tema é escuro (mesmo
+                            // cuidado documentado em qml/estilo/Estilo.qml).
+                            color: Estilo.cores.texto
+                            background: Item {}
+                            onTextChanged: telaFechamento.termoBusca = text
+                            // Esc limpa e devolve o teclado para a página, para
+                            // a próxima tecla começar uma busca nova.
+                            Keys.onEscapePressed: {
+                                telaFechamento.limparBusca();
+                                telaFechamento.forceActiveFocus();
+                            }
+                        }
+
+                        Button {
+                            visible: telaFechamento.buscando
+                            implicitWidth: 26
+                            implicitHeight: 26
+                            focusPolicy: Qt.NoFocus
+                            Layout.alignment: Qt.AlignVCenter
+                            onClicked: {
+                                telaFechamento.limparBusca();
+                                telaFechamento.forceActiveFocus();
+                            }
+
+                            contentItem: Icone {
+                                nome: "fa6s.xmark"
+                                cor: Estilo.cores.textoSecundario
+                                tamanho: 12
+                                anchors.centerIn: parent
+                            }
+
+                            background: Rectangle {
+                                radius: Estilo.rounding.padrao
+                                color: parent.down ? Estilo.cores.bordaCard : "transparent"
+                            }
+                        }
+                    }
                 }
 
                 Flickable {
@@ -576,13 +771,21 @@ Page {
                                 // Preso aqui porque lá dentro, na ListView de
                                 // comandas, "modelData" já é a comanda.
                                 readonly property string nomeTipo: modelData
+                                // Só as que casam com a busca (todas quando
+                                // não há busca) — ver comandasDoTipo.
+                                readonly property var comandas: telaFechamento.comandasDoTipo(modelData)
                                 // Fechado por padrão — a lista de comandas só
                                 // aparece quando o box do tipo é clicado (ver
-                                // areaCabecalhoTipo abaixo).
-                                property bool expandido: false
+                                // areaCabecalhoTipo abaixo). Durante uma busca
+                                // abre sozinho: quem digitou quer ver o que
+                                // achou, não um bloco fechado com a contagem.
+                                property bool expandidoManual: false
+                                readonly property bool expandido: telaFechamento.buscando || expandidoManual
 
                                 Layout.fillWidth: true
-                                visible: info.quantidade > 0
+                                // Some por completo quando a busca não achou
+                                // nada aqui, para sobrar só o que interessa.
+                                visible: comandas.length > 0
                                 spacing: 6
 
                                 Rectangle {
@@ -599,7 +802,7 @@ Page {
                                         anchors.fill: parent
                                         hoverEnabled: true
                                         cursorShape: Qt.PointingHandCursor
-                                        onClicked: blocoTipo.expandido = !blocoTipo.expandido
+                                        onClicked: blocoTipo.expandidoManual = !blocoTipo.expandidoManual
                                     }
 
                                     RowLayout {
@@ -627,13 +830,13 @@ Page {
                                         Item { Layout.fillWidth: true }
 
                                         Text {
-                                            text: blocoTipo.info.quantidade + (blocoTipo.info.quantidade === 1 ? " comanda" : " comandas")
+                                            text: blocoTipo.comandas.length + (blocoTipo.comandas.length === 1 ? " comanda" : " comandas")
                                             font.pixelSize: 12
                                             color: Estilo.cores.textoSecundario
                                         }
 
                                         Text {
-                                            text: "R$ " + blocoTipo.info.total.toFixed(2).replace(".", ",")
+                                            text: "R$ " + telaFechamento.totalDoTipo(blocoTipo.nomeTipo).toFixed(2).replace(".", ",")
                                             font.bold: true
                                             font.pixelSize: Estilo.fonte.padrao
                                             color: telaFechamento.coresTipo[modelData] || Estilo.cores.texto
@@ -661,7 +864,7 @@ Page {
                                     interactive: false
                                     clip: true
                                     spacing: 4
-                                    model: blocoTipo.info.comandas
+                                    model: blocoTipo.comandas
                                     boundsBehavior: Flickable.StopAtBounds
 
                                     delegate: Rectangle {
