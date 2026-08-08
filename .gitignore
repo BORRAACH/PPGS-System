@@ -6,6 +6,13 @@ dist/
 wheels/
 *.egg-info
 
+# Executável do atalho do Windows, gerado por launcher/gerar_exe.bat. Fica de
+# fora do git de propósito: é um binário de alguns MB (o PyInstaller embute o
+# interpretador Python), específico da plataforma, e nada além dele mesmo
+# depende de estar versionado — cada máquina Windows gera o seu uma vez.
+*.exe
+launcher/build/
+
 # Virtual environments
 .venv
 

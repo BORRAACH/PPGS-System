@@ -112,6 +112,39 @@ mão, em vez de travar com um traceback.
 Depois de rodando, a janela abre direto na tela inicial, com a barra
 lateral para navegar entre Balcão, Entrega, Consulta e Rede.
 
+### Atalho de duplo clique no Windows (.exe)
+
+Para não precisar abrir o terminal em cada máquina da pizzaria, o diretório
+[`launcher/`](launcher/) gera um `SistemaDePedidos.exe`. Rode uma vez, **no
+Windows**:
+
+```bat
+launcher\gerar_exe.bat
+```
+
+O `.exe` aparece na raiz do projeto (alguns MB: o PyInstaller embute o
+interpretador Python dentro dele, mesmo o lançador sendo um script curto). Coloque-o na Área de Trabalho como
+**atalho** (botão direito no `.exe` > Enviar para > Área de trabalho) — não
+copie o arquivo para fora da pasta, porque ele procura o `main.py` ao lado
+dele.
+
+Esse executável **não contém o sistema**: ele acha o Python (preferindo o
+`.venv` do projeto) e roda o `main.py` que está no disco, sem a janela preta
+de console. Isso é de propósito — empacotar o app inteiro num `.exe`
+congelaria o código dentro do binário, e a atualização automática
+(`Config/atualizador.py`, que faz `git merge` e conta que os imports
+seguintes leiam os arquivos novos) deixaria de funcionar; `data/cardapio/`
+também precisa continuar no disco, já que a tela Cardápio o edita e a malha
+o sincroniza em tempo de execução.
+
+Como consequência, a máquina precisa ter o Python instalado e o projeto
+clonado — o mesmo que já é necessário hoje. Se faltar qualquer um dos dois, o
+atalho abre uma caixa de erro dizendo exatamente o que fazer, em vez de não
+fazer nada ao ser clicado.
+
+Só é preciso gerar o `.exe` de novo se `launcher/iniciar.py` mudar: as
+atualizações do sistema continuam chegando por git, sem tocar no executável.
+
 ### Rodando em mais de uma máquina
 
 Basta abrir o app normalmente em cada computador da mesma rede local — elas
