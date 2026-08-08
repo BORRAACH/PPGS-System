@@ -8,6 +8,15 @@ services) — assim, se o usuário aceitar atualizar, o `git merge --ff-only`
 já deixa os arquivos novos no disco a tempo dos imports seguintes pegarem o
 código atualizado, sem precisar reiniciar o processo.
 
+Essa posição custa caro na abertura: o `git fetch` daqui é o passo mais lento
+do arranque (~1,6s medido, e até _TIMEOUT_GIT=15s com internet ruim), todo ele
+antes de qualquer coisa aparecer na tela. Já foi tentado adiá-lo para depois
+da janela, junto das outras tarefas de arranque (ver main.py), e foi
+revertido: com o app já carregado em memória, a atualização aceita só passaria
+a valer na abertura seguinte. É uma troca deliberada de tempo de abertura por
+atualização que vale na hora. O resultado da checagem fica em
+ultimo_resultado() para a interface poder contá-lo assim que existir uma.
+
 Só faz sentido rodar num checkout que seja de fato um repositório git com
 upstream configurado; qualquer outra coisa (sem `.git`, sem internet, sem
 `git` instalado, branch "solta"/detached) faz verificar_atualizacoes()
@@ -178,7 +187,25 @@ def verificar_atualizacoes():
     app abre normal e a atualização é tentada de novo na próxima abertura,
     já com o código novo se ele tiver entrado."""
     try:
-        return _verificar_atualizacoes()
+        quantidade, branch, upstream, resumo = checar_atualizacoes()
+        if not quantidade:
+            return _qapplication_existente()
+
+        # A pergunta precisa de uma QApplication, e ela pode não existir
+        # ainda: isto roda antes do main.py criar a dele. Quem for criada
+        # aqui volta para o main.py reaproveitar — só pode haver uma por
+        # processo.
+        try:
+            from PyQt6.QtWidgets import QApplication
+        except ImportError:
+            # preConfig já deveria ter garantido o PyQt6; se não garantiu,
+            # main.py tem seu próprio try/except de import logo em seguida,
+            # com mensagem melhor. Aqui só desiste da pergunta e segue.
+            return None
+
+        app = QApplication.instance() or QApplication(sys.argv)
+        perguntar_e_atualizar(quantidade, branch, upstream, resumo)
+        return app
     except Exception:
         print(
             "[atualizador] Falha inesperada ao checar/aplicar a atualização — abrindo com a "
@@ -188,54 +215,102 @@ def verificar_atualizacoes():
         return _qapplication_existente()
 
 
-def _verificar_atualizacoes():
-    if not _eh_repositorio_git():
-        return None
+# O que a checagem concluiu, para a interface contar ao usuário depois. Fica
+# guardado porque o atualizador roda ANTES de existir qualquer janela: quando
+# a caixa de status aparece (ver services/statusInicializacaoService.py), isto
+# já aconteceu — sem registrar, não haveria como dizer o que foi feito.
+_ultimo_resultado = ("Atualizações não verificadas", False)
 
-    branch = _branch_atual()
-    if not branch:
-        print("[atualizador] HEAD solto (sem branch) — nada para checar.")
-        return None
 
-    versao = _versao_atual()
-    if versao:
-        _gravar_arquivo_versao(versao)
-        print(f"[atualizador] Versão instalada: {versao}. Checando atualizações no repositório...")
-    else:
-        print("[atualizador] Checando atualizações no repositório...")
+def ultimo_resultado():
+    """(texto, deu_certo) da última checagem deste processo."""
+    return _ultimo_resultado
 
-    if _rodar_git("fetch", "--quiet") is None:
-        print("[atualizador] Não foi possível checar o remoto (sem internet/git?) — seguindo com a versão atual.")
-        return None
 
-    upstream = _upstream_de(branch)
-    if not upstream:
-        print(f"[atualizador] Branch '{branch}' não tem upstream configurado — nada para checar.")
-        return None
+def _registrar(texto, ok=True):
+    global _ultimo_resultado
+    _ultimo_resultado = (texto, ok)
 
-    quantidade = _commits_atras(branch, upstream)
-    if quantidade == 0:
-        print("[atualizador] Já está na versão mais recente.")
-        return None
 
-    print(f"[atualizador] {quantidade} atualização(ões) disponível(is) em '{upstream}'.")
+def checar_atualizacoes():
+    """A parte LENTA e sem interface do atualizador: descobre se há commits
+    novos no remoto. Devolve (quantidade, branch, upstream, resumo), com
+    quantidade 0 quando não há nada a fazer.
 
+    Existe separada de verificar_atualizacoes() para poder rodar numa thread
+    depois que a janela já abriu: o `git fetch` daqui é o que mais pesa na
+    abertura do app (~1,6s medido, e até _TIMEOUT_GIT=15s com internet ruim),
+    e nada dele precisa acontecer antes de desenhar a tela. A pergunta ao
+    usuário e o merge continuam do outro lado, na thread da interface — abrir
+    um QMessageBox de uma thread de fundo não é permitido pelo Qt.
+
+    Nunca levanta: erro aqui vira "nenhuma atualização" e a tentativa se
+    repete na próxima abertura (ver o docstring de verificar_atualizacoes)."""
     try:
-        from PyQt6.QtWidgets import QApplication
-    except ImportError:
-        # PyQt6 deveria estar instalado a essa altura (preConfig já rodou),
-        # mas se por algum motivo não estiver, main.py tem seu próprio
-        # try/except de import logo em seguida com uma mensagem melhor —
-        # aqui só desiste da pergunta e segue.
-        return None
+        if not _eh_repositorio_git():
+            _registrar("Sem controle de versão — atualização não checada", False)
+            return 0, "", "", ""
 
-    app = QApplication.instance() or QApplication(sys.argv)
-    quer_atualizar = _perguntar_atualizar(quantidade, _resumo_commits_novos(branch, upstream))
+        branch = _branch_atual()
+        if not branch:
+            print("[atualizador] HEAD solto (sem branch) — nada para checar.")
+            _registrar("Atualização não checada (sem branch)", False)
+            return 0, "", "", ""
 
-    if quer_atualizar:
+        versao = _versao_atual()
+        if versao:
+            _gravar_arquivo_versao(versao)
+            print(f"[atualizador] Versão instalada: {versao}. Checando atualizações no repositório...")
+
+        if _rodar_git("fetch", "--quiet") is None:
+            print("[atualizador] Não foi possível checar o remoto (sem internet/git?) — seguindo com a versão atual.")
+            _registrar("Sem conexão para checar atualizações", False)
+            return 0, "", "", ""
+
+        upstream = _upstream_de(branch)
+        if not upstream:
+            print(f"[atualizador] Branch '{branch}' não tem upstream configurado — nada para checar.")
+            _registrar("Atualização não checada (sem upstream)", False)
+            return 0, "", "", ""
+
+        quantidade = _commits_atras(branch, upstream)
+        if not quantidade:
+            print("[atualizador] Já está na versão mais recente.")
+            _registrar("Sistema já está atualizado")
+            return 0, branch, upstream, ""
+
+        print(f"[atualizador] {quantidade} atualização(ões) disponível(is) em '{upstream}'.")
+        return quantidade, branch, upstream, _resumo_commits_novos(branch, upstream)
+    except Exception:
+        print(
+            "[atualizador] Falha inesperada ao checar a atualização — seguindo com a versão "
+            f"atual. Detalhes:\n{traceback.format_exc().rstrip()}",
+            file=sys.stderr,
+        )
+        return 0, "", "", ""
+
+
+def perguntar_e_atualizar(quantidade, branch, upstream, resumo):
+    """A parte com interface: pergunta e, se o usuário aceitar, aplica. Tem
+    que rodar na thread da interface. Devolve True se atualizou."""
+    try:
+        if not quantidade or not branch or not upstream:
+            return False
+
+        if not _perguntar_atualizar(quantidade, resumo):
+            _registrar("Atualização adiada pelo usuário", False)
+            return False
+
         _atualizar(branch, upstream)
-
-    return app
+        _registrar(f"{quantidade} atualização(ões) aplicada(s)")
+        return True
+    except Exception:
+        print(
+            "[atualizador] Falha inesperada ao aplicar a atualização — seguindo com a versão "
+            f"atual. Detalhes:\n{traceback.format_exc().rstrip()}",
+            file=sys.stderr,
+        )
+        return False
 
 
 def _perguntar_atualizar(quantidade, resumo):

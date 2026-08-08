@@ -267,6 +267,10 @@ class RedeService(QObject):
         # A porta TCP é sorteada pelo sistema (listen na porta 0), então só
         # dá pra anunciá-la depois que o servidor está de pé.
         print(f"[RedeService] Esta máquina é '{self._nome_local}' (instância {self._id[:8]}), ouvindo na porta {self._tcp_server.serverPort()}.")
+        # Repassado à tela: a descoberta sobe numa thread (leva ~1,6s) e
+        # iniciar() volta antes dela ficar pronta, então "a malha está no ar"
+        # é uma resposta que só ela pode dar.
+        self._descoberta.iniciada.connect(self._ao_iniciar_descoberta)
         self._descoberta.iniciar(self._id, self._tcp_server.serverPort())
 
         # Rede de segurança da conexão: refaz sozinho as tentativas que
@@ -292,6 +296,14 @@ class RedeService(QObject):
         )
 
     # ---------- Descoberta ----------
+
+    def _ao_iniciar_descoberta(self, ok: bool):
+        from services.statusInicializacaoService import status
+
+        if ok:
+            status.concluida("rede", "Rede local no ar")
+        else:
+            status.falhou("rede", "Rede local indisponível")
 
     def _ao_descobrir_peer(self, id_remoto: str, enderecos: list, porta_tcp: int):
         """Uma instância apareceu na rede (ver services/rede/descoberta.py).

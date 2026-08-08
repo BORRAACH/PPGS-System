@@ -12,12 +12,17 @@ preConfig.garantir_dependencias()
 
 from Config import atualizador, impressoraWindows
 
-# Roda antes dos imports do resto do app (logo abaixo): se o usuário aceitar
-# atualizar, o `git merge --ff-only` já deixa os arquivos novos no disco a
-# tempo desses imports pegarem o código atualizado, sem precisar reiniciar
-# o processo. Devolve a QApplication criada pra perguntar (se alguma foi
-# criada) pra reaproveitar mais abaixo — só é possível existir uma por
-# processo.
+# Antes dos imports do resto do app (logo abaixo), e antes de qualquer coisa
+# aparecer na tela: se o usuário aceitar atualizar, o `git merge --ff-only`
+# deixa os arquivos novos no disco a tempo desses imports pegarem o código
+# atualizado, e a atualização vale JÁ NESTA execução. Foi tentado adiar isto
+# para depois da janela (a checagem é o que mais pesa na abertura: ~1,6s, até
+# 15s com internet ruim), mas aí o app já está com o código antigo carregado
+# em memória e a atualização só passaria a valer na abertura seguinte — o que
+# não vale a espera economizada.
+#
+# Devolve a QApplication criada pra perguntar (se alguma foi criada) pra
+# reaproveitar mais abaixo: só pode existir uma por processo.
 _app_atualizador = atualizador.verificar_atualizacoes()
 
 import sys
@@ -25,7 +30,7 @@ import os
 import threading
 
 try:
-    from PyQt6.QtCore import QObject, pyqtSlot, QVariant, QUrl
+    from PyQt6.QtCore import QObject, pyqtSlot, QTimer, QVariant, QUrl
     from PyQt6.QtGui import QGuiApplication
     from PyQt6.QtQml import QQmlApplicationEngine
 
@@ -39,6 +44,7 @@ try:
     from services.comandaEstiloService import ComandaEstiloController
     from services.cardapioService import CardapioController
     from services.formulaLucroService import FormulaLucroController
+    from services.statusInicializacaoService import status
     from Config import diagnosticar_impressora
 except ImportError as erro:
     # preConfig.garantir_dependencias() já tentou instalar tudo sozinho —
@@ -84,11 +90,37 @@ logConfig.instalar_captura_de_mensagens_qt()
 os.environ["QML_XHR_ALLOW_FILE_READ"] = "1"
 
 
+def _iniciar_rede():
+    """Sobe a malha local. Roda na thread da interface (via QTimer), não numa
+    thread de fundo: RedeService cria QTcpServer/QTimer, que pertencem à
+    thread onde foram criados e não podem ser acionados de fora. O que era
+    lento aqui — o registro mDNS, ~1,6s — passou a acontecer numa thread
+    dentro da própria descoberta (ver services/rede/descoberta.py), então
+    esta chamada volta na hora e o "Rede local no ar" chega depois, pelo
+    sinal `iniciada`."""
+    status.iniciando("rede", "Iniciando rede local...")
+    rede.iniciar()
+
+
+def _mostrar_resultado_da_atualizacao():
+    """Conta na caixa de status o que a checagem de atualizações concluiu.
+
+    Ela já aconteceu lá em cima, antes de existir qualquer janela — este é o
+    primeiro momento em que dá para mostrar o resultado ao usuário (ver
+    Config/atualizador.ultimo_resultado)."""
+    texto, ok = atualizador.ultimo_resultado()
+    if ok:
+        status.concluida("atualizacao", texto)
+    else:
+        status.falhou("atualizacao", texto)
+
+
 def _tarefas_de_fundo():
     """Chamado numa thread à parte depois que a janela já carregou (ver
     __main__ abaixo). Só faz configuração/diagnóstico de impressora — nada
     aqui é necessário para a interface aparecer, e ambos já eram melhor
     esforço (nunca levantam exceção, só logam avisos)."""
+    status.iniciando("impressora", "Procurando impressora...")
     # Só faz algo no Windows (ver Config/impressoraWindows.py) — acha a
     # Bematech MP-4200 TH nas portas USB e garante que existe uma fila de
     # impressão apontando pra ela, já que o Windows não cria essa fila
@@ -104,7 +136,14 @@ def _tarefas_de_fundo():
     # logs/app.log, sem precisar rodar o diagnóstico à parte pra descobrir por
     # que uma porta caiu como "desconhecido" (ver
     # redeService._detectar_impressora_em_thread).
-    diagnosticar_impressora.listar_impressoras()
+    impressoras = diagnosticar_impressora.listar_impressoras()
+
+    # listar_impressoras() já loga o detalhe; aqui só interessa se achou
+    # alguma, para a tela poder dizer algo útil em vez de "pronto".
+    if impressoras:
+        status.concluida("impressora", f"{len(impressoras)} impressora(s) encontrada(s)")
+    else:
+        status.falhou("impressora", "Nenhuma impressora encontrada")
 
 
 if __name__ == "__main__":
@@ -155,24 +194,35 @@ if __name__ == "__main__":
     # Compartilha pedidos com outras instâncias deste app na mesma rede
     # local (ver architecture/EXPLAIN.md). Os sinais entram pelo
     # consultaController, que é quem sabe gravar/apagar os .txt e avisar a
-    # tela de Consulta; iniciar() só pode rodar depois do QGuiApplication.
+    # tela de Consulta. A malha só sobe depois da janela (ver abaixo).
     rede.pedidoRecebido.connect(consultaController.aplicarPedidoRemoto)
     rede.pedidoRemovidoRemoto.connect(consultaController.removerPedidoRemoto)
     engine.rootContext().setContextProperty("redeController", rede)
-    rede.iniciar()
+    engine.rootContext().setContextProperty("statusController", status)
 
     engine.addImportPath(qml_dir)
- 
+
     engine.load(main_qml)
 
     if not engine.rootObjects():
         sys.exit(-1)
 
-    # A janela já está de pé nesse ponto — o que sobra (configurar a
-    # impressora Bematech no Windows, listar as impressoras instaladas) é
-    # só melhor esforço/diagnóstico e não precisa terminar antes do usuário
-    # ver a tela. Roda numa thread separada pra não travar o primeiro
-    # frame nem o resto da abertura esperando o PowerShell/CUPS responder.
+    # --- Daqui pra baixo, a janela JÁ está de pé ---
+    #
+    # A atualização é a única coisa que roda antes da interface (ver o topo do
+    # arquivo). O que sobrou aqui não é necessário para desenhar a tela e só
+    # custa tempo de rede: subir a malha local levava ~1,7s antes do primeiro
+    # frame. Agora roda com o usuário já vendo a tela, anunciando o progresso
+    # no canto (services/statusInicializacaoService.py).
+    #
+    # QTimer.singleShot(0, ...) em vez de chamar direto: devolve o controle ao
+    # loop de eventos primeiro, para o primeiro frame ser desenhado antes de
+    # qualquer uma dessas tarefas começar.
+    QTimer.singleShot(0, _mostrar_resultado_da_atualizacao)
+    QTimer.singleShot(0, _iniciar_rede)
+
+    # Em thread porque é I/O bloqueante puro (PowerShell/CUPS) e não toca
+    # objeto Qt nenhum.
     threading.Thread(target=_tarefas_de_fundo, daemon=True).start()
 
     sys.exit(app.exec())

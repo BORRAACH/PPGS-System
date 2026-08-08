@@ -119,6 +119,12 @@ ApplicationWindow {
     // que realmente tem a impressora — e o usuário já pode ter navegado
     // para outra tela nesse meio-tempo. Mesmo padrão visual (Rectangle
     // deslizante + Timer de auto-fechar) usado em Balcao.qml/Entrega.qml.
+    // Andamento do que o app faz sozinho ao abrir (malha local, atualizações,
+    // impressora). Fica aqui, e não numa tela específica, porque essas tarefas
+    // terminam segundos depois da abertura, com o usuário já em qualquer tela.
+    StatusInicio {
+    }
+
     Rectangle {
         id: notificacaoImpressao
 

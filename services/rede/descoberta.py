@@ -161,6 +161,13 @@ class Descoberta(QObject):
     # Quem recebe tenta todos (ver RedeService._tentar_conectar_a_peer).
     peerDescoberto = pyqtSignal(str, list, int)
 
+    # A descoberta terminou de subir (True) ou desistiu (False). Existe porque
+    # a estratégia zeroconf leva ~1,6s e passou a fazer isso numa thread, com
+    # a interface já na tela: sem este aviso, nada saberia dizer quando a
+    # máquina de fato começou a ser vista pelas outras (ver
+    # services/statusInicializacaoService.py).
+    iniciada = pyqtSignal(bool)
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self._id_local = ""
@@ -212,12 +219,30 @@ class DescobertaZeroconf(Descoberta):
         self._browser = None
 
     def _iniciar(self) -> None:
+        # Numa thread porque construir o Zeroconf() e registrar o serviço leva
+        # ~1,6s (medido), e isto é chamado de RedeService.iniciar(), na thread
+        # da interface — era o maior peso da abertura do app, com a janela
+        # ainda por desenhar. Nada aqui toca objeto Qt preso a uma thread: é
+        # tudo zeroconf puro, e o resultado só sai daqui pelo sinal
+        # peerDescoberto, que o Qt entrega na thread certa sozinho.
+        threading.Thread(target=self._iniciar_em_thread, daemon=True).start()
+
+    def _iniciar_em_thread(self) -> None:
+        # Fechar o app nos primeiros ~1,6s chega aqui com parar() já
+        # executado: sem esta checagem a thread seguiria e registraria o
+        # serviço depois, deixando um anúncio órfão que ninguém vai
+        # desregistrar — as outras máquinas ficariam discando para uma
+        # instância morta até o registro expirar sozinho.
+        if not self._iniciado:
+            return
+
         try:
             self._zeroconf = Zeroconf()
         except OSError as erro:
             # Porta 5353 ocupada por outro daemon mDNS em modo exclusivo,
             # rede indisponível no boot etc.
             print(f"[descoberta] Não foi possível iniciar o zeroconf ({erro}) — a rede local ficará sem descoberta.")
+            self.iniciada.emit(False)
             return
 
         # O nome do serviço e o do host precisam ser únicos POR INSTÂNCIA, não
@@ -235,6 +260,13 @@ class DescobertaZeroconf(Descoberta):
             server=f"{self._id_local}.local.",
         )
 
+        # Segunda checagem: construir o Zeroconf() acima é justamente a parte
+        # demorada, e o app pode ter sido fechado nesse meio-tempo.
+        if not self._iniciado:
+            self._zeroconf.close()
+            self._zeroconf = None
+            return
+
         try:
             self._zeroconf.register_service(self._info_servico)
         except OSError as erro:
@@ -248,6 +280,7 @@ class DescobertaZeroconf(Descoberta):
             f"[descoberta] Anunciando '{_TIPO_SERVICO}' em {', '.join(enderecos)} "
             f"na porta {self._porta_tcp} e procurando outras máquinas."
         )
+        self.iniciada.emit(True)
 
     def _ao_mudar_servico(self, zeroconf, service_type, name, state_change) -> None:
         if state_change not in (ServiceStateChange.Added, ServiceStateChange.Updated):
@@ -322,6 +355,9 @@ class DescobertaBroadcast(Descoberta):
         self._timer.timeout.connect(self._anunciar)
         self._timer.start(_INTERVALO_BROADCAST_MS)
         self._anunciar()
+        # Este caminho é síncrono e rápido (só abre um socket UDP), mas quem
+        # escuta não deve precisar saber qual estratégia está em uso.
+        self.iniciada.emit(True)
 
     def _anunciar(self) -> None:
         mensagem = json.dumps({
