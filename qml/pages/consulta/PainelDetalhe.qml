@@ -18,7 +18,16 @@ Rectangle {
 
     Text {
         anchors.centerIn: parent
-        text: painelDetalhe.totalComandas === 0 ? "Nenhuma comanda encontrada em pedidos/" : "← Selecione uma comanda para ver os detalhes"
+        // Durante o carregamento a lista ainda está se enchendo (ver
+        // Consulta.qml _preencherModelo), então "nenhuma comanda encontrada"
+        // seria uma conclusão tirada antes da hora — e das erradas.
+        text: {
+            if (painelDetalhe.pagina && painelDetalhe.pagina.carregando)
+                return "Carregando comandas...";
+            return painelDetalhe.totalComandas === 0
+                ? "Nenhuma comanda encontrada em pedidos/"
+                : "← Selecione uma comanda para ver os detalhes";
+        }
         color: "#95a5a6"
         font.italic: true
         font.pixelSize: Estilo.fonte.padrao

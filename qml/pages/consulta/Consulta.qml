@@ -33,6 +33,27 @@ Page {
     // motivo de buscaAtual: precisa sobreviver a um "Atualizar".
     property string filtroStatus: "todas"
 
+    // Verdadeiro do pedido de carregamento até a última comanda entrar na
+    // lista. ColunaEsquerda.qml mostra a caixa "Carregando..." enquanto
+    // isso, e PainelDetalhe.qml segura a mensagem de lista vazia — que,
+    // durante o carregamento, seria simplesmente mentira.
+    property bool carregando: false
+
+    // Comandas ainda não colocadas no modelo, e por onde o preenchimento em
+    // lotes está (ver _preencherModelo/_proximoLote). Os grupos de dias
+    // anteriores esperam o fim dos lotes: cada caixinha cria delegates, e
+    // elas ficam abaixo da dobra, então não vale atrasar o que está à vista.
+    property var _lotePendente: []
+    property int _loteIndice: 0
+    property var _gruposPendentes: []
+
+    // Comandas por lote. Um número baixo devolve o controle à interface com
+    // frequência (a caixa "Carregando..." continua girando, a busca continua
+    // digitável); um alto termina antes, mas voltando a travar tudo num só
+    // passo de JavaScript. 25 é o meio-termo que mantém cada lote na casa de
+    // poucos milissegundos mesmo nas máquinas fracas da pizzaria.
+    readonly property int _tamanhoLote: 25
+
     // Exposto para AreaPrincipal.qml/ColunaEsquerda.qml preencherem a lista.
     property alias modelo: modeloComandas
 
@@ -105,17 +126,66 @@ Page {
             return telaConsulta._chaveDia(b) - telaConsulta._chaveDia(a);
         });
 
-        modeloComandas.clear();
-        for (var h = 0; h < hoje.length; h++)
-            modeloComandas.append(hoje[h]);
-
         var grupos = [];
         for (var k = 0; k < ordemDias.length; k++)
             grupos.push({
                 "dia": ordemDias[k],
                 "comandas": mapaDias[ordemDias[k]]
             });
-        telaConsulta.gruposAnteriores = grupos;
+
+        telaConsulta._preencherModelo(hoje, grupos);
+    }
+
+    // Único caminho que preenche a lista exibida.
+    //
+    // Durante o carregamento da página preenche aos poucos, um lote por
+    // quadro: com algumas centenas de comandas, apender tudo de uma vez
+    // segura a interface inteira num só passo de JavaScript — e é justamente
+    // esse passo que cria os ItemComandaDelegate, já que a ListView de "hoje"
+    // tem a altura amarrada ao contentHeight e por isso não recicla delegate
+    // nenhum (ver ColunaEsquerda.qml).
+    //
+    // Fora do carregamento (busca/filtro, com a lista já em tela) preenche de
+    // uma vez só: ali o usuário espera o resultado da tecla que acabou de
+    // digitar, e ver a lista se remontando aos pedaços seria pior do que o
+    // instante parado.
+    function _preencherModelo(lista, grupos) {
+        timerLote.stop();
+        modeloComandas.clear();
+        telaConsulta.gruposAnteriores = [];
+
+        if (!telaConsulta.carregando) {
+            for (var i = 0; i < lista.length; i++)
+                modeloComandas.append(lista[i]);
+            telaConsulta.gruposAnteriores = grupos;
+            return;
+        }
+
+        telaConsulta._lotePendente = lista;
+        telaConsulta._loteIndice = 0;
+        telaConsulta._gruposPendentes = grupos;
+        // O primeiro lote entra agora, não no próximo quadro: as comandas do
+        // topo (as mais recentes, que são as que interessam) aparecem junto
+        // com a tela, sem um piscar de lista vazia antes.
+        telaConsulta._proximoLote();
+    }
+
+    function _proximoLote() {
+        var lista = telaConsulta._lotePendente;
+        var fim = Math.min(telaConsulta._loteIndice + telaConsulta._tamanhoLote, lista.length);
+        for (var i = telaConsulta._loteIndice; i < fim; i++)
+            modeloComandas.append(lista[i]);
+        telaConsulta._loteIndice = fim;
+
+        if (fim < lista.length) {
+            timerLote.restart();
+            return;
+        }
+
+        telaConsulta.gruposAnteriores = telaConsulta._gruposPendentes;
+        telaConsulta._lotePendente = [];
+        telaConsulta._gruposPendentes = [];
+        telaConsulta.carregando = false;
     }
 
     // Monta "Nome do Cliente - horário" a partir dos campos já extraídos
@@ -200,20 +270,33 @@ Page {
             // Busca mostra tudo achatado, sem agrupar por dia — encontrar a
             // comanda certa não deveria exigir abrir a caixinha do dia
             // certo primeiro.
-            modeloComandas.clear();
-            for (var j = 0; j < lista.length; j++)
-                modeloComandas.append(lista[j]);
-            telaConsulta.gruposAnteriores = [];
+            telaConsulta._preencherModelo(lista, []);
             return;
         }
 
         telaConsulta._agruparPorDia(lista);
     }
 
+    // Pede o recarregamento da lista sem fazê-lo agora: quem chama aqui é
+    // sempre alguém que acabou de mexer na tela (abrir a página, apagar uma
+    // comanda, receber um pedido da rede), e a leitura em si — ler todo o
+    // pedidos/ do disco e remontar a lista — leva tempo suficiente pra
+    // segurar o primeiro quadro da página inteira.
+    //
+    // O timer resolve duas coisas de uma vez: devolve o controle ao loop de
+    // eventos, pra interface aparecer antes das comandas, e junta numa
+    // leitura só as chamadas em rajada (a página chama duas vezes ao abrir,
+    // por Component.onCompleted e StackView.onActivated, e a malha chama uma
+    // vez por pedido recebido durante uma sincronização).
     function carregarComandas() {
-        telaConsulta._todasComandas = consultaController.listarComandas();
+        telaConsulta.carregando = true;
         telaConsulta.comandaSelecionada = null;
         telaConsulta.arquivoSelecionado = "";
+        timerCarregar.restart();
+    }
+
+    function _lerDoDisco() {
+        telaConsulta._todasComandas = consultaController.listarComandas();
         telaConsulta.aplicarFiltro();
     }
 
@@ -303,6 +386,30 @@ Page {
 
     ListModel {
         id: modeloComandas
+    }
+
+    // 50ms, e não 0/1ms, porque o objetivo é que um quadro chegue mesmo a ser
+    // desenhado antes da leitura começar — um timer curto demais dispara
+    // dentro do mesmo ciclo em que a página está sendo montada, e a tela
+    // continuaria aparecendo só depois das comandas, que é justamente o que
+    // isto veio resolver. Perto do tempo da leitura, é pausa que ninguém vê.
+    Timer {
+        id: timerCarregar
+
+        interval: 50
+        repeat: false
+        onTriggered: telaConsulta._lerDoDisco()
+    }
+
+    // Um lote por quadro (ver _proximoLote). 16ms é o intervalo de um quadro
+    // a 60Hz: o suficiente pra interface repintar e processar cliques entre
+    // um lote e outro.
+    Timer {
+        id: timerLote
+
+        interval: 16
+        repeat: false
+        onTriggered: telaConsulta._proximoLote()
     }
 
     PopupConfirmarExclusao {

@@ -204,6 +204,47 @@ Column {
             width: flickableComandas.width
             spacing: 12
 
+            // --- CARREGANDO ---
+            // A tela abre antes das comandas (ver Consulta.qml
+            // carregarComandas), e elas entram na lista aos poucos. Sem esta
+            // caixa, esse intervalo seria indistinguível de "não tem comanda
+            // nenhuma aqui" — que é a leitura mais alarmante possível numa
+            // tela de consulta de vendas.
+            Rectangle {
+                id: caixaCarregando
+
+                readonly property bool ativa: colunaEsquerda.pagina ? colunaEsquerda.pagina.carregando : false
+
+                Layout.fillWidth: true
+                visible: ativa
+                implicitHeight: linhaCarregando.implicitHeight + 24
+                radius: Estilo.rounding.padrao
+                color: "#ffffff"
+                border.color: Estilo.cores.bordaCard
+                border.width: 1
+
+                Row {
+                    id: linhaCarregando
+
+                    anchors.centerIn: parent
+                    spacing: 10
+
+                    BusyIndicator {
+                        width: 20
+                        height: 20
+                        running: caixaCarregando.ativa
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
+
+                    Text {
+                        text: "Carregando comandas..."
+                        font.pixelSize: Estilo.fonte.padrao
+                        color: Estilo.cores.textoSecundario
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
+                }
+            }
+
             // --- HOJE (direto, sem caixinha) ---
             ListView {
                 id: listaHoje
@@ -241,8 +282,7 @@ Column {
                     Layout.fillWidth: true
                     spacing: 6
 
-                    // Preenchida uma vez, na criação do delegate — precisa
-                    // ser um ListModel (não o array direto) pra
+                    // Precisa ser um ListModel (não o array direto) pra
                     // ItemComandaDelegate.qml continuar acessando os campos
                     // via "model.xxx" do mesmo jeito que já faz na lista de
                     // hoje.
@@ -250,9 +290,23 @@ Column {
                         id: modeloDia
                     }
 
-                    Component.onCompleted: {
+                    // Preenchido só quando a caixinha é aberta pela primeira
+                    // vez, e não na criação do delegate: fechada, ela mostra
+                    // apenas o dia e a contagem (que saem do próprio
+                    // modelData), então montar o modelo antes disso era jogar
+                    // no carregamento da página o custo de todas as comandas
+                    // de todos os dias anteriores — a maioria das quais
+                    // ninguém vai abrir.
+                    function _garantirPreenchido() {
+                        if (modeloDia.count > 0)
+                            return;
                         for (var i = 0; i < blocoDia.modelData.comandas.length; i++)
                             modeloDia.append(blocoDia.modelData.comandas[i]);
+                    }
+
+                    onExpandidoChanged: {
+                        if (blocoDia.expandido)
+                            blocoDia._garantirPreenchido();
                     }
 
                     Rectangle {
