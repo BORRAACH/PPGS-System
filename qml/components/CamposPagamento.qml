@@ -20,6 +20,17 @@ Row {
 
     property color corDestaque: Estilo.confirmar.normal
     property var opcoesPagamento: ["Pix", "Crédito", "Débito", "Dinheiro"]
+    // Forma de pagamento já selecionada quando o formulário abre limpo. É
+    // separada da ORDEM de opcoesPagamento de propósito: a ordem é a que
+    // aparece na lista do combo, e mudar o padrão não deveria bagunçá-la.
+    //
+    // Precisa acompanhar comandaParserService.FORMA_PAGAMENTO_PADRAO: é por
+    // ela que eh_suspeita reconhece uma comanda em que ninguém tocou no bloco
+    // de pagamento (sem nome + não pago + forma padrão). Se as duas
+    // divergirem, comandas assim deixam de ser sinalizadas em
+    // Consulta/Fechamento.
+    property string formaPagamentoPadrao: "Dinheiro"
+    readonly property int _indicePadrao: Math.max(0, camposPagamento.opcoesPagamento.indexOf(camposPagamento.formaPagamentoPadrao))
     // Preenchimento inicial — usado pela Consulta ao reabrir uma comanda
     // salva para edição (ver itensIniciais/reconstruirComanda nas telas).
     property string formaPagamentoInicial: ""
@@ -48,7 +59,7 @@ Row {
     // Restaura os campos ao estado inicial — usado ao limpar o formulário
     // depois de lançar/imprimir um pedido.
     function redefinirPadrao() {
-        comboFormaPagamento.currentIndex = 0;
+        comboFormaPagamento.currentIndex = camposPagamento._indicePadrao;
         inputTroco.text = "";
         inputTaxaEntrega.text = "";
         btnStatusPagamento.pago = false;
@@ -69,7 +80,13 @@ Row {
 
             width: 150
             model: camposPagamento.opcoesPagamento
-            currentIndex: Math.max(0, camposPagamento.opcoesPagamento.indexOf(camposPagamento.formaPagamentoInicial))
+            // Reabrir uma comanda salva manda a forma dela em
+            // formaPagamentoInicial; formulário limpo (string vazia, que o
+            // indexOf não acha) cai no padrão.
+            currentIndex: {
+                var indice = camposPagamento.opcoesPagamento.indexOf(camposPagamento.formaPagamentoInicial);
+                return indice >= 0 ? indice : camposPagamento._indicePadrao;
+            }
             KeyNavigation.tab: inputTroco.visible ? inputTroco : (camposPagamento.mostrarTaxaEntrega ? inputTaxaEntrega : (btnStatusPagamento.visible ? btnStatusPagamento : camposPagamento.proximoCampo))
             // Backtab chama obterCampoAnterior() na hora, não como
             // "KeyNavigation.backtab: ..." — o alvo (normalmente a última

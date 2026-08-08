@@ -23,6 +23,17 @@ from services.comandaTextoService import MARCADOR_ITENS, PREFIXO_ADICIONAL, PREF
 
 CODEPAGE_IMPRESSORA = "cp850"
 
+# Forma de pagamento que já vem selecionada quando o formulário de pedido abre
+# limpo. Usada por eh_suspeita para reconhecer a comanda em que ninguém tocou
+# no bloco de pagamento — não é uma preferência de negócio, é "o que o combo
+# mostra sozinho".
+#
+# Tem que ser a MESMA de qml/components/CamposPagamento.qml
+# (formaPagamentoPadrao) e de qml/pages/salao/PopupFecharConta.qml. Se
+# divergirem, a comanda deixada no padrão para de ser sinalizada em
+# Consulta/Fechamento — e nada quebra de forma visível, o aviso só some.
+FORMA_PAGAMENTO_PADRAO = "Dinheiro"
+
 ESC = "\x1b"
 GS = "\x1d"
 # Remove os códigos ESC/POS de estilo embutidos no .txt pelos controllers de
@@ -162,17 +173,18 @@ def eh_suspeita(tipo, cliente, forma_pagamento, status, endereco=""):
     vermelha nas duas telas, ver ItemComandaDelegate.qml e Fechamento.qml).
 
     Dois critérios independentes (OR), qualquer um basta:
-    - Sem nome do cliente + status NP + forma de pagamento Pix, em
-      Balcão/Entrega. Mesa não entra aqui: cada divisão da conta tem seu
-      próprio nome/status/forma, sem um único valor no nível do cabeçalho
-      (ver FechamentoController._calcular_resumo_dia).
+    - Sem nome do cliente + status NP + a forma de pagamento PADRÃO, em
+      Balcão/Entrega — a combinação exata de quem lançou o pedido sem tocar
+      em nada do bloco de pagamento. Mesa não entra aqui: cada divisão da
+      conta tem seu próprio nome/status/forma, sem um único valor no nível
+      do cabeçalho (ver FechamentoController._calcular_resumo_dia).
     - Entrega sem nome OU sem endereço — os dois são obrigatórios pra
       entregar de verdade, então a ausência de qualquer um dos dois é sinal
       de pedido incompleto, independente da forma de pagamento."""
     cliente = (cliente or "").strip()
     endereco = (endereco or "").strip()
 
-    if tipo != "Mesa" and cliente == "" and status == "NP" and forma_pagamento == "Pix":
+    if tipo != "Mesa" and cliente == "" and status == "NP" and forma_pagamento == FORMA_PAGAMENTO_PADRAO:
         return True
 
     if tipo == "Entrega" and (cliente == "" or endereco == ""):

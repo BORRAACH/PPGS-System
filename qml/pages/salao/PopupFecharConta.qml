@@ -23,6 +23,11 @@ Popup {
     property bool modoIgual: true
 
     readonly property var opcoesPagamento: ["Pix", "Crédito", "Débito", "Dinheiro"]
+    // Forma já selecionada em cada divisão nova. Mesmo padrão de
+    // components/CamposPagamento.qml (que o Salão não usa: aqui é uma linha
+    // por pessoa, não um bloco único) e de
+    // comandaParserService.FORMA_PAGAMENTO_PADRAO.
+    readonly property string formaPagamentoPadrao: "Dinheiro"
 
     // Soma dos valores já digitados nas divisões — só relevante no modo
     // avulso, pra dar uma pista visual se a soma não bate com o total (não
@@ -74,7 +79,7 @@ Popup {
             modeloDivisoes.append({
                 "nome": anterior ? anterior.nome : ("Pessoa " + (idx + 1)),
                 "valor": "R$ " + (centavos / 100).toFixed(2).replace(".", ","),
-                "formaPagamento": anterior ? anterior.formaPagamento : "Pix",
+                "formaPagamento": anterior ? anterior.formaPagamento : popupFecharConta.formaPagamentoPadrao,
                 "status": anterior ? anterior.status : "NP",
                 "trocoRecebido": anterior ? (anterior.trocoRecebido || "") : ""
             });
@@ -85,7 +90,7 @@ Popup {
         modeloDivisoes.append({
             "nome": "Pessoa " + (modeloDivisoes.count + 1),
             "valor": "R$ 0,00",
-            "formaPagamento": "Pix",
+            "formaPagamento": popupFecharConta.formaPagamentoPadrao,
             "status": "NP",
             "trocoRecebido": ""
         });
