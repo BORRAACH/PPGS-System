@@ -10,19 +10,29 @@ from Config import preConfig
 
 preConfig.garantir_dependencias()
 
+# A primeira coisa visível do sistema. Vem logo depois do preConfig porque é
+# ele que garante o PyQt6, e antes de todo o resto porque o que vem a seguir
+# (a checagem de atualizações) é a parte mais demorada da abertura — sem isto,
+# são segundos de tela vazia depois do duplo clique. Cria a QApplication do
+# processo, que main.py reaproveita lá embaixo.
+from services import splashInicializacao
+
+_app_splash, _splash = splashInicializacao.iniciar()
+
 from Config import atualizador, impressoraWindows
 
-# Antes dos imports do resto do app (logo abaixo), e antes de qualquer coisa
-# aparecer na tela: se o usuário aceitar atualizar, o `git merge --ff-only`
-# deixa os arquivos novos no disco a tempo desses imports pegarem o código
-# atualizado, e a atualização vale JÁ NESTA execução. Foi tentado adiar isto
-# para depois da janela (a checagem é o que mais pesa na abertura: ~1,6s, até
-# 15s com internet ruim), mas aí o app já está com o código antigo carregado
-# em memória e a atualização só passaria a valer na abertura seguinte — o que
-# não vale a espera economizada.
+# Antes dos imports do resto do app (logo abaixo): se o usuário aceitar
+# atualizar, o `git merge --ff-only` deixa os arquivos novos no disco a tempo
+# desses imports pegarem o código atualizado, e a atualização vale JÁ NESTA
+# execução. Foi tentado adiar isto para depois da janela (é o que mais pesa na
+# abertura: ~1,6s, até 15s com internet ruim), mas aí o app já está com o
+# código antigo carregado em memória e a atualização só passaria a valer na
+# abertura seguinte — o que não vale a espera economizada.
 #
 # Devolve a QApplication criada pra perguntar (se alguma foi criada) pra
-# reaproveitar mais abaixo: só pode existir uma por processo.
+# reaproveitar mais abaixo: só pode existir uma por processo. Com o splash já
+# de pé, ela é sempre a mesma que veio de lá.
+_splash.mensagem("Verificando atualizações...")
 _app_atualizador = atualizador.verificar_atualizacoes()
 
 import sys
@@ -86,6 +96,8 @@ except ImportError as erro:
 # ou um binding quebrado não deixa rastro nenhum no log.
 logConfig.instalar_captura_de_mensagens_qt()
 
+_splash.mensagem("Carregando o sistema...")
+
 # codigo perigoso
 os.environ["QML_XHR_ALLOW_FILE_READ"] = "1"
 
@@ -147,7 +159,11 @@ def _tarefas_de_fundo():
 
 
 if __name__ == "__main__":
-    app = _app_atualizador or QGuiApplication(sys.argv)
+    # A QApplication já existe desde o splash; _app_atualizador é a mesma
+    # instância (o atualizador reusa QApplication.instance()). O
+    # QGuiApplication só entra se as duas falharem — sem ambiente gráfico, por
+    # exemplo, onde o app não vai mesmo abrir, mas quem explica isso é o Qt.
+    app = _app_splash or _app_atualizador or QGuiApplication(sys.argv)
     # Nome/organização estáveis — necessário para QStandardPaths resolver
     # sempre o mesmo diretório de cache entre execuções (ver
     # services/rede/fechamentoCache.py); sem isso, o Qt cai num caminho
@@ -202,10 +218,16 @@ if __name__ == "__main__":
 
     engine.addImportPath(qml_dir)
 
+    _splash.mensagem("Abrindo a tela inicial...")
     engine.load(main_qml)
 
     if not engine.rootObjects():
+        _splash.encerrar()
         sys.exit(-1)
+
+    # A janela principal já está montada: a tela de carregamento sai de cena
+    # passando a vez para ela, sem piscar um vazio no meio.
+    _splash.encerrar(engine.rootObjects()[0])
 
     # --- Daqui pra baixo, a janela JÁ está de pé ---
     #
