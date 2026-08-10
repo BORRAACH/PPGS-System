@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Layouts
 import "../pedidos"
 import "../../components"
 import estilo 1.0
@@ -215,7 +216,31 @@ Page {
         id: conteudoBalcaoComponent
 
         Item {
+            id: conteudoBalcao
+
             anchors.fill: parent
+
+            // ===== MEDIDAS DO LAYOUT =====
+            // Antes, formulário (690) e resumo (300) eram larguras cravadas
+            // dentro de um Row: somados aos 30 de respiro, exigiam 1020px
+            // fixos, e abaixo disso o conteúdo simplesmente saía pela borda —
+            // sem rolagem horizontal, sem alcance. Agora as duas colunas
+            // partem do espaço que existe.
+            readonly property real larguraDisponivel: width - Estilo.global.padding.xl * 2
+            // O resumo da comanda é o primeiro a descer para baixo do
+            // formulário: ele é leitura, não digitação — quem está lançando o
+            // pedido precisa dos campos, e confere o resumo depois.
+            readonly property bool empilhado: larguraDisponivel < 690 + 300 + Estilo.global.spacing.xxl
+            readonly property int larguraResumo: empilhado ? Math.min(360, larguraDisponivel) : 300
+            readonly property int larguraFormulario: empilhado ? Math.min(690, larguraDisponivel) : Math.min(690, larguraDisponivel - larguraResumo - Estilo.global.spacing.xxl)
+            // Grade das três colunas de item, compartilhada pelo cabeçalho
+            // (aqui) e pelos campos (components/LinhaPedido.qml) — ver
+            // Responsivo.gradePedido.
+            readonly property var gradePedido: Responsivo.gradePedido(larguraFormulario)
+            // Os três botões de ação repartem a largura do formulário, sem
+            // passar dos 200 originais nem descer abaixo do que o rótulo mais
+            // longo ("Voltar para o Menu") precisa para ser lido.
+            readonly property int larguraBotaoAcao: Math.max(140, Math.min(200, Math.floor((larguraFormulario - Estilo.global.spacing.xl * 2) / 3)))
 
             // Exposto para telaBalcao.StackView.onActivated poder focar o
             // primeiro campo assim que a tela vira a atual (ver comentário
@@ -366,54 +391,70 @@ Page {
                     policy: ScrollBar.AsNeeded
                 }
 
-                Row {
+                // GridLayout de uma ou duas colunas, no lugar do Row de antes:
+                // é a mesma árvore de itens nos dois casos — muda só o número
+                // de colunas — então o formulário não é reconstruído (nem
+                // perde o que já foi digitado) quando a janela cruza o ponto
+                // de virada.
+                GridLayout {
                     id: rowConteudo
 
                     anchors.horizontalCenter: parent.horizontalCenter
                     anchors.verticalCenter: parent.verticalCenter
-                    spacing: 30
+                    columns: conteudoBalcao.empilhado ? 1 : 2
+                    columnSpacing: Estilo.global.spacing.xxl
+                    rowSpacing: Estilo.global.spacing.xxl
 
                     Column {
-                        anchors.verticalCenter: parent.verticalCenter
-                        spacing: 20
+                        Layout.preferredWidth: conteudoBalcao.larguraFormulario
+                        Layout.alignment: Qt.AlignHCenter | Qt.AlignVCenter
+                        spacing: Estilo.global.spacing.xxl
 
                         Row {
-                            spacing: 10
-                            anchors.horizontalCenter: parent
+                            spacing: Estilo.global.spacing.md
+                            anchors.horizontalCenter: parent.horizontalCenter
                             Icone {
                                 nome: "fa6s.building"
-                                cor: Estilo.confirmar.normal
-                                tamanho: Estilo.fonte.titulo
+                                cor: Estilo.action.confirm.base
+                                tamanho: Estilo.global.fontSize.title
                                 anchors.verticalCenter: parent.verticalCenter
                             }
                             Text {
                                 text: "ATENDIMENTO BALCÃO"
-                                font.pixelSize: Estilo.fonte.titulo
-                                font.bold: true
-                                color: Estilo.confirmar.normal
+                                font.pixelSize: Estilo.global.fontSize.title
+                                font.family: Estilo.global.fontFamily.title
+                                color: Estilo.action.confirm.base
                                 anchors.verticalCenter: parent.verticalCenter
                             }
                         }
 
                         // Campo Nome do Cliente
+                        // Alinhado à esquerda, e não centralizado: ele é mais
+                        // estreito que o formulário, e centralizado ficava com
+                        // a borda deslocada em relação à lista de itens e ao
+                        // bloco de pagamento logo abaixo — três começos de
+                        // campo em posições diferentes na mesma coluna. Numa
+                        // tela estreita, onde ele passa a ocupar a largura
+                        // toda, os dois alinhamentos coincidem.
                         Column {
-                            anchors.horizontalCenter: parent
                             spacing: 4
 
                             Text {
                                 text: "Nome do Cliente"
-                                font.pixelSize: 12
+                                font.pixelSize: Estilo.global.fontSize.sm
                                 font.bold: true
-                                color: Estilo.cores.textoSecundario
+                                color: Estilo.global.textSecondary
                             }
 
                             TextField {
                                 id: inputNomeCliente
 
-                                color: Estilo.cores.textoInput
-                                placeholderTextColor: Estilo.cores.placeholderInput
+                                color: Estilo.global.textInput
+                                placeholderTextColor: Estilo.global.textPlaceholder
                                 placeholderText: "NOME DO CLIENTE"
-                                width: 420
+                                // Confortável quando há espaço, encolhe junto
+                                // com o formulário quando não há.
+                                width: Math.min(420, conteudoBalcao.larguraFormulario)
                                 topPadding: 10
                                 bottomPadding: 10
                                 leftPadding: 10
@@ -431,10 +472,10 @@ Page {
                                 Keys.onReturnPressed: primeiroCampoPedido().forceActiveFocus()
 
                                 background: Rectangle {
-                                    radius: Estilo.rounding.padrao
-                                    color: "#ffffff"
-                                    border.color: parent.activeFocus ? Estilo.confirmar.normal : Estilo.cores.borda
-                                    border.width: 1
+                                    radius: Estilo.global.radius.sm
+                                    color: Estilo.global.inputBackground
+                                    border.color: parent.activeFocus ? Estilo.action.confirm.base : Estilo.global.border
+                                    border.width: Estilo.global.borderWidth.hairline
                                 }
                             }
                         }
@@ -442,30 +483,30 @@ Page {
                         // --- CABEÇALHO DA LISTA DE PEDIDOS (rótulo das colunas, uma vez só —
                         // repetir em cada linha do delegate abaixo poluiria a lista) ---
                         Row {
-                            width: 690
-                            anchors.horizontalCenter: parent
-                            spacing: 10
+                            width: conteudoBalcao.larguraFormulario
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            spacing: Estilo.global.spacing.md
 
                             Text {
                                 text: "Pedido"
-                                width: 200
-                                font.pixelSize: 12
+                                width: conteudoBalcao.gradePedido.pedido
+                                font.pixelSize: Estilo.global.fontSize.sm
                                 font.bold: true
-                                color: Estilo.cores.textoSecundario
+                                color: Estilo.global.textSecondary
                             }
                             Text {
                                 text: "Observação"
-                                width: 180
-                                font.pixelSize: 12
+                                width: conteudoBalcao.gradePedido.observacao
+                                font.pixelSize: Estilo.global.fontSize.sm
                                 font.bold: true
-                                color: Estilo.cores.textoSecundario
+                                color: Estilo.global.textSecondary
                             }
                             Text {
                                 text: "Valor"
-                                width: 110
-                                font.pixelSize: 12
+                                width: conteudoBalcao.gradePedido.valor
+                                font.pixelSize: Estilo.global.fontSize.sm
                                 font.bold: true
-                                color: Estilo.cores.textoSecundario
+                                color: Estilo.global.textSecondary
                             }
                         }
 
@@ -473,12 +514,12 @@ Page {
                         ListView {
                             id: listaPedidos
 
-                            width: 690
+                            width: conteudoBalcao.larguraFormulario
                             height: Math.min(count * 60, 240)
                             clip: true
                             model: modeloPedidos // Consome o modelo declarado na raiz da Page
-                            spacing: 10
-                            anchors.horizontalCenter: parent
+                            spacing: Estilo.global.spacing.md
+                            anchors.horizontalCenter: parent.horizontalCenter
 
                             ScrollBar.vertical: ScrollBar {
                                 policy: ScrollBar.AsNeeded
@@ -499,7 +540,7 @@ Page {
                             }
 
                             delegate: LinhaPedido {
-                                corDestaque: Estilo.confirmar.normal
+                                corDestaque: Estilo.action.confirm.base
                                 campoExternoAnterior: inputNomeCliente
                                 campoExternoProximo: camposPagamento.primeiroCampo
                                 onSelecionarPedido: function (indice) {
@@ -511,31 +552,37 @@ Page {
 
                         // --- SEÇÃO DE PAGAMENTO ---
                         Row {
-                            spacing: 8
-                            anchors.horizontalCenter: parent
+                            spacing: Estilo.global.spacing.sm
+                            anchors.horizontalCenter: parent.horizontalCenter
                             Icone {
                                 nome: "fa6s.credit-card"
-                                cor: Estilo.confirmar.normal
+                                cor: Estilo.action.confirm.base
                                 tamanho: 16
                                 anchors.verticalCenter: parent.verticalCenter
                             }
                             Text {
                                 text: "PAGAMENTO"
-                                font.pixelSize: 16
+                                font.pixelSize: Estilo.global.fontSize.xl
                                 font.bold: true
-                                color: Estilo.confirmar.normal
+                                color: Estilo.action.confirm.base
                                 anchors.verticalCenter: parent.verticalCenter
                             }
                         }
 
-                        Row {
-                            spacing: 10
-                            anchors.horizontalCenter: parent
+                        // Flow: se os campos de pagamento e o seletor de cópias
+                        // não couberem lado a lado, "Cópias" desce uma linha
+                        // em vez de ficar fora da tela.
+                        Flow {
+                            spacing: Estilo.global.spacing.md
+                            width: conteudoBalcao.larguraFormulario
 
                             CamposPagamento {
                                 id: camposPagamento
 
-                                corDestaque: Estilo.confirmar.normal
+                                // Desconta o seletor de cópias: é o espaço que
+                                // sobra de fato para os campos se dividirem.
+                                larguraDisponivel: conteudoBalcao.larguraFormulario - 100
+                                corDestaque: Estilo.action.confirm.base
                                 formaPagamentoInicial: telaBalcao.formaPagamentoInicial
                                 trocoInicial: telaBalcao.trocoInicial
                                 statusPagamentoInicial: telaBalcao.statusPagamentoInicial
@@ -554,16 +601,16 @@ Page {
 
                                 Text {
                                     text: "Cópias"
-                                    font.pixelSize: 12
+                                    font.pixelSize: Estilo.global.fontSize.sm
                                     font.bold: true
-                                    color: Estilo.cores.textoSecundario
+                                    color: Estilo.global.textSecondary
                                 }
 
                                 SpinnerCopias {
                                     id: spinnerCopias
 
                                     value: 1
-                                    corDestaque: Estilo.confirmar.normal
+                                    corDestaque: Estilo.action.confirm.base
                                     KeyNavigation.tab: btnImprimir
                                     KeyNavigation.backtab: camposPagamento.ultimoCampo
                                 }
@@ -571,16 +618,21 @@ Page {
                         }
 
                         // --- BOTÕES DE AÇÃO INFERIORES ---
-                        Row {
-                            spacing: 15
-                            anchors.horizontalCenter: parent
+                        // Também em Flow: os três botões dividem a largura do
+                        // formulário e, quando nem assim couberem os três na
+                        // mesma linha, quebram para a linha de baixo. Eram
+                        // 200px cada, fixos — 630px de exigência mínima só
+                        // para Imprimir/Lançar/Voltar.
+                        Flow {
+                            spacing: Estilo.global.spacing.xl
+                            width: conteudoBalcao.larguraFormulario
 
                             // Botão Imprimir
                             Button {
                                 id: btnImprimir
 
-                                padding: 10
-                                width: 200
+                                padding: Estilo.global.padding.md
+                                width: conteudoBalcao.larguraBotaoAcao
                                 focusPolicy: Qt.StrongFocus
                                 KeyNavigation.tab: btnLancar
                                 KeyNavigation.backtab: spinnerCopias
@@ -595,29 +647,29 @@ Page {
                                 }
 
                                 contentItem: Row {
-                                    spacing: 6
+                                    spacing: Estilo.global.spacing.xs
                                     anchors.centerIn: parent
                                     Icone {
                                         nome: "fa6s.print"
-                                        cor: "#ffffff"
-                                        tamanho: Estilo.fonte.padrao
+                                        cor: Estilo.global.textOnAccent
+                                        tamanho: Estilo.global.fontSize.lg
                                         anchors.verticalCenter: parent.verticalCenter
                                     }
                                     Text {
                                         text: "Imprimir"
                                         font.bold: true
-                                        color: "#ffffff"
+                                        color: Estilo.global.textOnAccent
                                         anchors.verticalCenter: parent.verticalCenter
                                     }
                                 }
 
                                 background: Rectangle {
-                                    radius: Estilo.rounding.padrao
-                                    color: parent.down ? Estilo.confirmar.pressionado : (parent.hovered ? Estilo.confirmar.hover : Estilo.confirmar.normal)
+                                    radius: Estilo.global.radius.sm
+                                    color: parent.down ? Estilo.action.confirm.pressed : (parent.hovered ? Estilo.action.confirm.hover : Estilo.action.confirm.base)
                                     // Anel de foco mais grosso: só aparece navegando
                                     // por teclado, para dar pra ver onde o Tab chegou.
-                                    border.color: parent.activeFocus ? Estilo.cores.texto : Estilo.confirmar.pressionado
-                                    border.width: parent.activeFocus ? 3 : 1
+                                    border.color: parent.activeFocus ? Estilo.global.text : Estilo.action.confirm.pressed
+                                    border.width: parent.activeFocus ? Estilo.global.borderWidth.focus : Estilo.global.borderWidth.hairline
                                 }
                             }
 
@@ -626,8 +678,8 @@ Page {
                             Button {
                                 id: btnLancar
 
-                                padding: 10
-                                width: 200
+                                padding: Estilo.global.padding.md
+                                width: conteudoBalcao.larguraBotaoAcao
                                 focusPolicy: Qt.StrongFocus
                                 KeyNavigation.tab: btnVoltar
                                 KeyNavigation.backtab: btnImprimir
@@ -642,29 +694,29 @@ Page {
                                 }
 
                                 contentItem: Row {
-                                    spacing: 6
+                                    spacing: Estilo.global.spacing.xs
                                     anchors.centerIn: parent
                                     Icone {
                                         nome: "fa6s.floppy-disk"
-                                        cor: "#ffffff"
-                                        tamanho: Estilo.fonte.padrao
+                                        cor: Estilo.global.textOnAccent
+                                        tamanho: Estilo.global.fontSize.lg
                                         anchors.verticalCenter: parent.verticalCenter
                                     }
                                     Text {
                                         text: "Lançar"
                                         font.bold: true
-                                        color: "#ffffff"
+                                        color: Estilo.global.textOnAccent
                                         anchors.verticalCenter: parent.verticalCenter
                                     }
                                 }
 
                                 background: Rectangle {
-                                    radius: Estilo.rounding.padrao
-                                    color: parent.down ? "#1d4ed8" : (parent.hovered ? "#1e40af" : "#2563eb")
+                                    radius: Estilo.global.radius.sm
+                                    color: parent.down ? Estilo.action.save.pressed : (parent.hovered ? Estilo.action.save.hover : Estilo.action.save.base)
                                     // Anel de foco mais grosso: só aparece navegando
                                     // por teclado, para dar pra ver onde o Tab chegou.
-                                    border.color: parent.activeFocus ? Estilo.cores.texto : "#1d4ed8"
-                                    border.width: parent.activeFocus ? 3 : 1
+                                    border.color: parent.activeFocus ? Estilo.global.focusRing : Estilo.action.save.border
+                                    border.width: parent.activeFocus ? Estilo.global.borderWidth.focus : Estilo.global.borderWidth.hairline
                                 }
                             }
 
@@ -672,8 +724,8 @@ Page {
                             Button {
                                 id: btnVoltar
 
-                                padding: 10
-                                width: 200
+                                padding: Estilo.global.padding.md
+                                width: conteudoBalcao.larguraBotaoAcao
                                 focusPolicy: Qt.StrongFocus
                                 KeyNavigation.tab: inputNomeCliente
                                 KeyNavigation.backtab: btnLancar
@@ -690,38 +742,39 @@ Page {
                                 }
 
                                 contentItem: Row {
-                                    spacing: 6
+                                    spacing: Estilo.global.spacing.xs
                                     anchors.centerIn: parent
                                     Icone {
                                         nome: "fa6s.arrow-left"
-                                        cor: "#ffffff"
-                                        tamanho: Estilo.fonte.padrao
+                                        cor: Estilo.global.textOnAccent
+                                        tamanho: Estilo.global.fontSize.lg
                                         anchors.verticalCenter: parent.verticalCenter
                                     }
                                     Text {
                                         text: "Voltar para o Menu"
                                         font.bold: true
-                                        color: "#ffffff"
+                                        color: Estilo.global.textOnAccent
                                         anchors.verticalCenter: parent.verticalCenter
                                     }
                                 }
 
                                 background: Rectangle {
-                                    radius: Estilo.rounding.padrao
-                                    color: parent.down ? Estilo.cancelar.pressionado : (parent.hovered ? Estilo.cancelar.hover : Estilo.cancelar.normal)
+                                    radius: Estilo.global.radius.sm
+                                    color: parent.down ? Estilo.action.danger.pressed : (parent.hovered ? Estilo.action.danger.hover : Estilo.action.danger.base)
                                     // Anel de foco mais grosso: só aparece navegando
                                     // por teclado, para dar pra ver onde o Tab chegou.
-                                    border.color: parent.activeFocus ? Estilo.cores.texto : Estilo.cancelar.pressionado
-                                    border.width: parent.activeFocus ? 3 : 1
+                                    border.color: parent.activeFocus ? Estilo.global.text : Estilo.action.danger.pressed
+                                    border.width: parent.activeFocus ? Estilo.global.borderWidth.focus : Estilo.global.borderWidth.hairline
                                 }
                             }
                         }
                     }
 
                     ResumoComanda {
-                        anchors.verticalCenter: parent.verticalCenter
+                        Layout.preferredWidth: conteudoBalcao.larguraResumo
+                        Layout.alignment: Qt.AlignHCenter | Qt.AlignVCenter
                         itens: modeloPedidos
-                        corDestaque: Estilo.confirmar.normal
+                        corDestaque: Estilo.action.confirm.base
                         formaPagamento: camposPagamento.formaPagamento
                         troco: camposPagamento.formaPagamento === "Dinheiro" ? camposPagamento.troco : ""
                         pago: camposPagamento.pago
@@ -756,7 +809,7 @@ Page {
     }
 
     background: Rectangle {
-        color: Estilo.cores.fundoPagina
-        radius: Estilo.rounding.popup
+        color: Estilo.global.background
+        radius: Estilo.global.radius.xl
     }
 }

@@ -32,7 +32,7 @@ import "../../../components"
 Column {
     id: raiz
 
-    readonly property color corDestaque: "#475569"
+    readonly property color corDestaque: Estilo.screen.config.accent
     // Largura da comanda em caracteres — a mesma de "-" * 40 e do
     // MARCADOR_ITENS ("=" * 40) em services/comandaTextoService.py. Sai daqui
     // a largura do papel na tela, então a prévia não pode divergir do que é
@@ -553,14 +553,14 @@ Column {
     // --- CABEÇALHO DA SEÇÃO + RESTAURAR PADRÕES ---
     RowLayout {
         width: raiz.width
-        spacing: 15
+        spacing: Estilo.global.spacing.xl
 
         Row {
-            spacing: 8
-            Icone { nome: "fa6s.receipt"; cor: raiz.corDestaque; tamanho: Estilo.fonte.padrao; anchors.verticalCenter: parent.verticalCenter }
+            spacing: Estilo.global.spacing.sm
+            Icone { nome: "fa6s.receipt"; cor: raiz.corDestaque; tamanho: Estilo.global.fontSize.lg; anchors.verticalCenter: parent.verticalCenter }
             Text {
                 text: "MODELO DA COMANDA IMPRESSA"
-                font.pixelSize: 16
+                font.pixelSize: Estilo.global.fontSize.xl
                 font.bold: true
                 color: raiz.corDestaque
                 anchors.verticalCenter: parent.verticalCenter
@@ -582,19 +582,19 @@ Column {
             }
 
             contentItem: Row {
-                spacing: 6
-                Icone { nome: "fa6s.arrow-rotate-left"; cor: "#ffffff"; tamanho: Estilo.fonte.padrao; anchors.verticalCenter: parent.verticalCenter }
+                spacing: Estilo.global.spacing.xs
+                Icone { nome: "fa6s.arrow-rotate-left"; cor: Estilo.global.textOnAccent; tamanho: Estilo.global.fontSize.lg; anchors.verticalCenter: parent.verticalCenter }
                 Text {
                     text: "Restaurar padrões"
                     font.bold: true
-                    color: "#ffffff"
+                    color: Estilo.global.textOnAccent
                     anchors.verticalCenter: parent.verticalCenter
                 }
             }
 
             background: Rectangle {
-                radius: Estilo.rounding.padrao
-                color: parent.down ? Estilo.cancelar.pressionado : (parent.hovered ? Estilo.cancelar.hover : Estilo.cancelar.normal)
+                radius: Estilo.global.radius.sm
+                color: parent.down ? Estilo.action.danger.pressed : (parent.hovered ? Estilo.action.danger.hover : Estilo.action.danger.base)
             }
         }
     }
@@ -604,14 +604,14 @@ Column {
         id: cartaoComanda
 
         width: parent.width
-        height: colunaCartao.implicitHeight + Estilo.preenchimento.grande * 2
-        radius: Estilo.rounding.painel
-        color: "#ffffff"
+        height: colunaCartao.implicitHeight + Estilo.global.padding.xl * 2
+        radius: Estilo.global.radius.lg
+        color: Estilo.global.surface
         // Anel de foco na convenção do resto do app (border.width 2 quando
         // focado): comunica que as setas do teclado agora controlam ESTE
         // cartão. A linha selecionada usa outra afordância (fundo + barra de
         // acento à esquerda) pros dois estados não se confundirem.
-        border.color: activeFocus ? raiz.corDestaque : Estilo.cores.bordaCard
+        border.color: activeFocus ? raiz.corDestaque : Estilo.global.borderCard
         border.width: activeFocus ? 2 : 1
         activeFocusOnTab: true
 
@@ -637,25 +637,25 @@ Column {
             id: colunaCartao
 
             anchors.fill: parent
-            anchors.margins: Estilo.preenchimento.grande
-            spacing: Estilo.espacamento.normal
+            anchors.margins: Estilo.global.padding.xl
+            spacing: Estilo.global.spacing.lg
 
             // --- Barra de controles ---
             RowLayout {
                 width: parent.width
-                spacing: Estilo.espacamento.grande
+                spacing: Estilo.global.spacing.xxl
 
                 // Seletor de tipo de comanda: troca quais campos aparecem
                 // acesos, porque nenhuma comanda real usa os 16 ao mesmo
                 // tempo (Balcão não tem endereço, Mesa não tem telefone).
                 Row {
-                    spacing: 6
+                    spacing: Estilo.global.spacing.xs
                     Layout.alignment: Qt.AlignVCenter
 
                     Text {
                         text: "Tipo:"
-                        font.pixelSize: 13
-                        color: Estilo.cores.textoSecundario
+                        font.pixelSize: Estilo.global.fontSize.md
+                        color: Estilo.global.textSecondary
                         anchors.verticalCenter: parent.verticalCenter
                     }
 
@@ -669,25 +669,25 @@ Column {
 
                             readonly property bool _ativo: raiz.tipoComanda === botaoTipo.modelData
 
-                            padding: 7
+                            padding: Estilo.global.padding.sm
                             focusPolicy: Qt.NoFocus
                             anchors.verticalCenter: parent.verticalCenter
                             onClicked: raiz.tipoComanda = botaoTipo.modelData
 
                             contentItem: Text {
                                 text: botaoTipo.modelData
-                                font.pixelSize: 13
+                                font.pixelSize: Estilo.global.fontSize.md
                                 font.bold: botaoTipo._ativo
-                                color: botaoTipo._ativo ? "#ffffff" : Estilo.cores.texto
+                                color: botaoTipo._ativo ? Estilo.global.textOnAccent : Estilo.global.text
                                 horizontalAlignment: Text.AlignHCenter
                                 verticalAlignment: Text.AlignVCenter
                             }
 
                             background: Rectangle {
-                                radius: Estilo.rounding.padrao
-                                color: botaoTipo._ativo ? raiz.corDestaque : (botaoTipo.hovered ? Estilo.cores.fundoPagina : "#ffffff")
-                                border.color: botaoTipo._ativo ? raiz.corDestaque : Estilo.cores.borda
-                                border.width: 1
+                                radius: Estilo.global.radius.sm
+                                color: botaoTipo._ativo ? raiz.corDestaque : (botaoTipo.hovered ? Estilo.global.surfaceHover : Estilo.global.surface)
+                                border.color: botaoTipo._ativo ? raiz.corDestaque : Estilo.global.border
+                                border.width: Estilo.global.borderWidth.hairline
                             }
                         }
                     }
@@ -701,8 +701,8 @@ Column {
             Text {
                 width: parent.width
                 text: raiz.chaveSelecionada === "" ? "Clique numa linha da comanda para selecioná-la; os controles aparecem ao lado dela — as setas mudam a posição, e \"Estilo…\" abre negrito, sublinhado, fundo preto e tamanho da fonte." :("Selecionado: " + raiz.rotuloDe(raiz.chaveSelecionada) + (raiz.donoSelecionado !== raiz.chaveSelecionada ? " — as setas movem a " + raiz.rotuloDe(raiz.donoSelecionado).toLowerCase() + " inteira." : ""))
-                font.pixelSize: 12
-                color: Estilo.cores.textoSecundario
+                font.pixelSize: Estilo.global.fontSize.sm
+                color: Estilo.global.textSecondary
                 wrapMode: Text.WordWrap
             }
 
@@ -726,8 +726,8 @@ Column {
                 // papel (as duas colunas ficavam maiores que os itens dentro
                 // delas, mesmo com os itens travados no próprio tamanho).
                 columns: raiz.width >= faixaPapel.implicitWidth + columnSpacing + painelEspacamento.implicitWidth ? 2 : 1
-                columnSpacing: Estilo.espacamento.grande
-                rowSpacing: Estilo.espacamento.grande
+                columnSpacing: Estilo.global.spacing.xxl
+                rowSpacing: Estilo.global.spacing.xxl
 
                 // Reserva a faixa dos controles flutuantes junto do papel: eles
                 // moram AQUI dentro (não no cartão), então a largura da coluna
@@ -735,7 +735,7 @@ Column {
                 Item {
                     id: faixaPapel
 
-                    implicitWidth: papel.width + Estilo.espacamento.normal + controlesLinha.implicitWidth
+                    implicitWidth: papel.width + Estilo.global.spacing.lg + controlesLinha.implicitWidth
                     implicitHeight: papel.height
                     Layout.alignment: Qt.AlignTop
 
@@ -746,9 +746,9 @@ Column {
                         anchors.top: parent.top
                         width: Math.ceil(metricaPapel.width) + 30
                         height: colunaPapel.implicitHeight + 24
-                        radius: 4
-                        color: "#fdfdf7"
-                        border.color: "#e5e0c8"
+                        radius: Estilo.global.radius.xs
+                        color: Estilo.printer.paper
+                        border.color: Estilo.printer.paperBorder
                         // Campos com fonte bem maior (multiplicador alto) podem ficar
                         // mais largos que o papel — contém em vez de vazar
                         // visualmente pra fora do cartão.
@@ -777,7 +777,7 @@ Column {
                             move: Transition {
                                 NumberAnimation {
                                     property: "y"
-                                    duration: 120
+                                    duration: Estilo.global.motion.fast
                                     easing.type: Easing.OutCubic
                                 }
                             }
@@ -806,7 +806,7 @@ Column {
                                     spacing: 0
                                     // Campo que este tipo de comanda não imprime:
                                     // continua visível e movível, só apagado.
-                                    opacity: linhaOrdem._noTipo ? 1 : 0.35
+                                    opacity: linhaOrdem._noTipo ? 1 : Estilo.global.opacity.muted
 
                                     SeparadorPapel {
                                         largura: linhaOrdem.width
@@ -867,8 +867,8 @@ Column {
                                                 anchors.fill: parent
                                                 anchors.leftMargin: -6
                                                 anchors.rightMargin: -6
-                                                radius: 3
-                                                color: subLinha._selecionada ? "#dbeafe" : (areaSubLinha.containsMouse ? "#f1f5f9" : "transparent")
+                                                radius: Estilo.global.radius.xs
+                                                color: subLinha._selecionada ? Estilo.screen.config.softStrong : (areaSubLinha.containsMouse ? Estilo.screen.config.soft : "transparent")
                                             }
 
                                             Rectangle {
@@ -877,7 +877,7 @@ Column {
                                                 anchors.verticalCenter: parent.verticalCenter
                                                 width: 3
                                                 height: parent.height
-                                                radius: 2
+                                                radius: Estilo.global.radius.xs
                                                 color: raiz.corDestaque
                                                 visible: subLinha._selecionada
                                             }
@@ -909,7 +909,7 @@ Column {
                                                             text: segmento.modelData.t
                                                             font.family: "monospace"
                                                             font.pixelSize: raiz.tamanhoBasePapel
-                                                            color: Estilo.cores.texto
+                                                            color: Estilo.printer.ink
                                                         }
 
                                                         PreviaCampoTexto {
@@ -973,9 +973,9 @@ Column {
     
                         readonly property int _lado: 34
 
-                        spacing: 8
+                        spacing: Estilo.global.spacing.sm
                         visible: raiz.chaveSelecionada !== ""
-                        x: papel.width + Estilo.espacamento.normal
+                        x: papel.width + Estilo.global.spacing.lg
                         y: raiz.yLinhaSelecionada + (raiz.alturaLinhaSelecionada - height) / 2
 
                         // Sem Behavior on y aqui, de propósito. O deslizar ao reordenar já
@@ -994,14 +994,14 @@ Column {
                         // perde o anel e as setas do teclado param de funcionar logo
                         // depois do primeiro clique no ▲.
                         Row {
-                            spacing: 6
+                            spacing: Estilo.global.spacing.xs
 
                             Button {
                                 width: controlesLinha._lado
                                 height: controlesLinha._lado
                                 focusPolicy: Qt.NoFocus
                                 enabled: raiz.donoSelecionado !== ""
-                                opacity: enabled ? 1 : 0.4
+                                opacity: enabled ? 1 : Estilo.global.opacity.disabled
                                 onClicked: raiz.moverSelecionado(-1)
 
                                 contentItem: Icone {
@@ -1012,10 +1012,10 @@ Column {
                                 }
 
                                 background: Rectangle {
-                                    radius: Estilo.rounding.padrao
-                                    color: parent.down ? Estilo.cores.bordaCard : "#ffffff"
-                                    border.color: Estilo.cores.borda
-                                    border.width: 1
+                                    radius: Estilo.global.radius.sm
+                                    color: parent.down ? Estilo.global.surfacePressed : Estilo.global.surface
+                                    border.color: Estilo.global.border
+                                    border.width: Estilo.global.borderWidth.hairline
                                 }
                             }
 
@@ -1024,7 +1024,7 @@ Column {
                                 height: controlesLinha._lado
                                 focusPolicy: Qt.NoFocus
                                 enabled: raiz.donoSelecionado !== ""
-                                opacity: enabled ? 1 : 0.4
+                                opacity: enabled ? 1 : Estilo.global.opacity.disabled
                                 onClicked: raiz.moverSelecionado(1)
 
                                 contentItem: Icone {
@@ -1035,10 +1035,10 @@ Column {
                                 }
 
                                 background: Rectangle {
-                                    radius: Estilo.rounding.padrao
-                                    color: parent.down ? Estilo.cores.bordaCard : "#ffffff"
-                                    border.color: Estilo.cores.borda
-                                    border.width: 1
+                                    radius: Estilo.global.radius.sm
+                                    color: parent.down ? Estilo.global.surfacePressed : Estilo.global.surface
+                                    border.color: Estilo.global.border
+                                    border.width: Estilo.global.borderWidth.hairline
                                 }
                             }
 
@@ -1046,27 +1046,27 @@ Column {
                                 id: btnEstilo
 
                                 height: controlesLinha._lado
-                                padding: 10
+                                padding: Estilo.global.padding.md
                                 focusPolicy: Qt.NoFocus
                                 enabled: raiz.podeEstilizar(raiz.chaveSelecionada)
-                                opacity: enabled ? 1 : 0.4
+                                opacity: enabled ? 1 : Estilo.global.opacity.disabled
                                 onClicked: popupEstiloCampo.abrirPara(raiz.chaveSelecionada, raiz.rotuloDe(raiz.chaveSelecionada))
 
                                 contentItem: Row {
-                                    spacing: 6
-                                    Icone { nome: "fa6s.pen"; cor: "#ffffff"; tamanho: 12; anchors.verticalCenter: parent.verticalCenter }
+                                    spacing: Estilo.global.spacing.xs
+                                    Icone { nome: "fa6s.pen"; cor: Estilo.global.textOnAccent; tamanho: 12; anchors.verticalCenter: parent.verticalCenter }
                                     Text {
                                         text: "Estilo…"
-                                        font.pixelSize: 13
+                                        font.pixelSize: Estilo.global.fontSize.md
                                         font.bold: true
-                                        color: "#ffffff"
+                                        color: Estilo.global.textOnAccent
                                         anchors.verticalCenter: parent.verticalCenter
                                     }
                                 }
 
                                 background: Rectangle {
-                                    radius: Estilo.rounding.padrao
-                                    color: parent.down ? "#334155" : (parent.hovered ? "#64748b" : raiz.corDestaque)
+                                    radius: Estilo.global.radius.sm
+                                    color: parent.down ? Estilo.screen.config.pressed : (parent.hovered ? Estilo.screen.config.hover : raiz.corDestaque)
                                 }
                             }
                         }
@@ -1081,12 +1081,12 @@ Column {
                             readonly property bool _fixo: raiz.separadorFixo(raiz.donoSelecionado)
                             readonly property int _atual: raiz.linhasTracoDe(raiz.donoSelecionado)
 
-                            spacing: 6
+                            spacing: Estilo.global.spacing.xs
 
                             Text {
                                 text: "Traços acima:"
-                                font.pixelSize: 12
-                                color: Estilo.cores.textoSecundario
+                                font.pixelSize: Estilo.global.fontSize.sm
+                                color: Estilo.global.textSecondary
                                 anchors.verticalCenter: parent.verticalCenter
                             }
 
@@ -1096,22 +1096,22 @@ Column {
                                 focusPolicy: Qt.NoFocus
                                 anchors.verticalCenter: parent.verticalCenter
                                 enabled: !ajusteTracos._fixo && ajusteTracos._atual > 0
-                                opacity: enabled ? 1 : 0.4
+                                opacity: enabled ? 1 : Estilo.global.opacity.disabled
                                 onClicked: raiz.definirExcecaoSeparador(raiz.donoSelecionado, ajusteTracos._atual - 1)
 
                                 contentItem: Text {
                                     text: "−"
-                                    font.pixelSize: 14
-                                    color: Estilo.cores.texto
+                                    font.pixelSize: Estilo.global.fontSize.lg
+                                    color: Estilo.global.text
                                     horizontalAlignment: Text.AlignHCenter
                                     verticalAlignment: Text.AlignVCenter
                                 }
 
                                 background: Rectangle {
-                                    radius: Estilo.rounding.padrao
-                                    color: parent.down ? Estilo.cores.bordaCard : "#ffffff"
-                                    border.color: Estilo.cores.borda
-                                    border.width: 1
+                                    radius: Estilo.global.radius.sm
+                                    color: parent.down ? Estilo.global.surfacePressed : Estilo.global.surface
+                                    border.color: Estilo.global.border
+                                    border.width: Estilo.global.borderWidth.hairline
                                 }
                             }
 
@@ -1122,12 +1122,12 @@ Column {
                                 width: 24
                                 text: ajusteTracos._fixo ? "—" : ajusteTracos._atual
                                 horizontalAlignment: Text.AlignHCenter
-                                font.pixelSize: 13
+                                font.pixelSize: Estilo.global.fontSize.md
                                 // Negrito só quando este campo tem exceção gravada: é o
                                 // que distingue "eu escolhi este número aqui" de "está
                                 // seguindo o padrão de ESPAÇAMENTO lá embaixo".
                                 font.bold: raiz.temExcecaoSeparador(raiz.donoSelecionado)
-                                color: Estilo.cores.texto
+                                color: Estilo.global.text
                                 anchors.verticalCenter: parent.verticalCenter
                             }
 
@@ -1137,22 +1137,22 @@ Column {
                                 focusPolicy: Qt.NoFocus
                                 anchors.verticalCenter: parent.verticalCenter
                                 enabled: !ajusteTracos._fixo && ajusteTracos._atual < raiz.maxLinhasSeparador
-                                opacity: enabled ? 1 : 0.4
+                                opacity: enabled ? 1 : Estilo.global.opacity.disabled
                                 onClicked: raiz.definirExcecaoSeparador(raiz.donoSelecionado, ajusteTracos._atual + 1)
 
                                 contentItem: Text {
                                     text: "+"
-                                    font.pixelSize: 14
-                                    color: Estilo.cores.texto
+                                    font.pixelSize: Estilo.global.fontSize.lg
+                                    color: Estilo.global.text
                                     horizontalAlignment: Text.AlignHCenter
                                     verticalAlignment: Text.AlignVCenter
                                 }
 
                                 background: Rectangle {
-                                    radius: Estilo.rounding.padrao
-                                    color: parent.down ? Estilo.cores.bordaCard : "#ffffff"
-                                    border.color: Estilo.cores.borda
-                                    border.width: 1
+                                    radius: Estilo.global.radius.sm
+                                    color: parent.down ? Estilo.global.surfacePressed : Estilo.global.surface
+                                    border.color: Estilo.global.border
+                                    border.width: Estilo.global.borderWidth.hairline
                                 }
                             }
 
@@ -1168,7 +1168,7 @@ Column {
 
                                 contentItem: Icone {
                                     nome: "fa6s.arrow-rotate-left"
-                                    cor: Estilo.cores.textoSecundario
+                                    cor: Estilo.global.textSecondary
                                     tamanho: 11
                                     anchors.centerIn: parent
                                 }
@@ -1180,10 +1180,10 @@ Column {
                                 }
 
                                 background: Rectangle {
-                                    radius: Estilo.rounding.padrao
-                                    color: parent.down ? Estilo.cores.bordaCard : "#ffffff"
-                                    border.color: Estilo.cores.borda
-                                    border.width: 1
+                                    radius: Estilo.global.radius.sm
+                                    color: parent.down ? Estilo.global.surfacePressed : Estilo.global.surface
+                                    border.color: Estilo.global.border
+                                    border.width: Estilo.global.borderWidth.hairline
                                 }
                             }
                         }
@@ -1197,38 +1197,38 @@ Column {
                     // Largura própria, não Layout.fillWidth: é ela que
                     // `columns` mede pra saber se as duas colunas cabem, e
                     // esticar com a coluna realimentaria essa conta.
-                    implicitWidth: colunaEspacamento.implicitWidth + Estilo.preenchimento.grande * 2
-                    implicitHeight: colunaEspacamento.implicitHeight + Estilo.preenchimento.grande * 2
+                    implicitWidth: colunaEspacamento.implicitWidth + Estilo.global.padding.xl * 2
+                    implicitHeight: colunaEspacamento.implicitHeight + Estilo.global.padding.xl * 2
                     Layout.alignment: Qt.AlignTop
-                    radius: Estilo.rounding.painel
-                    color: "#ffffff"
-                    border.color: Estilo.cores.bordaCard
-                    border.width: 1
+                    radius: Estilo.global.radius.lg
+                    color: Estilo.global.surface
+                    border.color: Estilo.global.borderCard
+                    border.width: Estilo.global.borderWidth.hairline
 
                     Column {
                         id: colunaEspacamento
 
                         anchors.left: parent.left
                         anchors.top: parent.top
-                        anchors.margins: Estilo.preenchimento.grande
-                        spacing: Estilo.espacamento.maior
+                        anchors.margins: Estilo.global.padding.xl
+                        spacing: Estilo.global.spacing.xl
 
                         Text {
                             text: "ESPAÇAMENTO"
-                            font.pixelSize: 15
+                            font.pixelSize: Estilo.global.fontSize.xl
                             font.bold: true
                             color: raiz.corDestaque
                         }
 
                         // Linhas em branco entre seções da comanda
                         Row {
-                            spacing: 15
+                            spacing: Estilo.global.spacing.xl
 
                             Text {
                                 width: 300
                                 text: "Linhas em branco entre seções da comanda"
-                                font.pixelSize: 13
-                                color: Estilo.cores.texto
+                                font.pixelSize: Estilo.global.fontSize.md
+                                color: Estilo.global.text
                                 anchors.verticalCenter: parent.verticalCenter
                             }
 
@@ -1243,10 +1243,10 @@ Column {
                                 }
 
                                 background: Rectangle {
-                                    radius: Estilo.rounding.padrao
-                                    color: parent.down ? Estilo.cores.bordaCard : "#ffffff"
-                                    border.color: Estilo.cores.borda
-                                    border.width: 1
+                                    radius: Estilo.global.radius.sm
+                                    color: parent.down ? Estilo.global.surfacePressed : Estilo.global.surface
+                                    border.color: Estilo.global.border
+                                    border.width: Estilo.global.borderWidth.hairline
                                 }
                             }
 
@@ -1254,9 +1254,9 @@ Column {
                                 width: 30
                                 text: raiz.espacamentoSecoes
                                 horizontalAlignment: Text.AlignHCenter
-                                font.pixelSize: 14
+                                font.pixelSize: Estilo.global.fontSize.lg
                                 font.bold: true
-                                color: Estilo.cores.texto
+                                color: Estilo.global.text
                                 anchors.verticalCenter: parent.verticalCenter
                             }
 
@@ -1268,10 +1268,10 @@ Column {
                                 onClicked: raiz.espacamentoSecoes += 1
 
                                 background: Rectangle {
-                                    radius: Estilo.rounding.padrao
-                                    color: parent.down ? Estilo.cores.bordaCard : "#ffffff"
-                                    border.color: Estilo.cores.borda
-                                    border.width: 1
+                                    radius: Estilo.global.radius.sm
+                                    color: parent.down ? Estilo.global.surfacePressed : Estilo.global.surface
+                                    border.color: Estilo.global.border
+                                    border.width: Estilo.global.borderWidth.hairline
                                 }
                             }
                         }
@@ -1280,13 +1280,13 @@ Column {
                         // linha com exceção gravada pelos botões da prévia ignora este
                         // número (ver linhasTracoAntes).
                         Row {
-                            spacing: 15
+                            spacing: Estilo.global.spacing.xl
 
                             Text {
                                 width: 300
                                 text: "Linhas tracejadas em cada divisória"
-                                font.pixelSize: 13
-                                color: Estilo.cores.texto
+                                font.pixelSize: Estilo.global.fontSize.md
+                                color: Estilo.global.text
                                 anchors.verticalCenter: parent.verticalCenter
                             }
 
@@ -1296,14 +1296,14 @@ Column {
                                 height: 32
                                 anchors.verticalCenter: parent.verticalCenter
                                 enabled: raiz.linhasSeparadorPadrao > 0
-                                opacity: enabled ? 1 : 0.4
+                                opacity: enabled ? 1 : Estilo.global.opacity.disabled
                                 onClicked: raiz.definirLinhasSeparadorPadrao(raiz.linhasSeparadorPadrao - 1)
 
                                 background: Rectangle {
-                                    radius: Estilo.rounding.padrao
-                                    color: parent.down ? Estilo.cores.bordaCard : "#ffffff"
-                                    border.color: Estilo.cores.borda
-                                    border.width: 1
+                                    radius: Estilo.global.radius.sm
+                                    color: parent.down ? Estilo.global.surfacePressed : Estilo.global.surface
+                                    border.color: Estilo.global.border
+                                    border.width: Estilo.global.borderWidth.hairline
                                 }
                             }
 
@@ -1311,9 +1311,9 @@ Column {
                                 width: 30
                                 text: raiz.linhasSeparadorPadrao
                                 horizontalAlignment: Text.AlignHCenter
-                                font.pixelSize: 14
+                                font.pixelSize: Estilo.global.fontSize.lg
                                 font.bold: true
-                                color: Estilo.cores.texto
+                                color: Estilo.global.text
                                 anchors.verticalCenter: parent.verticalCenter
                             }
 
@@ -1323,27 +1323,27 @@ Column {
                                 height: 32
                                 anchors.verticalCenter: parent.verticalCenter
                                 enabled: raiz.linhasSeparadorPadrao < raiz.maxLinhasSeparador
-                                opacity: enabled ? 1 : 0.4
+                                opacity: enabled ? 1 : Estilo.global.opacity.disabled
                                 onClicked: raiz.definirLinhasSeparadorPadrao(raiz.linhasSeparadorPadrao + 1)
 
                                 background: Rectangle {
-                                    radius: Estilo.rounding.padrao
-                                    color: parent.down ? Estilo.cores.bordaCard : "#ffffff"
-                                    border.color: Estilo.cores.borda
-                                    border.width: 1
+                                    radius: Estilo.global.radius.sm
+                                    color: parent.down ? Estilo.global.surfacePressed : Estilo.global.surface
+                                    border.color: Estilo.global.border
+                                    border.width: Estilo.global.borderWidth.hairline
                                 }
                             }
                         }
 
                         // Linhas em branco antes do corte automático
                         Row {
-                            spacing: 15
+                            spacing: Estilo.global.spacing.xl
 
                             Text {
                                 width: 300
                                 text: "Linhas em branco antes do corte automático"
-                                font.pixelSize: 13
-                                color: Estilo.cores.texto
+                                font.pixelSize: Estilo.global.fontSize.md
+                                color: Estilo.global.text
                                 anchors.verticalCenter: parent.verticalCenter
                             }
 
@@ -1358,10 +1358,10 @@ Column {
                                 }
 
                                 background: Rectangle {
-                                    radius: Estilo.rounding.padrao
-                                    color: parent.down ? Estilo.cores.bordaCard : "#ffffff"
-                                    border.color: Estilo.cores.borda
-                                    border.width: 1
+                                    radius: Estilo.global.radius.sm
+                                    color: parent.down ? Estilo.global.surfacePressed : Estilo.global.surface
+                                    border.color: Estilo.global.border
+                                    border.width: Estilo.global.borderWidth.hairline
                                 }
                             }
 
@@ -1369,9 +1369,9 @@ Column {
                                 width: 30
                                 text: raiz.espacamentoCorte
                                 horizontalAlignment: Text.AlignHCenter
-                                font.pixelSize: 14
+                                font.pixelSize: Estilo.global.fontSize.lg
                                 font.bold: true
-                                color: Estilo.cores.texto
+                                color: Estilo.global.text
                                 anchors.verticalCenter: parent.verticalCenter
                             }
 
@@ -1383,10 +1383,10 @@ Column {
                                 onClicked: raiz.espacamentoCorte += 1
 
                                 background: Rectangle {
-                                    radius: Estilo.rounding.padrao
-                                    color: parent.down ? Estilo.cores.bordaCard : "#ffffff"
-                                    border.color: Estilo.cores.borda
-                                    border.width: 1
+                                    radius: Estilo.global.radius.sm
+                                    color: parent.down ? Estilo.global.surfacePressed : Estilo.global.surface
+                                    border.color: Estilo.global.border
+                                    border.width: Estilo.global.borderWidth.hairline
                                 }
                             }
                         }

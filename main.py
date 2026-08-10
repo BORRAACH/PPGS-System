@@ -55,7 +55,7 @@ try:
     from services.cardapioService import CardapioController
     from services.formulaLucroService import FormulaLucroController
     from services.statusInicializacaoService import status
-    from Config import diagnosticar_impressora
+    from Config import diagnosticar_impressora, fontes
 except ImportError as erro:
     # preConfig.garantir_dependencias() já tentou instalar tudo sozinho —
     # se mesmo assim algo continua faltando (sem internet, sem permissão
@@ -172,6 +172,14 @@ if __name__ == "__main__":
     # diferentes a cada vez.
     app.setApplicationName("PizzeriaSystem")
     app.setOrganizationName("PizzeriaSystem")
+
+    # Fontes embarcadas (qml/estilo/fontes/). Precisa vir antes do
+    # engine.load() lá embaixo: a partir dele os textos já são medidos, e uma
+    # troca de fonte depois disso deixaria a primeira tela desalinhada. Ver
+    # Config/fontes.py para por que a Figtree entra por aqui e a Caprasimo
+    # não.
+    fontes.aplicar(app)
+
     engine = QQmlApplicationEngine()
 
     # Diretório onde o script está sendo executado

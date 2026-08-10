@@ -10,7 +10,7 @@ import estilo 1.0
 SpinBox {
     id: spinnerCopias
 
-    property color corDestaque: Estilo.confirmar.normal
+    property color corDestaque: Estilo.action.confirm.base
 
     from: 1
     to: 5
@@ -20,8 +20,8 @@ SpinBox {
 
     contentItem: TextInput {
         text: spinnerCopias.textFromValue(spinnerCopias.value, spinnerCopias.locale)
-        font.pixelSize: Estilo.fonte.padrao
-        color: Estilo.cores.textoInput
+        font.pixelSize: Estilo.global.fontSize.lg
+        color: Estilo.global.textInput
         horizontalAlignment: Qt.AlignHCenter
         verticalAlignment: Qt.AlignVCenter
         readOnly: !spinnerCopias.editable
@@ -30,9 +30,9 @@ SpinBox {
     }
 
     background: Rectangle {
-        radius: Estilo.rounding.padrao
-        color: "#ffffff"
-        border.color: spinnerCopias.activeFocus ? spinnerCopias.corDestaque : Estilo.cores.borda
+        radius: Estilo.global.radius.sm
+        color: Estilo.global.inputBackground
+        border.color: spinnerCopias.activeFocus ? spinnerCopias.corDestaque : Estilo.global.border
         border.width: spinnerCopias.activeFocus ? 2 : 1
     }
 }

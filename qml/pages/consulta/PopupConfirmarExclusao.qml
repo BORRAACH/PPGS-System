@@ -23,72 +23,72 @@ Popup {
     modal: true
     focus: true
     closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
-    padding: 25
+    padding: Estilo.global.padding.popup
     parent: Overlay.overlay
     anchors.centerIn: parent
 
     Overlay.modal: Rectangle {
-        color: "#99000000"
+        color: Estilo.global.overlay
     }
 
     background: Rectangle {
-        radius: 16
-        color: Estilo.cores.fundoPagina
-        border.color: Estilo.cores.bordaCard
+        radius: Estilo.global.radius.xl
+        color: Estilo.global.background
+        border.color: Estilo.global.borderCard
     }
 
     contentItem: Column {
-        spacing: 20
+        spacing: Estilo.global.spacing.xxl
 
         Row {
-            spacing: 8
-            Icone { nome: "fa6s.trash-can"; cor: Estilo.cores.texto; tamanho: 17; anchors.verticalCenter: parent.verticalCenter }
+            spacing: Estilo.global.spacing.sm
+            Icone { nome: "fa6s.trash-can"; cor: Estilo.global.text; tamanho: 17; anchors.verticalCenter: parent.verticalCenter }
             Text {
                 text: "Apagar esta comanda?"
-                font.pixelSize: 17
+                font.pixelSize: Estilo.global.fontSize.xl
                 font.bold: true
-                color: Estilo.cores.texto
+                color: Estilo.global.text
                 anchors.verticalCenter: parent.verticalCenter
             }
         }
 
         Text {
             text: popupConfirmarExclusao.tituloAlvo
-            font.pixelSize: 13
-            color: Estilo.cores.textoSecundario
-            width: 320
+            font.pixelSize: Estilo.global.fontSize.md
+            color: Estilo.global.textSecondary
+            width: Responsivo.larguraPopup(320)
             wrapMode: Text.Wrap
         }
 
         Row {
-            spacing: 12
+            spacing: Estilo.global.spacing.lg
             anchors.right: parent.right
 
             Button {
                 id: btnCancelarExclusao
 
                 text: "Cancelar"
-                padding: 10
+                padding: Estilo.global.padding.md
                 onClicked: popupConfirmarExclusao.close()
 
                 contentItem: Text {
                     text: btnCancelarExclusao.text
                     font.bold: true
-                    color: "#ffffff"
+                    color: Estilo.global.textOnAccent
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
                 }
 
                 background: Rectangle {
-                    radius: Estilo.rounding.padrao
-                    color: parent.down ? Estilo.cores.textoSecundario : (parent.hovered ? "#95a5a6" : Estilo.cores.textoSecundario)
+                    radius: Estilo.global.radius.sm
+                    color: parent.down ? Estilo.action.neutral.pressed : (parent.hovered ? Estilo.action.neutral.hover : Estilo.action.neutral.base)
                 }
             }
 
             Button {
                 id: btnConfirmarExclusao
 
-                padding: 10
+                padding: Estilo.global.padding.md
                 onClicked: {
                     consultaController.apagarComanda(popupConfirmarExclusao.arquivoAlvo);
                     popupConfirmarExclusao.close();
@@ -96,22 +96,22 @@ Popup {
                 }
 
                 contentItem: Row {
-                    spacing: 6
+                    spacing: Estilo.global.spacing.xs
                     anchors.centerIn: parent
-                    Icone { nome: "fa6s.trash-can"; cor: "#ffffff"; tamanho: Estilo.fonte.padrao; anchors.verticalCenter: parent.verticalCenter }
+                    Icone { nome: "fa6s.trash-can"; cor: Estilo.global.textOnAccent; tamanho: Estilo.global.fontSize.lg; anchors.verticalCenter: parent.verticalCenter }
                     Text {
                         text: "Apagar"
                         font.bold: true
-                        color: "#ffffff"
+                        color: Estilo.global.textOnAccent
                         anchors.verticalCenter: parent.verticalCenter
                     }
                 }
 
                 background: Rectangle {
-                    radius: Estilo.rounding.padrao
-                    color: parent.down ? Estilo.cancelar.pressionado : (parent.hovered ? Estilo.cancelar.hover : Estilo.cancelar.normal)
-                    border.color: Estilo.cancelar.pressionado
-                    border.width: 1
+                    radius: Estilo.global.radius.sm
+                    color: parent.down ? Estilo.action.danger.pressed : (parent.hovered ? Estilo.action.danger.hover : Estilo.action.danger.base)
+                    border.color: Estilo.action.danger.pressed
+                    border.width: Estilo.global.borderWidth.hairline
                 }
             }
         }

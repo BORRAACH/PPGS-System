@@ -259,7 +259,7 @@ Popup {
     modal: true
     focus: true
     closePolicy: Popup.CloseOnEscape
-    padding: 25
+    padding: Estilo.global.padding.popup
     parent: Overlay.overlay
     anchors.centerIn: parent
     // Dá foco de teclado ao conteúdo assim que o popup abre — sem isso, as
@@ -271,19 +271,19 @@ Popup {
     height: Math.min(720, parent ? parent.height * 0.9 : 720)
 
     Overlay.modal: Rectangle {
-        color: "#99000000"
+        color: Estilo.global.overlay
     }
 
     background: Rectangle {
-        radius: Estilo.rounding.popup
-        color: Estilo.cores.fundoPagina
-        border.color: Estilo.cores.bordaCard
+        radius: Estilo.global.radius.xl
+        color: Estilo.global.background
+        border.color: Estilo.global.borderCard
     }
 
     contentItem: ColumnLayout {
         id: colunaConteudo
 
-        spacing: Estilo.espacamento.maior
+        spacing: Estilo.global.spacing.xl
         focus: true
         // Setas ‹ › (mesma navegação dos botões btnAnterior/btnProxima, só
         // que sem precisar mirar neles) e F10 como atalho pro botão Baixa —
@@ -332,18 +332,18 @@ Popup {
 
                 contentItem: Text {
                     text: "‹"
-                    font.pixelSize: 20
+                    font.pixelSize: Estilo.global.fontSize.xxl
                     font.bold: true
-                    color: btnAnterior.enabled ? Estilo.cores.texto : Estilo.cores.borda
+                    color: btnAnterior.enabled ? Estilo.global.text : Estilo.global.border
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
                 }
 
                 background: Rectangle {
-                    radius: Estilo.rounding.cheio
-                    color: btnAnterior.down ? "#e5e7eb" : (btnAnterior.hovered ? "#f1f5f9" : "transparent")
-                    border.color: btnAnterior.enabled ? Estilo.cores.borda : "transparent"
-                    border.width: 1
+                    radius: Estilo.global.radius.pill
+                    color: btnAnterior.down ? Estilo.action.ghost.pressed : (btnAnterior.hovered ? Estilo.action.ghost.hover : Estilo.action.ghost.base)
+                    border.color: btnAnterior.enabled ? Estilo.global.border : "transparent"
+                    border.width: Estilo.global.borderWidth.hairline
                 }
             }
 
@@ -360,17 +360,17 @@ Popup {
                     text: popupFechamentoRapido.modoFila
                         ? "Comanda " + (popupFechamentoRapido.indice + 1) + " de " + popupFechamentoRapido.comandas.length
                         : "Conferir comanda"
-                    font.pixelSize: 17
+                    font.pixelSize: Estilo.global.fontSize.xl
                     font.bold: true
-                    color: Estilo.cores.texto
+                    color: Estilo.global.text
                 }
 
                 Row {
                     anchors.horizontalCenter: parent.horizontalCenter
-                    spacing: 8
+                    spacing: Estilo.global.spacing.sm
 
                     Rectangle {
-                        radius: 6
+                        radius: Estilo.global.radius.sm
                         width: textoTipo.implicitWidth + 14
                         height: textoTipo.implicitHeight + 6
                         anchors.verticalCenter: parent.verticalCenter
@@ -378,16 +378,16 @@ Popup {
                             if (!popupFechamentoRapido.comandaAtual)
                                 return "transparent";
                             var tipo = popupFechamentoRapido.comandaAtual.tipo;
-                            return tipo === "Entrega" ? "#0284c7" : (tipo === "Mesa" ? "#0d9488" : "#d97706");
+                            return tipo === "Entrega" ? Estilo.orderType.entrega.base : (tipo === "Mesa" ? Estilo.orderType.mesa.base : Estilo.orderType.balcao.base);
                         }
 
                         Text {
                             id: textoTipo
 
                             text: popupFechamentoRapido.comandaAtual ? popupFechamentoRapido.comandaAtual.tipo : ""
-                            color: "#ffffff"
+                            color: Estilo.global.textOnAccent
                             font.bold: true
-                            font.pixelSize: 11
+                            font.pixelSize: Estilo.global.fontSize.xs
                             anchors.centerIn: parent
                         }
                     }
@@ -395,9 +395,9 @@ Popup {
                     Text {
                         text: popupFechamentoRapido.comandaAtual ? popupFechamentoRapido.comandaAtual.codigo : ""
                         visible: text !== ""
-                        font.pixelSize: 12
+                        font.pixelSize: Estilo.global.fontSize.sm
                         font.family: "monospace"
-                        color: Estilo.cores.textoSecundario
+                        color: Estilo.global.textSecondary
                         anchors.verticalCenter: parent.verticalCenter
                     }
                 }
@@ -416,18 +416,18 @@ Popup {
 
                 contentItem: Text {
                     text: "›"
-                    font.pixelSize: 20
+                    font.pixelSize: Estilo.global.fontSize.xxl
                     font.bold: true
-                    color: btnProxima.enabled ? Estilo.cores.texto : Estilo.cores.borda
+                    color: btnProxima.enabled ? Estilo.global.text : Estilo.global.border
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
                 }
 
                 background: Rectangle {
-                    radius: Estilo.rounding.cheio
-                    color: btnProxima.down ? "#e5e7eb" : (btnProxima.hovered ? "#f1f5f9" : "transparent")
-                    border.color: btnProxima.enabled ? Estilo.cores.borda : "transparent"
-                    border.width: 1
+                    radius: Estilo.global.radius.pill
+                    color: btnProxima.down ? Estilo.action.ghost.pressed : (btnProxima.hovered ? Estilo.action.ghost.hover : Estilo.action.ghost.base)
+                    border.color: btnProxima.enabled ? Estilo.global.border : "transparent"
+                    border.width: Estilo.global.borderWidth.hairline
                 }
             }
         }
@@ -439,15 +439,15 @@ Popup {
         Rectangle {
             Layout.fillWidth: true
             implicitHeight: 54
-            radius: Estilo.rounding.medio
-            color: "#f0fdf4"
-            border.color: "#bbf7d0"
+            radius: Estilo.global.radius.lg
+            color: Estilo.status.success.background
+            border.color: Estilo.status.success.border
 
             RowLayout {
                 anchors.fill: parent
-                anchors.leftMargin: Estilo.preenchimento.grande
-                anchors.rightMargin: Estilo.preenchimento.grande
-                spacing: Estilo.espacamento.normal
+                anchors.leftMargin: Estilo.global.padding.xl
+                anchors.rightMargin: Estilo.global.padding.xl
+                spacing: Estilo.global.spacing.lg
 
                 Text {
                     Layout.fillWidth: true
@@ -457,16 +457,16 @@ Popup {
                         var cliente = popupFechamentoRapido.comandaAtual.cliente;
                         return cliente && cliente.trim() !== "" ? cliente.trim() : "Cliente não informado";
                     }
-                    font.pixelSize: Estilo.fonte.padrao
+                    font.pixelSize: Estilo.global.fontSize.lg
                     font.bold: true
-                    color: Estilo.cores.texto
+                    color: Estilo.global.text
                     elide: Text.ElideRight
                 }
 
                 Text {
                     text: popupFechamentoRapido.comandaAtual ? popupFechamentoRapido.comandaAtual.dataHora : ""
-                    font.pixelSize: 12
-                    color: Estilo.cores.textoSecundario
+                    font.pixelSize: Estilo.global.fontSize.sm
+                    color: Estilo.global.textSecondary
                 }
 
                 // Agora que comandas já baixadas também chegam aqui (pela
@@ -478,17 +478,17 @@ Popup {
                     visible: popupFechamentoRapido.comandaAtual !== null
                     implicitWidth: textoConferida.implicitWidth + 16
                     implicitHeight: textoConferida.implicitHeight + 6
-                    radius: Estilo.rounding.cheio
-                    color: popupFechamentoRapido.comandaAtual && popupFechamentoRapido.comandaAtual.fechada ? Estilo.confirmar.normal : "#b45309"
+                    radius: Estilo.global.radius.pill
+                    color: popupFechamentoRapido.comandaAtual && popupFechamentoRapido.comandaAtual.fechada ? Estilo.action.confirm.base : Estilo.finance.outflow
 
                     Text {
                         id: textoConferida
 
                         anchors.centerIn: parent
                         text: popupFechamentoRapido.comandaAtual && popupFechamentoRapido.comandaAtual.fechada ? "CONFERIDA" : "EM ABERTO"
-                        font.pixelSize: 11
+                        font.pixelSize: Estilo.global.fontSize.xs
                         font.bold: true
-                        color: "#ffffff"
+                        color: Estilo.global.textOnAccent
                     }
                 }
 
@@ -496,9 +496,9 @@ Popup {
                     text: popupFechamentoRapido.comandaAtual
                         ? "R$ " + popupFechamentoRapido.comandaAtual.valor.toFixed(2).replace(".", ",")
                         : ""
-                    font.pixelSize: 22
+                    font.pixelSize: Estilo.global.fontSize.title
                     font.bold: true
-                    color: "#16a34a"
+                    color: Estilo.finance.positive
                 }
             }
         }
@@ -531,10 +531,10 @@ Popup {
                 itens: modeloItens
                 corDestaque: {
                     if (!popupFechamentoRapido.comandaAtual)
-                        return Estilo.confirmar.normal;
+                        return Estilo.action.confirm.base;
 
                     var tipo = popupFechamentoRapido.comandaAtual.tipo;
-                    return tipo === "Entrega" ? "#e67e22" : (tipo === "Mesa" ? "#0d9488" : Estilo.confirmar.normal);
+                    return tipo === "Entrega" ? Estilo.orderType.entrega.base : (tipo === "Mesa" ? Estilo.orderType.mesa.base : Estilo.orderType.balcao.base);
                 }
                 cliente: popupFechamentoRapido.detalhe.cliente || ""
                 telefone: popupFechamentoRapido.detalhe.telefone || ""
@@ -560,13 +560,13 @@ Popup {
             Layout.fillWidth: true
             Layout.fillHeight: true
             visible: !popupFechamentoRapido.temDetalhe
-            radius: Estilo.rounding.medio
-            color: "#ffffff"
-            border.color: Estilo.cores.bordaCard
+            radius: Estilo.global.radius.lg
+            color: Estilo.global.surface
+            border.color: Estilo.global.borderCard
 
             Flickable {
                 anchors.fill: parent
-                anchors.margins: Estilo.preenchimento.normal
+                anchors.margins: Estilo.global.padding.md
                 clip: true
                 contentWidth: Math.max(width, textoCupom.implicitWidth)
                 contentHeight: Math.max(height, textoCupom.implicitHeight)
@@ -585,8 +585,8 @@ Popup {
 
                     text: popupFechamentoRapido.comandaAtual ? popupFechamentoRapido.comandaAtual.conteudo : ""
                     font.family: "monospace"
-                    font.pixelSize: 13
-                    color: "#34495e"
+                    font.pixelSize: Estilo.global.fontSize.md
+                    color: Estilo.printer.ink
                     wrapMode: Text.NoWrap
                 }
             }
@@ -606,11 +606,11 @@ Popup {
         Rectangle {
             Layout.fillWidth: true
             visible: popupFechamentoRapido.escolhendoBaixa
-            implicitHeight: colunaEscolhaBaixa.implicitHeight + Estilo.preenchimento.grande * 2
-            radius: Estilo.rounding.medio
-            color: Estilo.cores.avisoFundo
-            border.color: Estilo.cores.avisoBorda
-            border.width: 1
+            implicitHeight: colunaEscolhaBaixa.implicitHeight + Estilo.global.padding.xl * 2
+            radius: Estilo.global.radius.lg
+            color: Estilo.status.warning.background
+            border.color: Estilo.status.warning.border
+            border.width: Estilo.global.borderWidth.hairline
 
             Column {
                 id: colunaEscolhaBaixa
@@ -618,20 +618,20 @@ Popup {
                 anchors.left: parent.left
                 anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
-                anchors.leftMargin: Estilo.preenchimento.grande
-                anchors.rightMargin: Estilo.preenchimento.grande
-                spacing: Estilo.espacamento.menor
+                anchors.leftMargin: Estilo.global.padding.xl
+                anchors.rightMargin: Estilo.global.padding.xl
+                spacing: Estilo.global.spacing.md
 
                 Text {
                     width: parent.width
                     text: "Esta comanda já foi conferida e conta no caixa do dia. A comanda corrigida é gravada como uma comanda nova — o que fazer com a conferência?"
-                    font.pixelSize: 13
-                    color: Estilo.cores.avisoTexto
+                    font.pixelSize: Estilo.global.fontSize.md
+                    color: Estilo.status.warning.content
                     wrapMode: Text.WordWrap
                 }
 
                 Row {
-                    spacing: Estilo.espacamento.normal
+                    spacing: Estilo.global.spacing.lg
 
                     Button {
                         id: btnManterConferida
@@ -642,14 +642,14 @@ Popup {
                         contentItem: Text {
                             text: "Manter conferida"
                             font.bold: true
-                            color: "#ffffff"
+                            color: Estilo.global.textOnAccent
                             horizontalAlignment: Text.AlignHCenter
                             verticalAlignment: Text.AlignVCenter
                         }
 
                         background: Rectangle {
-                            radius: Estilo.rounding.padrao
-                            color: btnManterConferida.down ? Estilo.confirmar.pressionado : (btnManterConferida.hovered ? Estilo.confirmar.hover : Estilo.confirmar.normal)
+                            radius: Estilo.global.radius.sm
+                            color: btnManterConferida.down ? Estilo.action.confirm.pressed : (btnManterConferida.hovered ? Estilo.action.confirm.hover : Estilo.action.confirm.base)
                         }
                     }
 
@@ -662,16 +662,16 @@ Popup {
                         contentItem: Text {
                             text: "Reconferir depois"
                             font.bold: true
-                            color: Estilo.cores.avisoTexto
+                            color: Estilo.status.warning.content
                             horizontalAlignment: Text.AlignHCenter
                             verticalAlignment: Text.AlignVCenter
                         }
 
                         background: Rectangle {
-                            radius: Estilo.rounding.padrao
-                            color: btnReconferirDepois.down ? "#fde68a" : (btnReconferirDepois.hovered ? "#fef9c3" : "transparent")
-                            border.color: Estilo.cores.avisoBorda
-                            border.width: 1
+                            radius: Estilo.global.radius.sm
+                            color: btnReconferirDepois.down ? Estilo.status.warning.border : (btnReconferirDepois.hovered ? Estilo.status.warning.background : "transparent")
+                            border.color: Estilo.status.warning.border
+                            border.width: Estilo.global.borderWidth.hairline
                         }
                     }
 
@@ -683,14 +683,14 @@ Popup {
 
                         contentItem: Text {
                             text: "Cancelar"
-                            color: Estilo.cores.textoSecundario
+                            color: Estilo.global.textSecondary
                             horizontalAlignment: Text.AlignHCenter
                             verticalAlignment: Text.AlignVCenter
                         }
 
                         background: Rectangle {
-                            radius: Estilo.rounding.padrao
-                            color: btnCancelarEscolha.hovered ? "#f1f5f9" : "transparent"
+                            radius: Estilo.global.radius.sm
+                            color: btnCancelarEscolha.hovered ? Estilo.action.ghost.hover : Estilo.action.ghost.base
                         }
                     }
                 }
@@ -705,53 +705,53 @@ Popup {
             Layout.fillWidth: true
             visible: !popupFechamentoRapido.ehHoje
             text: "Só dá para corrigir comandas do dia de hoje: a comanda corrigida é gravada de novo com a data de agora, e sairia do caixa deste dia."
-            font.pixelSize: 12
-            color: Estilo.cores.avisoTexto
+            font.pixelSize: Estilo.global.fontSize.sm
+            color: Estilo.status.warning.content
             wrapMode: Text.WordWrap
         }
 
         // --- AÇÕES ---
         RowLayout {
             Layout.fillWidth: true
-            spacing: Estilo.espacamento.normal
+            spacing: Estilo.global.spacing.lg
 
             Button {
                 id: btnBaixa
 
-                padding: 10
+                padding: Estilo.global.padding.md
                 // Comanda já conferida não tem baixa a dar.
                 visible: popupFechamentoRapido.comandaAtual !== null && !popupFechamentoRapido.comandaAtual.fechada
                 onClicked: popupFechamentoRapido.darBaixaAtual()
 
                 contentItem: Row {
-                    spacing: 6
+                    spacing: Estilo.global.spacing.xs
                     anchors.centerIn: parent
                     Icone {
                         nome: "fa6s.check"
-                        cor: "#ffffff"
-                        tamanho: Estilo.fonte.padrao
+                        cor: Estilo.global.textOnAccent
+                        tamanho: Estilo.global.fontSize.lg
                         anchors.verticalCenter: parent.verticalCenter
                     }
                     Text {
                         text: "Baixa"
                         font.bold: true
-                        color: "#ffffff"
+                        color: Estilo.global.textOnAccent
                         anchors.verticalCenter: parent.verticalCenter
                     }
                 }
 
                 background: Rectangle {
-                    radius: Estilo.rounding.padrao
-                    color: btnBaixa.down ? Estilo.confirmar.pressionado : (btnBaixa.hovered ? Estilo.confirmar.hover : Estilo.confirmar.normal)
-                    border.color: Estilo.confirmar.pressionado
-                    border.width: 1
+                    radius: Estilo.global.radius.sm
+                    color: btnBaixa.down ? Estilo.action.confirm.pressed : (btnBaixa.hovered ? Estilo.action.confirm.hover : Estilo.action.confirm.base)
+                    border.color: Estilo.action.confirm.pressed
+                    border.width: Estilo.global.borderWidth.hairline
                 }
             }
 
             Button {
                 id: btnEditar
 
-                padding: 10
+                padding: Estilo.global.padding.md
                 // Comanda de Mesa não reabre num formulário: a divisão da
                 // conta já impressa não volta pra Balcao.qml/Entrega.qml —
                 // mesma regra de ItemComandaDelegate.qml na Consulta.
@@ -760,29 +760,29 @@ Popup {
                 onClicked: popupFechamentoRapido.editarAtual()
 
                 contentItem: Row {
-                    spacing: 6
+                    spacing: Estilo.global.spacing.xs
                     anchors.centerIn: parent
                     Icone {
                         nome: "fa6s.pen"
-                        cor: btnEditar.enabled ? "#ffffff" : Estilo.cores.textoSecundario
-                        tamanho: Estilo.fonte.padrao
+                        cor: btnEditar.enabled ? Estilo.global.textOnAccent : Estilo.global.textSecondary
+                        tamanho: Estilo.global.fontSize.lg
                         anchors.verticalCenter: parent.verticalCenter
                     }
                     Text {
                         text: "Editar"
                         font.bold: true
-                        color: btnEditar.enabled ? "#ffffff" : Estilo.cores.textoSecundario
+                        color: btnEditar.enabled ? Estilo.global.textOnAccent : Estilo.global.textSecondary
                         anchors.verticalCenter: parent.verticalCenter
                     }
                 }
 
                 background: Rectangle {
-                    radius: Estilo.rounding.padrao
+                    radius: Estilo.global.radius.sm
                     color: {
                         if (!btnEditar.enabled)
-                            return Estilo.cores.borda;
+                            return Estilo.global.border;
 
-                        return btnEditar.down ? "#6d28d9" : (btnEditar.hovered ? "#8b5cf6" : "#7c3aed");
+                        return btnEditar.down ? Estilo.action.review.pressed : (btnEditar.hovered ? Estilo.action.review.hover : Estilo.action.review.base);
                     }
                 }
             }
@@ -790,66 +790,66 @@ Popup {
             Button {
                 id: btnReimprimir
 
-                padding: 10
+                padding: Estilo.global.padding.md
                 // Sem restrição de dia, ao contrário de Editar: reimprimir
                 // reenvia o .txt como está, sem gravar nem alterar nada.
                 visible: popupFechamentoRapido.comandaAtual !== null
                 onClicked: popupFechamentoRapido.reimprimirAtual()
 
                 contentItem: Row {
-                    spacing: 6
+                    spacing: Estilo.global.spacing.xs
                     anchors.centerIn: parent
                     Icone {
                         nome: "fa6s.print"
-                        cor: Estilo.cores.texto
-                        tamanho: Estilo.fonte.padrao
+                        cor: Estilo.global.text
+                        tamanho: Estilo.global.fontSize.lg
                         anchors.verticalCenter: parent.verticalCenter
                     }
                     Text {
                         text: "Reimprimir"
                         font.bold: true
-                        color: Estilo.cores.texto
+                        color: Estilo.global.text
                         anchors.verticalCenter: parent.verticalCenter
                     }
                 }
 
                 background: Rectangle {
-                    radius: Estilo.rounding.padrao
-                    color: btnReimprimir.down ? "#e5e7eb" : (btnReimprimir.hovered ? "#f1f5f9" : "transparent")
-                    border.color: Estilo.cores.borda
-                    border.width: 1
+                    radius: Estilo.global.radius.sm
+                    color: btnReimprimir.down ? Estilo.action.ghost.pressed : (btnReimprimir.hovered ? Estilo.action.ghost.hover : Estilo.action.ghost.base)
+                    border.color: Estilo.global.border
+                    border.width: Estilo.global.borderWidth.hairline
                 }
             }
 
             Button {
                 id: btnExcluir
 
-                padding: 10
+                padding: Estilo.global.padding.md
                 visible: popupFechamentoRapido.comandaAtual !== null
                 onClicked: popupFechamentoRapido.excluirAtual()
 
                 contentItem: Row {
-                    spacing: 6
+                    spacing: Estilo.global.spacing.xs
                     anchors.centerIn: parent
                     Icone {
                         nome: "fa6s.trash-can"
-                        cor: "#ffffff"
-                        tamanho: Estilo.fonte.padrao
+                        cor: Estilo.global.textOnAccent
+                        tamanho: Estilo.global.fontSize.lg
                         anchors.verticalCenter: parent.verticalCenter
                     }
                     Text {
                         text: "Excluir"
                         font.bold: true
-                        color: "#ffffff"
+                        color: Estilo.global.textOnAccent
                         anchors.verticalCenter: parent.verticalCenter
                     }
                 }
 
                 background: Rectangle {
-                    radius: Estilo.rounding.padrao
-                    color: btnExcluir.down ? Estilo.cancelar.pressionado : (btnExcluir.hovered ? Estilo.cancelar.hover : Estilo.cancelar.normal)
-                    border.color: Estilo.cancelar.pressionado
-                    border.width: 1
+                    radius: Estilo.global.radius.sm
+                    color: btnExcluir.down ? Estilo.action.danger.pressed : (btnExcluir.hovered ? Estilo.action.danger.hover : Estilo.action.danger.base)
+                    border.color: Estilo.action.danger.pressed
+                    border.width: Estilo.global.borderWidth.hairline
                 }
             }
 
@@ -860,20 +860,20 @@ Popup {
             Button {
                 id: btnSair
 
-                padding: 10
+                padding: Estilo.global.padding.md
                 onClicked: popupFechamentoRapido.close()
 
                 contentItem: Text {
                     text: "Sair"
                     font.bold: true
-                    color: "#ffffff"
+                    color: Estilo.global.textOnAccent
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
                 }
 
                 background: Rectangle {
-                    radius: Estilo.rounding.padrao
-                    color: btnSair.down ? "#6b7280" : (btnSair.hovered ? "#95a5a6" : Estilo.cores.textoSecundario)
+                    radius: Estilo.global.radius.sm
+                    color: btnSair.down ? Estilo.action.neutral.pressed : (btnSair.hovered ? Estilo.action.neutral.hover : Estilo.action.neutral.base)
                 }
             }
         }

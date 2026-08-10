@@ -25,7 +25,9 @@ Popup {
     // Valores digitados, por chave de campo (ex: valores["valor.pao_baby"])
     property var valores: ({})
     property string erro: ""
-    readonly property color corDestaque: categoria ? categoria.cor : Estilo.cores.texto
+    // Vem da tela do cardápio, que resolve a cor pela chave da categoria — o
+    // "cor" que o cardapioController devolve junto é ignorado de propósito.
+    property color corDestaque: Estilo.global.text
 
     signal confirmado(int indice, var item)
 
@@ -105,212 +107,232 @@ Popup {
     modal: true
     focus: true
     closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
-    padding: 25
+    padding: Estilo.global.padding.popup
     parent: Overlay.overlay
     anchors.centerIn: parent
+    // Um item com muitos campos (uma pizza tem nome, ingredientes e três
+    // preços) faz este popup passar da altura da janela num tablet. Preso ao
+    // que a janela comporta, o excedente vira rolagem do conteúdo em vez de
+    // sumir para fora da tela junto com os botões de Salvar/Cancelar.
+    height: Math.min(implicitHeight, Responsivo.alturaPopup(implicitHeight))
 
     Overlay.modal: Rectangle {
-        color: "#99000000"
+        color: Estilo.global.overlay
     }
 
     background: Rectangle {
-        radius: Estilo.rounding.popup
-        color: Estilo.cores.fundoPagina
-        border.color: Estilo.cores.bordaCard
+        radius: Estilo.global.radius.xl
+        color: Estilo.global.background
+        border.color: Estilo.global.borderCard
     }
 
     ListModel {
         id: modeloCampos
     }
 
-    contentItem: Column {
-        spacing: 18
+    contentItem: Flickable {
+        contentWidth: width
+        contentHeight: colunaItem.implicitHeight
+        boundsBehavior: Flickable.StopAtBounds
+        implicitWidth: colunaItem.implicitWidth
+        implicitHeight: colunaItem.implicitHeight
 
-        Row {
-            spacing: 8
-
-            Icone {
-                nome: raiz.categoria ? raiz.categoria.icone : "fa6s.pen"
-                cor: raiz.corDestaque
-                tamanho: 17
-                anchors.verticalCenter: parent.verticalCenter
-            }
-
-            Text {
-                text: raiz.indiceEditando < 0 ? (raiz.categoria ? raiz.categoria.novoRotulo : "Novo item") : "Editar item do cardápio"
-                font.pixelSize: 17
-                font.bold: true
-                color: Estilo.cores.texto
-                anchors.verticalCenter: parent.verticalCenter
-            }
+        ScrollBar.vertical: ScrollBar {
+            policy: ScrollBar.AsNeeded
         }
 
         Column {
-            spacing: 12
-            width: 460
+            id: colunaItem
 
-            Repeater {
-                model: modeloCampos
+            spacing: 18
 
-                delegate: Column {
-                    id: blocoCampo
+            Row {
+                spacing: Estilo.global.spacing.sm
 
-                    // Capturados do modelo porque os handlers e o background
-                    // dos campos abaixo estão em outro escopo.
-                    readonly property string chave: model.chave
-                    readonly property bool longo: model.tipo === "texto_longo"
-
-                    width: parent.width
-                    spacing: 5
-
-                    Text {
-                        text: model.rotulo + (model.obrigatorio ? "" : " (opcional)")
-                        font.pixelSize: 12
-                        font.bold: true
-                        color: Estilo.cores.textoSecundario
-                    }
-
-                    // Uma linha: nome e preços. Enter confirma o formulário
-                    // inteiro, para dar conta do caso mais comum (bebida ou
-                    // "outros": nome + preço e pronto).
-                    TextField {
-                        id: campoLinha
-
-                        visible: !blocoCampo.longo
-                        width: parent.width
-                        height: 40
-                        text: model.valor
-                        font.pixelSize: Estilo.fonte.padrao
-                        color: Estilo.cores.textoInput
-                        leftPadding: 12
-                        rightPadding: 12
-                        selectByMouse: true
-                        placeholderTextColor: Estilo.cores.placeholderInput
-                        placeholderText: model.tipo === "preco" ? "0,00" : ""
-                        onTextChanged: raiz.valores[blocoCampo.chave] = text
-                        onAccepted: raiz.confirmar()
-                        Component.onCompleted: {
-                            if (index === 0)
-                                campoLinha.forceActiveFocus();
-                        }
-
-                        background: Rectangle {
-                            radius: Estilo.rounding.grande
-                            color: "#ffffff"
-                            border.color: campoLinha.activeFocus ? raiz.corDestaque : Estilo.cores.borda
-                            border.width: campoLinha.activeFocus ? 2 : 1
-                        }
-                    }
-
-                    // Várias linhas: a lista de ingredientes, que costuma ser
-                    // longa demais para caber numa linha só.
-                    Rectangle {
-                        visible: blocoCampo.longo
-                        width: parent.width
-                        height: 78
-                        radius: Estilo.rounding.grande
-                        color: "#ffffff"
-                        border.color: campoTexto.activeFocus ? raiz.corDestaque : Estilo.cores.borda
-                        border.width: campoTexto.activeFocus ? 2 : 1
-
-                        TextArea {
-                            id: campoTexto
-
-                            placeholderTextColor: Estilo.cores.placeholderInput
-                            anchors.fill: parent
-                            anchors.margins: 4
-                            text: model.valor
-                            font.pixelSize: Estilo.fonte.padrao
-                            color: Estilo.cores.textoInput
-                            wrapMode: TextArea.Wrap
-                            selectByMouse: true
-                            background: null
-                            onTextChanged: raiz.valores[blocoCampo.chave] = text
-                        }
-                    }
+                Icone {
+                    nome: raiz.categoria ? raiz.categoria.icone : "fa6s.pen"
+                    cor: raiz.corDestaque
+                    tamanho: 17
+                    anchors.verticalCenter: parent.verticalCenter
                 }
-            }
-        }
 
-        Row {
-            spacing: 8
-            visible: raiz.erro !== ""
-            width: 460
-
-            Icone {
-                nome: "fa6s.triangle-exclamation"
-                cor: Estilo.cancelar.normal
-                tamanho: 13
-                anchors.verticalCenter: parent.verticalCenter
-            }
-
-            Text {
-                text: raiz.erro
-                font.pixelSize: 12
-                color: Estilo.cancelar.normal
-                width: parent.width - 21
-                wrapMode: Text.WordWrap
-                anchors.verticalCenter: parent.verticalCenter
-            }
-        }
-
-        Row {
-            spacing: 12
-            anchors.right: parent.right
-
-            Button {
-                id: btnCancelar
-
-                text: "Cancelar"
-                padding: 10
-                onClicked: raiz.close()
-
-                contentItem: Text {
-                    text: btnCancelar.text
+                Text {
+                    text: raiz.indiceEditando < 0 ? (raiz.categoria ? raiz.categoria.novoRotulo : "Novo item") : "Editar item do cardápio"
+                    font.pixelSize: Estilo.global.fontSize.xl
                     font.bold: true
-                    color: "#ffffff"
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
-                }
-
-                background: Rectangle {
-                    radius: Estilo.rounding.padrao
-                    color: btnCancelar.down ? Estilo.cores.textoSecundario : (btnCancelar.hovered ? "#95a5a6" : Estilo.cores.textoSecundario)
+                    color: Estilo.global.text
+                    anchors.verticalCenter: parent.verticalCenter
                 }
             }
 
-            Button {
-                id: btnSalvar
+            Column {
+                spacing: Estilo.global.spacing.lg
+                width: Responsivo.larguraPopup(460)
 
-                padding: 10
-                onClicked: raiz.confirmar()
+                Repeater {
+                    model: modeloCampos
 
-                contentItem: Row {
-                    spacing: 6
-                    anchors.centerIn: parent
+                    delegate: Column {
+                        id: blocoCampo
 
-                    Icone {
-                        nome: "fa6s.floppy-disk"
-                        cor: "#ffffff"
-                        tamanho: Estilo.fonte.padrao
-                        anchors.verticalCenter: parent.verticalCenter
+                        // Capturados do modelo porque os handlers e o background
+                        // dos campos abaixo estão em outro escopo.
+                        readonly property string chave: model.chave
+                        readonly property bool longo: model.tipo === "texto_longo"
+
+                        width: parent.width
+                        spacing: 5
+
+                        Text {
+                            text: model.rotulo + (model.obrigatorio ? "" : " (opcional)")
+                            font.pixelSize: Estilo.global.fontSize.sm
+                            font.bold: true
+                            color: Estilo.global.textSecondary
+                        }
+
+                        // Uma linha: nome e preços. Enter confirma o formulário
+                        // inteiro, para dar conta do caso mais comum (bebida ou
+                        // "outros": nome + preço e pronto).
+                        TextField {
+                            id: campoLinha
+
+                            visible: !blocoCampo.longo
+                            width: parent.width
+                            height: 40
+                            text: model.valor
+                            font.pixelSize: Estilo.global.fontSize.lg
+                            color: Estilo.global.textInput
+                            leftPadding: 12
+                            rightPadding: 12
+                            selectByMouse: true
+                            placeholderTextColor: Estilo.global.textPlaceholder
+                            placeholderText: model.tipo === "preco" ? "0,00" : ""
+                            onTextChanged: raiz.valores[blocoCampo.chave] = text
+                            onAccepted: raiz.confirmar()
+                            Component.onCompleted: {
+                                if (index === 0)
+                                    campoLinha.forceActiveFocus();
+                            }
+
+                            background: Rectangle {
+                                radius: Estilo.global.radius.md
+                                color: Estilo.global.inputBackground
+                                border.color: campoLinha.activeFocus ? raiz.corDestaque : Estilo.global.border
+                                border.width: campoLinha.activeFocus ? 2 : 1
+                            }
+                        }
+
+                        // Várias linhas: a lista de ingredientes, que costuma ser
+                        // longa demais para caber numa linha só.
+                        Rectangle {
+                            visible: blocoCampo.longo
+                            width: parent.width
+                            height: 78
+                            radius: Estilo.global.radius.md
+                            color: Estilo.global.inputBackground
+                            border.color: campoTexto.activeFocus ? raiz.corDestaque : Estilo.global.border
+                            border.width: campoTexto.activeFocus ? 2 : 1
+
+                            TextArea {
+                                id: campoTexto
+
+                                placeholderTextColor: Estilo.global.textPlaceholder
+                                anchors.fill: parent
+                                anchors.margins: 4
+                                text: model.valor
+                                font.pixelSize: Estilo.global.fontSize.lg
+                                color: Estilo.global.textInput
+                                wrapMode: TextArea.Wrap
+                                selectByMouse: true
+                                background: null
+                                onTextChanged: raiz.valores[blocoCampo.chave] = text
+                            }
+                        }
+                    }
+                }
+            }
+
+            Row {
+                spacing: Estilo.global.spacing.sm
+                visible: raiz.erro !== ""
+                width: Responsivo.larguraPopup(460)
+
+                Icone {
+                    nome: "fa6s.triangle-exclamation"
+                    cor: Estilo.action.danger.base
+                    tamanho: 13
+                    anchors.verticalCenter: parent.verticalCenter
+                }
+
+                Text {
+                    text: raiz.erro
+                    font.pixelSize: Estilo.global.fontSize.sm
+                    color: Estilo.action.danger.base
+                    width: parent.width - 21
+                    wrapMode: Text.WordWrap
+                    anchors.verticalCenter: parent.verticalCenter
+                }
+            }
+
+            Row {
+                spacing: Estilo.global.spacing.lg
+                anchors.right: parent.right
+
+                Button {
+                    id: btnCancelar
+
+                    text: "Cancelar"
+                    padding: Estilo.global.padding.md
+                    onClicked: raiz.close()
+
+                    contentItem: Text {
+                        text: btnCancelar.text
+                        font.bold: true
+                        color: Estilo.global.textOnAccent
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
                     }
 
-                    Text {
-                        text: "Salvar"
-                        font.bold: true
-                        color: "#ffffff"
-                        anchors.verticalCenter: parent.verticalCenter
+                    background: Rectangle {
+                        radius: Estilo.global.radius.sm
+                        color: btnCancelar.down ? Estilo.action.neutral.pressed : (btnCancelar.hovered ? Estilo.action.neutral.hover : Estilo.action.neutral.base)
                     }
                 }
 
-                background: Rectangle {
-                    radius: Estilo.rounding.padrao
-                    color: btnSalvar.down ? Estilo.confirmar.pressionado : (btnSalvar.hovered ? Estilo.confirmar.hover : Estilo.confirmar.normal)
-                    border.color: Estilo.confirmar.pressionado
-                    border.width: 1
+                Button {
+                    id: btnSalvar
+
+                    padding: Estilo.global.padding.md
+                    onClicked: raiz.confirmar()
+
+                    contentItem: Row {
+                        spacing: Estilo.global.spacing.xs
+                        anchors.centerIn: parent
+
+                        Icone {
+                            nome: "fa6s.floppy-disk"
+                            cor: Estilo.global.textOnAccent
+                            tamanho: Estilo.global.fontSize.lg
+                            anchors.verticalCenter: parent.verticalCenter
+                        }
+
+                        Text {
+                            text: "Salvar"
+                            font.bold: true
+                            color: Estilo.global.textOnAccent
+                            anchors.verticalCenter: parent.verticalCenter
+                        }
+                    }
+
+                    background: Rectangle {
+                        radius: Estilo.global.radius.sm
+                        color: btnSalvar.down ? Estilo.action.confirm.pressed : (btnSalvar.hovered ? Estilo.action.confirm.hover : Estilo.action.confirm.base)
+                        border.color: Estilo.action.confirm.pressed
+                        border.width: Estilo.global.borderWidth.hairline
+                    }
                 }
             }
         }
+
     }
 }

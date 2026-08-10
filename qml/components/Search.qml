@@ -9,20 +9,20 @@ import estilo 1.0
 TextField {
     id: root
 
-    property color corDestaque: Estilo.cores.borda
+    property color corDestaque: Estilo.global.border
 
     height: 42
-    placeholderTextColor: Estilo.cores.placeholderInput
-    font.pixelSize: Estilo.fonte.padrao
+    placeholderTextColor: Estilo.global.textPlaceholder
+    font.pixelSize: Estilo.global.fontSize.lg
     leftPadding: 14
     rightPadding: 14
-    color: Estilo.cores.textoInput
+    color: Estilo.global.textInput
     selectByMouse: true
 
     background: Rectangle {
-        radius: Estilo.rounding.grande
-        color: root.enabled ? "#ffffff" : "#f0f0f0"
-        border.color: root.activeFocus ? root.corDestaque : Estilo.cores.borda
+        radius: Estilo.global.radius.md
+        color: root.enabled ? Estilo.global.inputBackground : Estilo.global.inputDisabled
+        border.color: root.activeFocus ? root.corDestaque : Estilo.global.border
         border.width: root.activeFocus ? 2 : 1
     }
 }

@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Layouts
 import estilo 1.0
 import "../../../components"
 import "../../../components/Texto.js" as Texto
@@ -271,732 +272,776 @@ Page {
     }
 
     background: Rectangle {
-        color: Estilo.cores.fundoPagina
-        radius: Estilo.rounding.popup
+        color: Estilo.global.background
+        radius: Estilo.global.radius.xl
     }
 
     // Layout Principal
-    Row {
+    // ===== MEDIDAS DO LAYOUT =====
+    // Escolher itens (esquerda) e conferir o pedido (direita) eram 52% e 43%
+    // da largura, sempre — o que em tela estreita virava duas colunas
+    // apertadas demais para as duas coisas. Abaixo do ponto de virada elas
+    // passam a ocupar a largura inteira, uma embaixo da outra, com a rolagem
+    // do Flickable dando conta do resto. Mesmo padrão de Pizzas.qml.
+    readonly property real larguraUtil: width - Estilo.global.padding.xl * 2
+    readonly property real alturaUtil: height - Estilo.global.padding.xl * 2
+    readonly property bool empilhado: larguraUtil < 760
+    readonly property int larguraColunaEsquerda: empilhado ? larguraUtil : Math.round(larguraUtil * 0.545)
+    readonly property int larguraColunaDireita: empilhado ? larguraUtil : larguraUtil - larguraColunaEsquerda - Estilo.global.spacing.xxl
+    // Soma dos blocos de altura fixa da coluna direita mais o respiro entre
+    // eles; o que sobra vai para a lista do pedido — e é isso que a mantém
+    // com altura positiva mesmo numa janela baixa, onde a subtração crua
+    // ficava negativa e o painel sumia.
+    readonly property int alturaBlocosDireita: 180 + 60 + 42 + 65 + 46 + Estilo.global.spacing.lg * 5
+    readonly property int alturaColunaDireita: empilhado ? alturaBlocosDireita + 180 : Math.max(alturaBlocosDireita + 120, alturaUtil)
+    readonly property int alturaColunaEsquerda: empilhado ? Math.max(320, Math.round(alturaUtil * 0.7)) : alturaUtil
+
+    // Layout Principal
+    // Rola quando as duas colunas passam a ficar empilhadas (e, mesmo lado a
+    // lado, quando a janela é baixa demais para a coluna direita inteira).
+    Flickable {
         anchors.fill: parent
-        anchors.margins: 20
-        spacing: 20
+        anchors.margins: Estilo.global.padding.xl
+        clip: true
+        contentWidth: width
+        contentHeight: Math.max(height, gradePrincipal.implicitHeight)
+        boundsBehavior: Flickable.StopAtBounds
 
-        // ================= COLUNA DA ESQUERDA (Lista, Tamanho e Pesquisa) =================
-        Column {
-            width: parent.width * 0.52
-            height: parent.height
-            spacing: 12
+        ScrollBar.vertical: ScrollBar {
+            policy: ScrollBar.AsNeeded
+        }
 
-            Row {
-                spacing: 8
-                Icone { nome: "fa6s.ice-cream"; cor: "#8e44ad"; tamanho: Estilo.fonte.titulo; anchors.verticalCenter: parent.verticalCenter }
-                Text {
-                    text: "Monte o Copo de Açaí"
-                    font.pixelSize: Estilo.fonte.titulo
-                    font.bold: true
-                    color: "#8e44ad"
-                    anchors.verticalCenter: parent.verticalCenter
-                }
-            }
+        GridLayout {
+            id: gradePrincipal
 
-            Text {
-                text: totalAdicionaisAtual === 0 ? "Copo sem adicionais" : totalAdicionaisAtual + (totalAdicionaisAtual === 1 ? " adicional no copo atual" : " adicionais no copo atual")
-                font.pixelSize: Estilo.fonte.padrao
-                color: totalAdicionaisAtual > 0 ? "#6c3483" : Estilo.cores.textoSecundario
-                font.bold: totalAdicionaisAtual > 0
-            }
+            width: parent.width
+            columns: telaAcai.empilhado ? 1 : 2
+            columnSpacing: Estilo.global.spacing.xxl
+            rowSpacing: Estilo.global.spacing.xxl
 
-            // BARRA DE PESQUISA
-            Search {
-                id: campoBusca
-
-                width: parent.width
-                corDestaque: "#8e44ad"
-                placeholderText: "Pesquisar adicional (ex: nutella, granola)..."
-                onTextChanged: {
-                    filtrarAdicionais(text);
-                }
-                // Enter com um só resultado na busca já adiciona esse
-                // adicional (mesmo efeito do botão "+") e limpa a busca.
-                onAccepted: {
-                    if (modeloFiltrado.count === 1) {
-                        var item = modeloFiltrado.get(0);
-                        adicionarAdicionalAtual(item.nome, parseValor(item.valor));
-                        campoBusca.text = "";
-                    }
-                }
-            }
-
-            // SELEÇÃO DE TAMANHO (3 Opções Exclusivas com fallback para 300 ML)
-            Rectangle {
-                width: parent.width
-                height: 50
-                color: "#ffffff"
-                radius: Estilo.rounding.grande
-                border.color: Estilo.cores.borda
+            // ================= COLUNA DA ESQUERDA (Lista, Tamanho e Pesquisa) =================
+            Column {
+                Layout.preferredWidth: telaAcai.larguraColunaEsquerda
+                Layout.preferredHeight: telaAcai.alturaColunaEsquerda
+                Layout.alignment: Qt.AlignTop
+                spacing: Estilo.global.spacing.lg
 
                 Row {
-                    id: linhaTamanhos
-
-                    // Ancorado às bordas (e não centralizado por conteúdo):
-                    // a soma dos três CheckBox com o preço embutido no texto
-                    // passa da largura desta coluna em telas menores, e o
-                    // conteúdo vazava para fora do cartão dos dois lados —
-                    // o rótulo "Tamanho:" saía cortado à esquerda e o
-                    // "700 ML" à direita. Aqui a régua é a largura real
-                    // disponível, e cada opção fica com uma fatia igual.
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    anchors.leftMargin: 12
-                    anchors.rightMargin: 12
-                    anchors.verticalCenter: parent.verticalCenter
-                    spacing: 12
-
-                    readonly property real larguraOpcao: (width - rotuloTamanho.width - (spacing * 3)) / 3
-
+                    spacing: Estilo.global.spacing.sm
+                    Icone { nome: "fa6s.ice-cream"; cor: Estilo.category.acai.base; tamanho: Estilo.global.fontSize.title; anchors.verticalCenter: parent.verticalCenter }
                     Text {
-                        id: rotuloTamanho
-
-                        text: "Tamanho:"
-                        font.pixelSize: Estilo.fonte.padrao
-                        font.bold: true
-                        color: Estilo.cores.texto
+                        text: "Monte o Copo de Açaí"
+                        font.pixelSize: Estilo.global.fontSize.title
+                        font.family: Estilo.global.fontFamily.title
+                        color: Estilo.category.acai.base
                         anchors.verticalCenter: parent.verticalCenter
                     }
+                }
 
-                    // --- CHECKBOX 300 ML ---
-                    CheckBox {
-                        id: chk300
+                Text {
+                    text: totalAdicionaisAtual === 0 ? "Copo sem adicionais" : totalAdicionaisAtual + (totalAdicionaisAtual === 1 ? " adicional no copo atual" : " adicionais no copo atual")
+                    font.pixelSize: Estilo.global.fontSize.lg
+                    color: totalAdicionaisAtual > 0 ? Estilo.category.acai.pressed : Estilo.global.textSecondary
+                    font.bold: totalAdicionaisAtual > 0
+                }
 
-                        text: "300 ML (R$ " + precoTamanho("300 ML").toFixed(2).replace(".", ",") + ")"
-                        checked: tamanhoSelecionado === "300 ML"
-                        width: linhaTamanhos.larguraOpcao
-                        anchors.verticalCenter: parent.verticalCenter
-                        onClicked: {
-                            tamanhoSelecionado = "300 ML";
-                        }
+                // BARRA DE PESQUISA
+                Search {
+                    id: campoBusca
 
-                        contentItem: Text {
-                            text: chk300.text
-                            font.pixelSize: Estilo.fonte.padrao
-                            font.bold: true
-                            color: Estilo.cores.texto
-                            leftPadding: chk300.indicator.width + chk300.spacing
-                            verticalAlignment: Text.AlignVCenter
-                            // A largura da opção vem da coluna (ver
-                            // linhaTamanhos.larguraOpcao), então em tela
-                            // apertada o rótulo encolhe até o mínimo antes
-                            // de recorrer às reticências — nunca vaza.
-                            fontSizeMode: Text.HorizontalFit
-                            minimumPixelSize: 9
-                            elide: Text.ElideRight
-                        }
-
-                        indicator: Rectangle {
-                            implicitWidth: 20
-                            implicitHeight: 20
-                            x: chk300.leftPadding
-                            y: parent.height / 2 - height / 2
-                            radius: 4
-                            border.color: chk300.checked ? "#8e44ad" : "#bdc3c7"
-                            border.width: 2
-                            color: chk300.checked ? "#8e44ad" : "transparent"
-
-                            Icone {
-                                nome: "fa6s.check"
-                                cor: "white"
-                                tamanho: 12
-                                anchors.centerIn: parent
-                                visible: chk300.checked
-                            }
-                        }
+                    width: parent.width
+                    corDestaque: Estilo.category.acai.base
+                    placeholderText: "Pesquisar adicional (ex: nutella, granola)..."
+                    onTextChanged: {
+                        filtrarAdicionais(text);
                     }
-
-                    // --- CHECKBOX 500 ML ---
-                    CheckBox {
-                        id: chk500
-
-                        text: "500 ML (R$ " + precoTamanho("500 ML").toFixed(2).replace(".", ",") + ")"
-                        checked: tamanhoSelecionado === "500 ML"
-                        width: linhaTamanhos.larguraOpcao
-                        anchors.verticalCenter: parent.verticalCenter
-                        onClicked: {
-                            tamanhoSelecionado = "500 ML";
-                        }
-
-                        contentItem: Text {
-                            text: chk500.text
-                            font.pixelSize: Estilo.fonte.padrao
-                            font.bold: true
-                            color: Estilo.cores.texto
-                            leftPadding: chk500.indicator.width + chk500.spacing
-                            verticalAlignment: Text.AlignVCenter
-                            // A largura da opção vem da coluna (ver
-                            // linhaTamanhos.larguraOpcao), então em tela
-                            // apertada o rótulo encolhe até o mínimo antes
-                            // de recorrer às reticências — nunca vaza.
-                            fontSizeMode: Text.HorizontalFit
-                            minimumPixelSize: 9
-                            elide: Text.ElideRight
-                        }
-
-                        indicator: Rectangle {
-                            implicitWidth: 20
-                            implicitHeight: 20
-                            x: chk500.leftPadding
-                            y: parent.height / 2 - height / 2
-                            radius: 4
-                            border.color: chk500.checked ? "#8e44ad" : "#bdc3c7"
-                            border.width: 2
-                            color: chk500.checked ? "#8e44ad" : "transparent"
-
-                            Icone {
-                                nome: "fa6s.check"
-                                cor: "white"
-                                tamanho: 12
-                                anchors.centerIn: parent
-                                visible: chk500.checked
-                            }
-                        }
-                    }
-
-                    // --- CHECKBOX 700 ML ---
-                    CheckBox {
-                        id: chk700
-
-                        text: "700 ML (R$ " + precoTamanho("700 ML").toFixed(2).replace(".", ",") + ")"
-                        checked: tamanhoSelecionado === "700 ML"
-                        width: linhaTamanhos.larguraOpcao
-                        anchors.verticalCenter: parent.verticalCenter
-                        onClicked: {
-                            tamanhoSelecionado = "700 ML";
-                        }
-
-                        contentItem: Text {
-                            text: chk700.text
-                            font.pixelSize: Estilo.fonte.padrao
-                            font.bold: true
-                            color: Estilo.cores.texto
-                            leftPadding: chk700.indicator.width + chk700.spacing
-                            verticalAlignment: Text.AlignVCenter
-                            // A largura da opção vem da coluna (ver
-                            // linhaTamanhos.larguraOpcao), então em tela
-                            // apertada o rótulo encolhe até o mínimo antes
-                            // de recorrer às reticências — nunca vaza.
-                            fontSizeMode: Text.HorizontalFit
-                            minimumPixelSize: 9
-                            elide: Text.ElideRight
-                        }
-
-                        indicator: Rectangle {
-                            implicitWidth: 20
-                            implicitHeight: 20
-                            x: chk700.leftPadding
-                            y: parent.height / 2 - height / 2
-                            radius: 4
-                            border.color: chk700.checked ? "#8e44ad" : "#bdc3c7"
-                            border.width: 2
-                            color: chk700.checked ? "#8e44ad" : "transparent"
-
-                            Icone {
-                                nome: "fa6s.check"
-                                cor: "white"
-                                tamanho: 12
-                                anchors.centerIn: parent
-                                visible: chk700.checked
-                            }
+                    // Enter com um só resultado na busca já adiciona esse
+                    // adicional (mesmo efeito do botão "+") e limpa a busca.
+                    onAccepted: {
+                        if (modeloFiltrado.count === 1) {
+                            var item = modeloFiltrado.get(0);
+                            adicionarAdicionalAtual(item.nome, parseValor(item.valor));
+                            campoBusca.text = "";
                         }
                     }
                 }
-            }
 
-            ListView {
-                id: listaAdicionaisView
-
-                width: parent.width
-                height: parent.height - 225
-                model: modeloFiltrado
-                spacing: 8
-                clip: true
-
-                ScrollBar.vertical: ScrollBar {
-                    policy: ScrollBar.AlwaysOn
-                    active: true
-                }
-
-                // Cada adicional tem um contador próprio (+ / -), permitindo
-                // atribuí-lo ao mesmo copo mais de uma vez (ex: 2x Nutella)
-                // sem reabrir esta tela — mesmo padrão de Bebidas.qml.
-                delegate: Rectangle {
-                    id: itemRow
-
-                    property int quantidade: quantidadeAdicionalAtual(model.nome)
-
-                    width: listaAdicionaisView.width - (listaAdicionaisView.ScrollBar.vertical.visible ? listaAdicionaisView.ScrollBar.vertical.width : 0)
-                    height: 52
-                    radius: Estilo.rounding.grande
-                    color: quantidade > 0 ? "#f4ecf7" : "#ffffff"
-                    border.color: quantidade > 0 ? "#8e44ad" : Estilo.cores.borda
-                    border.width: quantidade > 0 ? 2 : 1
+                // SELEÇÃO DE TAMANHO (3 Opções Exclusivas com fallback para 300 ML)
+                Rectangle {
+                    width: parent.width
+                    height: 50
+                    color: Estilo.global.surface
+                    radius: Estilo.global.radius.md
+                    border.color: Estilo.global.border
 
                     Row {
+                        id: linhaTamanhos
+
+                        // Ancorado às bordas (e não centralizado por conteúdo):
+                        // a soma dos três CheckBox com o preço embutido no texto
+                        // passa da largura desta coluna em telas menores, e o
+                        // conteúdo vazava para fora do cartão dos dois lados —
+                        // o rótulo "Tamanho:" saía cortado à esquerda e o
+                        // "700 ML" à direita. Aqui a régua é a largura real
+                        // disponível, e cada opção fica com uma fatia igual.
                         anchors.left: parent.left
-                        anchors.leftMargin: 14
-                        anchors.right: controles.left
-                        anchors.rightMargin: 10
-                        anchors.verticalCenter: parent.verticalCenter
-                        spacing: 10
-
-                        Text {
-                            text: model.nome
-                            font.pixelSize: Estilo.fonte.padrao
-                            font.bold: true
-                            color: Estilo.cores.texto
-                            width: parent.width - 90
-                            elide: Text.ElideRight
-                            anchors.verticalCenter: parent.verticalCenter
-                        }
-
-                        Text {
-                            text: "R$ " + model.valor
-                            font.pixelSize: Estilo.fonte.padrao
-                            color: Estilo.confirmar.normal
-                            font.bold: true
-                            anchors.verticalCenter: parent.verticalCenter
-                        }
-                    }
-
-                    Row {
-                        id: controles
-
                         anchors.right: parent.right
-                        anchors.rightMargin: 10
+                        anchors.leftMargin: 12
+                        anchors.rightMargin: 12
                         anchors.verticalCenter: parent.verticalCenter
-                        spacing: 6
+                        spacing: Estilo.global.spacing.lg
 
-                        Button {
-                            width: 26
-                            height: 26
-                            padding: 0
-                            visible: itemRow.quantidade > 0
-                            onClicked: removerAdicionalAtual(model.nome)
-
-                            contentItem: Text {
-                                text: "−"
-                                color: "#ffffff"
-                                font.bold: true
-                                horizontalAlignment: Text.AlignHCenter
-                                verticalAlignment: Text.AlignVCenter
-                            }
-
-                            background: Rectangle {
-                                radius: 6
-                                color: parent.down ? Estilo.cancelar.pressionado : (parent.hovered ? Estilo.cancelar.hover : Estilo.cancelar.normal)
-                            }
-                        }
+                        readonly property real larguraOpcao: (width - rotuloTamanho.width - (spacing * 3)) / 3
 
                         Text {
-                            text: itemRow.quantidade
-                            visible: itemRow.quantidade > 0
+                            id: rotuloTamanho
+
+                            text: "Tamanho:"
+                            font.pixelSize: Estilo.global.fontSize.lg
                             font.bold: true
-                            font.pixelSize: Estilo.fonte.padrao
-                            color: Estilo.cores.texto
-                            width: 16
-                            horizontalAlignment: Text.AlignHCenter
+                            color: Estilo.global.text
                             anchors.verticalCenter: parent.verticalCenter
                         }
 
-                        Button {
-                            width: 26
-                            height: 26
-                            padding: 0
-                            onClicked: adicionarAdicionalAtual(model.nome, parseValor(model.valor))
+                        // --- CHECKBOX 300 ML ---
+                        CheckBox {
+                            id: chk300
+
+                            text: "300 ML (R$ " + precoTamanho("300 ML").toFixed(2).replace(".", ",") + ")"
+                            checked: tamanhoSelecionado === "300 ML"
+                            width: linhaTamanhos.larguraOpcao
+                            anchors.verticalCenter: parent.verticalCenter
+                            onClicked: {
+                                tamanhoSelecionado = "300 ML";
+                            }
 
                             contentItem: Text {
-                                text: "+"
-                                color: "#ffffff"
+                                text: chk300.text
+                                font.pixelSize: Estilo.global.fontSize.lg
                                 font.bold: true
-                                horizontalAlignment: Text.AlignHCenter
+                                color: Estilo.global.text
+                                leftPadding: chk300.indicator.width + chk300.spacing
                                 verticalAlignment: Text.AlignVCenter
+                                // A largura da opção vem da coluna (ver
+                                // linhaTamanhos.larguraOpcao), então em tela
+                                // apertada o rótulo encolhe até o mínimo antes
+                                // de recorrer às reticências — nunca vaza.
+                                fontSizeMode: Text.HorizontalFit
+                                minimumPixelSize: 9
+                                elide: Text.ElideRight
                             }
 
-                            background: Rectangle {
-                                radius: 6
-                                color: parent.down ? "#6c3483" : (parent.hovered ? "#a569bd" : "#8e44ad")
+                            indicator: Rectangle {
+                                implicitWidth: 20
+                                implicitHeight: 20
+                                x: chk300.leftPadding
+                                y: parent.height / 2 - height / 2
+                                radius: Estilo.global.radius.xs
+                                border.color: chk300.checked ? Estilo.category.acai.base : Estilo.global.textDisabled
+                                border.width: Estilo.global.borderWidth.thick
+                                color: chk300.checked ? Estilo.category.acai.base : "transparent"
+
+                                Icone {
+                                    nome: "fa6s.check"
+                                    cor: Estilo.global.textOnAccent
+                                    tamanho: 12
+                                    anchors.centerIn: parent
+                                    visible: chk300.checked
+                                }
+                            }
+                        }
+
+                        // --- CHECKBOX 500 ML ---
+                        CheckBox {
+                            id: chk500
+
+                            text: "500 ML (R$ " + precoTamanho("500 ML").toFixed(2).replace(".", ",") + ")"
+                            checked: tamanhoSelecionado === "500 ML"
+                            width: linhaTamanhos.larguraOpcao
+                            anchors.verticalCenter: parent.verticalCenter
+                            onClicked: {
+                                tamanhoSelecionado = "500 ML";
+                            }
+
+                            contentItem: Text {
+                                text: chk500.text
+                                font.pixelSize: Estilo.global.fontSize.lg
+                                font.bold: true
+                                color: Estilo.global.text
+                                leftPadding: chk500.indicator.width + chk500.spacing
+                                verticalAlignment: Text.AlignVCenter
+                                // A largura da opção vem da coluna (ver
+                                // linhaTamanhos.larguraOpcao), então em tela
+                                // apertada o rótulo encolhe até o mínimo antes
+                                // de recorrer às reticências — nunca vaza.
+                                fontSizeMode: Text.HorizontalFit
+                                minimumPixelSize: 9
+                                elide: Text.ElideRight
+                            }
+
+                            indicator: Rectangle {
+                                implicitWidth: 20
+                                implicitHeight: 20
+                                x: chk500.leftPadding
+                                y: parent.height / 2 - height / 2
+                                radius: Estilo.global.radius.xs
+                                border.color: chk500.checked ? Estilo.category.acai.base : Estilo.global.textDisabled
+                                border.width: Estilo.global.borderWidth.thick
+                                color: chk500.checked ? Estilo.category.acai.base : "transparent"
+
+                                Icone {
+                                    nome: "fa6s.check"
+                                    cor: Estilo.global.textOnAccent
+                                    tamanho: 12
+                                    anchors.centerIn: parent
+                                    visible: chk500.checked
+                                }
+                            }
+                        }
+
+                        // --- CHECKBOX 700 ML ---
+                        CheckBox {
+                            id: chk700
+
+                            text: "700 ML (R$ " + precoTamanho("700 ML").toFixed(2).replace(".", ",") + ")"
+                            checked: tamanhoSelecionado === "700 ML"
+                            width: linhaTamanhos.larguraOpcao
+                            anchors.verticalCenter: parent.verticalCenter
+                            onClicked: {
+                                tamanhoSelecionado = "700 ML";
+                            }
+
+                            contentItem: Text {
+                                text: chk700.text
+                                font.pixelSize: Estilo.global.fontSize.lg
+                                font.bold: true
+                                color: Estilo.global.text
+                                leftPadding: chk700.indicator.width + chk700.spacing
+                                verticalAlignment: Text.AlignVCenter
+                                // A largura da opção vem da coluna (ver
+                                // linhaTamanhos.larguraOpcao), então em tela
+                                // apertada o rótulo encolhe até o mínimo antes
+                                // de recorrer às reticências — nunca vaza.
+                                fontSizeMode: Text.HorizontalFit
+                                minimumPixelSize: 9
+                                elide: Text.ElideRight
+                            }
+
+                            indicator: Rectangle {
+                                implicitWidth: 20
+                                implicitHeight: 20
+                                x: chk700.leftPadding
+                                y: parent.height / 2 - height / 2
+                                radius: Estilo.global.radius.xs
+                                border.color: chk700.checked ? Estilo.category.acai.base : Estilo.global.textDisabled
+                                border.width: Estilo.global.borderWidth.thick
+                                color: chk700.checked ? Estilo.category.acai.base : "transparent"
+
+                                Icone {
+                                    nome: "fa6s.check"
+                                    cor: Estilo.global.textOnAccent
+                                    tamanho: 12
+                                    anchors.centerIn: parent
+                                    visible: chk700.checked
+                                }
+                            }
+                        }
+                    }
+                }
+
+                ListView {
+                    id: listaAdicionaisView
+
+                    width: parent.width
+                    // O desconto é o que cabeçalho/busca/filtros ocupam acima
+                    // dela; o piso evita que a lista suma numa janela baixa.
+                    height: Math.max(160, parent.height - 225)
+                    model: modeloFiltrado
+                    spacing: Estilo.global.spacing.sm
+                    clip: true
+
+                    ScrollBar.vertical: ScrollBar {
+                        policy: ScrollBar.AlwaysOn
+                        active: true
+                    }
+
+                    // Cada adicional tem um contador próprio (+ / -), permitindo
+                    // atribuí-lo ao mesmo copo mais de uma vez (ex: 2x Nutella)
+                    // sem reabrir esta tela — mesmo padrão de Bebidas.qml.
+                    delegate: Rectangle {
+                        id: itemRow
+
+                        property int quantidade: quantidadeAdicionalAtual(model.nome)
+
+                        width: listaAdicionaisView.width - (listaAdicionaisView.ScrollBar.vertical.visible ? listaAdicionaisView.ScrollBar.vertical.width : 0)
+                        height: 52
+                        radius: Estilo.global.radius.md
+                        color: quantidade > 0 ? Estilo.category.acai.soft : Estilo.global.surface
+                        border.color: quantidade > 0 ? Estilo.category.acai.base : Estilo.global.border
+                        border.width: quantidade > 0 ? 2 : 1
+
+                        Row {
+                            anchors.left: parent.left
+                            anchors.leftMargin: 14
+                            anchors.right: controles.left
+                            anchors.rightMargin: 10
+                            anchors.verticalCenter: parent.verticalCenter
+                            spacing: Estilo.global.spacing.md
+
+                            Text {
+                                text: model.nome
+                                font.pixelSize: Estilo.global.fontSize.lg
+                                font.bold: true
+                                color: Estilo.global.text
+                                width: parent.width - 90
+                                elide: Text.ElideRight
+                                anchors.verticalCenter: parent.verticalCenter
+                            }
+
+                            Text {
+                                text: "R$ " + model.valor
+                                font.pixelSize: Estilo.global.fontSize.lg
+                                color: Estilo.action.confirm.base
+                                font.bold: true
+                                anchors.verticalCenter: parent.verticalCenter
+                            }
+                        }
+
+                        Row {
+                            id: controles
+
+                            anchors.right: parent.right
+                            anchors.rightMargin: 10
+                            anchors.verticalCenter: parent.verticalCenter
+                            spacing: Estilo.global.spacing.xs
+
+                            Button {
+                                width: 26
+                                height: 26
+                                padding: 0
+                                visible: itemRow.quantidade > 0
+                                onClicked: removerAdicionalAtual(model.nome)
+
+                                contentItem: Text {
+                                    text: "−"
+                                    color: Estilo.global.surface
+                                    font.bold: true
+                                    horizontalAlignment: Text.AlignHCenter
+                                    verticalAlignment: Text.AlignVCenter
+                                }
+
+                                background: Rectangle {
+                                    radius: Estilo.global.radius.sm
+                                    color: parent.down ? Estilo.action.danger.pressed : (parent.hovered ? Estilo.action.danger.hover : Estilo.action.danger.base)
+                                }
+                            }
+
+                            Text {
+                                text: itemRow.quantidade
+                                visible: itemRow.quantidade > 0
+                                font.bold: true
+                                font.pixelSize: Estilo.global.fontSize.lg
+                                color: Estilo.global.text
+                                width: 16
+                                horizontalAlignment: Text.AlignHCenter
+                                anchors.verticalCenter: parent.verticalCenter
+                            }
+
+                            Button {
+                                width: 26
+                                height: 26
+                                padding: 0
+                                onClicked: adicionarAdicionalAtual(model.nome, parseValor(model.valor))
+
+                                contentItem: Text {
+                                    text: "+"
+                                    color: Estilo.global.surface
+                                    font.bold: true
+                                    horizontalAlignment: Text.AlignHCenter
+                                    verticalAlignment: Text.AlignVCenter
+                                }
+
+                                background: Rectangle {
+                                    radius: Estilo.global.radius.sm
+                                    color: parent.down ? Estilo.category.acai.pressed : (parent.hovered ? Estilo.category.acai.hover : Estilo.category.acai.base)
+                                }
                             }
                         }
                     }
                 }
             }
-        }
 
-        // ================= COLUNA DA DIREITA (Visualização, Legenda e Total) =================
-        Column {
-            width: parent.width * 0.43
-            height: parent.height
-            spacing: 12
-            anchors.verticalCenter: parent.verticalCenter
+            // ================= COLUNA DA DIREITA (Visualização, Legenda e Total) =================
+            Column {
+                Layout.preferredWidth: telaAcai.larguraColunaDireita
+                Layout.preferredHeight: telaAcai.alturaColunaDireita
+                Layout.alignment: Qt.AlignTop
+                spacing: Estilo.global.spacing.lg
 
-            // 1. Painel Visual
-            Rectangle {
-                width: parent.width
-                height: 180
-                color: "#ffffff"
-                radius: Estilo.rounding.painel
-                border.color: Estilo.cores.bordaCard
+                // 1. Painel Visual
+                Rectangle {
+                    width: parent.width
+                    height: 180
+                    color: Estilo.global.surface
+                    radius: Estilo.global.radius.lg
+                    border.color: Estilo.global.borderCard
 
-                Column {
-                    anchors.centerIn: parent
-                    spacing: 10
+                    Column {
+                        anchors.centerIn: parent
+                        spacing: Estilo.global.spacing.md
 
-                    Icone {
-                        nome: "fa6s.ice-cream"
-                        cor: "#8e44ad"
-                        tamanho: 80
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        opacity: coposMontados.length > 0 ? 1 : 0.35
-                    }
-
-                    Text {
-                        text: coposMontados.length === 0 ? "Nenhum copo adicionado" : (coposMontados.length === 1 ? ("Açaí " + coposMontados[0].tamanho) : coposMontados.length + " copos adicionados")
-                        font.pixelSize: Estilo.fonte.padrao
-                        font.bold: true
-                        color: Estilo.cores.texto
-                        anchors.horizontalCenter: parent.horizontalCenter
-                    }
-                }
-            }
-
-            // 2. Resumo do copo em montagem
-            Rectangle {
-                width: parent.width
-                height: 60
-                color: "#ffffff"
-                radius: Estilo.rounding.medio
-                border.color: Estilo.cores.bordaCard
-
-                Column {
-                    anchors.centerIn: parent
-                    spacing: 2
-                    width: parent.width - 20
-
-                    Text {
-                        text: "COPO ATUAL — " + tamanhoSelecionado
-                        font.pixelSize: 11
-                        font.bold: true
-                        color: Estilo.cores.textoSecundario
-                    }
-
-                    Text {
-                        text: (totalAdicionaisAtual === 0 ? "Sem adicionais" : totalAdicionaisAtual + " adicional(is)") + " · R$ " + valorPreviaCopoAtual().toFixed(2).replace(".", ",")
-                        font.pixelSize: 14
-                        font.bold: true
-                        color: "#8e44ad"
-                    }
-                }
-            }
-
-            // 3. Botão para fechar o copo atual e começar o próximo, sem
-            // sair desta tela — é isso que permite montar mais de um copo
-            // de uma vez.
-            Button {
-                id: btnAdicionarCopo
-
-                width: parent.width
-                height: 42
-                onClicked: adicionarCopoAtual()
-
-                contentItem: Row {
-                    spacing: 6
-                    anchors.centerIn: parent
-
-                    Icone {
-                        nome: "fa6s.plus"
-                        cor: "#ffffff"
-                        tamanho: 14
-                        anchors.verticalCenter: parent.verticalCenter
-                    }
-                    Text {
-                        text: "Adicionar Copo (" + tamanhoSelecionado + ")"
-                        font.pixelSize: 14
-                        font.bold: true
-                        color: "#ffffff"
-                        anchors.verticalCenter: parent.verticalCenter
-                    }
-                }
-
-                background: Rectangle {
-                    radius: Estilo.rounding.grande
-                    color: btnAdicionarCopo.down ? "#219150" : (btnAdicionarCopo.hovered ? Estilo.confirmar.hover : Estilo.confirmar.normal)
-                    border.color: "#219150"
-                    border.width: 1
-                }
-            }
-
-            // 4. Copos já adicionados ao pedido — cada um pode ser removido
-            // individualmente antes de confirmar.
-            Rectangle {
-                width: parent.width
-                height: parent.height - 180 - 60 - 42 - 65 - 46 - (12 * 5)
-                color: "#ffffff"
-                radius: Estilo.rounding.medio
-                border.color: Estilo.cores.bordaCard
-                clip: true
-
-                Column {
-                    anchors.fill: parent
-                    anchors.margins: 10
-                    spacing: 6
-
-                    Text {
-                        text: "AÇAÍ ADICIONADOS"
-                        font.pixelSize: 11
-                        font.bold: true
-                        color: Estilo.cores.textoSecundario
-                    }
-
-                    Text {
-                        text: "Nenhum copo adicionado ainda"
-                        font.pixelSize: 13
-                        color: "#bdc3c7"
-                        font.italic: true
-                        visible: coposMontados.length === 0
-                    }
-
-                    Flickable {
-                        width: parent.width
-                        height: parent.height - 24
-                        clip: true
-                        contentHeight: colunaCoposMontados.height
-                        visible: coposMontados.length > 0
-                        boundsBehavior: Flickable.StopAtBounds
-
-                        ScrollBar.vertical: ScrollBar {
-                            policy: ScrollBar.AsNeeded
+                        Icone {
+                            nome: "fa6s.ice-cream"
+                            cor: Estilo.category.acai.base
+                            tamanho: 80
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            opacity: coposMontados.length > 0 ? 1 : Estilo.global.opacity.muted
                         }
 
-                        Column {
-                            id: colunaCoposMontados
+                        Text {
+                            text: coposMontados.length === 0 ? "Nenhum copo adicionado" : (coposMontados.length === 1 ? ("Açaí " + coposMontados[0].tamanho) : coposMontados.length + " copos adicionados")
+                            font.pixelSize: Estilo.global.fontSize.lg
+                            font.bold: true
+                            color: Estilo.global.text
+                            anchors.horizontalCenter: parent.horizontalCenter
+                        }
+                    }
+                }
 
+                // 2. Resumo do copo em montagem
+                Rectangle {
+                    width: parent.width
+                    height: 60
+                    color: Estilo.global.surface
+                    radius: Estilo.global.radius.lg
+                    border.color: Estilo.global.borderCard
+
+                    Column {
+                        anchors.centerIn: parent
+                        spacing: 2
+                        width: parent.width - 20
+
+                        Text {
+                            text: "COPO ATUAL — " + tamanhoSelecionado
+                            font.pixelSize: Estilo.global.fontSize.xs
+                            font.bold: true
+                            color: Estilo.global.textSecondary
+                        }
+
+                        Text {
+                            text: (totalAdicionaisAtual === 0 ? "Sem adicionais" : totalAdicionaisAtual + " adicional(is)") + " · R$ " + valorPreviaCopoAtual().toFixed(2).replace(".", ",")
+                            font.pixelSize: Estilo.global.fontSize.lg
+                            font.bold: true
+                            color: Estilo.category.acai.base
+                        }
+                    }
+                }
+
+                // 3. Botão para fechar o copo atual e começar o próximo, sem
+                // sair desta tela — é isso que permite montar mais de um copo
+                // de uma vez.
+                Button {
+                    id: btnAdicionarCopo
+
+                    width: parent.width
+                    height: 42
+                    onClicked: adicionarCopoAtual()
+
+                    contentItem: Row {
+                        spacing: Estilo.global.spacing.xs
+                        anchors.centerIn: parent
+
+                        Icone {
+                            nome: "fa6s.plus"
+                            cor: Estilo.global.textOnAccent
+                            tamanho: 14
+                            anchors.verticalCenter: parent.verticalCenter
+                        }
+                        Text {
+                            text: "Adicionar Copo (" + tamanhoSelecionado + ")"
+                            font.pixelSize: Estilo.global.fontSize.lg
+                            font.bold: true
+                            color: Estilo.global.surface
+                            anchors.verticalCenter: parent.verticalCenter
+                        }
+                    }
+
+                    background: Rectangle {
+                        radius: Estilo.global.radius.md
+                        color: btnAdicionarCopo.down ? Estilo.action.confirm.pressed : (btnAdicionarCopo.hovered ? Estilo.action.confirm.hover : Estilo.action.confirm.base)
+                        border.color: Estilo.action.confirm.border
+                        border.width: Estilo.global.borderWidth.hairline
+                    }
+                }
+
+                // 4. Copos já adicionados ao pedido — cada um pode ser removido
+                // individualmente antes de confirmar.
+                Rectangle {
+                    width: parent.width
+                    // O que sobra da coluna depois dos blocos de altura fixa
+                    // (ver telaAcai.alturaBlocosDireita).
+                    height: Math.max(120, parent.height - telaAcai.alturaBlocosDireita)
+                    color: Estilo.global.surface
+                    radius: Estilo.global.radius.lg
+                    border.color: Estilo.global.borderCard
+                    clip: true
+
+                    Column {
+                        anchors.fill: parent
+                        anchors.margins: 10
+                        spacing: Estilo.global.spacing.xs
+
+                        Text {
+                            text: "AÇAÍ ADICIONADOS"
+                            font.pixelSize: Estilo.global.fontSize.xs
+                            font.bold: true
+                            color: Estilo.global.textSecondary
+                        }
+
+                        Text {
+                            text: "Nenhum copo adicionado ainda"
+                            font.pixelSize: Estilo.global.fontSize.md
+                            color: Estilo.global.textDisabled
+                            font.italic: true
+                            visible: coposMontados.length === 0
+                        }
+
+                        Flickable {
                             width: parent.width
-                            spacing: 6
+                            height: parent.height - 24
+                            clip: true
+                            contentHeight: colunaCoposMontados.height
+                            visible: coposMontados.length > 0
+                            boundsBehavior: Flickable.StopAtBounds
 
-                            Repeater {
-                                model: coposMontados
+                            ScrollBar.vertical: ScrollBar {
+                                policy: ScrollBar.AsNeeded
+                            }
 
-                                // Badge do tamanho e adicionais ficam à esquerda; valor e botão
-                                // de remover são ancorados na borda direita do cartão (posição
-                                // fixa) — mesmo padrão usado em Pizzas.qml/Lanches.qml.
-                                Rectangle {
-                                    id: itemCopoMontado
+                            Column {
+                                id: colunaCoposMontados
 
-                                    width: colunaCoposMontados.width
-                                    height: 40
-                                    radius: Estilo.rounding.grande
-                                    color: Estilo.cores.fundoPagina
-                                    border.color: Estilo.cores.bordaCard
-                                    clip: true
+                                width: parent.width
+                                spacing: Estilo.global.spacing.xs
 
+                                Repeater {
+                                    model: coposMontados
+
+                                    // Badge do tamanho e adicionais ficam à esquerda; valor e botão
+                                    // de remover são ancorados na borda direita do cartão (posição
+                                    // fixa) — mesmo padrão usado em Pizzas.qml/Lanches.qml.
                                     Rectangle {
-                                        id: badgeTamanhoCopoMontado
+                                        id: itemCopoMontado
 
-                                        radius: 6
-                                        width: textoBadgeTamanho.implicitWidth + 14
-                                        height: textoBadgeTamanho.implicitHeight + 6
-                                        color: "#8e44ad"
-                                        anchors.left: parent.left
-                                        anchors.leftMargin: 8
-                                        anchors.verticalCenter: parent.verticalCenter
+                                        width: colunaCoposMontados.width
+                                        height: 40
+                                        radius: Estilo.global.radius.md
+                                        color: Estilo.global.background
+                                        border.color: Estilo.global.borderCard
+                                        clip: true
+
+                                        Rectangle {
+                                            id: badgeTamanhoCopoMontado
+
+                                            radius: Estilo.global.radius.sm
+                                            width: textoBadgeTamanho.implicitWidth + 14
+                                            height: textoBadgeTamanho.implicitHeight + 6
+                                            color: Estilo.category.acai.base
+                                            anchors.left: parent.left
+                                            anchors.leftMargin: 8
+                                            anchors.verticalCenter: parent.verticalCenter
+
+                                            Text {
+                                                id: textoBadgeTamanho
+
+                                                text: modelData.tamanho
+                                                color: Estilo.global.surface
+                                                font.bold: true
+                                                font.pixelSize: Estilo.global.fontSize.xs
+                                                anchors.centerIn: parent
+                                            }
+                                        }
+
+                                        // Remove só este copo montado.
+                                        Button {
+                                            id: btnRemoverCopoMontado
+
+                                            width: 22
+                                            height: 22
+                                            padding: 0
+                                            anchors.right: parent.right
+                                            anchors.rightMargin: 8
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            onClicked: removerCopoMontado(index)
+
+                                            contentItem: Text {
+                                                text: "×"
+                                                color: Estilo.global.surface
+                                                font.bold: true
+                                                horizontalAlignment: Text.AlignHCenter
+                                                verticalAlignment: Text.AlignVCenter
+                                            }
+
+                                            background: Rectangle {
+                                                radius: Estilo.global.radius.sm
+                                                color: parent.down ? Estilo.action.danger.pressed : (parent.hovered ? Estilo.action.danger.hover : Estilo.action.danger.base)
+                                            }
+                                        }
 
                                         Text {
-                                            id: textoBadgeTamanho
+                                            id: textoValorCopoMontado
 
-                                            text: modelData.tamanho
-                                            color: "#ffffff"
+                                            text: "R$ " + valorFinalCopo(modelData).toFixed(2).replace(".", ",")
+                                            font.pixelSize: Estilo.global.fontSize.sm
+                                            color: Estilo.global.textSecondary
+                                            anchors.right: btnRemoverCopoMontado.left
+                                            anchors.rightMargin: 8
+                                            anchors.verticalCenter: parent.verticalCenter
+                                        }
+
+                                        Text {
+                                            text: "Açaí " + modelData.tamanho + resumoAdicionaisCopo(modelData)
+                                            font.pixelSize: Estilo.global.fontSize.md
                                             font.bold: true
-                                            font.pixelSize: 10
-                                            anchors.centerIn: parent
+                                            color: Estilo.global.text
+                                            anchors.left: badgeTamanhoCopoMontado.right
+                                            anchors.leftMargin: 8
+                                            anchors.right: textoValorCopoMontado.left
+                                            anchors.rightMargin: 8
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            elide: Text.ElideRight
                                         }
-                                    }
-
-                                    // Remove só este copo montado.
-                                    Button {
-                                        id: btnRemoverCopoMontado
-
-                                        width: 22
-                                        height: 22
-                                        padding: 0
-                                        anchors.right: parent.right
-                                        anchors.rightMargin: 8
-                                        anchors.verticalCenter: parent.verticalCenter
-                                        onClicked: removerCopoMontado(index)
-
-                                        contentItem: Text {
-                                            text: "×"
-                                            color: "#ffffff"
-                                            font.bold: true
-                                            horizontalAlignment: Text.AlignHCenter
-                                            verticalAlignment: Text.AlignVCenter
-                                        }
-
-                                        background: Rectangle {
-                                            radius: 6
-                                            color: parent.down ? Estilo.cancelar.pressionado : (parent.hovered ? Estilo.cancelar.hover : Estilo.cancelar.normal)
-                                        }
-                                    }
-
-                                    Text {
-                                        id: textoValorCopoMontado
-
-                                        text: "R$ " + valorFinalCopo(modelData).toFixed(2).replace(".", ",")
-                                        font.pixelSize: 12
-                                        color: Estilo.cores.textoSecundario
-                                        anchors.right: btnRemoverCopoMontado.left
-                                        anchors.rightMargin: 8
-                                        anchors.verticalCenter: parent.verticalCenter
-                                    }
-
-                                    Text {
-                                        text: "Açaí " + modelData.tamanho + resumoAdicionaisCopo(modelData)
-                                        font.pixelSize: 13
-                                        font.bold: true
-                                        color: Estilo.cores.texto
-                                        anchors.left: badgeTamanhoCopoMontado.right
-                                        anchors.leftMargin: 8
-                                        anchors.right: textoValorCopoMontado.left
-                                        anchors.rightMargin: 8
-                                        anchors.verticalCenter: parent.verticalCenter
-                                        elide: Text.ElideRight
                                     }
                                 }
                             }
                         }
                     }
                 }
-            }
 
-            // 5. Valor Total
-            Rectangle {
-                width: parent.width
-                height: 65
-                color: Estilo.cores.texto
-                radius: Estilo.rounding.medio
+                // 5. Valor Total
+                Rectangle {
+                    width: parent.width
+                    height: 65
+                    color: Estilo.global.text
+                    radius: Estilo.global.radius.lg
 
-                Column {
-                    anchors.centerIn: parent
-                    spacing: 2
+                    Column {
+                        anchors.centerIn: parent
+                        spacing: 2
 
-                    Text {
-                        text: "VALOR TOTAL DO PEDIDO"
-                        color: "#bdc3c7"
-                        font.pixelSize: 10
-                        font.bold: true
-                        anchors.horizontalCenter: parent.horizontalCenter
-                    }
+                        Text {
+                            text: "VALOR TOTAL DO PEDIDO"
+                            color: Estilo.global.textDisabled
+                            font.pixelSize: Estilo.global.fontSize.xs
+                            font.bold: true
+                            anchors.horizontalCenter: parent.horizontalCenter
+                        }
 
-                    Text {
-                        text: "R$ " + valorTotalPedido.toFixed(2).replace(".", ",")
-                        color: Estilo.confirmar.hover
-                        font.pixelSize: 20
-                        font.bold: true
-                        anchors.horizontalCenter: parent.horizontalCenter
-                    }
-                }
-            }
-
-            // 6. Botões de Ação
-            Row {
-                width: parent.width
-                spacing: 12
-
-                // BOTÃO VOLTAR
-                Button {
-                    id: btnVoltar
-
-                    width: (parent.width - parent.spacing) / 2
-                    height: 46
-                    onClicked: pilha.pop()
-
-                    contentItem: Text {
-                        text: "Voltar"
-                        font.pixelSize: 15
-                        font.bold: true
-                        color: "#ffffff"
-                        horizontalAlignment: Text.AlignHCenter
-                        verticalAlignment: Text.AlignVCenter
-                    }
-
-                    background: Rectangle {
-                        radius: Estilo.rounding.grande
-                        color: btnVoltar.down ? Estilo.voltar.pressionado : (btnVoltar.hovered ? Estilo.voltar.hover : Estilo.cancelar.normal)
-                        border.color: Estilo.voltar.pressionado
-                        border.width: 1
+                        Text {
+                            text: "R$ " + valorTotalPedido.toFixed(2).replace(".", ",")
+                            color: Estilo.action.confirm.hover
+                            font.pixelSize: Estilo.global.fontSize.xxl
+                            font.bold: true
+                            anchors.horizontalCenter: parent.horizontalCenter
+                        }
                     }
                 }
 
-                // BOTÃO CONFIRMAR
-                Button {
-                    id: btnConfirmar
+                // 6. Botões de Ação
+                Row {
+                    width: parent.width
+                    spacing: Estilo.global.spacing.lg
 
-                    width: (parent.width - parent.spacing) / 2
-                    height: 46
-                    enabled: coposMontados.length > 0 || totalAdicionaisAtual > 0
-                    // Junta os copos já adicionados com o copo em andamento
-                    // (se ele já tiver algum adicional) e envia tudo de uma vez.
-                    onClicked: {
-                        var listaFinal = coposMontados.slice();
-                        if (totalAdicionaisAtual > 0) {
-                            listaFinal.push({
-                                "tamanho": tamanhoSelecionado,
-                                "valorNum": precoTamanho(tamanhoSelecionado),
-                                "adicionais": adicionaisAtual.slice()
+                    // BOTÃO VOLTAR
+                    Button {
+                        id: btnVoltar
+
+                        width: (parent.width - parent.spacing) / 2
+                        height: 46
+                        onClicked: pilha.pop()
+
+                        contentItem: Text {
+                            text: "Voltar"
+                            font.pixelSize: Estilo.global.fontSize.xl
+                            font.bold: true
+                            color: Estilo.global.surface
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+
+                        background: Rectangle {
+                            radius: Estilo.global.radius.md
+                            color: btnVoltar.down ? Estilo.action.back.pressed : (btnVoltar.hovered ? Estilo.action.back.hover : Estilo.action.danger.base)
+                            border.color: Estilo.action.back.pressed
+                            border.width: Estilo.global.borderWidth.hairline
+                        }
+                    }
+
+                    // BOTÃO CONFIRMAR
+                    Button {
+                        id: btnConfirmar
+
+                        width: (parent.width - parent.spacing) / 2
+                        height: 46
+                        enabled: coposMontados.length > 0 || totalAdicionaisAtual > 0
+                        // Junta os copos já adicionados com o copo em andamento
+                        // (se ele já tiver algum adicional) e envia tudo de uma vez.
+                        onClicked: {
+                            var listaFinal = coposMontados.slice();
+                            if (totalAdicionaisAtual > 0) {
+                                listaFinal.push({
+                                    "tamanho": tamanhoSelecionado,
+                                    "valorNum": precoTamanho(tamanhoSelecionado),
+                                    "adicionais": adicionaisAtual.slice()
+                                });
+                            }
+                            if (listaFinal.length === 0)
+                                return ;
+
+                            var itens = listaFinal.map(function (copo) {
+                                var adicionaisFlat = [];
+                                var adicionais = copo.adicionais || [];
+                                for (var i = 0; i < adicionais.length; i++) {
+                                    for (var q = 0; q < adicionais[i].quantidade; q++) {
+                                        adicionaisFlat.push({
+                                            "sabor": "Açaí",
+                                            "nome": adicionais[i].nome,
+                                            "valor": "R$ " + adicionais[i].valorNum.toFixed(2).replace(".", ",")
+                                        });
+                                    }
+                                }
+                                return {
+                                    "nome": "Açaí (" + copo.tamanho + ")",
+                                    "valor": "R$ " + valorFinalCopo(copo).toFixed(2).replace(".", ","),
+                                    "observacao": "",
+                                    "adicionais": adicionaisFlat
+                                };
                             });
+                            if (typeof onPedidoSelecionado === "function")
+                                onPedidoSelecionado(itens);
+                            pilha.pop(null);
                         }
-                        if (listaFinal.length === 0)
-                            return ;
 
-                        var itens = listaFinal.map(function (copo) {
-                            var adicionaisFlat = [];
-                            var adicionais = copo.adicionais || [];
-                            for (var i = 0; i < adicionais.length; i++) {
-                                for (var q = 0; q < adicionais[i].quantidade; q++) {
-                                    adicionaisFlat.push({
-                                        "sabor": "Açaí",
-                                        "nome": adicionais[i].nome,
-                                        "valor": "R$ " + adicionais[i].valorNum.toFixed(2).replace(".", ",")
-                                    });
-                                }
-                            }
-                            return {
-                                "nome": "Açaí (" + copo.tamanho + ")",
-                                "valor": "R$ " + valorFinalCopo(copo).toFixed(2).replace(".", ","),
-                                "observacao": "",
-                                "adicionais": adicionaisFlat
-                            };
-                        });
-                        if (typeof onPedidoSelecionado === "function")
-                            onPedidoSelecionado(itens);
-                        pilha.pop(null);
-                    }
+                        contentItem: Text {
+                            text: "Confirmar"
+                            font.pixelSize: Estilo.global.fontSize.xl
+                            font.bold: true
+                            color: Estilo.global.surface
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                            opacity: btnConfirmar.enabled ? 1 : Estilo.global.opacity.subtle
+                        }
 
-                    contentItem: Text {
-                        text: "Confirmar"
-                        font.pixelSize: 15
-                        font.bold: true
-                        color: "#ffffff"
-                        horizontalAlignment: Text.AlignHCenter
-                        verticalAlignment: Text.AlignVCenter
-                        opacity: btnConfirmar.enabled ? 1 : 0.6
-                    }
-
-                    background: Rectangle {
-                        radius: Estilo.rounding.grande
-                        color: !btnConfirmar.enabled ? "#bdc3c7" : (btnConfirmar.down ? "#6c3483" : (btnConfirmar.hovered ? "#a569bd" : "#8e44ad"))
-                        border.color: !btnConfirmar.enabled ? "#bdc3c7" : "#6c3483"
-                        border.width: 1
+                        background: Rectangle {
+                            radius: Estilo.global.radius.md
+                            color: !btnConfirmar.enabled ? Estilo.global.surfaceDisabled : (btnConfirmar.down ? Estilo.category.acai.pressed : (btnConfirmar.hovered ? Estilo.category.acai.hover : Estilo.category.acai.base))
+                            border.color: !btnConfirmar.enabled ? Estilo.global.surfaceDisabled : Estilo.category.acai.pressed
+                            border.width: Estilo.global.borderWidth.hairline
+                        }
                     }
                 }
             }
         }
+
     }
 }

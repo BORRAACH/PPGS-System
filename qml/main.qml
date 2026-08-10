@@ -17,15 +17,38 @@ ApplicationWindow {
     height: 500
     visible: true
     visibility: Window.Maximized
-    color: Qt.darker(Estilo.cores.fundoPagina, 1.8)
+    color: Estilo.global.chrome
     title: "Sistema de Pedidos"
     // Isto é a rede de segurança; cada input também declara a própria "color"
-    // (ver Estilo.cores.textoInput), de modo que nenhum campo dependa só
+    // (ver Estilo.global.textInput), de modo que nenhum campo dependa só
     // desta herança.
-    palette.text: Estilo.cores.textoInput
-    palette.placeholderText: Estilo.cores.placeholderInput
-    palette.base: "#ffffff"
-    palette.windowText: Estilo.cores.texto
+    palette.text: Estilo.global.textInput
+    palette.placeholderText: Estilo.global.textPlaceholder
+    palette.base: Estilo.global.inputBackground
+    palette.windowText: Estilo.global.text
+
+    // --- MEDIDA DA JANELA PARA O RESTO DO APP ---
+    // Este é o ÚNICO ponto que alimenta o singleton Responsivo (ver
+    // qml/estilo/Responsivo.qml); dali saem as escalas de fonte/espaço que
+    // todas as telas já consomem por baixo, via Estilo.*, e as decisões de
+    // empilhar layout. Um singleton não enxerga a janela sozinho — precisa
+    // que alguém que a enxergue lhe conte, e a raiz é quem sempre a enxerga.
+    // Binding declarativo, e não "onWidthChanged: Responsivo.largura = width":
+    // o binding também vale no primeiro frame, antes de qualquer
+    // redimensionamento acontecer.
+    Binding {
+        target: Responsivo
+        property: "largura"
+        value: root.width
+        restoreMode: Binding.RestoreNone
+    }
+
+    Binding {
+        target: Responsivo
+        property: "altura"
+        value: root.height
+        restoreMode: Binding.RestoreNone
+    }
 
     RowLayout {
         anchors.fill: parent
@@ -43,11 +66,14 @@ ApplicationWindow {
 
             Layout.fillWidth: true
             Layout.fillHeight: true
-            Layout.topMargin: 8
-            Layout.bottomMargin: 8
-            Layout.rightMargin: 8
-            color: Estilo.cores.fundoPagina // Cor de fundo do app
-            radius: Estilo.rounding.popup
+            // A moldura em volta do conteúdo é a primeira coisa a sumir em
+            // tela pequena: são 8px de cada lado que valem mais como espaço
+            // de trabalho do que como respiro.
+            Layout.topMargin: Responsivo.compacto ? 0 : Math.round(8 * Responsivo.escalaEspaco)
+            Layout.bottomMargin: Layout.topMargin
+            Layout.rightMargin: Layout.topMargin
+            color: Estilo.global.background // Cor de fundo do app
+            radius: Estilo.global.radius.xl
             clip: true // Garante o corte dos elementos internos e da sombra
 
             StackView {
@@ -133,10 +159,13 @@ ApplicationWindow {
         property bool aberta: false
 
         z: 2000
-        radius: Estilo.rounding.medio
-        color: sucesso ? Estilo.confirmar.normal : Estilo.cancelar.normal
-        width: linhaNotificacaoImpressao.implicitWidth + 40
-        height: 50
+        radius: Estilo.global.radius.lg
+        color: sucesso ? Estilo.action.confirm.base : Estilo.action.danger.base
+        // Cresce com o texto até onde a janela permite; passando disso, é o
+        // texto que encolhe (elide, abaixo) em vez de a faixa vazar pela
+        // esquerda da tela.
+        width: Math.min(linhaNotificacaoImpressao.implicitWidth + 40, root.width - 40)
+        height: Math.max(40, linhaNotificacaoImpressao.implicitHeight + 20)
         anchors.right: parent.right
         anchors.rightMargin: 20
         anchors.bottom: parent.bottom
@@ -145,21 +174,28 @@ ApplicationWindow {
         Row {
             id: linhaNotificacaoImpressao
 
-            spacing: 8
+            spacing: Estilo.global.spacing.sm
             anchors.centerIn: parent
 
             Icone {
+                id: iconeNotificacaoImpressao
+
                 nome: notificacaoImpressao.sucesso ? "fa6s.print" : "fa6s.circle-xmark"
-                cor: "#ffffff"
-                tamanho: Estilo.fonte.padrao
+                cor: Estilo.global.textOnAccent
+                tamanho: Estilo.global.fontSize.lg
                 anchors.verticalCenter: parent.verticalCenter
             }
 
             Text {
                 text: notificacaoImpressao.texto
-                color: "#ffffff"
+                color: Estilo.global.textOnAccent
                 font.bold: true
-                font.pixelSize: Estilo.fonte.padrao
+                font.pixelSize: Estilo.global.fontSize.lg
+                // Limitado ao que sobra da faixa depois do ícone: o nome da
+                // máquina que imprimiu pode ser longo, e sem isto a faixa
+                // ficava mais larga que a janela.
+                width: Math.min(implicitWidth, notificacaoImpressao.width - iconeNotificacaoImpressao.width - parent.spacing - 40)
+                elide: Text.ElideRight
                 anchors.verticalCenter: parent.verticalCenter
             }
 
@@ -167,7 +203,7 @@ ApplicationWindow {
 
         Behavior on anchors.bottomMargin {
             NumberAnimation {
-                duration: 300
+                duration: Estilo.global.motion.slow
                 easing.type: Easing.OutCubic
             }
 

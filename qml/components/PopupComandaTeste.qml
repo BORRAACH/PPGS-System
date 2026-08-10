@@ -27,52 +27,52 @@ Popup {
     modal: true
     focus: true
     closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
-    padding: 25
+    padding: Estilo.global.padding.popup
     parent: Overlay.overlay
     anchors.centerIn: parent
 
     Overlay.modal: Rectangle {
-        color: "#99000000"
+        color: Estilo.global.overlay
     }
 
     background: Rectangle {
-        radius: 16
-        color: Estilo.cores.fundoPagina
-        border.color: Estilo.cores.bordaCard
+        radius: Estilo.global.radius.xl
+        color: Estilo.global.background
+        border.color: Estilo.global.borderCard
     }
 
     contentItem: Column {
-        spacing: 20
+        spacing: Estilo.global.spacing.xxl
 
         Row {
-            spacing: 8
-            Icone { nome: "fa6s.flask"; cor: Estilo.cores.texto; tamanho: 17; anchors.verticalCenter: parent.verticalCenter }
+            spacing: Estilo.global.spacing.sm
+            Icone { nome: "fa6s.flask"; cor: Estilo.global.text; tamanho: 17; anchors.verticalCenter: parent.verticalCenter }
             Text {
                 text: "Comanda em branco"
-                font.pixelSize: 17
+                font.pixelSize: Estilo.global.fontSize.xl
                 font.bold: true
-                color: Estilo.cores.texto
+                color: Estilo.global.text
                 anchors.verticalCenter: parent.verticalCenter
             }
         }
 
         Text {
             text: "Nenhum campo foi preenchido. Deseja seguir mesmo assim como comanda de teste?"
-            font.pixelSize: 13
-            color: Estilo.cores.textoSecundario
+            font.pixelSize: Estilo.global.fontSize.md
+            color: Estilo.global.textSecondary
             width: 320
             wrapMode: Text.Wrap
         }
 
         Row {
-            spacing: 12
+            spacing: Estilo.global.spacing.lg
             anchors.right: parent.right
 
             Button {
                 id: btnComandaNormal
 
                 text: "Não, é normal"
-                padding: 10
+                padding: Estilo.global.padding.md
                 onClicked: {
                     popupComandaTeste.close();
                     popupComandaTeste.respondido(false);
@@ -81,43 +81,43 @@ Popup {
                 contentItem: Text {
                     text: btnComandaNormal.text
                     font.bold: true
-                    color: "#ffffff"
+                    color: Estilo.global.textOnAccent
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
                 }
 
                 background: Rectangle {
-                    radius: Estilo.rounding.padrao
-                    color: parent.down ? Estilo.cores.textoSecundario : (parent.hovered ? "#95a5a6" : Estilo.cores.textoSecundario)
+                    radius: Estilo.global.radius.sm
+                    color: parent.down ? Estilo.action.neutral.pressed : (parent.hovered ? Estilo.action.neutral.hover : Estilo.action.neutral.base)
                 }
             }
 
             Button {
                 id: btnComandaTeste
 
-                padding: 10
+                padding: Estilo.global.padding.md
                 onClicked: {
                     popupComandaTeste.close();
                     popupComandaTeste.respondido(true);
                 }
 
                 contentItem: Row {
-                    spacing: 6
+                    spacing: Estilo.global.spacing.xs
                     anchors.centerIn: parent
-                    Icone { nome: "fa6s.flask"; cor: "#ffffff"; tamanho: Estilo.fonte.padrao; anchors.verticalCenter: parent.verticalCenter }
+                    Icone { nome: "fa6s.flask"; cor: Estilo.global.textOnAccent; tamanho: Estilo.global.fontSize.lg; anchors.verticalCenter: parent.verticalCenter }
                     Text {
                         text: "Sim, é teste"
                         font.bold: true
-                        color: "#ffffff"
+                        color: Estilo.global.textOnAccent
                         anchors.verticalCenter: parent.verticalCenter
                     }
                 }
 
                 background: Rectangle {
-                    radius: Estilo.rounding.padrao
-                    color: parent.down ? Estilo.confirmar.pressionado : (parent.hovered ? Estilo.confirmar.hover : Estilo.confirmar.normal)
-                    border.color: Estilo.confirmar.pressionado
-                    border.width: 1
+                    radius: Estilo.global.radius.sm
+                    color: parent.down ? Estilo.action.confirm.pressed : (parent.hovered ? Estilo.action.confirm.hover : Estilo.action.confirm.base)
+                    border.color: Estilo.action.confirm.pressed
+                    border.width: Estilo.global.borderWidth.hairline
                 }
             }
         }

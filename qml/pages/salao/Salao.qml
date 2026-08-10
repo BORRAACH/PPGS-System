@@ -228,7 +228,22 @@ Page {
         id: conteudoSalaoComponent
 
         Item {
+            id: conteudoSalao
+
             anchors.fill: parent
+
+            // ===== MEDIDAS DO LAYOUT =====
+            // Mesma conta do Balcão e da Entrega (ver Balcao.qml): formulário
+            // (690) e resumo (300) eram larguras cravadas dentro de um Row.
+            readonly property real larguraDisponivel: width - Estilo.global.padding.xl * 2
+            readonly property bool empilhado: larguraDisponivel < 690 + 300 + Estilo.global.spacing.xxl
+            readonly property int larguraResumo: empilhado ? Math.min(360, larguraDisponivel) : 300
+            readonly property int larguraFormulario: empilhado ? Math.min(690, larguraDisponivel) : Math.min(690, larguraDisponivel - larguraResumo - Estilo.global.spacing.xxl)
+            // Cliente + número da mesa lado a lado: 280 e 120 no desenho
+            // original, agora proporcionais ao que couber.
+            readonly property int larguraCampos: Math.min(420, larguraFormulario)
+            readonly property var gradePedido: Responsivo.gradePedido(larguraFormulario)
+            readonly property int larguraBotaoAcao: Math.max(140, Math.min(200, Math.floor((larguraFormulario - Estilo.global.spacing.xl * 2) / 3)))
 
             property alias inputNomeCliente: inputNomeCliente
 
@@ -359,52 +374,61 @@ Page {
                     policy: ScrollBar.AsNeeded
                 }
 
-                Row {
+                // Uma ou duas colunas conforme o espaço — ver o comentário
+                // equivalente em Balcao.qml.
+                GridLayout {
                     id: rowConteudo
 
                     anchors.horizontalCenter: parent.horizontalCenter
                     anchors.verticalCenter: parent.verticalCenter
-                    spacing: 30
+                    columns: conteudoSalao.empilhado ? 1 : 2
+                    columnSpacing: Estilo.global.spacing.xxl
+                    rowSpacing: Estilo.global.spacing.xxl
 
                     Column {
-                        anchors.verticalCenter: parent.verticalCenter
-                        spacing: 20
+                        Layout.preferredWidth: conteudoSalao.larguraFormulario
+                        Layout.alignment: Qt.AlignHCenter | Qt.AlignVCenter
+                        spacing: Estilo.global.spacing.xxl
 
                         Row {
-                            spacing: 10
-                            anchors.horizontalCenter: parent
-                            Icone { nome: "fa6s.utensils"; cor: "#0d9488"; tamanho: Estilo.fonte.titulo; anchors.verticalCenter: parent.verticalCenter }
+                            spacing: Estilo.global.spacing.md
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            Icone { nome: "fa6s.utensils"; cor: Estilo.screen.salao.accent; tamanho: Estilo.global.fontSize.title; anchors.verticalCenter: parent.verticalCenter }
                             Text {
                                 text: "ATENDIMENTO SALÃO"
-                                font.pixelSize: Estilo.fonte.titulo
-                                font.bold: true
-                                color: "#0d9488"
+                                font.pixelSize: Estilo.global.fontSize.title
+                                font.family: Estilo.global.fontFamily.title
+                                color: Estilo.screen.salao.accent
                                 anchors.verticalCenter: parent.verticalCenter
                             }
                         }
 
                         // Campos Cliente + Mesa lado a lado.
+                        // Alinhados à esquerda, e não centralizados: juntos são
+                        // mais estreitos que o formulário, e centralizados
+                        // começavam deslocados em relação à lista de itens
+                        // logo abaixo. Numa tela estreita, onde ocupam a
+                        // largura toda, os dois alinhamentos coincidem.
                         Row {
-                            spacing: 20
-                            anchors.horizontalCenter: parent
+                            spacing: Estilo.global.spacing.xxl
 
                             Column {
                                 spacing: 4
 
                                 Text {
                                     text: "Nome do Cliente"
-                                    font.pixelSize: 12
+                                    font.pixelSize: Estilo.global.fontSize.sm
                                     font.bold: true
-                                    color: Estilo.cores.textoSecundario
+                                    color: Estilo.global.textSecondary
                                 }
 
                                 TextField {
                                     id: inputNomeCliente
 
-                                    color: Estilo.cores.textoInput
-                                    placeholderTextColor: Estilo.cores.placeholderInput
+                                    color: Estilo.global.textInput
+                                    placeholderTextColor: Estilo.global.textPlaceholder
                                     placeholderText: "NOME DO CLIENTE (opcional)"
-                                    width: 280
+                                    width: Math.round((conteudoSalao.larguraCampos - Estilo.global.spacing.xxl) * 0.7)
                                     topPadding: 10
                                     bottomPadding: 10
                                     leftPadding: 10
@@ -415,10 +439,10 @@ Page {
                                     Keys.onReturnPressed: inputMesa.forceActiveFocus()
 
                                     background: Rectangle {
-                                        radius: Estilo.rounding.padrao
-                                        color: "#ffffff"
-                                        border.color: parent.activeFocus ? "#0d9488" : Estilo.cores.borda
-                                        border.width: 1
+                                        radius: Estilo.global.radius.sm
+                                        color: Estilo.global.inputBackground
+                                        border.color: parent.activeFocus ? Estilo.screen.salao.accent : Estilo.global.border
+                                        border.width: Estilo.global.borderWidth.hairline
                                     }
                                 }
                             }
@@ -428,9 +452,9 @@ Page {
 
                                 Text {
                                     text: "Mesa"
-                                    font.pixelSize: 12
+                                    font.pixelSize: Estilo.global.fontSize.sm
                                     font.bold: true
-                                    color: Estilo.cores.textoSecundario
+                                    color: Estilo.global.textSecondary
                                 }
 
                                 SpinBox {
@@ -440,7 +464,7 @@ Page {
                                     to: 200
                                     value: 1
                                     editable: true
-                                    width: 120
+                                    width: (conteudoSalao.larguraCampos - Estilo.global.spacing.xxl) - Math.round((conteudoSalao.larguraCampos - Estilo.global.spacing.xxl) * 0.7)
                                     height: inputNomeCliente.implicitHeight
                                     KeyNavigation.backtab: inputNomeCliente
                                     Keys.onTabPressed: primeiroCampoPedido().forceActiveFocus()
@@ -448,8 +472,8 @@ Page {
 
                                     contentItem: TextInput {
                                         text: inputMesa.textFromValue(inputMesa.value, inputMesa.locale)
-                                        font.pixelSize: Estilo.fonte.padrao
-                                        color: Estilo.cores.textoInput
+                                        font.pixelSize: Estilo.global.fontSize.lg
+                                        color: Estilo.global.textInput
                                         horizontalAlignment: Qt.AlignHCenter
                                         verticalAlignment: Qt.AlignVCenter
                                         readOnly: !inputMesa.editable
@@ -458,9 +482,9 @@ Page {
                                     }
 
                                     background: Rectangle {
-                                        radius: Estilo.rounding.padrao
-                                        color: "#ffffff"
-                                        border.color: inputMesa.activeFocus ? "#0d9488" : Estilo.cores.borda
+                                        radius: Estilo.global.radius.sm
+                                        color: Estilo.global.inputBackground
+                                        border.color: inputMesa.activeFocus ? Estilo.screen.salao.accent : Estilo.global.border
                                         border.width: inputMesa.activeFocus ? 2 : 1
                                     }
                                 }
@@ -469,25 +493,25 @@ Page {
 
                         // --- CABEÇALHO DA LISTA DE PEDIDOS ---
                         Row {
-                            width: 690
-                            anchors.horizontalCenter: parent
-                            spacing: 10
+                            width: conteudoSalao.larguraFormulario
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            spacing: Estilo.global.spacing.md
 
-                            Text { text: "Pedido"; width: 200; font.pixelSize: 12; font.bold: true; color: Estilo.cores.textoSecundario }
-                            Text { text: "Observação"; width: 180; font.pixelSize: 12; font.bold: true; color: Estilo.cores.textoSecundario }
-                            Text { text: "Valor"; width: 110; font.pixelSize: 12; font.bold: true; color: Estilo.cores.textoSecundario }
+                            Text { text: "Pedido"; width: conteudoSalao.gradePedido.pedido; font.pixelSize: Estilo.global.fontSize.sm; font.bold: true; color: Estilo.global.textSecondary }
+                            Text { text: "Observação"; width: conteudoSalao.gradePedido.observacao; font.pixelSize: Estilo.global.fontSize.sm; font.bold: true; color: Estilo.global.textSecondary }
+                            Text { text: "Valor"; width: conteudoSalao.gradePedido.valor; font.pixelSize: Estilo.global.fontSize.sm; font.bold: true; color: Estilo.global.textSecondary }
                         }
 
                         // --- LISTA DINÂMICA DE PEDIDOS (mesmo delegate de Balcao.qml) ---
                         ListView {
                             id: listaPedidos
 
-                            width: 690
+                            width: conteudoSalao.larguraFormulario
                             height: Math.min(count * 60, 240)
                             clip: true
                             model: modeloPedidos
-                            spacing: 10
-                            anchors.horizontalCenter: parent
+                            spacing: Estilo.global.spacing.md
+                            anchors.horizontalCenter: parent.horizontalCenter
 
                             ScrollBar.vertical: ScrollBar {
                                 policy: ScrollBar.AsNeeded
@@ -502,7 +526,7 @@ Page {
                             }
 
                             delegate: LinhaPedido {
-                                corDestaque: "#0d9488"
+                                corDestaque: Estilo.screen.salao.accent
                                 campoExternoAnterior: inputMesa
                                 campoExternoProximo: btnSalvarMesa
                                 onSelecionarPedido: function(indice) {
@@ -513,9 +537,12 @@ Page {
                         }
 
                         // --- BOTÕES DE AÇÃO INFERIORES ---
-                        Row {
-                            spacing: 15
-                            anchors.horizontalCenter: parent
+                        // Flow pelo mesmo motivo de Balcão/Entrega: os botões
+                        // repartem a largura do formulário e quebram para a
+                        // linha de baixo quando não couberem lado a lado.
+                        Flow {
+                            spacing: Estilo.global.spacing.xl
+                            width: conteudoSalao.larguraFormulario
 
                             // Salva o estado atual (itens, cliente, mesa) sem
                             // imprimir nada — a mesa continua aberta, pronta
@@ -523,8 +550,8 @@ Page {
                             Button {
                                 id: btnSalvarMesa
 
-                                padding: 10
-                                width: 200
+                                padding: Estilo.global.padding.md
+                                width: conteudoSalao.larguraBotaoAcao
                                 focusPolicy: Qt.StrongFocus
                                 KeyNavigation.tab: btnFecharConta
                                 // Chama ultimoCampoValor() na hora, não como
@@ -543,22 +570,22 @@ Page {
                                 }
 
                                 contentItem: Row {
-                                    spacing: 6
+                                    spacing: Estilo.global.spacing.xs
                                     anchors.centerIn: parent
-                                    Icone { nome: "fa6s.floppy-disk"; cor: "#ffffff"; tamanho: Estilo.fonte.padrao; anchors.verticalCenter: parent.verticalCenter }
+                                    Icone { nome: "fa6s.floppy-disk"; cor: Estilo.global.textOnAccent; tamanho: Estilo.global.fontSize.lg; anchors.verticalCenter: parent.verticalCenter }
                                     Text {
                                         text: "Salvar Mesa"
                                         font.bold: true
-                                        color: "#ffffff"
+                                        color: Estilo.global.textOnAccent
                                         anchors.verticalCenter: parent.verticalCenter
                                     }
                                 }
 
                                 background: Rectangle {
-                                    radius: Estilo.rounding.padrao
-                                    color: parent.down ? "#1d4ed8" : (parent.hovered ? "#1e40af" : "#2563eb")
-                                    border.color: parent.activeFocus ? Estilo.cores.texto : "#1d4ed8"
-                                    border.width: parent.activeFocus ? 3 : 1
+                                    radius: Estilo.global.radius.sm
+                                    color: parent.down ? Estilo.action.save.pressed : (parent.hovered ? Estilo.action.save.hover : Estilo.action.save.base)
+                                    border.color: parent.activeFocus ? Estilo.global.focusRing : Estilo.action.save.border
+                                    border.width: parent.activeFocus ? Estilo.global.borderWidth.focus : Estilo.global.borderWidth.hairline
                                 }
                             }
 
@@ -569,8 +596,8 @@ Page {
                             Button {
                                 id: btnFecharConta
 
-                                padding: 10
-                                width: 200
+                                padding: Estilo.global.padding.md
+                                width: conteudoSalao.larguraBotaoAcao
                                 focusPolicy: Qt.StrongFocus
                                 KeyNavigation.tab: btnVoltar
                                 KeyNavigation.backtab: btnSalvarMesa
@@ -588,22 +615,22 @@ Page {
                                 }
 
                                 contentItem: Row {
-                                    spacing: 6
+                                    spacing: Estilo.global.spacing.xs
                                     anchors.centerIn: parent
-                                    Icone { nome: "fa6s.receipt"; cor: "#ffffff"; tamanho: Estilo.fonte.padrao; anchors.verticalCenter: parent.verticalCenter }
+                                    Icone { nome: "fa6s.receipt"; cor: Estilo.global.textOnAccent; tamanho: Estilo.global.fontSize.lg; anchors.verticalCenter: parent.verticalCenter }
                                     Text {
                                         text: "Fechar Conta"
                                         font.bold: true
-                                        color: "#ffffff"
+                                        color: Estilo.global.textOnAccent
                                         anchors.verticalCenter: parent.verticalCenter
                                     }
                                 }
 
                                 background: Rectangle {
-                                    radius: Estilo.rounding.padrao
-                                    color: parent.down ? Estilo.confirmar.pressionado : (parent.hovered ? Estilo.confirmar.hover : Estilo.confirmar.normal)
-                                    border.color: parent.activeFocus ? Estilo.cores.texto : Estilo.confirmar.pressionado
-                                    border.width: parent.activeFocus ? 3 : 1
+                                    radius: Estilo.global.radius.sm
+                                    color: parent.down ? Estilo.action.confirm.pressed : (parent.hovered ? Estilo.action.confirm.hover : Estilo.action.confirm.base)
+                                    border.color: parent.activeFocus ? Estilo.global.text : Estilo.action.confirm.pressed
+                                    border.width: parent.activeFocus ? Estilo.global.borderWidth.focus : Estilo.global.borderWidth.hairline
                                 }
                             }
 
@@ -611,8 +638,8 @@ Page {
                             Button {
                                 id: btnVoltar
 
-                                padding: 10
-                                width: 200
+                                padding: Estilo.global.padding.md
+                                width: conteudoSalao.larguraBotaoAcao
                                 focusPolicy: Qt.StrongFocus
                                 KeyNavigation.tab: inputNomeCliente
                                 KeyNavigation.backtab: btnFecharConta
@@ -626,22 +653,22 @@ Page {
                                 }
 
                                 contentItem: Row {
-                                    spacing: 6
+                                    spacing: Estilo.global.spacing.xs
                                     anchors.centerIn: parent
-                                    Icone { nome: "fa6s.arrow-left"; cor: "#ffffff"; tamanho: Estilo.fonte.padrao; anchors.verticalCenter: parent.verticalCenter }
+                                    Icone { nome: "fa6s.arrow-left"; cor: Estilo.global.textOnAccent; tamanho: Estilo.global.fontSize.lg; anchors.verticalCenter: parent.verticalCenter }
                                     Text {
                                         text: "Voltar para o Menu"
                                         font.bold: true
-                                        color: "#ffffff"
+                                        color: Estilo.global.textOnAccent
                                         anchors.verticalCenter: parent.verticalCenter
                                     }
                                 }
 
                                 background: Rectangle {
-                                    radius: Estilo.rounding.padrao
-                                    color: parent.down ? Estilo.cancelar.pressionado : (parent.hovered ? Estilo.cancelar.hover : Estilo.cancelar.normal)
-                                    border.color: parent.activeFocus ? Estilo.cores.texto : Estilo.cancelar.pressionado
-                                    border.width: parent.activeFocus ? 3 : 1
+                                    radius: Estilo.global.radius.sm
+                                    color: parent.down ? Estilo.action.danger.pressed : (parent.hovered ? Estilo.action.danger.hover : Estilo.action.danger.base)
+                                    border.color: parent.activeFocus ? Estilo.global.text : Estilo.action.danger.pressed
+                                    border.width: parent.activeFocus ? Estilo.global.borderWidth.focus : Estilo.global.borderWidth.hairline
                                 }
                             }
                         }
@@ -652,13 +679,14 @@ Page {
                     Rectangle {
                         id: resumoMesa
 
-                        width: 300
-                        anchors.verticalCenter: parent.verticalCenter
-                        implicitHeight: colunaResumoMesa.implicitHeight + Estilo.preenchimento.grande * 2
-                        radius: Estilo.rounding.painel
-                        color: "#ffffff"
-                        border.color: Estilo.cores.bordaCard
-                        border.width: 1
+                        Layout.preferredWidth: conteudoSalao.larguraResumo
+                        Layout.alignment: Qt.AlignHCenter | Qt.AlignVCenter
+                        width: conteudoSalao.larguraResumo
+                        implicitHeight: colunaResumoMesa.implicitHeight + Estilo.global.padding.xl * 2
+                        radius: Estilo.global.radius.lg
+                        color: Estilo.global.surface
+                        border.color: Estilo.global.borderCard
+                        border.width: Estilo.global.borderWidth.hairline
 
                         readonly property int quantidadeItensMesa: {
                             var n = 0;
@@ -688,33 +716,33 @@ Page {
                         Column {
                             id: colunaResumoMesa
 
-                            width: parent.width - Estilo.preenchimento.grande * 2
+                            width: parent.width - Estilo.global.padding.xl * 2
                             anchors.horizontalCenter: parent.horizontalCenter
                             anchors.top: parent.top
-                            anchors.topMargin: Estilo.preenchimento.grande
-                            spacing: Estilo.espacamento.normal
+                            anchors.topMargin: Estilo.global.padding.xl
+                            spacing: Estilo.global.spacing.lg
 
                             Row {
-                                spacing: 8
-                                Icone { nome: "fa6s.receipt"; cor: "#0d9488"; tamanho: 18; anchors.verticalCenter: parent.verticalCenter }
+                                spacing: Estilo.global.spacing.sm
+                                Icone { nome: "fa6s.receipt"; cor: Estilo.screen.salao.accent; tamanho: 18; anchors.verticalCenter: parent.verticalCenter }
                                 Text {
                                     text: "RESUMO DA MESA"
-                                    font.pixelSize: 15
+                                    font.pixelSize: Estilo.global.fontSize.xl
                                     font.bold: true
-                                    color: "#0d9488"
+                                    color: Estilo.screen.salao.accent
                                     anchors.verticalCenter: parent.verticalCenter
                                 }
                             }
 
-                            Rectangle { width: parent.width; height: 1; color: Estilo.cores.bordaCard }
+                            Rectangle { width: parent.width; height: 1; color: Estilo.global.borderCard }
 
                             Text {
                                 width: parent.width
                                 visible: resumoMesa.quantidadeItensMesa === 0
                                 text: "Nenhum item adicionado ainda."
-                                font.pixelSize: 13
+                                font.pixelSize: Estilo.global.fontSize.md
                                 font.italic: true
-                                color: Estilo.cores.textoSecundario
+                                color: Estilo.global.textSecondary
                                 wrapMode: Text.WordWrap
                             }
 
@@ -733,8 +761,8 @@ Page {
                                         anchors.right: textoValorItemMesa.left
                                         anchors.rightMargin: 8
                                         text: "• " + model.pedido
-                                        font.pixelSize: 13
-                                        color: Estilo.cores.texto
+                                        font.pixelSize: Estilo.global.fontSize.md
+                                        color: Estilo.global.text
                                         elide: Text.ElideRight
                                     }
 
@@ -743,13 +771,13 @@ Page {
 
                                         anchors.right: parent.right
                                         text: model.valor || "R$ 0,00"
-                                        font.pixelSize: 13
-                                        color: Estilo.cores.textoSecundario
+                                        font.pixelSize: Estilo.global.fontSize.md
+                                        color: Estilo.global.textSecondary
                                     }
                                 }
                             }
 
-                            Rectangle { width: parent.width; height: 1; color: Estilo.cores.bordaCard }
+                            Rectangle { width: parent.width; height: 1; color: Estilo.global.borderCard }
 
                             Item {
                                 width: parent.width
@@ -761,18 +789,18 @@ Page {
                                     anchors.left: parent.left
                                     anchors.verticalCenter: parent.verticalCenter
                                     text: "TOTAL"
-                                    font.pixelSize: 16
+                                    font.pixelSize: Estilo.global.fontSize.xl
                                     font.bold: true
-                                    color: "#0d9488"
+                                    color: Estilo.screen.salao.accent
                                 }
 
                                 Text {
                                     anchors.right: parent.right
                                     anchors.verticalCenter: parent.verticalCenter
                                     text: "R$ " + resumoMesa.valorTotalMesa.toFixed(2).replace(".", ",")
-                                    font.pixelSize: 18
+                                    font.pixelSize: Estilo.global.fontSize.xxl
                                     font.bold: true
-                                    color: "#0d9488"
+                                    color: Estilo.screen.salao.accent
                                 }
                             }
                         }
@@ -803,12 +831,14 @@ Page {
         anchors.top: parent.top
         anchors.left: parent.left
         anchors.right: parent.right
-        anchors.margins: 20
-        height: 110
-        spacing: 10
+        anchors.margins: Estilo.global.padding.xl
+        // A faixa é o "menu de mesas" fixo no topo: em tela baixa ela cede
+        // altura para o formulário, que é onde o pedido é digitado.
+        height: Responsivo.baixa ? 88 : 110
+        spacing: Estilo.global.spacing.md
 
         Button {
-            Layout.preferredWidth: 110
+            Layout.preferredWidth: Responsivo.compacto ? 90 : 110
             Layout.fillHeight: true
             onClicked: {
                 if (stackViewLocal.currentItem)
@@ -824,46 +854,46 @@ Page {
                 // inteira.
                 width: parent.width
                 anchors.centerIn: parent
-                spacing: 6
-                Icone { nome: "fa6s.plus"; cor: "#0d9488"; tamanho: 20; anchors.horizontalCenter: parent.horizontalCenter }
+                spacing: Estilo.global.spacing.xs
+                Icone { nome: "fa6s.plus"; cor: Estilo.screen.salao.accent; tamanho: 20; anchors.horizontalCenter: parent.horizontalCenter }
                 Text {
                     text: "Nova Mesa"
                     width: parent.width
-                    font.pixelSize: 12
+                    font.pixelSize: Estilo.global.fontSize.sm
                     font.bold: true
-                    color: "#0d9488"
+                    color: Estilo.screen.salao.accent
                     horizontalAlignment: Text.AlignHCenter
                 }
             }
 
             background: Rectangle {
-                radius: Estilo.rounding.grande
-                color: parent.down ? "#ccfbf1" : (parent.hovered ? "#e6fffa" : "#ffffff")
-                border.color: "#0d9488"
-                border.width: 2
+                radius: Estilo.global.radius.md
+                color: parent.down ? Estilo.screen.salao.softStrong : (parent.hovered ? Estilo.screen.salao.soft : Estilo.global.surface)
+                border.color: Estilo.screen.salao.accent
+                border.width: Estilo.global.borderWidth.thick
             }
         }
 
         Rectangle {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            radius: Estilo.rounding.grande
-            color: "#ffffff"
-            border.color: Estilo.cores.bordaCard
+            radius: Estilo.global.radius.md
+            color: Estilo.global.surface
+            border.color: Estilo.global.borderCard
 
             Text {
                 anchors.centerIn: parent
                 visible: modeloMesasAbertas.count === 0
                 text: "Nenhuma mesa aberta no momento."
                 font.italic: true
-                color: Estilo.cores.textoSecundario
+                color: Estilo.global.textSecondary
             }
 
             ListView {
                 anchors.fill: parent
                 anchors.margins: 8
                 orientation: ListView.Horizontal
-                spacing: 10
+                spacing: Estilo.global.spacing.md
                 clip: true
                 model: modeloMesasAbertas
 
@@ -872,11 +902,11 @@ Page {
 
                     readonly property bool selecionada: model.id === telaSalao.mesaAtualId
 
-                    width: 160
+                    width: Responsivo.compacto ? 130 : 160
                     height: ListView.view.height
-                    radius: Estilo.rounding.grande
-                    color: selecionada ? "#ccfbf1" : (mouseAreaMesa.containsMouse ? "#f5f5f5" : Estilo.cores.fundoPagina)
-                    border.color: selecionada ? "#0d9488" : Estilo.cores.bordaCard
+                    radius: Estilo.global.radius.md
+                    color: selecionada ? Estilo.screen.salao.softStrong : (mouseAreaMesa.containsMouse ? Estilo.global.surfaceHover : Estilo.global.background)
+                    border.color: selecionada ? Estilo.screen.salao.accent : Estilo.global.borderCard
                     border.width: selecionada ? 2 : 1
 
                     MouseArea {
@@ -898,16 +928,16 @@ Page {
 
                         Text {
                             text: "Mesa " + model.mesa
-                            font.pixelSize: 14
+                            font.pixelSize: Estilo.global.fontSize.lg
                             font.bold: true
-                            color: "#0d9488"
+                            color: Estilo.screen.salao.accent
                             anchors.horizontalCenter: parent.horizontalCenter
                         }
 
                         Text {
                             text: model.cliente && model.cliente.trim() !== "" ? model.cliente : "Sem nome"
-                            font.pixelSize: 12
-                            color: Estilo.cores.texto
+                            font.pixelSize: Estilo.global.fontSize.sm
+                            color: Estilo.global.text
                             width: parent.width
                             horizontalAlignment: Text.AlignHCenter
                             elide: Text.ElideRight
@@ -915,16 +945,16 @@ Page {
 
                         Text {
                             text: model.quantidadeItens + (model.quantidadeItens === 1 ? " item" : " itens")
-                            font.pixelSize: 11
-                            color: Estilo.cores.textoSecundario
+                            font.pixelSize: Estilo.global.fontSize.xs
+                            color: Estilo.global.textSecondary
                             anchors.horizontalCenter: parent.horizontalCenter
                         }
 
                         Text {
                             text: "R$ " + model.valorTotal.toFixed(2).replace(".", ",")
-                            font.pixelSize: 13
+                            font.pixelSize: Estilo.global.fontSize.md
                             font.bold: true
-                            color: Estilo.cores.texto
+                            color: Estilo.global.text
                             anchors.horizontalCenter: parent.horizontalCenter
                         }
                     }
@@ -951,14 +981,14 @@ Page {
 
                         contentItem: Icone {
                             nome: "fa6s.xmark"
-                            cor: "#ffffff"
+                            cor: Estilo.global.textOnAccent
                             tamanho: 11
                             anchors.centerIn: parent
                         }
 
                         background: Rectangle {
                             radius: width / 2
-                            color: parent.down ? Estilo.cancelar.pressionado : (parent.hovered ? Estilo.cancelar.hover : Estilo.cancelar.normal)
+                            color: parent.down ? Estilo.action.danger.pressed : (parent.hovered ? Estilo.action.danger.hover : Estilo.action.danger.base)
                         }
                     }
                 }
@@ -972,7 +1002,7 @@ Page {
     }
 
     background: Rectangle {
-        color: Estilo.cores.fundoPagina
-        radius: Estilo.rounding.popup
+        color: Estilo.global.background
+        radius: Estilo.global.radius.xl
     }
 }

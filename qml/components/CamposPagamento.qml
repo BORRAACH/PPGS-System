@@ -16,9 +16,24 @@ import estilo 1.0
 Row {
     id: camposPagamento
 
-    spacing: 10
+    spacing: Estilo.global.spacing.md
 
-    property color corDestaque: Estilo.confirmar.normal
+    // Quanto de largura a página tem para oferecer a este bloco. -1 (padrão)
+    // significa "sem restrição": os campos ficam com os 150px de sempre, e as
+    // telas que não passam nada continuam idênticas ao que eram. Quando a
+    // página informa um limite, os campos dividem esse espaço entre si em vez
+    // de a linha inteira transbordar — são até quatro (forma, troco, taxa,
+    // status) e, na Entrega, os 150 fixos somavam mais que a tela toda de um
+    // tablet.
+    property real larguraDisponivel: -1
+    // Quantos campos de texto/combo estão realmente em cena agora: troco só
+    // aparece no pagamento em dinheiro, taxa só na Entrega.
+    readonly property int _camposLargos: 1 + (comboFormaPagamento.currentText === "Dinheiro" ? 1 : 0) + (mostrarTaxaEntrega ? 1 : 0)
+    // O status é um botão estreito de largura fixa (60) e fica de fora do
+    // rateio; o resto do espaço é dividido igualmente entre os campos largos.
+    readonly property int larguraCampo: larguraDisponivel < 0 ? 150 : Math.max(100, Math.min(150, Math.floor((larguraDisponivel - 60 - spacing * _camposLargos) / _camposLargos)))
+
+    property color corDestaque: Estilo.action.confirm.base
     property var opcoesPagamento: ["Pix", "Crédito", "Débito", "Dinheiro"]
     // Forma de pagamento já selecionada quando o formulário abre limpo. É
     // separada da ORDEM de opcoesPagamento de propósito: a ordem é a que
@@ -70,15 +85,15 @@ Row {
 
         Text {
             text: "Forma de Pagamento"
-            font.pixelSize: 12
+            font.pixelSize: Estilo.global.fontSize.sm
             font.bold: true
-            color: Estilo.cores.textoSecundario
+            color: Estilo.global.textSecondary
         }
 
         ComboBox {
             id: comboFormaPagamento
 
-            width: 150
+            width: camposPagamento.larguraCampo
             model: camposPagamento.opcoesPagamento
             // Reabrir uma comanda salva manda a forma dela em
             // formaPagamentoInicial; formulário limpo (string vazia, que o
@@ -101,7 +116,7 @@ Row {
 
             contentItem: Text {
                 text: comboFormaPagamento.displayText
-                color: Estilo.cores.textoInput
+                color: Estilo.global.textInput
                 leftPadding: 10
                 rightPadding: 10
                 verticalAlignment: Text.AlignVCenter
@@ -116,15 +131,15 @@ Row {
                 width: comboFormaPagamento.width
                 text: modelData
                 highlighted: comboFormaPagamento.highlightedIndex === index
-                palette.text: Estilo.cores.textoInput
-                palette.highlightedText: Estilo.cores.textoInput
+                palette.text: Estilo.global.textInput
+                palette.highlightedText: Estilo.global.textInput
             }
 
             background: Rectangle {
-                radius: Estilo.rounding.padrao
-                color: "#ffffff"
-                border.color: comboFormaPagamento.activeFocus ? camposPagamento.corDestaque : Estilo.cores.borda
-                border.width: 1
+                radius: Estilo.global.radius.sm
+                color: Estilo.global.inputBackground
+                border.color: comboFormaPagamento.activeFocus ? camposPagamento.corDestaque : Estilo.global.border
+                border.width: Estilo.global.borderWidth.hairline
                 implicitHeight: inputTroco.implicitHeight
             }
         }
@@ -137,18 +152,18 @@ Row {
 
         Text {
             text: "Troco"
-            font.pixelSize: 12
+            font.pixelSize: Estilo.global.fontSize.sm
             font.bold: true
-            color: Estilo.cores.textoSecundario
+            color: Estilo.global.textSecondary
         }
 
         TextField {
             id: inputTroco
 
-            color: Estilo.cores.textoInput
-            placeholderTextColor: Estilo.cores.placeholderInput
+            color: Estilo.global.textInput
+            placeholderTextColor: Estilo.global.textPlaceholder
             placeholderText: "TROCO PARA"
-            width: 150
+            width: camposPagamento.larguraCampo
             topPadding: 10
             bottomPadding: 10
             leftPadding: 10
@@ -174,10 +189,10 @@ Row {
             }
 
             background: Rectangle {
-                radius: Estilo.rounding.padrao
-                color: "#ffffff"
-                border.color: parent.activeFocus ? camposPagamento.corDestaque : Estilo.cores.borda
-                border.width: 1
+                radius: Estilo.global.radius.sm
+                color: Estilo.global.inputBackground
+                border.color: parent.activeFocus ? camposPagamento.corDestaque : Estilo.global.border
+                border.width: Estilo.global.borderWidth.hairline
             }
         }
     }
@@ -190,18 +205,18 @@ Row {
 
         Text {
             text: "Taxa de Entrega"
-            font.pixelSize: 12
+            font.pixelSize: Estilo.global.fontSize.sm
             font.bold: true
-            color: Estilo.cores.textoSecundario
+            color: Estilo.global.textSecondary
         }
 
         TextField {
             id: inputTaxaEntrega
 
-            color: Estilo.cores.textoInput
-            placeholderTextColor: Estilo.cores.placeholderInput
+            color: Estilo.global.textInput
+            placeholderTextColor: Estilo.global.textPlaceholder
             placeholderText: "TAXA DE ENTREGA"
-            width: 150
+            width: camposPagamento.larguraCampo
             topPadding: 10
             bottomPadding: 10
             leftPadding: 10
@@ -226,10 +241,10 @@ Row {
             }
 
             background: Rectangle {
-                radius: Estilo.rounding.padrao
-                color: "#ffffff"
-                border.color: parent.activeFocus ? camposPagamento.corDestaque : Estilo.cores.borda
-                border.width: 1
+                radius: Estilo.global.radius.sm
+                color: Estilo.global.inputBackground
+                border.color: parent.activeFocus ? camposPagamento.corDestaque : Estilo.global.border
+                border.width: Estilo.global.borderWidth.hairline
             }
         }
     }
@@ -243,9 +258,9 @@ Row {
 
         Text {
             text: "Status"
-            font.pixelSize: 12
+            font.pixelSize: Estilo.global.fontSize.sm
             font.bold: true
-            color: Estilo.cores.textoSecundario
+            color: Estilo.global.textSecondary
         }
 
         Button {
@@ -266,19 +281,19 @@ Row {
             contentItem: Text {
                 text: btnStatusPagamento.text
                 font.bold: true
-                color: "#ffffff"
+                color: Estilo.global.textOnAccent
                 horizontalAlignment: Text.AlignHCenter
                 verticalAlignment: Text.AlignVCenter
             }
 
             background: Rectangle {
-                radius: Estilo.rounding.padrao
-                color: btnStatusPagamento.pago ? (parent.down ? Estilo.confirmar.pressionado : (parent.hovered ? Estilo.confirmar.hover : Estilo.confirmar.normal)) : (parent.down ? Estilo.cancelar.pressionado : (parent.hovered ? Estilo.cancelar.hover : Estilo.cancelar.normal))
+                radius: Estilo.global.radius.sm
+                color: btnStatusPagamento.pago ? (parent.down ? Estilo.action.confirm.pressed : (parent.hovered ? Estilo.action.confirm.hover : Estilo.action.confirm.base)) : (parent.down ? Estilo.action.danger.pressed : (parent.hovered ? Estilo.action.danger.hover : Estilo.action.danger.base))
                 // Anel de foco: só aparece navegando por teclado — sem
                 // isso, Tab chegava ao botão sem nenhum sinal visual de
                 // onde o foco estava.
-                border.color: Estilo.cores.texto
-                border.width: parent.activeFocus ? 3 : 0
+                border.color: Estilo.global.text
+                border.width: parent.activeFocus ? Estilo.global.borderWidth.focus : 0
             }
         }
     }

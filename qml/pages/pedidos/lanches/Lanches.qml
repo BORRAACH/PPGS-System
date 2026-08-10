@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Layouts
 import estilo 1.0
 import "../../../components"
 import "../../../components/Texto.js" as Texto
@@ -31,7 +32,7 @@ Page {
         {
             "nome": "Pão de Hambúrguer",
             "icone": "fa6s.burger",
-            "cor": "#e67e22",
+            "cor": Estilo.bread.hamburguer,
             // Pão padrão do lanche: não aparece no nome do pedido.
             "resumo": "",
             "chave": "valorHamburguer"
@@ -39,14 +40,14 @@ Page {
         {
             "nome": "Pão Francês",
             "icone": "fa6s.bread-slice",
-            "cor": "#8e44ad",
+            "cor": Estilo.bread.frances,
             "resumo": "frances",
             "chave": "valorFrances"
         },
         {
             "nome": "Pão Baby",
             "icone": "fa6s.bread-slice",
-            "cor": "#16a085",
+            "cor": Estilo.bread.baby,
             "resumo": "baby",
             "chave": "valorBaby"
         }
@@ -118,7 +119,7 @@ Page {
             if (tiposPao[i].nome === nomePao)
                 return tiposPao[i].cor;
         }
-        return Estilo.cores.textoSecundario;
+        return Estilo.global.textSecondary;
     }
 
     // Resumo do tipo de pão para anexar ao nome do pedido (ex: "frances",
@@ -288,18 +289,18 @@ Page {
         modal: true
         focus: true
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
-        padding: 25
+        padding: Estilo.global.padding.popup
         parent: Overlay.overlay
         anchors.centerIn: parent
 
         Overlay.modal: Rectangle {
-            color: "#99000000"
+            color: Estilo.global.overlay
         }
 
         background: Rectangle {
-            radius: Estilo.rounding.popup
-            color: Estilo.cores.fundoPagina
-            border.color: Estilo.cores.bordaCard
+            radius: Estilo.global.radius.xl
+            color: Estilo.global.background
+            border.color: Estilo.global.borderCard
         }
 
         onClosed: {
@@ -311,9 +312,9 @@ Page {
 
             Text {
                 text: paoPendente ? ("Qual pão para \"" + paoPendente.nome + "\"?") : ""
-                font.pixelSize: 18
+                font.pixelSize: Estilo.global.fontSize.xxl
                 font.bold: true
-                color: Estilo.cores.texto
+                color: Estilo.global.text
                 wrapMode: Text.WordWrap
                 width: 300
                 horizontalAlignment: Text.AlignHCenter
@@ -321,7 +322,7 @@ Page {
             }
 
             Column {
-                spacing: 10
+                spacing: Estilo.global.spacing.md
                 width: 300
                 anchors.horizontalCenter: parent.horizontalCenter
 
@@ -344,7 +345,7 @@ Page {
                             Icone {
                                 id: iconePao
                                 nome: modelData.icone
-                                cor: "#ffffff"
+                                cor: Estilo.global.textOnAccent
                                 tamanho: 15
                                 anchors.left: parent.left
                                 anchors.verticalCenter: parent.verticalCenter
@@ -354,9 +355,9 @@ Page {
                                 id: textoPrecoPao
 
                                 text: paoPendente ? ("R$ " + parseValor(paoPendente[modelData.chave]).toFixed(2).replace(".", ",")) : ""
-                                font.pixelSize: 15
+                                font.pixelSize: Estilo.global.fontSize.xl
                                 font.bold: true
-                                color: "#ffffff"
+                                color: Estilo.global.textOnAccent
                                 anchors.right: parent.right
                                 anchors.verticalCenter: parent.verticalCenter
                             }
@@ -366,9 +367,9 @@ Page {
                             // preço quando o nome do pão for mais longo.
                             Text {
                                 text: modelData.nome
-                                font.pixelSize: 15
+                                font.pixelSize: Estilo.global.fontSize.xl
                                 font.bold: true
-                                color: "#ffffff"
+                                color: Estilo.global.textOnAccent
                                 anchors.left: iconePao.right
                                 anchors.leftMargin: 8
                                 anchors.right: textoPrecoPao.left
@@ -379,12 +380,12 @@ Page {
                         }
 
                         background: Rectangle {
-                            radius: Estilo.rounding.grande
+                            radius: Estilo.global.radius.md
                             color: parent.down ? Qt.darker(modelData.cor, 1.2) : (parent.hovered ? Qt.lighter(modelData.cor, 1.1) : modelData.cor)
 
                             Behavior on color {
                                 ColorAnimation {
-                                    duration: 100
+                                    duration: Estilo.global.motion.instant
                                 }
                             }
                         }
@@ -396,7 +397,7 @@ Page {
                 id: btnCancelarPao
 
                 text: "Cancelar"
-                padding: 10
+                padding: Estilo.global.padding.md
                 width: 300
                 anchors.horizontalCenter: parent.horizontalCenter
                 onClicked: popupPao.close()
@@ -404,14 +405,14 @@ Page {
                 contentItem: Text {
                     text: btnCancelarPao.text
                     font.bold: true
-                    color: "#ffffff"
+                    color: Estilo.global.textOnAccent
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
                 }
 
                 background: Rectangle {
-                    radius: Estilo.rounding.padrao
-                    color: parent.down ? Estilo.cores.textoSecundario : (parent.hovered ? "#95a5a6" : Estilo.cores.textoSecundario)
+                    radius: Estilo.global.radius.sm
+                    color: parent.down ? Estilo.action.neutral.pressed : (parent.hovered ? Estilo.action.neutral.hover : Estilo.action.neutral.base)
                 }
             }
         }
@@ -427,496 +428,540 @@ Page {
     }
 
     background: Rectangle {
-        color: Estilo.cores.fundoPagina
-        radius: Estilo.rounding.popup
+        color: Estilo.global.background
+        radius: Estilo.global.radius.xl
     }
 
     // Layout Principal
-    Row {
+    // ===== MEDIDAS DO LAYOUT =====
+    // Escolher itens (esquerda) e conferir o pedido (direita) eram 52% e 43%
+    // da largura, sempre — o que em tela estreita virava duas colunas
+    // apertadas demais para as duas coisas. Abaixo do ponto de virada elas
+    // passam a ocupar a largura inteira, uma embaixo da outra, com a rolagem
+    // do Flickable dando conta do resto. Mesmo padrão de Pizzas.qml.
+    readonly property real larguraUtil: width - Estilo.global.padding.xl * 2
+    readonly property real alturaUtil: height - Estilo.global.padding.xl * 2
+    readonly property bool empilhado: larguraUtil < 760
+    readonly property int larguraColunaEsquerda: empilhado ? larguraUtil : Math.round(larguraUtil * 0.545)
+    readonly property int larguraColunaDireita: empilhado ? larguraUtil : larguraUtil - larguraColunaEsquerda - Estilo.global.spacing.xxl
+    // Soma dos blocos de altura fixa da coluna direita mais o respiro entre
+    // eles; o que sobra vai para a lista do pedido — e é isso que a mantém
+    // com altura positiva mesmo numa janela baixa, onde a subtração crua
+    // ficava negativa e o painel sumia.
+    readonly property int alturaBlocosDireita: 210 + 65 + 42 + 46 + Estilo.global.spacing.lg * 4
+    readonly property int alturaColunaDireita: empilhado ? alturaBlocosDireita + 180 : Math.max(alturaBlocosDireita + 120, alturaUtil)
+    readonly property int alturaColunaEsquerda: empilhado ? Math.max(320, Math.round(alturaUtil * 0.7)) : alturaUtil
+
+    // Layout Principal
+    // Rola quando as duas colunas passam a ficar empilhadas (e, mesmo lado a
+    // lado, quando a janela é baixa demais para a coluna direita inteira).
+    Flickable {
         anchors.fill: parent
-        anchors.margins: 20
-        spacing: 20
+        anchors.margins: Estilo.global.padding.xl
+        clip: true
+        contentWidth: width
+        contentHeight: Math.max(height, gradePrincipal.implicitHeight)
+        boundsBehavior: Flickable.StopAtBounds
 
-        // ================= COLUNA DA ESQUERDA (Lista e Pesquisa) =================
-        Column {
-            width: parent.width * 0.52
-            height: parent.height
-            spacing: 12
+        ScrollBar.vertical: ScrollBar {
+            policy: ScrollBar.AsNeeded
+        }
 
-            Row {
-                spacing: 8
-                Icone { nome: "fa6s.burger"; cor: "#e67e22"; tamanho: Estilo.fonte.titulo; anchors.verticalCenter: parent.verticalCenter }
+        GridLayout {
+            id: gradePrincipal
+
+            width: parent.width
+            columns: telaLanches.empilhado ? 1 : 2
+            columnSpacing: Estilo.global.spacing.xxl
+            rowSpacing: Estilo.global.spacing.xxl
+
+            // ================= COLUNA DA ESQUERDA (Lista e Pesquisa) =================
+            Column {
+                Layout.preferredWidth: telaLanches.larguraColunaEsquerda
+                Layout.preferredHeight: telaLanches.alturaColunaEsquerda
+                Layout.alignment: Qt.AlignTop
+                spacing: Estilo.global.spacing.lg
+
+                Row {
+                    spacing: Estilo.global.spacing.sm
+                    Icone { nome: "fa6s.burger"; cor: Estilo.category.lanche.base; tamanho: Estilo.global.fontSize.title; anchors.verticalCenter: parent.verticalCenter }
+                    Text {
+                        text: "Escolha o(s) Lanche(s)"
+                        font.pixelSize: Estilo.global.fontSize.title
+                        font.family: Estilo.global.fontFamily.title
+                        color: Estilo.category.lanche.base
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
+                }
+
                 Text {
-                    text: "Escolha o(s) Lanche(s)"
-                    font.pixelSize: Estilo.fonte.titulo
-                    font.bold: true
-                    color: "#e67e22"
-                    anchors.verticalCenter: parent.verticalCenter
+                    text: selecionados.length === 0 ? "Nenhum lanche selecionado" : selecionados.length + (selecionados.length === 1 ? " lanche selecionado" : " lanches selecionados")
+                    font.pixelSize: Estilo.global.fontSize.lg
+                    color: selecionados.length > 0 ? Estilo.category.lanche.pressed : Estilo.global.textSecondary
+                    font.bold: selecionados.length > 0
                 }
-            }
 
-            Text {
-                text: selecionados.length === 0 ? "Nenhum lanche selecionado" : selecionados.length + (selecionados.length === 1 ? " lanche selecionado" : " lanches selecionados")
-                font.pixelSize: Estilo.fonte.padrao
-                color: selecionados.length > 0 ? "#d35400" : Estilo.cores.textoSecundario
-                font.bold: selecionados.length > 0
-            }
+                // BARRA DE PESQUISA
+                Search {
+                    id: campoBusca
 
-            // BARRA DE PESQUISA
-            Search {
-                id: campoBusca
-
-                width: parent.width
-                corDestaque: "#e67e22"
-                placeholderText: "Pesquisar lanche (ex: bacon, salada)..."
-                onTextChanged: {
-                    filtrarLanches(text);
-                }
-                // Enter com um só resultado na busca já escolhe esse lanche
-                // (abre o popup de pão, como um clique) e limpa a busca.
-                onAccepted: {
-                    if (modeloFiltrado.count === 1) {
-                        var item = modeloFiltrado.get(0);
-                        paoPendente = {
-                            "nome": item.nome,
-                            "valorHamburguer": item.valorHamburguer,
-                            "valorFrances": item.valorFrances,
-                            "valorBaby": item.valorBaby
-                        };
-                        popupPao.open();
-                        campoBusca.text = "";
+                    width: parent.width
+                    corDestaque: Estilo.category.lanche.base
+                    placeholderText: "Pesquisar lanche (ex: bacon, salada)..."
+                    onTextChanged: {
+                        filtrarLanches(text);
+                    }
+                    // Enter com um só resultado na busca já escolhe esse lanche
+                    // (abre o popup de pão, como um clique) e limpa a busca.
+                    onAccepted: {
+                        if (modeloFiltrado.count === 1) {
+                            var item = modeloFiltrado.get(0);
+                            paoPendente = {
+                                "nome": item.nome,
+                                "valorHamburguer": item.valorHamburguer,
+                                "valorFrances": item.valorFrances,
+                                "valorBaby": item.valorBaby
+                            };
+                            popupPao.open();
+                            campoBusca.text = "";
+                        }
                     }
                 }
-            }
 
-            ListView {
-                id: listaLanchesView
+                ListView {
+                    id: listaLanchesView
 
-                width: parent.width
-                height: parent.height - 155
-                model: modeloFiltrado
-                spacing: 8
-                clip: true
+                    width: parent.width
+                    // O desconto é o que cabeçalho/busca/filtros ocupam acima
+                    // dela; o piso evita que a lista suma numa janela baixa.
+                    height: Math.max(160, parent.height - 155)
+                    model: modeloFiltrado
+                    spacing: Estilo.global.spacing.sm
+                    clip: true
 
-                ScrollBar.vertical: ScrollBar {
-                    policy: ScrollBar.AlwaysOn
-                    active: true
-                }
-
-                // Clicar num lanche sempre adiciona mais uma unidade (após
-                // escolher o pão) — não faz mais toggle de seleção, o que
-                // permite pedir o mesmo lanche várias vezes seguidas. A
-                // remoção acontece na pré-comanda (à direita), unidade por
-                // unidade.
-                delegate: Button {
-                    id: btnItem
-
-                    property int quantidade: quantidadeDe(model.nome)
-
-                    width: listaLanchesView.width - (listaLanchesView.ScrollBar.vertical.visible ? listaLanchesView.ScrollBar.vertical.width : 0)
-                    padding: 10
-                    onClicked: {
-                        paoPendente = {
-                            "nome": model.nome,
-                            "valorHamburguer": model.valorHamburguer,
-                            "valorFrances": model.valorFrances,
-                            "valorBaby": model.valorBaby
-                        };
-                        popupPao.open();
+                    ScrollBar.vertical: ScrollBar {
+                        policy: ScrollBar.AlwaysOn
+                        active: true
                     }
 
-                    // Mesmo estilo (Row com spacing 10) da lista de sabores em
-                    // Pizzas.qml — sem preço aqui, já que cada pão tem seu
-                    // próprio valor, só mostrado depois de escolhido (na
-                    // pré-comanda, à direita).
-                    contentItem: Row {
-                        spacing: 10
+                    // Clicar num lanche sempre adiciona mais uma unidade (após
+                    // escolher o pão) — não faz mais toggle de seleção, o que
+                    // permite pedir o mesmo lanche várias vezes seguidas. A
+                    // remoção acontece na pré-comanda (à direita), unidade por
+                    // unidade.
+                    delegate: Button {
+                        id: btnItem
 
-                        Rectangle {
-                            width: 20
-                            height: 20
-                            radius: btnItem.quantidade > 0 ? 10 : 4
-                            border.color: btnItem.quantidade > 0 ? "#e67e22" : "#bdc3c7"
-                            border.width: 2
-                            color: btnItem.quantidade > 0 ? "#e67e22" : "transparent"
-                            anchors.verticalCenter: parent.verticalCenter
+                        property int quantidade: quantidadeDe(model.nome)
+
+                        width: listaLanchesView.width - (listaLanchesView.ScrollBar.vertical.visible ? listaLanchesView.ScrollBar.vertical.width : 0)
+                        padding: Estilo.global.padding.md
+                        onClicked: {
+                            paoPendente = {
+                                "nome": model.nome,
+                                "valorHamburguer": model.valorHamburguer,
+                                "valorFrances": model.valorFrances,
+                                "valorBaby": model.valorBaby
+                            };
+                            popupPao.open();
+                        }
+
+                        // Mesmo estilo (Row com spacing 10) da lista de sabores em
+                        // Pizzas.qml — sem preço aqui, já que cada pão tem seu
+                        // próprio valor, só mostrado depois de escolhido (na
+                        // pré-comanda, à direita).
+                        contentItem: Row {
+                            spacing: Estilo.global.spacing.md
+
+                            Rectangle {
+                                width: 20
+                                height: 20
+                                radius: btnItem.quantidade > 0 ? 10 : 4
+                                border.color: btnItem.quantidade > 0 ? Estilo.category.lanche.base : Estilo.global.textDisabled
+                                border.width: Estilo.global.borderWidth.thick
+                                color: btnItem.quantidade > 0 ? Estilo.category.lanche.base : "transparent"
+                                anchors.verticalCenter: parent.verticalCenter
+
+                                Text {
+                                    text: btnItem.quantidade
+                                    color: Estilo.global.textOnAccent
+                                    font.bold: true
+                                    font.pixelSize: Estilo.global.fontSize.xs
+                                    anchors.centerIn: parent
+                                    visible: btnItem.quantidade > 0
+                                }
+                            }
 
                             Text {
-                                text: btnItem.quantidade
-                                color: "white"
+                                text: model.nome
+                                font.pixelSize: Estilo.global.fontSize.lg
                                 font.bold: true
-                                font.pixelSize: 11
-                                anchors.centerIn: parent
-                                visible: btnItem.quantidade > 0
+                                color: Estilo.global.text
+                                width: parent.width - 30
+                                elide: Text.ElideRight
+                                anchors.verticalCenter: parent.verticalCenter
                             }
                         }
 
+                        background: Rectangle {
+                            radius: Estilo.global.radius.md
+                            color: btnItem.quantidade > 0 ? Estilo.category.lanche.soft : (btnItem.down ? Estilo.global.surfacePressed : (btnItem.hovered ? Estilo.global.surfaceHover : Estilo.global.surface))
+                            border.color: btnItem.quantidade > 0 ? Estilo.category.lanche.base : Estilo.global.border
+                            border.width: btnItem.quantidade > 0 ? 2 : 1
+                        }
+                    }
+                }
+            }
+
+            // ================= COLUNA DA DIREITA (Visualização, Legenda e Total) =================
+            Column {
+                Layout.preferredWidth: telaLanches.larguraColunaDireita
+                Layout.preferredHeight: telaLanches.alturaColunaDireita
+                Layout.alignment: Qt.AlignTop
+                spacing: Estilo.global.spacing.lg
+
+                // 1. Painel Visual
+                Rectangle {
+                    width: parent.width
+                    height: 210
+                    color: Estilo.global.surface
+                    radius: Estilo.global.radius.lg
+                    border.color: Estilo.global.borderCard
+
+                    Column {
+                        anchors.centerIn: parent
+                        spacing: Estilo.global.spacing.md
+
+                        Icone {
+                            nome: "fa6s.burger"
+                            cor: Estilo.category.lanche.base
+                            tamanho: 90
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            opacity: selecionados.length > 0 ? 1 : Estilo.global.opacity.muted
+                        }
+
                         Text {
-                            text: model.nome
-                            font.pixelSize: Estilo.fonte.padrao
+                            text: selecionados.length === 0 ? "Nenhum lanche selecionado" : (selecionados.length === 1 ? selecionados[0].nome : selecionados.length + " lanches selecionados")
+                            font.pixelSize: Estilo.global.fontSize.lg
                             font.bold: true
-                            color: Estilo.cores.texto
-                            width: parent.width - 30
-                            elide: Text.ElideRight
+                            color: Estilo.global.text
+                            anchors.horizontalCenter: parent.horizontalCenter
+                        }
+                    }
+                }
+
+                // 2. Valor Total
+                Rectangle {
+                    width: parent.width
+                    height: 65
+                    color: Estilo.global.text
+                    radius: Estilo.global.radius.lg
+
+                    Column {
+                        anchors.centerIn: parent
+                        spacing: 2
+
+                        Text {
+                            text: "VALOR TOTAL"
+                            color: Estilo.global.textDisabled
+                            font.pixelSize: Estilo.global.fontSize.xs
+                            font.bold: true
+                            anchors.horizontalCenter: parent.horizontalCenter
+                        }
+
+                        Text {
+                            text: "R$ " + valorAtual.toFixed(2).replace(".", ",")
+                            color: Estilo.action.confirm.hover
+                            font.pixelSize: Estilo.global.fontSize.xxl
+                            font.bold: true
+                            anchors.horizontalCenter: parent.horizontalCenter
+                        }
+                    }
+                }
+
+                // 3. Adicionais — opera sobre "selecionados", já que Lanches
+                // não tem uma etapa separada de "montar e fechar" como Pizzas
+                // (cada lanche entra em "selecionados" assim que o pão é
+                // escolhido em popupPao).
+                Button {
+                    id: btnAdicionaisLanche
+
+                    width: parent.width
+                    height: 42
+                    enabled: selecionados.length > 0
+                    onClicked: popupAdicionaisLanches.open()
+
+                    contentItem: Row {
+                        spacing: Estilo.global.spacing.xs
+                        anchors.centerIn: parent
+                        opacity: btnAdicionaisLanche.enabled ? 1 : Estilo.global.opacity.subtle
+
+                        Icone {
+                            nome: "fa6s.plus"
+                            cor: Estilo.global.textOnAccent
+                            tamanho: 14
+                            anchors.verticalCenter: parent.verticalCenter
+                        }
+                        Text {
+                            text: "Adicionais"
+                            font.pixelSize: Estilo.global.fontSize.lg
+                            font.bold: true
+                            color: Estilo.global.textOnAccent
                             anchors.verticalCenter: parent.verticalCenter
                         }
                     }
 
                     background: Rectangle {
-                        radius: Estilo.rounding.grande
-                        color: btnItem.quantidade > 0 ? "#fdebd0" : (btnItem.down ? Estilo.cores.bordaCard : (btnItem.hovered ? "#f1f1f1" : "#ffffff"))
-                        border.color: btnItem.quantidade > 0 ? "#e67e22" : Estilo.cores.borda
-                        border.width: btnItem.quantidade > 0 ? 2 : 1
-                    }
-                }
-            }
-        }
-
-        // ================= COLUNA DA DIREITA (Visualização, Legenda e Total) =================
-        Column {
-            width: parent.width * 0.43
-            height: parent.height
-            spacing: 12
-            anchors.verticalCenter: parent.verticalCenter
-
-            // 1. Painel Visual
-            Rectangle {
-                width: parent.width
-                height: 210
-                color: "#ffffff"
-                radius: Estilo.rounding.painel
-                border.color: Estilo.cores.bordaCard
-
-                Column {
-                    anchors.centerIn: parent
-                    spacing: 10
-
-                    Icone {
-                        nome: "fa6s.burger"
-                        cor: "#e67e22"
-                        tamanho: 90
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        opacity: selecionados.length > 0 ? 1 : 0.35
-                    }
-
-                    Text {
-                        text: selecionados.length === 0 ? "Nenhum lanche selecionado" : (selecionados.length === 1 ? selecionados[0].nome : selecionados.length + " lanches selecionados")
-                        font.pixelSize: Estilo.fonte.padrao
-                        font.bold: true
-                        color: Estilo.cores.texto
-                        anchors.horizontalCenter: parent.horizontalCenter
-                    }
-                }
-            }
-
-            // 2. Valor Total
-            Rectangle {
-                width: parent.width
-                height: 65
-                color: Estilo.cores.texto
-                radius: Estilo.rounding.medio
-
-                Column {
-                    anchors.centerIn: parent
-                    spacing: 2
-
-                    Text {
-                        text: "VALOR TOTAL"
-                        color: "#bdc3c7"
-                        font.pixelSize: 10
-                        font.bold: true
-                        anchors.horizontalCenter: parent
-                    }
-
-                    Text {
-                        text: "R$ " + valorAtual.toFixed(2).replace(".", ",")
-                        color: Estilo.confirmar.hover
-                        font.pixelSize: 20
-                        font.bold: true
-                        anchors.horizontalCenter: parent
-                    }
-                }
-            }
-
-            // 3. Adicionais — opera sobre "selecionados", já que Lanches
-            // não tem uma etapa separada de "montar e fechar" como Pizzas
-            // (cada lanche entra em "selecionados" assim que o pão é
-            // escolhido em popupPao).
-            Button {
-                id: btnAdicionaisLanche
-
-                width: parent.width
-                height: 42
-                enabled: selecionados.length > 0
-                onClicked: popupAdicionaisLanches.open()
-
-                contentItem: Row {
-                    spacing: 6
-                    anchors.centerIn: parent
-                    opacity: btnAdicionaisLanche.enabled ? 1 : 0.6
-
-                    Icone {
-                        nome: "fa6s.plus"
-                        cor: "#ffffff"
-                        tamanho: 14
-                        anchors.verticalCenter: parent.verticalCenter
-                    }
-                    Text {
-                        text: "Adicionais"
-                        font.pixelSize: 14
-                        font.bold: true
-                        color: "#ffffff"
-                        anchors.verticalCenter: parent.verticalCenter
+                        radius: Estilo.global.radius.md
+                        color: !btnAdicionaisLanche.enabled ? Estilo.global.surfaceDisabled : (btnAdicionaisLanche.down ? Estilo.category.lanche.pressed : (btnAdicionaisLanche.hovered ? Estilo.category.lanche.hover : Estilo.category.lanche.base))
+                        border.color: !btnAdicionaisLanche.enabled ? Estilo.global.surfaceDisabled : Estilo.category.lanche.pressed
+                        border.width: Estilo.global.borderWidth.hairline
                     }
                 }
 
-                background: Rectangle {
-                    radius: Estilo.rounding.grande
-                    color: !btnAdicionaisLanche.enabled ? "#bdc3c7" : (btnAdicionaisLanche.down ? "#d35400" : (btnAdicionaisLanche.hovered ? "#f39c12" : "#e67e22"))
-                    border.color: !btnAdicionaisLanche.enabled ? "#bdc3c7" : "#d35400"
-                    border.width: 1
-                }
-            }
+                // 4. Pré-comanda: prévia do pedido que será enviado para
+                // Balcao.qml/Entrega.qml, no mesmo formato de cartão usado pela
+                // lista de comandas em Consulta.qml (badge colorido + título +
+                // valor) — aqui o badge mostra o pão escolhido para cada lanche.
+                Rectangle {
+                    width: parent.width
+                    // O que sobra da coluna depois dos blocos de altura fixa
+                    // (ver telaLanches.alturaBlocosDireita).
+                    height: Math.max(120, parent.height - telaLanches.alturaBlocosDireita)
+                    color: Estilo.global.surface
+                    radius: Estilo.global.radius.lg
+                    border.color: Estilo.global.borderCard
+                    clip: true
 
-            // 4. Pré-comanda: prévia do pedido que será enviado para
-            // Balcao.qml/Entrega.qml, no mesmo formato de cartão usado pela
-            // lista de comandas em Consulta.qml (badge colorido + título +
-            // valor) — aqui o badge mostra o pão escolhido para cada lanche.
-            Rectangle {
-                width: parent.width
-                height: parent.height - 210 - 65 - 42 - 46 - (12 * 4)
-                color: "#ffffff"
-                radius: Estilo.rounding.medio
-                border.color: Estilo.cores.bordaCard
-                clip: true
+                    Column {
+                        anchors.fill: parent
+                        anchors.margins: 10
+                        spacing: Estilo.global.spacing.xs
 
-                Column {
-                    anchors.fill: parent
-                    anchors.margins: 10
-                    spacing: 6
-
-                    Text {
-                        text: "PRÉ-COMANDA"
-                        font.pixelSize: 11
-                        font.bold: true
-                        color: Estilo.cores.textoSecundario
-                    }
-
-                    Text {
-                        text: "Nenhum lanche selecionado"
-                        font.pixelSize: 13
-                        color: "#bdc3c7"
-                        font.italic: true
-                        visible: selecionados.length === 0
-                    }
-
-                    Flickable {
-                        width: parent.width
-                        height: parent.height - 24
-                        clip: true
-                        contentHeight: colunaPreComanda.height
-                        visible: selecionados.length > 0
-                        boundsBehavior: Flickable.StopAtBounds
-
-                        ScrollBar.vertical: ScrollBar {
-                            policy: ScrollBar.AsNeeded
+                        Text {
+                            text: "PRÉ-COMANDA"
+                            font.pixelSize: Estilo.global.fontSize.xs
+                            font.bold: true
+                            color: Estilo.global.textSecondary
                         }
 
-                        Column {
-                            id: colunaPreComanda
+                        Text {
+                            text: "Nenhum lanche selecionado"
+                            font.pixelSize: Estilo.global.fontSize.md
+                            color: Estilo.global.textDisabled
+                            font.italic: true
+                            visible: selecionados.length === 0
+                        }
 
+                        Flickable {
                             width: parent.width
-                            spacing: 6
+                            height: parent.height - 24
+                            clip: true
+                            contentHeight: colunaPreComanda.height
+                            visible: selecionados.length > 0
+                            boundsBehavior: Flickable.StopAtBounds
 
-                            Repeater {
-                                model: selecionados
+                            ScrollBar.vertical: ScrollBar {
+                                policy: ScrollBar.AsNeeded
+                            }
 
-                                // Badge do pão e nome ficam à esquerda; valor e botão de
-                                // remover são ancorados na borda direita do cartão (posição
-                                // fixa) em vez de entrarem numa Row somada ao nome — assim
-                                // eles nunca "vazam" para fora do retângulo, e o nome ocupa
-                                // exatamente o espaço que sobra entre o badge e o valor.
-                                Rectangle {
-                                    id: itemPreComanda
+                            Column {
+                                id: colunaPreComanda
 
-                                    width: colunaPreComanda.width
-                                    height: 40
-                                    radius: Estilo.rounding.grande
-                                    color: Estilo.cores.fundoPagina
-                                    border.color: Estilo.cores.bordaCard
-                                    clip: true
+                                width: parent.width
+                                spacing: Estilo.global.spacing.xs
 
+                                Repeater {
+                                    model: selecionados
+
+                                    // Badge do pão e nome ficam à esquerda; valor e botão de
+                                    // remover são ancorados na borda direita do cartão (posição
+                                    // fixa) em vez de entrarem numa Row somada ao nome — assim
+                                    // eles nunca "vazam" para fora do retângulo, e o nome ocupa
+                                    // exatamente o espaço que sobra entre o badge e o valor.
                                     Rectangle {
-                                        id: badgePaoPreComanda
+                                        id: itemPreComanda
 
-                                        radius: 6
-                                        width: textoBadgePao.implicitWidth + 14
-                                        height: textoBadgePao.implicitHeight + 6
-                                        color: corPao(modelData.paoTipo)
-                                        anchors.left: parent.left
-                                        anchors.leftMargin: 8
-                                        anchors.verticalCenter: parent.verticalCenter
+                                        width: colunaPreComanda.width
+                                        height: 40
+                                        radius: Estilo.global.radius.md
+                                        color: Estilo.global.background
+                                        border.color: Estilo.global.borderCard
+                                        clip: true
+
+                                        Rectangle {
+                                            id: badgePaoPreComanda
+
+                                            radius: Estilo.global.radius.sm
+                                            width: textoBadgePao.implicitWidth + 14
+                                            height: textoBadgePao.implicitHeight + 6
+                                            color: corPao(modelData.paoTipo)
+                                            anchors.left: parent.left
+                                            anchors.leftMargin: 8
+                                            anchors.verticalCenter: parent.verticalCenter
+
+                                            Text {
+                                                id: textoBadgePao
+
+                                                text: modelData.paoTipo
+                                                color: Estilo.global.textOnAccent
+                                                font.bold: true
+                                                font.pixelSize: Estilo.global.fontSize.xs
+                                                anchors.centerIn: parent
+                                            }
+                                        }
+
+                                        // Remove só esta unidade (por índice, já que duas
+                                        // unidades do mesmo lanche podem ter pães diferentes).
+                                        Button {
+                                            id: btnRemoverPreComanda
+
+                                            width: 22
+                                            height: 22
+                                            padding: 0
+                                            anchors.right: parent.right
+                                            anchors.rightMargin: 8
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            onClicked: removerIndice(index)
+
+                                            contentItem: Text {
+                                                text: "×"
+                                                color: Estilo.global.textOnAccent
+                                                font.bold: true
+                                                horizontalAlignment: Text.AlignHCenter
+                                                verticalAlignment: Text.AlignVCenter
+                                            }
+
+                                            background: Rectangle {
+                                                radius: Estilo.global.radius.sm
+                                                color: parent.down ? Estilo.action.danger.pressed : (parent.hovered ? Estilo.action.danger.hover : Estilo.action.danger.base)
+                                            }
+                                        }
 
                                         Text {
-                                            id: textoBadgePao
+                                            id: textoValorPreComanda
 
-                                            text: modelData.paoTipo
-                                            color: "#ffffff"
+                                            text: "R$ " + valorFinalLanche(modelData).toFixed(2).replace(".", ",")
+                                            font.pixelSize: Estilo.global.fontSize.sm
+                                            color: Estilo.global.textSecondary
+                                            anchors.right: btnRemoverPreComanda.left
+                                            anchors.rightMargin: 8
+                                            anchors.verticalCenter: parent.verticalCenter
+                                        }
+
+                                        Text {
+                                            text: modelData.nome + resumoAdicionaisLanche(modelData)
+                                            font.pixelSize: Estilo.global.fontSize.md
                                             font.bold: true
-                                            font.pixelSize: 10
-                                            anchors.centerIn: parent
+                                            color: Estilo.global.text
+                                            anchors.left: badgePaoPreComanda.right
+                                            anchors.leftMargin: 8
+                                            anchors.right: textoValorPreComanda.left
+                                            anchors.rightMargin: 8
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            elide: Text.ElideRight
                                         }
-                                    }
-
-                                    // Remove só esta unidade (por índice, já que duas
-                                    // unidades do mesmo lanche podem ter pães diferentes).
-                                    Button {
-                                        id: btnRemoverPreComanda
-
-                                        width: 22
-                                        height: 22
-                                        padding: 0
-                                        anchors.right: parent.right
-                                        anchors.rightMargin: 8
-                                        anchors.verticalCenter: parent.verticalCenter
-                                        onClicked: removerIndice(index)
-
-                                        contentItem: Text {
-                                            text: "×"
-                                            color: "#ffffff"
-                                            font.bold: true
-                                            horizontalAlignment: Text.AlignHCenter
-                                            verticalAlignment: Text.AlignVCenter
-                                        }
-
-                                        background: Rectangle {
-                                            radius: 6
-                                            color: parent.down ? Estilo.cancelar.pressionado : (parent.hovered ? Estilo.cancelar.hover : Estilo.cancelar.normal)
-                                        }
-                                    }
-
-                                    Text {
-                                        id: textoValorPreComanda
-
-                                        text: "R$ " + valorFinalLanche(modelData).toFixed(2).replace(".", ",")
-                                        font.pixelSize: 12
-                                        color: Estilo.cores.textoSecundario
-                                        anchors.right: btnRemoverPreComanda.left
-                                        anchors.rightMargin: 8
-                                        anchors.verticalCenter: parent.verticalCenter
-                                    }
-
-                                    Text {
-                                        text: modelData.nome + resumoAdicionaisLanche(modelData)
-                                        font.pixelSize: 13
-                                        font.bold: true
-                                        color: Estilo.cores.texto
-                                        anchors.left: badgePaoPreComanda.right
-                                        anchors.leftMargin: 8
-                                        anchors.right: textoValorPreComanda.left
-                                        anchors.rightMargin: 8
-                                        anchors.verticalCenter: parent.verticalCenter
-                                        elide: Text.ElideRight
                                     }
                                 }
                             }
                         }
                     }
                 }
-            }
 
-            // 5. Botões de Ação
-            Row {
-                width: parent.width
-                spacing: 12
+                // 5. Botões de Ação
+                Row {
+                    width: parent.width
+                    spacing: Estilo.global.spacing.lg
 
-                // BOTÃO VOLTAR
-                Button {
-                    id: btnVoltar
+                    // BOTÃO VOLTAR
+                    Button {
+                        id: btnVoltar
 
-                    width: (parent.width - parent.spacing) / 2
-                    height: 46
-                    onClicked: pilha.pop()
+                        width: (parent.width - parent.spacing) / 2
+                        height: 46
+                        onClicked: pilha.pop()
 
-                    contentItem: Text {
-                        text: "Voltar"
-                        font.pixelSize: 15
-                        font.bold: true
-                        color: "#ffffff"
-                        horizontalAlignment: Text.AlignHCenter
-                        verticalAlignment: Text.AlignVCenter
+                        contentItem: Text {
+                            text: "Voltar"
+                            font.pixelSize: Estilo.global.fontSize.xl
+                            font.bold: true
+                            color: Estilo.global.textOnAccent
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+
+                        background: Rectangle {
+                            radius: Estilo.global.radius.md
+                            color: btnVoltar.down ? Estilo.action.back.pressed : (btnVoltar.hovered ? Estilo.action.back.hover : Estilo.action.danger.base)
+                            border.color: Estilo.action.back.pressed
+                            border.width: Estilo.global.borderWidth.hairline
+                        }
                     }
 
-                    background: Rectangle {
-                        radius: Estilo.rounding.grande
-                        color: btnVoltar.down ? Estilo.voltar.pressionado : (btnVoltar.hovered ? Estilo.voltar.hover : Estilo.cancelar.normal)
-                        border.color: Estilo.voltar.pressionado
-                        border.width: 1
-                    }
-                }
+                    // BOTÃO CONFIRMAR
+                    Button {
+                        id: btnConfirmar
 
-                // BOTÃO CONFIRMAR
-                Button {
-                    id: btnConfirmar
+                        width: (parent.width - parent.spacing) / 2
+                        height: 46
+                        enabled: selecionados.length > 0
+                        onClicked: {
+                            if (selecionados.length === 0)
+                                return ;
 
-                    width: (parent.width - parent.spacing) / 2
-                    height: 46
-                    enabled: selecionados.length > 0
-                    onClicked: {
-                        if (selecionados.length === 0)
-                            return ;
-
-                        // Envia sempre um array de itens — mesmo com 1 lanche
-                        // selecionado — para que Balcao/Entrega tratem todos
-                        // os casos (1 ou mais lanches) da mesma forma. O pão
-                        // escolhido vai anexado ao nome do pedido (ex:
-                        // "Hambúrguer ( frances )"), não na observação. O pão
-                        // de hambúrguer é o padrão e não aparece no nome.
-                        var itens = selecionados.map(function(item) {
-                            var resumo = resumoPao(item.paoTipo);
-                            // "sabor" usa o nome BASE do lanche (sem o
-                            // sufixo do pão) porque é contra ele que
-                            // comandaTextoService._extras_adicionais casa o
-                            // adicional na hora de imprimir (ver
-                            // dividir_sabores, que trata um sufixo final
-                            // "(...)" como tamanho, não como parte do nome).
-                            var adicionais = (item.adicionais || []).map(function (a) {
+                            // Envia sempre um array de itens — mesmo com 1 lanche
+                            // selecionado — para que Balcao/Entrega tratem todos
+                            // os casos (1 ou mais lanches) da mesma forma. O pão
+                            // escolhido vai anexado ao nome do pedido (ex:
+                            // "Hambúrguer ( frances )"), não na observação. O pão
+                            // de hambúrguer é o padrão e não aparece no nome.
+                            var itens = selecionados.map(function(item) {
+                                var resumo = resumoPao(item.paoTipo);
+                                // "sabor" usa o nome BASE do lanche (sem o
+                                // sufixo do pão) porque é contra ele que
+                                // comandaTextoService._extras_adicionais casa o
+                                // adicional na hora de imprimir (ver
+                                // dividir_sabores, que trata um sufixo final
+                                // "(...)" como tamanho, não como parte do nome).
+                                var adicionais = (item.adicionais || []).map(function (a) {
+                                    return {
+                                        "sabor": item.nome,
+                                        "nome": a.nome,
+                                        "valor": "R$ " + a.valorNum.toFixed(2).replace(".", ",")
+                                    };
+                                });
                                 return {
-                                    "sabor": item.nome,
-                                    "nome": a.nome,
-                                    "valor": "R$ " + a.valorNum.toFixed(2).replace(".", ",")
+                                    "nome": resumo ? (item.nome + " ( " + resumo + " )") : item.nome,
+                                    "valor": "R$ " + valorFinalLanche(item).toFixed(2).replace(".", ","),
+                                    "observacao": "",
+                                    "adicionais": adicionais
                                 };
                             });
-                            return {
-                                "nome": resumo ? (item.nome + " ( " + resumo + " )") : item.nome,
-                                "valor": "R$ " + valorFinalLanche(item).toFixed(2).replace(".", ","),
-                                "observacao": "",
-                                "adicionais": adicionais
-                            };
-                        });
-                        if (typeof onPedidoSelecionado === "function")
-                            onPedidoSelecionado(itens);
-                        pilha.pop(null);
-                    }
+                            if (typeof onPedidoSelecionado === "function")
+                                onPedidoSelecionado(itens);
+                            pilha.pop(null);
+                        }
 
-                    contentItem: Text {
-                        text: "Confirmar"
-                        font.pixelSize: 15
-                        font.bold: true
-                        color: "#ffffff"
-                        horizontalAlignment: Text.AlignHCenter
-                        verticalAlignment: Text.AlignVCenter
-                        opacity: btnConfirmar.enabled ? 1 : 0.6
-                    }
+                        contentItem: Text {
+                            text: "Confirmar"
+                            font.pixelSize: Estilo.global.fontSize.xl
+                            font.bold: true
+                            color: Estilo.global.textOnAccent
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                            opacity: btnConfirmar.enabled ? 1 : Estilo.global.opacity.subtle
+                        }
 
-                    background: Rectangle {
-                        radius: Estilo.rounding.grande
-                        color: !btnConfirmar.enabled ? "#bdc3c7" : (btnConfirmar.down ? "#d35400" : (btnConfirmar.hovered ? "#f39c12" : "#e67e22"))
-                        border.color: !btnConfirmar.enabled ? "#bdc3c7" : "#d35400"
-                        border.width: 1
+                        background: Rectangle {
+                            radius: Estilo.global.radius.md
+                            color: !btnConfirmar.enabled ? Estilo.global.surfaceDisabled : (btnConfirmar.down ? Estilo.category.lanche.pressed : (btnConfirmar.hovered ? Estilo.category.lanche.hover : Estilo.category.lanche.base))
+                            border.color: !btnConfirmar.enabled ? Estilo.global.surfaceDisabled : Estilo.category.lanche.pressed
+                            border.width: Estilo.global.borderWidth.hairline
+                        }
                     }
                 }
             }
         }
+
     }
 }

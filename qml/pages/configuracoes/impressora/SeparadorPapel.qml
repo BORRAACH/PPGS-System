@@ -47,7 +47,7 @@ Column {
             text: raizSeparador.separador === "=" ? raizSeparador.marcador : raizSeparador.traco
             font.family: "monospace"
             font.pixelSize: raizSeparador.tamanhoFonte
-            color: Estilo.cores.texto
+            color: Estilo.printer.ink
         }
     }
 

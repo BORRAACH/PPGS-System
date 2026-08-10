@@ -380,8 +380,8 @@ Page {
     }
 
     background: Rectangle {
-        color: Estilo.cores.fundoPagina
-        radius: Estilo.rounding.popup
+        color: Estilo.global.background
+        radius: Estilo.global.radius.xl
     }
 
     ListModel {
@@ -421,21 +421,21 @@ Page {
     ColumnLayout {
         anchors.fill: parent
         anchors.margins: 20
-        spacing: 15
+        spacing: Estilo.global.spacing.xl
 
         // --- CABEÇALHO ---
         RowLayout {
             Layout.fillWidth: true
-            spacing: 15
+            spacing: Estilo.global.spacing.xl
 
             Row {
-                spacing: 8
-                Icone { nome: "fa6s.magnifying-glass"; cor: "#7c3aed"; tamanho: Estilo.fonte.titulo; anchors.verticalCenter: parent.verticalCenter }
+                spacing: Estilo.global.spacing.sm
+                Icone { nome: "fa6s.magnifying-glass"; cor: Estilo.screen.consulta.accent; tamanho: Estilo.global.fontSize.title; anchors.verticalCenter: parent.verticalCenter }
                 Text {
                     text: "CONSULTA DE COMANDAS"
-                    font.pixelSize: Estilo.fonte.titulo
-                    font.bold: true
-                    color: "#7c3aed"
+                    font.pixelSize: Estilo.global.fontSize.title
+                    font.family: Estilo.global.fontFamily.title
+                    color: Estilo.screen.consulta.accent
                     anchors.verticalCenter: parent.verticalCenter
                 }
             }
@@ -445,8 +445,8 @@ Page {
             }
 
             Row {
-                spacing: 6
-                Icone { nome: "fa6s.globe"; cor: Estilo.cores.textoSecundario; tamanho: Estilo.fonte.padrao; anchors.verticalCenter: parent.verticalCenter }
+                spacing: Estilo.global.spacing.xs
+                Icone { nome: "fa6s.globe"; cor: Estilo.global.textSecondary; tamanho: Estilo.global.fontSize.lg; anchors.verticalCenter: parent.verticalCenter }
                 Text {
                     // O guard existe porque, no encerramento do app, as
                     // context properties são destruídas antes das telas: sem
@@ -455,8 +455,8 @@ Page {
                     // logs/app.log a cada fechamento — ruído bem no arquivo
                     // que se usa pra diagnosticar problema de rede.
                     text: (redeController ? redeController.quantidadeConectados : 0) + " conectado(s)"
-                    font.pixelSize: Estilo.fonte.padrao
-                    color: Estilo.cores.textoSecundario
+                    font.pixelSize: Estilo.global.fontSize.lg
+                    color: Estilo.global.textSecondary
                     anchors.verticalCenter: parent.verticalCenter
                 }
             }
@@ -468,19 +468,19 @@ Page {
                 onClicked: telaConsulta.carregarComandas()
 
                 contentItem: Row {
-                    spacing: 6
-                    Icone { nome: "fa6s.arrows-rotate"; cor: "#ffffff"; tamanho: Estilo.fonte.padrao; anchors.verticalCenter: parent.verticalCenter }
+                    spacing: Estilo.global.spacing.xs
+                    Icone { nome: "fa6s.arrows-rotate"; cor: Estilo.global.textOnAccent; tamanho: Estilo.global.fontSize.lg; anchors.verticalCenter: parent.verticalCenter }
                     Text {
                         text: "Atualizar"
                         font.bold: true
-                        color: "#ffffff"
+                        color: Estilo.global.textOnAccent
                         anchors.verticalCenter: parent.verticalCenter
                     }
                 }
 
                 background: Rectangle {
-                    radius: Estilo.rounding.padrao
-                    color: parent.down ? "#6d28d9" : (parent.hovered ? "#8b5cf6" : "#7c3aed")
+                    radius: Estilo.global.radius.sm
+                    color: parent.down ? Estilo.screen.consulta.pressed : (parent.hovered ? Estilo.screen.consulta.hover : Estilo.screen.consulta.base)
                 }
             }
         }
@@ -499,7 +499,7 @@ Page {
         Button {
             id: btnVoltar
 
-            padding: 10
+            padding: Estilo.global.padding.md
             Layout.alignment: Qt.AlignHCenter
             Layout.preferredWidth: 200
             onClicked: {
@@ -508,22 +508,22 @@ Page {
             }
 
             contentItem: Row {
-                spacing: 6
+                spacing: Estilo.global.spacing.xs
                 anchors.centerIn: parent
-                Icone { nome: "fa6s.arrow-left"; cor: "#ffffff"; tamanho: Estilo.fonte.padrao; anchors.verticalCenter: parent.verticalCenter }
+                Icone { nome: "fa6s.arrow-left"; cor: Estilo.global.textOnAccent; tamanho: Estilo.global.fontSize.lg; anchors.verticalCenter: parent.verticalCenter }
                 Text {
                     text: "Voltar para o Menu"
                     font.bold: true
-                    color: "#ffffff"
+                    color: Estilo.global.textOnAccent
                     anchors.verticalCenter: parent.verticalCenter
                 }
             }
 
             background: Rectangle {
-                radius: Estilo.rounding.padrao
-                color: parent.down ? Estilo.cancelar.pressionado : (parent.hovered ? Estilo.cancelar.hover : Estilo.cancelar.normal)
-                border.color: Estilo.cancelar.pressionado
-                border.width: 1
+                radius: Estilo.global.radius.sm
+                color: parent.down ? Estilo.action.danger.pressed : (parent.hovered ? Estilo.action.danger.hover : Estilo.action.danger.base)
+                border.color: Estilo.action.danger.pressed
+                border.width: Estilo.global.borderWidth.hairline
             }
         }
     }

@@ -44,37 +44,40 @@ Rectangle {
         return n;
     }
 
+    // Largura padrão do painel; quem o usa dentro de um Layout (ver
+    // PopupFecharConta.qml) manda a largura por Layout.preferredWidth, e aí
+    // esta linha sai de cena sozinha.
     width: 280
-    implicitHeight: colunaResumoFechamento.implicitHeight + Estilo.preenchimento.grande * 2
-    radius: Estilo.rounding.painel
-    color: "#ffffff"
-    border.color: Estilo.cores.bordaCard
-    border.width: 1
+    implicitHeight: colunaResumoFechamento.implicitHeight + Estilo.global.padding.xl * 2
+    radius: Estilo.global.radius.lg
+    color: Estilo.global.surface
+    border.color: Estilo.global.borderCard
+    border.width: Estilo.global.borderWidth.hairline
 
     Column {
         id: colunaResumoFechamento
 
-        width: parent.width - Estilo.preenchimento.grande * 2
+        width: parent.width - Estilo.global.padding.xl * 2
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.top: parent.top
-        anchors.topMargin: Estilo.preenchimento.grande
-        spacing: Estilo.espacamento.normal
+        anchors.topMargin: Estilo.global.padding.xl
+        spacing: Estilo.global.spacing.lg
 
         Row {
-            spacing: 8
+            spacing: Estilo.global.spacing.sm
 
             Icone {
                 nome: "fa6s.receipt"
-                cor: "#0d9488"
+                cor: Estilo.screen.salao.accent
                 tamanho: 18
                 anchors.verticalCenter: parent.verticalCenter
             }
 
             Text {
                 text: "RESUMO DO FECHAMENTO"
-                font.pixelSize: 14
+                font.pixelSize: Estilo.global.fontSize.lg
                 font.bold: true
-                color: "#0d9488"
+                color: Estilo.screen.salao.accent
                 anchors.verticalCenter: parent.verticalCenter
                 wrapMode: Text.WordWrap
                 width: colunaResumoFechamento.width - 26
@@ -84,7 +87,7 @@ Rectangle {
         Rectangle {
             width: parent.width
             height: 1
-            color: Estilo.cores.bordaCard
+            color: Estilo.global.borderCard
         }
 
         // --- Itens do pedido da mesa ---
@@ -92,15 +95,15 @@ Rectangle {
             width: parent.width
             visible: root.quantidadeItens === 0
             text: "Nenhum item adicionado ainda."
-            font.pixelSize: 13
+            font.pixelSize: Estilo.global.fontSize.md
             font.italic: true
-            color: Estilo.cores.textoSecundario
+            color: Estilo.global.textSecondary
             wrapMode: Text.WordWrap
         }
 
         Column {
             width: parent.width
-            spacing: 6
+            spacing: Estilo.global.spacing.xs
             visible: root.quantidadeItens > 0
 
             Repeater {
@@ -118,8 +121,8 @@ Rectangle {
                         anchors.right: textoValorItemFechamento.left
                         anchors.rightMargin: 8
                         text: "• " + modelData.pedido
-                        font.pixelSize: 13
-                        color: Estilo.cores.texto
+                        font.pixelSize: Estilo.global.fontSize.md
+                        color: Estilo.global.text
                         elide: Text.ElideRight
                     }
 
@@ -128,8 +131,8 @@ Rectangle {
 
                         anchors.right: parent.right
                         text: modelData.valor || "R$ 0,00"
-                        font.pixelSize: 13
-                        color: Estilo.cores.textoSecundario
+                        font.pixelSize: Estilo.global.fontSize.md
+                        color: Estilo.global.textSecondary
                     }
                 }
             }
@@ -138,20 +141,20 @@ Rectangle {
         Rectangle {
             width: parent.width
             height: 1
-            color: Estilo.cores.bordaCard
+            color: Estilo.global.borderCard
         }
 
         // --- Divisão da conta (uma linha por pessoa) ---
         Text {
             text: "DIVISÃO DA CONTA"
-            font.pixelSize: 12
+            font.pixelSize: Estilo.global.fontSize.sm
             font.bold: true
-            color: Estilo.cores.textoSecundario
+            color: Estilo.global.textSecondary
         }
 
         Column {
             width: parent.width
-            spacing: 10
+            spacing: Estilo.global.spacing.md
 
             Repeater {
                 model: root.divisoes
@@ -172,9 +175,9 @@ Rectangle {
                             anchors.rightMargin: 8
                             anchors.verticalCenter: parent.verticalCenter
                             text: model.nome
-                            font.pixelSize: 13
+                            font.pixelSize: Estilo.global.fontSize.md
                             font.bold: true
-                            color: Estilo.cores.texto
+                            color: Estilo.global.text
                             elide: Text.ElideRight
                         }
 
@@ -185,17 +188,17 @@ Rectangle {
                             anchors.verticalCenter: parent.verticalCenter
                             width: textoStatusResumo.implicitWidth + 16
                             height: textoStatusResumo.implicitHeight + 6
-                            radius: Estilo.rounding.cheio
-                            color: model.status === "PG" ? Estilo.confirmar.normal : Estilo.cancelar.normal
+                            radius: Estilo.global.radius.pill
+                            color: model.status === "PG" ? Estilo.action.confirm.base : Estilo.action.danger.base
 
                             Text {
                                 id: textoStatusResumo
 
                                 anchors.centerIn: parent
                                 text: model.status === "PG" ? "PAGO" : "NÃO PAGO"
-                                font.pixelSize: 10
+                                font.pixelSize: Estilo.global.fontSize.xs
                                 font.bold: true
-                                color: "#ffffff"
+                                color: Estilo.global.textOnAccent
                             }
                         }
                     }
@@ -209,16 +212,16 @@ Rectangle {
 
                             anchors.left: parent.left
                             text: model.formaPagamento
-                            font.pixelSize: 12
-                            color: Estilo.cores.textoSecundario
+                            font.pixelSize: Estilo.global.fontSize.sm
+                            color: Estilo.global.textSecondary
                         }
 
                         Text {
                             anchors.right: parent.right
                             text: model.valor
-                            font.pixelSize: 13
+                            font.pixelSize: Estilo.global.fontSize.md
                             font.bold: true
-                            color: Estilo.cores.texto
+                            color: Estilo.global.text
                         }
                     }
 
@@ -229,9 +232,9 @@ Rectangle {
                         width: parent.width
                         visible: model.formaPagamento === "Dinheiro" && !!model.trocoRecebido
                         text: "Troco a dar: " + root._formatarMoeda(Math.max(recebido - valorPessoa, 0))
-                        font.pixelSize: 11
+                        font.pixelSize: Estilo.global.fontSize.xs
                         font.italic: true
-                        color: Estilo.cores.textoSecundario
+                        color: Estilo.global.textSecondary
                     }
                 }
             }
@@ -240,7 +243,7 @@ Rectangle {
         Rectangle {
             width: parent.width
             height: 1
-            color: Estilo.cores.bordaCard
+            color: Estilo.global.borderCard
         }
 
         // --- Total ---
@@ -254,18 +257,18 @@ Rectangle {
                 anchors.left: parent.left
                 anchors.verticalCenter: parent.verticalCenter
                 text: "TOTAL"
-                font.pixelSize: 16
+                font.pixelSize: Estilo.global.fontSize.xl
                 font.bold: true
-                color: "#0d9488"
+                color: Estilo.screen.salao.accent
             }
 
             Text {
                 anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
                 text: root._formatarMoeda(root.valorTotal)
-                font.pixelSize: 18
+                font.pixelSize: Estilo.global.fontSize.xxl
                 font.bold: true
-                color: "#0d9488"
+                color: Estilo.screen.salao.accent
             }
         }
     }

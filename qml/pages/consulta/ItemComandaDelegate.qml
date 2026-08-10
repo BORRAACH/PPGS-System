@@ -38,13 +38,13 @@ Rectangle {
 
     width: ListView.view.width - (ListView.view.ScrollBar.vertical.visible ? ListView.view.ScrollBar.vertical.width : 0)
     height: colunaItem.implicitHeight + 20
-    radius: Estilo.rounding.grande
+    radius: Estilo.global.radius.md
     color: emConflito
-        ? Estilo.cores.avisoFundo
-        : (selecionado ? "#ede9fe" : (mouseAreaItem.containsMouse ? "#f5f5f5" : "#ffffff"))
+        ? Estilo.status.warning.background
+        : (selecionado ? Estilo.screen.consulta.soft : (mouseAreaItem.containsMouse ? Estilo.global.surfaceHover : Estilo.global.surface))
     border.color: emConflito
-        ? Estilo.cores.avisoBorda
-        : (suspeita ? "#dc2626" : (selecionado ? "#7c3aed" : Estilo.cores.bordaCard))
+        ? Estilo.status.warning.border
+        : (suspeita ? Estilo.status.error.content : (selecionado ? Estilo.screen.consulta.base : Estilo.global.borderCard))
     border.width: (emConflito || selecionado || suspeita) ? 2 : 1
 
     MouseArea {
@@ -71,7 +71,7 @@ Rectangle {
         anchors.right: parent.right
         anchors.rightMargin: 10
         anchors.verticalCenter: parent.verticalCenter
-        spacing: 6
+        spacing: Estilo.global.spacing.xs
 
         Button {
             id: btnEditarItem
@@ -90,14 +90,14 @@ Rectangle {
 
             contentItem: Icone {
                 nome: "fa6s.pen"
-                cor: "#ffffff"
-                tamanho: Estilo.fonte.padrao
+                cor: Estilo.global.textOnAccent
+                tamanho: Estilo.global.fontSize.lg
                 anchors.centerIn: parent
             }
 
             background: Rectangle {
-                radius: 6
-                color: parent.down ? Estilo.confirmar.pressionado : (parent.hovered ? Estilo.confirmar.hover : Estilo.confirmar.normal)
+                radius: Estilo.global.radius.sm
+                color: parent.down ? Estilo.action.confirm.pressed : (parent.hovered ? Estilo.action.confirm.hover : Estilo.action.confirm.base)
             }
         }
 
@@ -114,14 +114,14 @@ Rectangle {
 
             contentItem: Icone {
                 nome: "fa6s.trash-can"
-                cor: "#ffffff"
-                tamanho: Estilo.fonte.padrao
+                cor: Estilo.global.textOnAccent
+                tamanho: Estilo.global.fontSize.lg
                 anchors.centerIn: parent
             }
 
             background: Rectangle {
-                radius: 6
-                color: parent.down ? Estilo.cancelar.pressionado : (parent.hovered ? Estilo.cancelar.hover : Estilo.cancelar.normal)
+                radius: Estilo.global.radius.sm
+                color: parent.down ? Estilo.action.danger.pressed : (parent.hovered ? Estilo.action.danger.hover : Estilo.action.danger.base)
             }
         }
     }
@@ -135,22 +135,22 @@ Rectangle {
         spacing: 4
 
         Row {
-            spacing: 8
+            spacing: Estilo.global.spacing.sm
 
             Rectangle {
-                radius: 6
+                radius: Estilo.global.radius.sm
                 width: textoBadgeItem.implicitWidth + 14
                 height: textoBadgeItem.implicitHeight + 6
-                color: model.tipo === "Entrega" ? "#0284c7" : (model.tipo === "Mesa" ? "#0d9488" : "#d97706")
+                color: model.tipo === "Entrega" ? Estilo.orderType.entrega.base : (model.tipo === "Mesa" ? Estilo.orderType.mesa.base : Estilo.orderType.balcao.base)
                 anchors.verticalCenter: parent.verticalCenter
 
                 Text {
                     id: textoBadgeItem
 
                     text: model.tipo
-                    color: "#ffffff"
+                    color: Estilo.global.textOnAccent
                     font.bold: true
-                    font.pixelSize: 11
+                    font.pixelSize: Estilo.global.fontSize.xs
                     anchors.centerIn: parent
                 }
             }
@@ -161,19 +161,19 @@ Rectangle {
             // estado "resolvido", e o cinza deixa a aberta parecer o que ela
             // é — pendente, sem ser um alerta.
             Rectangle {
-                radius: 6
+                radius: Estilo.global.radius.sm
                 width: textoBadgeStatus.implicitWidth + 14
                 height: textoBadgeStatus.implicitHeight + 6
-                color: model.fechada ? Estilo.confirmar.normal : Estilo.cores.textoSecundario
+                color: model.fechada ? Estilo.action.confirm.base : Estilo.global.textSecondary
                 anchors.verticalCenter: parent.verticalCenter
 
                 Text {
                     id: textoBadgeStatus
 
                     text: model.fechada ? "Fechada" : "Aberta"
-                    color: "#ffffff"
+                    color: Estilo.global.textOnAccent
                     font.bold: true
-                    font.pixelSize: 11
+                    font.pixelSize: Estilo.global.fontSize.xs
                     anchors.centerIn: parent
                 }
             }
@@ -187,16 +187,16 @@ Rectangle {
                     ? model.codigo + " · " + model.maquinaOrigem
                     : model.codigo
                 visible: model.codigo !== ""
-                font.pixelSize: 11
+                font.pixelSize: Estilo.global.fontSize.xs
                 font.family: "monospace"
-                color: itemComanda.emConflito ? Estilo.cores.avisoTexto : Estilo.cores.textoSecundario
+                color: itemComanda.emConflito ? Estilo.status.warning.content : Estilo.global.textSecondary
                 elide: Text.ElideRight
                 anchors.verticalCenter: parent.verticalCenter
             }
 
             Icone {
                 nome: "fa6s.triangle-exclamation"
-                cor: Estilo.cores.avisoBorda
+                cor: Estilo.status.warning.border
                 tamanho: 12
                 visible: itemComanda.emConflito
                 anchors.verticalCenter: parent.verticalCenter
@@ -205,9 +205,9 @@ Rectangle {
 
         Text {
             text: pagina.tituloComanda(model)
-            font.pixelSize: 12
+            font.pixelSize: Estilo.global.fontSize.sm
             font.bold: true
-            color: Estilo.cores.texto
+            color: Estilo.global.text
             elide: Text.ElideRight
             width: colunaItem.width
         }

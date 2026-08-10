@@ -108,7 +108,7 @@ Popup {
     modal: true
     focus: true
     closePolicy: Popup.CloseOnEscape
-    padding: 25
+    padding: Estilo.global.padding.popup
     parent: Overlay.overlay
     anchors.centerIn: parent
     onOpened: inputNome.forceActiveFocus()
@@ -116,21 +116,21 @@ Popup {
     width: Math.min(420, parent ? parent.width * 0.9 : 420)
 
     Overlay.modal: Rectangle {
-        color: "#99000000"
+        color: Estilo.global.overlay
     }
 
     background: Rectangle {
-        radius: Estilo.rounding.popup
-        color: Estilo.cores.fundoPagina
-        border.color: Estilo.cores.bordaCard
+        radius: Estilo.global.radius.xl
+        color: Estilo.global.background
+        border.color: Estilo.global.borderCard
     }
 
     contentItem: ColumnLayout {
-        spacing: Estilo.espacamento.maior
+        spacing: Estilo.global.spacing.xl
 
         Row {
-            spacing: 8
-            Icone { nome: "fa6s.hand-holding-dollar"; cor: "#b45309"; tamanho: Estilo.fonte.titulo; anchors.verticalCenter: parent.verticalCenter }
+            spacing: Estilo.global.spacing.sm
+            Icone { nome: "fa6s.hand-holding-dollar"; cor: Estilo.finance.outflow; tamanho: Estilo.global.fontSize.title; anchors.verticalCenter: parent.verticalCenter }
             Text {
                 text: {
                     if (popupExtras.confirmando)
@@ -139,9 +139,9 @@ Popup {
                         return "Excluir pagamento?";
                     return popupExtras.idEdicao !== "" ? "Editar pagamento de diária" : "Pagamento de diária";
                 }
-                font.pixelSize: 17
+                font.pixelSize: Estilo.global.fontSize.xl
                 font.bold: true
-                color: Estilo.cores.texto
+                color: Estilo.global.text
                 anchors.verticalCenter: parent.verticalCenter
             }
         }
@@ -150,7 +150,7 @@ Popup {
         ColumnLayout {
             Layout.fillWidth: true
             visible: !popupExtras.confirmando && !popupExtras.confirmandoExclusao
-            spacing: Estilo.espacamento.normal
+            spacing: Estilo.global.spacing.lg
 
             Column {
                 Layout.fillWidth: true
@@ -158,17 +158,17 @@ Popup {
 
                 Text {
                     text: "Nome do funcionário"
-                    font.pixelSize: 12
+                    font.pixelSize: Estilo.global.fontSize.sm
                     font.bold: true
-                    color: Estilo.cores.textoSecundario
+                    color: Estilo.global.textSecondary
                 }
 
                 TextField {
                     id: inputNome
 
                     width: parent.width
-                    color: Estilo.cores.textoInput
-                    placeholderTextColor: Estilo.cores.placeholderInput
+                    color: Estilo.global.textInput
+                    placeholderTextColor: Estilo.global.textPlaceholder
                     placeholderText: "NOME DO FUNCIONÁRIO"
                     topPadding: 10
                     bottomPadding: 10
@@ -178,10 +178,10 @@ Popup {
                     Keys.onReturnPressed: inputValor.forceActiveFocus()
 
                     background: Rectangle {
-                        radius: Estilo.rounding.padrao
-                        color: "#ffffff"
-                        border.color: inputNome.activeFocus ? "#b45309" : Estilo.cores.borda
-                        border.width: 1
+                        radius: Estilo.global.radius.sm
+                        color: Estilo.global.inputBackground
+                        border.color: inputNome.activeFocus ? Estilo.finance.outflow : Estilo.global.border
+                        border.width: Estilo.global.borderWidth.hairline
                     }
                 }
             }
@@ -192,17 +192,17 @@ Popup {
 
                 Text {
                     text: "Valor pago"
-                    font.pixelSize: 12
+                    font.pixelSize: Estilo.global.fontSize.sm
                     font.bold: true
-                    color: Estilo.cores.textoSecundario
+                    color: Estilo.global.textSecondary
                 }
 
                 TextField {
                     id: inputValor
 
                     width: parent.width
-                    color: Estilo.cores.textoInput
-                    placeholderTextColor: Estilo.cores.placeholderInput
+                    color: Estilo.global.textInput
+                    placeholderTextColor: Estilo.global.textPlaceholder
                     placeholderText: "VALOR"
                     topPadding: 10
                     bottomPadding: 10
@@ -216,18 +216,18 @@ Popup {
                     Keys.onReturnPressed: popupExtras._confirmar()
 
                     background: Rectangle {
-                        radius: Estilo.rounding.padrao
-                        color: "#ffffff"
-                        border.color: inputValor.activeFocus ? "#b45309" : Estilo.cores.borda
-                        border.width: 1
+                        radius: Estilo.global.radius.sm
+                        color: Estilo.global.inputBackground
+                        border.color: inputValor.activeFocus ? Estilo.finance.outflow : Estilo.global.border
+                        border.width: Estilo.global.borderWidth.hairline
                     }
                 }
             }
 
             RowLayout {
                 Layout.fillWidth: true
-                Layout.topMargin: Estilo.espacamento.normal
-                spacing: Estilo.espacamento.normal
+                Layout.topMargin: Estilo.global.spacing.lg
+                spacing: Estilo.global.spacing.lg
 
                 // Só existe corrigindo um lançamento já existente — um
                 // pagamento novo ainda não tem o que excluir.
@@ -236,23 +236,23 @@ Button {
                     id: btnConfirmarExtra
 
                     Layout.fillWidth: true
-                    padding: 10
+                    padding: Estilo.global.padding.md
                     enabled: inputNome.text.trim() !== "" && parseFloat((inputValor.text || "0").replace(",", ".")) > 0
                     onClicked: popupExtras._confirmar()
 
                     contentItem: Text {
                         text: "Confirmar"
                         font.bold: true
-                        color: "#ffffff"
+                        color: Estilo.global.textOnAccent
                         horizontalAlignment: Text.AlignHCenter
                     }
 
                     background: Rectangle {
-                        radius: Estilo.rounding.padrao
-                        opacity: btnConfirmarExtra.enabled ? 1 : 0.5
-                        color: btnConfirmarExtra.down ? Estilo.confirmar.pressionado : (btnConfirmarExtra.hovered ? Estilo.confirmar.hover : Estilo.confirmar.normal)
-                        border.color: Estilo.confirmar.pressionado
-                        border.width: 1
+                        radius: Estilo.global.radius.sm
+                        opacity: btnConfirmarExtra.enabled ? 1 : Estilo.global.opacity.disabled
+                        color: btnConfirmarExtra.down ? Estilo.action.confirm.pressed : (btnConfirmarExtra.hovered ? Estilo.action.confirm.hover : Estilo.action.confirm.base)
+                        border.color: Estilo.action.confirm.pressed
+                        border.width: Estilo.global.borderWidth.hairline
                     }
                 }
 
@@ -261,21 +261,21 @@ Button {
                     id: btnCancelarExtra
 
                     Layout.fillWidth: true
-                    padding: 10
+                    padding: Estilo.global.padding.md
                     onClicked: popupExtras.close()
 
                     contentItem: Text {
                         text: "Cancelar"
                         font.bold: true
-                        color: "#ffffff"
+                        color: Estilo.global.textOnAccent
                         horizontalAlignment: Text.AlignHCenter
                     }
 
                     background: Rectangle {
-                        radius: Estilo.rounding.padrao
-                        color: btnCancelarExtra.down ? Estilo.cancelar.pressionado : (btnCancelarExtra.hovered ? Estilo.cancelar.hover : Estilo.cancelar.normal)
-                        border.color: Estilo.cancelar.pressionado
-                        border.width: 1
+                        radius: Estilo.global.radius.sm
+                        color: btnCancelarExtra.down ? Estilo.action.danger.pressed : (btnCancelarExtra.hovered ? Estilo.action.danger.hover : Estilo.action.danger.base)
+                        border.color: Estilo.action.danger.pressed
+                        border.width: Estilo.global.borderWidth.hairline
                     }
                   }
 
@@ -284,26 +284,26 @@ Button {
 
                     visible: popupExtras.idEdicao !== ""
                     Layout.fillWidth: true
-                    padding: 10
+                    padding: Estilo.global.padding.md
                     onClicked: popupExtras.confirmandoExclusao = true
 
                     contentItem: Row {
-                        spacing: 6
+                        spacing: Estilo.global.spacing.xs
                         anchors.centerIn: parent
-                        Icone { nome: "fa6s.trash-can"; cor: Estilo.cancelar.normal; tamanho: Estilo.fonte.padrao; anchors.verticalCenter: parent.verticalCenter }
+                        Icone { nome: "fa6s.trash-can"; cor: Estilo.action.danger.base; tamanho: Estilo.global.fontSize.lg; anchors.verticalCenter: parent.verticalCenter }
                         Text {
                             text: "Excluir"
                             font.bold: true
-                            color: Estilo.cancelar.normal
+                            color: Estilo.action.danger.base
                             anchors.verticalCenter: parent.verticalCenter
                         }
                     }
 
                     background: Rectangle {
-                        radius: Estilo.rounding.padrao
-                        color: btnExcluirExtra.down ? "#fecaca" : (btnExcluirExtra.hovered ? "#fee2e2" : "transparent")
-                        border.color: Estilo.cancelar.normal
-                        border.width: 1
+                        radius: Estilo.global.radius.sm
+                        color: btnExcluirExtra.down ? Estilo.status.error.border : (btnExcluirExtra.hovered ? Estilo.status.error.background : "transparent")
+                        border.color: Estilo.action.danger.base
+                        border.width: Estilo.global.borderWidth.hairline
                     }
                 }
 
@@ -315,7 +315,7 @@ Button {
         ColumnLayout {
             Layout.fillWidth: true
             visible: popupExtras.confirmandoExclusao
-            spacing: Estilo.espacamento.normal
+            spacing: Estilo.global.spacing.lg
 
             Text {
                 Layout.fillWidth: true
@@ -323,34 +323,34 @@ Button {
                     + Number(popupExtras.registroEditando.valor || 0).toFixed(2).replace(".", ",")
                     + "? Esta ação não pode ser desfeita."
                 wrapMode: Text.WordWrap
-                font.pixelSize: 13
-                color: Estilo.cores.texto
+                font.pixelSize: Estilo.global.fontSize.md
+                color: Estilo.global.text
             }
 
             RowLayout {
                 Layout.fillWidth: true
-                Layout.topMargin: Estilo.espacamento.normal
-                spacing: Estilo.espacamento.normal
+                Layout.topMargin: Estilo.global.spacing.lg
+                spacing: Estilo.global.spacing.lg
 
                 Button {
                     id: btnCancelarExclusaoExtra
 
                     Layout.fillWidth: true
-                    padding: 10
+                    padding: Estilo.global.padding.md
                     onClicked: popupExtras.confirmandoExclusao = false
 
                     contentItem: Text {
                         text: "Cancelar"
                         font.bold: true
-                        color: Estilo.cores.textoSecundario
+                        color: Estilo.global.textSecondary
                         horizontalAlignment: Text.AlignHCenter
                     }
 
                     background: Rectangle {
-                        radius: Estilo.rounding.padrao
-                        color: btnCancelarExclusaoExtra.down ? "#e5e7eb" : (btnCancelarExclusaoExtra.hovered ? "#f1f5f9" : "transparent")
-                        border.color: Estilo.cores.borda
-                        border.width: 1
+                        radius: Estilo.global.radius.sm
+                        color: btnCancelarExclusaoExtra.down ? Estilo.action.ghost.pressed : (btnCancelarExclusaoExtra.hovered ? Estilo.action.ghost.hover : Estilo.action.ghost.base)
+                        border.color: Estilo.global.border
+                        border.width: Estilo.global.borderWidth.hairline
                     }
                 }
 
@@ -358,26 +358,26 @@ Button {
                     id: btnConfirmarExclusaoExtra
 
                     Layout.fillWidth: true
-                    padding: 10
+                    padding: Estilo.global.padding.md
                     onClicked: popupExtras._excluir()
 
                     contentItem: Row {
-                        spacing: 6
+                        spacing: Estilo.global.spacing.xs
                         anchors.centerIn: parent
-                        Icone { nome: "fa6s.trash-can"; cor: "#ffffff"; tamanho: Estilo.fonte.padrao; anchors.verticalCenter: parent.verticalCenter }
+                        Icone { nome: "fa6s.trash-can"; cor: Estilo.global.textOnAccent; tamanho: Estilo.global.fontSize.lg; anchors.verticalCenter: parent.verticalCenter }
                         Text {
                             text: "Excluir"
                             font.bold: true
-                            color: "#ffffff"
+                            color: Estilo.global.textOnAccent
                             anchors.verticalCenter: parent.verticalCenter
                         }
                     }
 
                     background: Rectangle {
-                        radius: Estilo.rounding.padrao
-                        color: btnConfirmarExclusaoExtra.down ? Estilo.cancelar.pressionado : (btnConfirmarExclusaoExtra.hovered ? Estilo.cancelar.hover : Estilo.cancelar.normal)
-                        border.color: Estilo.cancelar.pressionado
-                        border.width: 1
+                        radius: Estilo.global.radius.sm
+                        color: btnConfirmarExclusaoExtra.down ? Estilo.action.danger.pressed : (btnConfirmarExclusaoExtra.hovered ? Estilo.action.danger.hover : Estilo.action.danger.base)
+                        border.color: Estilo.action.danger.pressed
+                        border.width: Estilo.global.borderWidth.hairline
                     }
                 }
             }
@@ -387,7 +387,7 @@ Button {
         ColumnLayout {
             Layout.fillWidth: true
             visible: popupExtras.confirmando
-            spacing: Estilo.espacamento.normal
+            spacing: Estilo.global.spacing.lg
 
             Text {
                 Layout.fillWidth: true
@@ -395,34 +395,34 @@ Button {
                     + Number(popupExtras.registroAtual.valor || 0).toFixed(2).replace(".", ",")
                     + " salvo. Deseja imprimir o recibo?"
                 wrapMode: Text.WordWrap
-                font.pixelSize: 13
-                color: Estilo.cores.texto
+                font.pixelSize: Estilo.global.fontSize.md
+                color: Estilo.global.text
             }
 
             RowLayout {
                 Layout.fillWidth: true
-                Layout.topMargin: Estilo.espacamento.normal
-                spacing: Estilo.espacamento.normal
+                Layout.topMargin: Estilo.global.spacing.lg
+                spacing: Estilo.global.spacing.lg
 
                 Button {
                     id: btnNaoImprimirExtra
 
                     Layout.fillWidth: true
-                    padding: 10
+                    padding: Estilo.global.padding.md
                     onClicked: popupExtras.close()
 
                     contentItem: Text {
                         text: "Não"
                         font.bold: true
-                        color: Estilo.cores.textoSecundario
+                        color: Estilo.global.textSecondary
                         horizontalAlignment: Text.AlignHCenter
                     }
 
                     background: Rectangle {
-                        radius: Estilo.rounding.padrao
-                        color: btnNaoImprimirExtra.down ? "#e5e7eb" : (btnNaoImprimirExtra.hovered ? "#f1f5f9" : "transparent")
-                        border.color: Estilo.cores.borda
-                        border.width: 1
+                        radius: Estilo.global.radius.sm
+                        color: btnNaoImprimirExtra.down ? Estilo.action.ghost.pressed : (btnNaoImprimirExtra.hovered ? Estilo.action.ghost.hover : Estilo.action.ghost.base)
+                        border.color: Estilo.global.border
+                        border.width: Estilo.global.borderWidth.hairline
                     }
                 }
 
@@ -430,26 +430,26 @@ Button {
                     id: btnSimImprimirExtra
 
                     Layout.fillWidth: true
-                    padding: 10
+                    padding: Estilo.global.padding.md
                     onClicked: popupExtras._imprimirRecibo()
 
                     contentItem: Row {
-                        spacing: 6
+                        spacing: Estilo.global.spacing.xs
                         anchors.centerIn: parent
-                        Icone { nome: "fa6s.print"; cor: "#ffffff"; tamanho: Estilo.fonte.padrao; anchors.verticalCenter: parent.verticalCenter }
+                        Icone { nome: "fa6s.print"; cor: Estilo.global.textOnAccent; tamanho: Estilo.global.fontSize.lg; anchors.verticalCenter: parent.verticalCenter }
                         Text {
                             text: "Sim, imprimir"
                             font.bold: true
-                            color: "#ffffff"
+                            color: Estilo.global.textOnAccent
                             anchors.verticalCenter: parent.verticalCenter
                         }
                     }
 
                     background: Rectangle {
-                        radius: Estilo.rounding.padrao
-                        color: btnSimImprimirExtra.down ? Estilo.confirmar.pressionado : (btnSimImprimirExtra.hovered ? Estilo.confirmar.hover : Estilo.confirmar.normal)
-                        border.color: Estilo.confirmar.pressionado
-                        border.width: 1
+                        radius: Estilo.global.radius.sm
+                        color: btnSimImprimirExtra.down ? Estilo.action.confirm.pressed : (btnSimImprimirExtra.hovered ? Estilo.action.confirm.hover : Estilo.action.confirm.base)
+                        border.color: Estilo.action.confirm.pressed
+                        border.width: Estilo.global.borderWidth.hairline
                     }
                 }
             }

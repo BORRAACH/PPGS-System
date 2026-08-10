@@ -1,4 +1,5 @@
 import QtQuick
+import estilo 1.0
 
 // Ícone da biblioteca QtAwesome (Font Awesome, Material Design Icons...),
 // renderizado por services/iconProvider.py e exposto via
@@ -9,7 +10,7 @@ Image {
     id: root
 
     property string nome: ""
-    property color cor: "#2c3e50"
+    property color cor: Estilo.global.text
     property int tamanho: 20
 
     source: nome ? "image://qtaicon/" + nome + "?color=" + encodeURIComponent(String(cor)) : ""

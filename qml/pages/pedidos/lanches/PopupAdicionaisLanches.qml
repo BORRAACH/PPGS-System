@@ -30,9 +30,14 @@ Popup {
     modal: true
     focus: true
     closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
-    padding: 25
+    padding: Estilo.global.padding.popup
     parent: Overlay.overlay
     anchors.centerIn: parent
+    // A lista de adicionais cresce com o cardápio: presa à altura da janela,
+    // a sobra vira rolagem do conteúdo em vez de empurrar os botões de
+    // confirmar/cancelar para fora da tela — num popup modal, isso deixaria
+    // o atendente sem saída a não ser pelo Esc.
+    height: Math.min(implicitHeight, Responsivo.alturaPopup(implicitHeight))
     onOpened: {
         etapa = "itens";
         itemSelecionado = null;
@@ -40,13 +45,13 @@ Popup {
     }
 
     Overlay.modal: Rectangle {
-        color: "#99000000"
+        color: Estilo.global.overlay
     }
 
     background: Rectangle {
-        radius: Estilo.rounding.popup
-        color: Estilo.cores.fundoPagina
-        border.color: Estilo.cores.bordaCard
+        radius: Estilo.global.radius.xl
+        color: Estilo.global.background
+        border.color: Estilo.global.borderCard
     }
 
     ListModel {
@@ -108,152 +113,165 @@ Popup {
         return etapa === "itens" ? "Escolha o Adicional" : "Em qual lanche?";
     }
 
-    contentItem: Column {
-        id: colunaPopup
+    contentItem: Flickable {
+        contentWidth: width
+        contentHeight: colunaPopup.implicitHeight
+        boundsBehavior: Flickable.StopAtBounds
+        implicitWidth: colunaPopup.implicitWidth
+        implicitHeight: colunaPopup.implicitHeight
 
-        width: 380
-        spacing: 16
-
-        Text {
-            text: popupAdicionaisLanches.tituloEtapa()
-            font.pixelSize: Estilo.fonte.titulo
-            font.bold: true
-            color: Estilo.cores.texto
-            anchors.horizontalCenter: parent.horizontalCenter
+        ScrollBar.vertical: ScrollBar {
+            policy: ScrollBar.AsNeeded
         }
 
-        // ---------- ETAPA 1: lista de adicionais ----------
-        ListView {
-            visible: popupAdicionaisLanches.etapa === "itens"
-            width: parent.width
-            height: Math.min(300, count * 54)
-            clip: true
-            spacing: 6
-            model: modeloAdicionaisLanche
+        Column {
+            id: colunaPopup
 
-            ScrollBar.vertical: ScrollBar {
-                policy: ScrollBar.AsNeeded
+            width: Responsivo.larguraPopup(380)
+            spacing: 16
+
+            Text {
+                text: popupAdicionaisLanches.tituloEtapa()
+                font.pixelSize: Estilo.global.fontSize.title
+                font.family: Estilo.global.fontFamily.title
+                color: Estilo.global.text
+                anchors.horizontalCenter: parent.horizontalCenter
             }
 
-            delegate: Button {
-                width: ListView.view.width
-                height: 48
-                padding: 10
-                onClicked: popupAdicionaisLanches.selecionarItem(model.nome, model.valor)
+            // ---------- ETAPA 1: lista de adicionais ----------
+            ListView {
+                visible: popupAdicionaisLanches.etapa === "itens"
+                width: parent.width
+                height: Math.min(300, count * 54)
+                clip: true
+                spacing: Estilo.global.spacing.xs
+                model: modeloAdicionaisLanche
 
-                contentItem: Row {
-                    spacing: 10
+                ScrollBar.vertical: ScrollBar {
+                    policy: ScrollBar.AsNeeded
+                }
 
-                    Text {
-                        text: model.nome
-                        font.pixelSize: Estilo.fonte.padrao
+                delegate: Button {
+                    width: ListView.view.width
+                    height: 48
+                    padding: Estilo.global.padding.md
+                    onClicked: popupAdicionaisLanches.selecionarItem(model.nome, model.valor)
+
+                    contentItem: Row {
+                        spacing: Estilo.global.spacing.md
+
+                        Text {
+                            text: model.nome
+                            font.pixelSize: Estilo.global.fontSize.lg
+                            font.bold: true
+                            color: Estilo.global.text
+                            width: parent.width - 90
+                            elide: Text.ElideRight
+                            anchors.verticalCenter: parent.verticalCenter
+                        }
+
+                        Text {
+                            text: "R$ " + model.valor
+                            font.pixelSize: Estilo.global.fontSize.lg
+                            color: Estilo.action.confirm.base
+                            font.bold: true
+                            anchors.verticalCenter: parent.verticalCenter
+                        }
+                    }
+
+                    background: Rectangle {
+                        radius: Estilo.global.radius.md
+                        color: parent.down ? Estilo.global.surfacePressed : (parent.hovered ? Estilo.global.surfaceHover : Estilo.global.surface)
+                        border.color: Estilo.global.border
+                        border.width: Estilo.global.borderWidth.hairline
+                    }
+                }
+            }
+
+            // ---------- ETAPA 2: lista de lanches já selecionados ----------
+            ListView {
+                visible: popupAdicionaisLanches.etapa === "lanches"
+                width: parent.width
+                height: Math.min(300, count * 54)
+                clip: true
+                spacing: Estilo.global.spacing.xs
+                model: popupAdicionaisLanches.lanchesSelecionados
+
+                ScrollBar.vertical: ScrollBar {
+                    policy: ScrollBar.AsNeeded
+                }
+
+                delegate: Button {
+                    width: ListView.view.width
+                    height: 48
+                    padding: Estilo.global.padding.md
+                    onClicked: popupAdicionaisLanches.selecionarLanche(index)
+
+                    contentItem: Text {
+                        text: popupAdicionaisLanches.descricaoLanche(modelData)
+                        font.pixelSize: Estilo.global.fontSize.lg
                         font.bold: true
-                        color: Estilo.cores.texto
-                        width: parent.width - 90
+                        color: Estilo.global.text
                         elide: Text.ElideRight
-                        anchors.verticalCenter: parent.verticalCenter
+                        verticalAlignment: Text.AlignVCenter
                     }
 
-                    Text {
-                        text: "R$ " + model.valor
-                        font.pixelSize: Estilo.fonte.padrao
-                        color: Estilo.confirmar.normal
-                        font.bold: true
-                        anchors.verticalCenter: parent.verticalCenter
+                    background: Rectangle {
+                        radius: Estilo.global.radius.md
+                        color: parent.down ? Estilo.global.surfacePressed : (parent.hovered ? Estilo.global.surfaceHover : Estilo.global.surface)
+                        border.color: Estilo.global.border
+                        border.width: Estilo.global.borderWidth.hairline
                     }
                 }
-
-                background: Rectangle {
-                    radius: Estilo.rounding.grande
-                    color: parent.down ? Estilo.cores.bordaCard : (parent.hovered ? "#f1f1f1" : "#ffffff")
-                    border.color: Estilo.cores.borda
-                    border.width: 1
-                }
-            }
-        }
-
-        // ---------- ETAPA 2: lista de lanches já selecionados ----------
-        ListView {
-            visible: popupAdicionaisLanches.etapa === "lanches"
-            width: parent.width
-            height: Math.min(300, count * 54)
-            clip: true
-            spacing: 6
-            model: popupAdicionaisLanches.lanchesSelecionados
-
-            ScrollBar.vertical: ScrollBar {
-                policy: ScrollBar.AsNeeded
             }
 
-            delegate: Button {
-                width: ListView.view.width
-                height: 48
-                padding: 10
-                onClicked: popupAdicionaisLanches.selecionarLanche(index)
+            // ---------- Rodapé: Voltar/Cancelar ----------
+            Row {
+                anchors.horizontalCenter: parent.horizontalCenter
+                spacing: Estilo.global.spacing.lg
 
-                contentItem: Text {
-                    text: popupAdicionaisLanches.descricaoLanche(modelData)
-                    font.pixelSize: Estilo.fonte.padrao
-                    font.bold: true
-                    color: Estilo.cores.texto
-                    elide: Text.ElideRight
-                    verticalAlignment: Text.AlignVCenter
-                }
-
-                background: Rectangle {
-                    radius: Estilo.rounding.grande
-                    color: parent.down ? Estilo.cores.bordaCard : (parent.hovered ? "#f1f1f1" : "#ffffff")
-                    border.color: Estilo.cores.borda
-                    border.width: 1
-                }
-            }
-        }
-
-        // ---------- Rodapé: Voltar/Cancelar ----------
-        Row {
-            anchors.horizontalCenter: parent.horizontalCenter
-            spacing: 12
-
-            Button {
-                text: "Voltar"
-                visible: popupAdicionaisLanches.etapa !== "itens"
-                padding: 10
-                width: 150
-                onClicked: popupAdicionaisLanches.voltar()
-
-                contentItem: Text {
+                Button {
                     text: "Voltar"
-                    font.bold: true
-                    color: "#ffffff"
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
+                    visible: popupAdicionaisLanches.etapa !== "itens"
+                    padding: Estilo.global.padding.md
+                    width: 150
+                    onClicked: popupAdicionaisLanches.voltar()
+
+                    contentItem: Text {
+                        text: "Voltar"
+                        font.bold: true
+                        color: Estilo.global.textOnAccent
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+
+                    background: Rectangle {
+                        radius: Estilo.global.radius.sm
+                        color: parent.down ? Estilo.action.back.pressed : (parent.hovered ? Estilo.action.back.hover : Estilo.action.danger.base)
+                    }
                 }
 
-                background: Rectangle {
-                    radius: Estilo.rounding.padrao
-                    color: parent.down ? Estilo.voltar.pressionado : (parent.hovered ? Estilo.voltar.hover : Estilo.cancelar.normal)
-                }
-            }
-
-            Button {
-                text: "Cancelar"
-                padding: 10
-                width: 150
-                onClicked: popupAdicionaisLanches.close()
-
-                contentItem: Text {
+                Button {
                     text: "Cancelar"
-                    font.bold: true
-                    color: "#ffffff"
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
-                }
+                    padding: Estilo.global.padding.md
+                    width: 150
+                    onClicked: popupAdicionaisLanches.close()
 
-                background: Rectangle {
-                    radius: Estilo.rounding.padrao
-                    color: parent.down ? Qt.darker(Estilo.cores.textoSecundario, 1.2) : (parent.hovered ? Qt.lighter(Estilo.cores.textoSecundario, 1.1) : Estilo.cores.textoSecundario)
+                    contentItem: Text {
+                        text: "Cancelar"
+                        font.bold: true
+                        color: Estilo.global.textOnAccent
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+
+                    background: Rectangle {
+                        radius: Estilo.global.radius.sm
+                        color: parent.down ? Qt.darker(Estilo.global.textSecondary, 1.2) : (parent.hovered ? Qt.lighter(Estilo.global.textSecondary, 1.1) : Estilo.global.textSecondary)
+                    }
                 }
             }
         }
+
     }
 }

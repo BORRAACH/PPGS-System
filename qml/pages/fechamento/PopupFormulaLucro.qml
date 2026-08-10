@@ -45,33 +45,33 @@ Popup {
     modal: true
     focus: true
     closePolicy: Popup.CloseOnEscape
-    padding: 25
+    padding: Estilo.global.padding.popup
     parent: Overlay.overlay
     anchors.centerIn: parent
 
     width: Math.min(420, parent ? parent.width * 0.9 : 420)
 
     Overlay.modal: Rectangle {
-        color: "#99000000"
+        color: Estilo.global.overlay
     }
 
     background: Rectangle {
-        radius: Estilo.rounding.popup
-        color: Estilo.cores.fundoPagina
-        border.color: Estilo.cores.bordaCard
+        radius: Estilo.global.radius.xl
+        color: Estilo.global.background
+        border.color: Estilo.global.borderCard
     }
 
     contentItem: ColumnLayout {
-        spacing: Estilo.espacamento.maior
+        spacing: Estilo.global.spacing.xl
 
         Row {
-            spacing: 8
-            Icone { nome: "fa6s.gear"; cor: "#0d9488"; tamanho: Estilo.fonte.titulo; anchors.verticalCenter: parent.verticalCenter }
+            spacing: Estilo.global.spacing.sm
+            Icone { nome: "fa6s.gear"; cor: Estilo.screen.caixa.base; tamanho: Estilo.global.fontSize.title; anchors.verticalCenter: parent.verticalCenter }
             Text {
                 text: "Fórmula do lucro"
-                font.pixelSize: 17
+                font.pixelSize: Estilo.global.fontSize.xl
                 font.bold: true
-                color: Estilo.cores.texto
+                color: Estilo.global.text
                 anchors.verticalCenter: parent.verticalCenter
             }
         }
@@ -79,8 +79,8 @@ Popup {
         Text {
             Layout.fillWidth: true
             text: "Lucro = soma dos três termos abaixo, cada um com o sinal escolhido."
-            font.pixelSize: 12
-            color: Estilo.cores.textoSecundario
+            font.pixelSize: Estilo.global.fontSize.sm
+            color: Estilo.global.textSecondary
             wrapMode: Text.WordWrap
         }
 
@@ -92,8 +92,8 @@ Popup {
 
             Text {
                 text: "Contagem (Cartão+Dinheiro+Pix)"
-                font.pixelSize: 13
-                color: Estilo.cores.texto
+                font.pixelSize: Estilo.global.fontSize.md
+                color: Estilo.global.text
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap
             }
@@ -105,8 +105,8 @@ Popup {
 
             Text {
                 text: "Extras (diárias de funcionários)"
-                font.pixelSize: 13
-                color: Estilo.cores.texto
+                font.pixelSize: Estilo.global.fontSize.md
+                color: Estilo.global.text
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap
             }
@@ -118,8 +118,8 @@ Popup {
 
             Text {
                 text: "Vendas brutas (Total do dia)"
-                font.pixelSize: 13
-                color: Estilo.cores.texto
+                font.pixelSize: Estilo.global.fontSize.md
+                color: Estilo.global.text
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap
             }
@@ -132,28 +132,28 @@ Popup {
 
         RowLayout {
             Layout.fillWidth: true
-            Layout.topMargin: Estilo.espacamento.normal
-            spacing: Estilo.espacamento.normal
+            Layout.topMargin: Estilo.global.spacing.lg
+            spacing: Estilo.global.spacing.lg
 
             Button {
                 id: btnCancelarFormula
 
                 Layout.fillWidth: true
-                padding: 10
+                padding: Estilo.global.padding.md
                 onClicked: popupFormulaLucro.close()
 
                 contentItem: Text {
                     text: "Cancelar"
                     font.bold: true
-                    color: "#ffffff"
+                    color: Estilo.global.textOnAccent
                     horizontalAlignment: Text.AlignHCenter
                 }
 
                 background: Rectangle {
-                    radius: Estilo.rounding.padrao
-                    color: btnCancelarFormula.down ? Estilo.cancelar.pressionado : (btnCancelarFormula.hovered ? Estilo.cancelar.hover : Estilo.cancelar.normal)
-                    border.color: Estilo.cancelar.pressionado
-                    border.width: 1
+                    radius: Estilo.global.radius.sm
+                    color: btnCancelarFormula.down ? Estilo.action.danger.pressed : (btnCancelarFormula.hovered ? Estilo.action.danger.hover : Estilo.action.danger.base)
+                    border.color: Estilo.action.danger.pressed
+                    border.width: Estilo.global.borderWidth.hairline
                 }
             }
 
@@ -161,21 +161,21 @@ Popup {
                 id: btnConfirmarFormula
 
                 Layout.fillWidth: true
-                padding: 10
+                padding: Estilo.global.padding.md
                 onClicked: popupFormulaLucro._confirmar()
 
                 contentItem: Text {
                     text: "Confirmar"
                     font.bold: true
-                    color: "#ffffff"
+                    color: Estilo.global.textOnAccent
                     horizontalAlignment: Text.AlignHCenter
                 }
 
                 background: Rectangle {
-                    radius: Estilo.rounding.padrao
-                    color: btnConfirmarFormula.down ? Estilo.confirmar.pressionado : (btnConfirmarFormula.hovered ? Estilo.confirmar.hover : Estilo.confirmar.normal)
-                    border.color: Estilo.confirmar.pressionado
-                    border.width: 1
+                    radius: Estilo.global.radius.sm
+                    color: btnConfirmarFormula.down ? Estilo.action.confirm.pressed : (btnConfirmarFormula.hovered ? Estilo.action.confirm.hover : Estilo.action.confirm.base)
+                    border.color: Estilo.action.confirm.pressed
+                    border.width: Estilo.global.borderWidth.hairline
                 }
             }
         }

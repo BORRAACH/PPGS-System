@@ -66,7 +66,7 @@ Rectangle {
 
     implicitWidth: rotulo.implicitWidth + (_fundoPreto ? 8 : 0)
     implicitHeight: rotulo.implicitHeight + (_fundoPreto ? 2 : 0)
-    color: _fundoPreto ? "#000000" : "transparent"
+    color: _fundoPreto ? Estilo.printer.reverseBackground : "transparent"
 
     Text {
         id: rotulo
@@ -77,6 +77,6 @@ Rectangle {
         font.bold: raizCampo._negrito
         font.underline: raizCampo._sublinhado
         font.pixelSize: raizCampo.tamanhoBase * raizCampo._multiplicador
-        color: raizCampo._fundoPreto ? "#ffffff" : Estilo.cores.texto
+        color: raizCampo._fundoPreto ? Estilo.printer.reverseText : Estilo.printer.ink
     }
 }

@@ -36,13 +36,13 @@ Column {
     // de editar/apagar estão visíveis.
     property bool modoEdicao: false
 
-    spacing: 10
+    spacing: Estilo.global.spacing.md
 
     Text {
         text: "Comandas (" + colunaEsquerda.totalComandas + ")"
-        font.pixelSize: Estilo.fonte.padrao
+        font.pixelSize: Estilo.global.fontSize.lg
         font.bold: true
-        color: Estilo.cores.textoSecundario
+        color: Estilo.global.textSecondary
     }
 
     // --- BARRA DE PESQUISA + BOTÃO DE MODO DE EDIÇÃO ---
@@ -51,13 +51,13 @@ Column {
 
         width: parent.width
         height: 42
-        spacing: 8
+        spacing: Estilo.global.spacing.sm
 
         Search {
             id: campoBusca
 
             width: parent.width - btnModoEdicao.width - linhaBusca.spacing
-            corDestaque: "#7c3aed"
+            corDestaque: Estilo.screen.consulta.accent
             placeholderText: "Pesquisar por cliente ou conteúdo..."
             // Só reordena/exibe depois que o usuário para de digitar (ver
             // debounceBusca abaixo) — reprocessar a lista inteira a cada
@@ -99,29 +99,29 @@ Column {
             id: btnModoEdicao
 
             height: 42
-            padding: 10
+            padding: Estilo.global.padding.md
             onClicked: colunaEsquerda.modoEdicao = !colunaEsquerda.modoEdicao
 
             contentItem: Row {
-                spacing: 6
+                spacing: Estilo.global.spacing.xs
                 anchors.centerIn: parent
                 Icone {
                     nome: colunaEsquerda.modoEdicao ? "fa6s.xmark" : "fa6s.pen"
-                    cor: "#ffffff"
-                    tamanho: Estilo.fonte.padrao
+                    cor: Estilo.global.textOnAccent
+                    tamanho: Estilo.global.fontSize.lg
                     anchors.verticalCenter: parent.verticalCenter
                 }
                 Text {
                     text: colunaEsquerda.modoEdicao ? "Concluir" : "Editar"
                     font.bold: true
-                    color: "#ffffff"
+                    color: Estilo.global.textOnAccent
                     anchors.verticalCenter: parent.verticalCenter
                 }
             }
 
             background: Rectangle {
-                radius: Estilo.rounding.grande
-                color: colunaEsquerda.modoEdicao ? (parent.down ? "#6d28d9" : (parent.hovered ? "#8b5cf6" : "#7c3aed")) : (parent.down ? "#4b5563" : (parent.hovered ? "#6b7280" : "#95a5a6"))
+                radius: Estilo.global.radius.md
+                color: colunaEsquerda.modoEdicao ? (parent.down ? Estilo.screen.consulta.pressed : (parent.hovered ? Estilo.screen.consulta.hover : Estilo.screen.consulta.base)) : (parent.down ? Estilo.action.neutral.pressed : (parent.hovered ? Estilo.action.neutral.base : Estilo.action.neutral.hover))
             }
         }
     }
@@ -134,7 +134,7 @@ Column {
     Row {
         id: linhaFiltroStatus
 
-        spacing: 6
+        spacing: Estilo.global.spacing.xs
 
         Repeater {
             model: [
@@ -151,7 +151,7 @@ Column {
                 readonly property bool ativo: colunaEsquerda.pagina.filtroStatus === modelData.valor
 
                 height: 28
-                padding: 12
+                padding: Estilo.global.padding.lg
                 onClicked: {
                     colunaEsquerda.pagina.filtroStatus = modelData.valor;
                     colunaEsquerda.pagina.aplicarFiltro();
@@ -159,20 +159,20 @@ Column {
 
                 contentItem: Text {
                     text: botaoFiltro.modelData.rotulo
-                    font.pixelSize: 12
+                    font.pixelSize: Estilo.global.fontSize.sm
                     font.bold: botaoFiltro.ativo
-                    color: botaoFiltro.ativo ? "#ffffff" : Estilo.cores.textoSecundario
+                    color: botaoFiltro.ativo ? Estilo.global.textOnAccent : Estilo.global.textSecondary
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
                 }
 
                 background: Rectangle {
-                    radius: Estilo.rounding.cheio
+                    radius: Estilo.global.radius.pill
                     color: botaoFiltro.ativo
-                        ? (botaoFiltro.down ? "#6d28d9" : "#7c3aed")
-                        : (botaoFiltro.hovered ? "#ede9fe" : "transparent")
-                    border.color: botaoFiltro.ativo ? "#6d28d9" : Estilo.cores.borda
-                    border.width: 1
+                        ? (botaoFiltro.down ? Estilo.screen.consulta.pressed : Estilo.screen.consulta.base)
+                        : (botaoFiltro.hovered ? Estilo.screen.consulta.soft : "transparent")
+                    border.color: botaoFiltro.ativo ? Estilo.screen.consulta.pressed : Estilo.global.border
+                    border.width: Estilo.global.borderWidth.hairline
                 }
             }
         }
@@ -202,7 +202,7 @@ Column {
             id: colunaListas
 
             width: flickableComandas.width
-            spacing: 12
+            spacing: Estilo.global.spacing.lg
 
             // --- CARREGANDO ---
             // A tela abre antes das comandas (ver Consulta.qml
@@ -218,16 +218,16 @@ Column {
                 Layout.fillWidth: true
                 visible: ativa
                 implicitHeight: linhaCarregando.implicitHeight + 24
-                radius: Estilo.rounding.padrao
-                color: "#ffffff"
-                border.color: Estilo.cores.bordaCard
-                border.width: 1
+                radius: Estilo.global.radius.sm
+                color: Estilo.global.surface
+                border.color: Estilo.global.borderCard
+                border.width: Estilo.global.borderWidth.hairline
 
                 Row {
                     id: linhaCarregando
 
                     anchors.centerIn: parent
-                    spacing: 10
+                    spacing: Estilo.global.spacing.md
 
                     BusyIndicator {
                         width: 20
@@ -238,8 +238,8 @@ Column {
 
                     Text {
                         text: "Carregando comandas..."
-                        font.pixelSize: Estilo.fonte.padrao
-                        color: Estilo.cores.textoSecundario
+                        font.pixelSize: Estilo.global.fontSize.lg
+                        color: Estilo.global.textSecondary
                         anchors.verticalCenter: parent.verticalCenter
                     }
                 }
@@ -252,7 +252,7 @@ Column {
                 Layout.fillWidth: true
                 Layout.preferredHeight: contentHeight
                 interactive: false
-                spacing: 8
+                spacing: Estilo.global.spacing.sm
 
                 ScrollBar.vertical: ScrollBar {
                     policy: ScrollBar.AsNeeded
@@ -280,7 +280,7 @@ Column {
                     property bool expandido: false
 
                     Layout.fillWidth: true
-                    spacing: 6
+                    spacing: Estilo.global.spacing.xs
 
                     // Precisa ser um ListModel (não o array direto) pra
                     // ItemComandaDelegate.qml continuar acessando os campos
@@ -312,10 +312,10 @@ Column {
                     Rectangle {
                         Layout.fillWidth: true
                         implicitHeight: linhaCabecalhoDia.implicitHeight + 16
-                        radius: Estilo.rounding.padrao
-                        color: "#ffffff"
-                        border.color: Estilo.cores.bordaCard
-                        border.width: 1
+                        radius: Estilo.global.radius.sm
+                        color: Estilo.global.surface
+                        border.color: Estilo.global.borderCard
+                        border.width: Estilo.global.borderWidth.hairline
 
                         MouseArea {
                             id: areaCabecalhoDia
@@ -331,11 +331,11 @@ Column {
 
                             anchors.fill: parent
                             anchors.margins: 8
-                            spacing: 8
+                            spacing: Estilo.global.spacing.sm
 
                             Icone {
                                 nome: "fa6s.calendar-day"
-                                cor: Estilo.cores.textoSecundario
+                                cor: Estilo.global.textSecondary
                                 tamanho: 14
                                 anchors.verticalCenter: parent.verticalCenter
                             }
@@ -343,21 +343,21 @@ Column {
                             Text {
                                 text: blocoDia.modelData.dia
                                 font.bold: true
-                                font.pixelSize: Estilo.fonte.padrao
-                                color: Estilo.cores.texto
+                                font.pixelSize: Estilo.global.fontSize.lg
+                                color: Estilo.global.text
                             }
 
                             Item { Layout.fillWidth: true }
 
                             Text {
                                 text: blocoDia.modelData.comandas.length + (blocoDia.modelData.comandas.length === 1 ? " comanda" : " comandas")
-                                font.pixelSize: 12
-                                color: Estilo.cores.textoSecundario
+                                font.pixelSize: Estilo.global.fontSize.sm
+                                color: Estilo.global.textSecondary
                             }
 
                             Icone {
                                 nome: blocoDia.expandido ? "fa6s.chevron-up" : "fa6s.chevron-down"
-                                cor: Estilo.cores.textoSecundario
+                                cor: Estilo.global.textSecondary
                                 tamanho: 12
                                 anchors.verticalCenter: parent.verticalCenter
                             }
@@ -370,7 +370,7 @@ Column {
                         Layout.preferredHeight: contentHeight
                         visible: blocoDia.expandido
                         interactive: false
-                        spacing: 8
+                        spacing: Estilo.global.spacing.sm
                         model: modeloDia
 
                         ScrollBar.vertical: ScrollBar {

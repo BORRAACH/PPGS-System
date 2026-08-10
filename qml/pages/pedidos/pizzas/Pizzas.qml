@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Layouts
 import estilo 1.0
 import "../../../components"
 import "../../../components/Texto.js" as Texto
@@ -356,826 +357,871 @@ Page {
         }
     }
 
+    // ===== MEDIDAS DO LAYOUT =====
+    // A tela é dividida em escolher sabores (esquerda) e conferir a pizza
+    // montada (direita). As duas colunas eram 52% e 43% da largura, sempre —
+    // o que em tela estreita virava duas colunas de ~250px, apertadas demais
+    // para a lista de sabores E para o desenho da pizza. Abaixo do ponto de
+    // virada elas passam a ocupar a largura inteira, uma embaixo da outra,
+    // com a rolagem do Flickable dando conta do resto.
+    readonly property real larguraUtil: width - Estilo.global.padding.xl * 2
+    readonly property real alturaUtil: height - Estilo.global.padding.xl * 2
+    readonly property bool empilhado: larguraUtil < 760
+    readonly property int larguraColunaEsquerda: empilhado ? larguraUtil : Math.round(larguraUtil * 0.545)
+    readonly property int larguraColunaDireita: empilhado ? larguraUtil : larguraUtil - larguraColunaEsquerda - Estilo.global.spacing.xxl
+    // Soma dos blocos de altura fixa da coluna direita (pizza, legenda, os
+    // dois botões, total, ações) mais o respiro entre eles. O que sobra vai
+    // para a lista de pizzas montadas — e é isso que a mantém com altura
+    // positiva mesmo numa janela baixa, onde a subtração crua ficava negativa
+    // e o painel desaparecia.
+    readonly property int alturaBlocosDireita: 210 + 110 + 42 + 42 + 65 + 46 + Estilo.global.spacing.lg * 6
+    readonly property int alturaColunaDireita: empilhado ? alturaBlocosDireita + 180 : Math.max(alturaBlocosDireita + 120, alturaUtil)
+    readonly property int alturaColunaEsquerda: empilhado ? Math.max(320, Math.round(alturaUtil * 0.7)) : alturaUtil
+
     // Layout Principal
-    Row {
+    // Rola quando as duas colunas passam a ficar empilhadas (e, mesmo lado a
+    // lado, quando a janela é baixa demais para a coluna direita inteira).
+    Flickable {
         anchors.fill: parent
-        anchors.margins: 20
-        spacing: 20
+        anchors.margins: Estilo.global.padding.xl
+        clip: true
+        contentWidth: width
+        contentHeight: Math.max(height, gradePrincipal.implicitHeight)
+        boundsBehavior: Flickable.StopAtBounds
 
-        // ================= COLUNA DA ESQUERDA (Lista, Tamanho e Pesquisa) =================
-        Column {
-            width: parent.width * 0.52
-            height: parent.height
-            spacing: 12
-
-            Row {
-                spacing: 8
-                Icone {
-                    nome: "fa6s.pizza-slice"
-                    cor: Estilo.cancelar.normal
-                    tamanho: Estilo.fonte.titulo
-                    anchors.verticalCenter: parent.verticalCenter
-                }
-                Text {
-                    text: "Escolha até " + limiteSabores + (limiteSabores === 1 ? " Sabor" : " Sabores")
-                    font.pixelSize: Estilo.fonte.titulo
-                    font.bold: true
-                    color: Estilo.cancelar.normal
-                    anchors.verticalCenter: parent.verticalCenter
-                }
-            }
-
-            Row {
-                spacing: 6
-                Icone {
-                    nome: "fa6s.triangle-exclamation"
-                    cor: "#d32f2f"
-                    tamanho: Estilo.fonte.padrao
-                    visible: selecionados.length === limiteSabores
-                    anchors.verticalCenter: parent.verticalCenter
-                }
-                Text {
-                    text: selecionados.length === limiteSabores ? "Limite máximo de " + limiteSabores + " sabores atingido!" : selecionados.length + " de " + limiteSabores + " sabores selecionados"
-                    font.pixelSize: Estilo.fonte.padrao
-                    color: selecionados.length === limiteSabores ? "#d32f2f" : Estilo.cores.textoSecundario
-                    font.bold: selecionados.length > 0
-                    anchors.verticalCenter: parent.verticalCenter
-                }
-            }
-
-            // BARRA DE PESQUISA
-            Search {
-                id: campoBusca
-
-                width: parent.width
-                corDestaque: Estilo.cancelar.normal
-                placeholderText: "Pesquisar sabor (ex: calabresa, chocolate)..."
-                enabled: selecionados.length < limiteSabores
-                onTextChanged: {
-                    filtrarPizzas(text);
-                }
-                // Enter com um só resultado na busca já seleciona esse sabor
-                // (mesmo efeito de um clique) e limpa a busca.
-                onAccepted: {
-                    if (modeloFiltrado.count === 1) {
-                        var item = modeloFiltrado.get(0);
-                        if (!isSelecionado(item.nome) && selecionados.length < limiteSabores) {
-                            var lista = selecionados.slice();
-                            lista.push({
-                                "nome": item.nome,
-                                "valorNum": parseValor(item.valor)
-                            });
-                            selecionados = lista;
-                        }
-                        campoBusca.text = "";
-                    }
-                }
-            }
-
-            // SELEÇÃO DE TAMANHO (3 Opções Exclusivas com fallback para Grande)
-            Rectangle {
-                width: parent.width
-                height: 50
-                color: "#ffffff"
-                radius: Estilo.rounding.grande
-                border.color: Estilo.cores.borda
-
-                Row {
-                    anchors.centerIn: parent
-                    spacing: 18
-
-                    Text {
-                        text: "Tamanho:"
-                        font.pixelSize: Estilo.fonte.padrao
-                        font.bold: true
-                        color: Estilo.cores.texto
-                        anchors.verticalCenter: parent.verticalCenter
-                    }
-
-                    // --- CHECKBOX GRANDE ---
-                    CheckBox {
-                        id: chkGrande
-
-                        text: "Grande"
-                        checked: tamanhoSelecionado === "Grande"
-                        anchors.verticalCenter: parent.verticalCenter
-                        enabled: true
-                        onClicked: {
-                            tamanhoSelecionado = "Grande";
-                        }
-
-                        contentItem: Text {
-                            text: chkGrande.text
-                            font.pixelSize: Estilo.fonte.padrao
-                            font.bold: true
-                            color: Estilo.cores.texto
-                            leftPadding: chkGrande.indicator.width + chkGrande.spacing
-                            verticalAlignment: Text.AlignVCenter
-                        }
-
-                        indicator: Rectangle {
-                            implicitWidth: 20
-                            implicitHeight: 20
-                            x: chkGrande.leftPadding
-                            y: parent.height / 2 - height / 2
-                            radius: 4
-                            border.color: chkGrande.checked ? Estilo.confirmar.normal : "#bdc3c7"
-                            border.width: 2
-                            color: chkGrande.checked ? Estilo.confirmar.normal : "transparent"
-
-                            Icone {
-                                nome: "fa6s.check"
-                                cor: "white"
-                                tamanho: 12
-                                anchors.centerIn: parent
-                                visible: chkGrande.checked
-                            }
-                        }
-                    }
-
-                    // --- CHECKBOX BROTO ---
-                    CheckBox {
-                        id: chkBroto
-
-                        text: "Broto"
-                        checked: tamanhoSelecionado === "Broto"
-                        anchors.verticalCenter: parent.verticalCenter
-                        enabled: selecionados.length <= 2
-                        onClicked: {
-                            if (checked)
-                                tamanhoSelecionado = "Broto";
-                            else
-                                tamanhoSelecionado = "Grande";
-                        }
-
-                        contentItem: Text {
-                            text: chkBroto.text
-                            font.pixelSize: Estilo.fonte.padrao
-                            font.bold: true
-                            color: chkBroto.enabled ? Estilo.cores.texto : "#bdc3c7"
-                            leftPadding: chkBroto.indicator.width + chkBroto.spacing
-                            verticalAlignment: Text.AlignVCenter
-                        }
-
-                        indicator: Rectangle {
-                            implicitWidth: 20
-                            implicitHeight: 20
-                            x: chkBroto.leftPadding
-                            y: parent.height / 2 - height / 2
-                            radius: 4
-                            border.color: chkBroto.enabled ? (chkBroto.checked ? Estilo.confirmar.normal : "#bdc3c7") : Estilo.cores.bordaCard
-                            border.width: 2
-                            color: chkBroto.enabled ? (chkBroto.checked ? Estilo.confirmar.normal : "transparent") : "#f0f0f0"
-
-                            Icone {
-                                nome: "fa6s.check"
-                                cor: "white"
-                                tamanho: 12
-                                anchors.centerIn: parent
-                                visible: chkBroto.checked
-                            }
-                        }
-                    }
-
-                    // --- CHECKBOX MINI ---
-                    CheckBox {
-                        id: chkMini
-
-                        text: "Mini"
-                        checked: tamanhoSelecionado === "Mini"
-                        anchors.verticalCenter: parent.verticalCenter
-                        enabled: selecionados.length <= 2
-                        onClicked: {
-                            if (checked)
-                                tamanhoSelecionado = "Mini";
-                            else
-                                tamanhoSelecionado = "Grande";
-                        }
-
-                        contentItem: Text {
-                            text: chkMini.text
-                            font.pixelSize: Estilo.fonte.padrao
-                            font.bold: true
-                            color: chkMini.enabled ? Estilo.cores.texto : "#bdc3c7"
-                            leftPadding: chkMini.indicator.width + chkMini.spacing
-                            verticalAlignment: Text.AlignVCenter
-                        }
-
-                        indicator: Rectangle {
-                            implicitWidth: 20
-                            implicitHeight: 20
-                            x: chkMini.leftPadding
-                            y: parent.height / 2 - height / 2
-                            radius: 4
-                            border.color: chkMini.enabled ? (chkMini.checked ? Estilo.confirmar.normal : "#bdc3c7") : Estilo.cores.bordaCard
-                            border.width: 2
-                            color: chkMini.enabled ? (chkMini.checked ? Estilo.confirmar.normal : "transparent") : "#f0f0f0"
-
-                            Icone {
-                                nome: "fa6s.check"
-                                cor: "white"
-                                tamanho: 12
-                                anchors.centerIn: parent
-                                visible: chkMini.checked
-                            }
-                        }
-                    }
-                }
-            }
-
-            ListView {
-                id: listaPizzasView
-
-                width: parent.width
-                height: parent.height - 225
-                model: modeloFiltrado
-                spacing: 8
-                clip: true
-
-                // 1. Adiciona a barra de rolagem à direita da lista
-                ScrollBar.vertical: ScrollBar {
-                    policy: ScrollBar.AlwaysOn
-                    active: true
-                }
-
-                delegate: Button {
-                    id: btnItem
-
-                    property bool checado: isSelecionado(model.nome)
-
-                    // 2. Subtrai a largura da ScrollBar (aprox. 12px) para o botão não ficar embaixo dela
-                    width: listaPizzasView.width - (listaPizzasView.ScrollBar.vertical.visible ? listaPizzasView.ScrollBar.vertical.width : 0)
-                    padding: 10
-                    onClicked: {
-                        var listaTemp = selecionados.slice();
-                        if (checado) {
-                            listaTemp = listaTemp.filter(function (item) {
-                                return item.nome !== model.nome;
-                            });
-                        } else {
-                            if (listaTemp.length < limiteSabores)
-                                listaTemp.push({
-                                    "nome": model.nome,
-                                    "valorNum": parseValor(model.valor)
-                                });
-                        }
-                        selecionados = listaTemp;
-                    }
-
-                    contentItem: Row {
-                        spacing: 10
-
-                        Rectangle {
-                            width: 20
-                            height: 20
-                            radius: 4
-                            border.color: btnItem.checado ? Estilo.confirmar.normal : "#bdc3c7"
-                            border.width: 2
-                            color: btnItem.checado ? Estilo.confirmar.normal : "transparent"
-                            anchors.verticalCenter: parent.verticalCenter
-
-                            Icone {
-                                nome: "fa6s.check"
-                                cor: "white"
-                                tamanho: 12
-                                anchors.centerIn: parent
-                                visible: btnItem.checado
-                            }
-                        }
-
-                        Text {
-                            text: model.nome
-                            font.pixelSize: Estilo.fonte.padrao
-                            font.bold: true
-                            color: Estilo.cores.texto
-                            // Ajuste proporcional para não encostar nos preços
-                            width: parent.width - 120
-                            elide: Text.ElideRight
-                            anchors.verticalCenter: parent.verticalCenter
-                        }
-
-                        Text {
-                            text: "R$ " + model.valor
-                            font.pixelSize: Estilo.fonte.padrao
-                            color: Estilo.confirmar.normal
-                            font.bold: true
-                            anchors.verticalCenter: parent.verticalCenter
-                        }
-                    }
-
-                    background: Rectangle {
-                        radius: Estilo.rounding.grande
-                        color: btnItem.checado ? "#d5f5e3" : (btnItem.down ? Estilo.cores.bordaCard : (btnItem.hovered ? "#f1f1f1" : "#ffffff"))
-                        border.color: btnItem.checado ? Estilo.confirmar.normal : Estilo.cores.borda
-                        border.width: btnItem.checado ? 2 : 1
-                    }
-                }
-            }
+        ScrollBar.vertical: ScrollBar {
+            policy: ScrollBar.AsNeeded
         }
 
-        // ================= COLUNA DA DIREITA (Visualização, Legenda e Total) =================
-        Column {
-            width: parent.width * 0.43
-            height: parent.height
-            spacing: 12
-            anchors.verticalCenter: parent.verticalCenter
+        GridLayout {
+            id: gradePrincipal
 
-            // 1. Painel da Pizza Visual
-            Rectangle {
-                width: parent.width
-                height: 210
-                color: "#ffffff"
-                radius: Estilo.rounding.painel
-                border.color: Estilo.cores.bordaCard
+            width: parent.width
+            columns: telaPizzas.empilhado ? 1 : 2
+            columnSpacing: Estilo.global.spacing.xxl
+            rowSpacing: Estilo.global.spacing.xxl
 
-                Canvas {
-                    id: canvasPizza
+            // ================= COLUNA DA ESQUERDA (Lista, Tamanho e Pesquisa) =================
+            Column {
+                Layout.preferredWidth: telaPizzas.larguraColunaEsquerda
+                Layout.preferredHeight: telaPizzas.alturaColunaEsquerda
+                Layout.alignment: Qt.AlignTop
+                spacing: Estilo.global.spacing.lg
 
-                    width: 160
-                    height: 160
-                    anchors.centerIn: parent
-                    onPaint: {
-                        var ctx = getContext("2d");
-                        ctx.reset();
-                        var centroX = width / 2;
-                        var centroY = height / 2;
-                        var raio = width / 2 - 5;
-                        // Massa e Borda
-                        ctx.beginPath();
-                        ctx.arc(centroX, centroY, raio, 0, 2 * Math.PI);
-                        ctx.fillStyle = "#f39c12";
-                        ctx.fill();
-                        ctx.lineWidth = 6;
-                        ctx.strokeStyle = "#d35400";
-                        ctx.stroke();
-                        var qtd = selecionados.length;
-                        if (qtd === 0)
-                            return;
-
-                        var anguloFatia = (2 * Math.PI) / qtd;
-                        for (var i = 0; i < qtd; i++) {
-                            var inicio = i * anguloFatia - (Math.PI / 2);
-                            if (qtd > 1) {
-                                ctx.beginPath();
-                                ctx.moveTo(centroX, centroY);
-                                ctx.lineTo(centroX + raio * Math.cos(inicio), centroY + raio * Math.sin(inicio));
-                                ctx.lineWidth = 2;
-                                ctx.strokeStyle = "#ffffff";
-                                ctx.stroke();
-                            }
-                            var anguloMeio = inicio + (anguloFatia / 2);
-                            var distTexto = raio * 0.55;
-                            var posX = centroX + distTexto * Math.cos(anguloMeio);
-                            var posY = centroY + distTexto * Math.sin(anguloMeio);
-                            ctx.font = "bold 18px sans-serif";
-                            ctx.fillStyle = "#ffffff";
-                            ctx.textAlign = "center";
-                            ctx.textBaseline = "middle";
-                            ctx.fillText((i + 1).toString(), posX, posY);
-                        }
+                Row {
+                    spacing: Estilo.global.spacing.sm
+                    Icone {
+                        nome: "fa6s.pizza-slice"
+                        cor: Estilo.action.danger.base
+                        tamanho: Estilo.global.fontSize.title
+                        anchors.verticalCenter: parent.verticalCenter
                     }
-
-                    Connections {
-                        function onSelecionadosChanged() {
-                            canvasPizza.requestPaint();
-                        }
-
-                        target: telaPizzas
+                    Text {
+                        text: "Escolha até " + limiteSabores + (limiteSabores === 1 ? " Sabor" : " Sabores")
+                        font.pixelSize: Estilo.global.fontSize.title
+                        font.family: Estilo.global.fontFamily.title
+                        color: Estilo.action.danger.base
+                        anchors.verticalCenter: parent.verticalCenter
                     }
                 }
-            }
 
-            // 2. Legenda dos Sabores
-            Rectangle {
-                width: parent.width
-                height: 110
-                color: "#ffffff"
-                radius: Estilo.rounding.medio
-                border.color: Estilo.cores.bordaCard
-                clip: true
-
-                Column {
-                    anchors.fill: parent
-                    anchors.margins: 10
-                    spacing: 6
-
+                Row {
+                    spacing: Estilo.global.spacing.xs
+                    Icone {
+                        nome: "fa6s.triangle-exclamation"
+                        cor: Estilo.category.pizza.base
+                        tamanho: Estilo.global.fontSize.lg
+                        visible: selecionados.length === limiteSabores
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
                     Text {
-                        text: "LEGENDA (" + tamanhoSelecionado.toUpperCase() + ")"
-                        font.pixelSize: 11
-                        font.bold: true
-                        color: Estilo.cores.textoSecundario
+                        text: selecionados.length === limiteSabores ? "Limite máximo de " + limiteSabores + " sabores atingido!" : selecionados.length + " de " + limiteSabores + " sabores selecionados"
+                        font.pixelSize: Estilo.global.fontSize.lg
+                        color: selecionados.length === limiteSabores ? Estilo.category.pizza.base : Estilo.global.textSecondary
+                        font.bold: selecionados.length > 0
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
+                }
+
+                // BARRA DE PESQUISA
+                Search {
+                    id: campoBusca
+
+                    width: parent.width
+                    corDestaque: Estilo.action.danger.base
+                    placeholderText: "Pesquisar sabor (ex: calabresa, chocolate)..."
+                    enabled: selecionados.length < limiteSabores
+                    onTextChanged: {
+                        filtrarPizzas(text);
+                    }
+                    // Enter com um só resultado na busca já seleciona esse sabor
+                    // (mesmo efeito de um clique) e limpa a busca.
+                    onAccepted: {
+                        if (modeloFiltrado.count === 1) {
+                            var item = modeloFiltrado.get(0);
+                            if (!isSelecionado(item.nome) && selecionados.length < limiteSabores) {
+                                var lista = selecionados.slice();
+                                lista.push({
+                                    "nome": item.nome,
+                                    "valorNum": parseValor(item.valor)
+                                });
+                                selecionados = lista;
+                            }
+                            campoBusca.text = "";
+                        }
+                    }
+                }
+
+                // SELEÇÃO DE TAMANHO (3 Opções Exclusivas com fallback para Grande)
+                Rectangle {
+                    width: parent.width
+                    height: 50
+                    color: Estilo.global.surface
+                    radius: Estilo.global.radius.md
+                    border.color: Estilo.global.border
+
+                    Row {
+                        anchors.centerIn: parent
+                        spacing: 18
+
+                        Text {
+                            text: "Tamanho:"
+                            font.pixelSize: Estilo.global.fontSize.lg
+                            font.bold: true
+                            color: Estilo.global.text
+                            anchors.verticalCenter: parent.verticalCenter
+                        }
+
+                        // --- CHECKBOX GRANDE ---
+                        CheckBox {
+                            id: chkGrande
+
+                            text: "Grande"
+                            checked: tamanhoSelecionado === "Grande"
+                            anchors.verticalCenter: parent.verticalCenter
+                            enabled: true
+                            onClicked: {
+                                tamanhoSelecionado = "Grande";
+                            }
+
+                            contentItem: Text {
+                                text: chkGrande.text
+                                font.pixelSize: Estilo.global.fontSize.lg
+                                font.bold: true
+                                color: Estilo.global.text
+                                leftPadding: chkGrande.indicator.width + chkGrande.spacing
+                                verticalAlignment: Text.AlignVCenter
+                            }
+
+                            indicator: Rectangle {
+                                implicitWidth: 20
+                                implicitHeight: 20
+                                x: chkGrande.leftPadding
+                                y: parent.height / 2 - height / 2
+                                radius: Estilo.global.radius.xs
+                                border.color: chkGrande.checked ? Estilo.action.confirm.base : Estilo.global.textDisabled
+                                border.width: Estilo.global.borderWidth.thick
+                                color: chkGrande.checked ? Estilo.action.confirm.base : "transparent"
+
+                                Icone {
+                                    nome: "fa6s.check"
+                                    cor: Estilo.global.textOnAccent
+                                    tamanho: 12
+                                    anchors.centerIn: parent
+                                    visible: chkGrande.checked
+                                }
+                            }
+                        }
+
+                        // --- CHECKBOX BROTO ---
+                        CheckBox {
+                            id: chkBroto
+
+                            text: "Broto"
+                            checked: tamanhoSelecionado === "Broto"
+                            anchors.verticalCenter: parent.verticalCenter
+                            enabled: selecionados.length <= 2
+                            onClicked: {
+                                if (checked)
+                                    tamanhoSelecionado = "Broto";
+                                else
+                                    tamanhoSelecionado = "Grande";
+                            }
+
+                            contentItem: Text {
+                                text: chkBroto.text
+                                font.pixelSize: Estilo.global.fontSize.lg
+                                font.bold: true
+                                color: chkBroto.enabled ? Estilo.global.text : Estilo.global.textDisabled
+                                leftPadding: chkBroto.indicator.width + chkBroto.spacing
+                                verticalAlignment: Text.AlignVCenter
+                            }
+
+                            indicator: Rectangle {
+                                implicitWidth: 20
+                                implicitHeight: 20
+                                x: chkBroto.leftPadding
+                                y: parent.height / 2 - height / 2
+                                radius: Estilo.global.radius.xs
+                                border.color: chkBroto.enabled ? (chkBroto.checked ? Estilo.action.confirm.base : Estilo.global.textDisabled) : Estilo.global.borderCard
+                                border.width: Estilo.global.borderWidth.thick
+                                color: chkBroto.enabled ? (chkBroto.checked ? Estilo.action.confirm.base : "transparent") : Estilo.global.inputDisabled
+
+                                Icone {
+                                    nome: "fa6s.check"
+                                    cor: Estilo.global.textOnAccent
+                                    tamanho: 12
+                                    anchors.centerIn: parent
+                                    visible: chkBroto.checked
+                                }
+                            }
+                        }
+
+                        // --- CHECKBOX MINI ---
+                        CheckBox {
+                            id: chkMini
+
+                            text: "Mini"
+                            checked: tamanhoSelecionado === "Mini"
+                            anchors.verticalCenter: parent.verticalCenter
+                            enabled: selecionados.length <= 2
+                            onClicked: {
+                                if (checked)
+                                    tamanhoSelecionado = "Mini";
+                                else
+                                    tamanhoSelecionado = "Grande";
+                            }
+
+                            contentItem: Text {
+                                text: chkMini.text
+                                font.pixelSize: Estilo.global.fontSize.lg
+                                font.bold: true
+                                color: chkMini.enabled ? Estilo.global.text : Estilo.global.textDisabled
+                                leftPadding: chkMini.indicator.width + chkMini.spacing
+                                verticalAlignment: Text.AlignVCenter
+                            }
+
+                            indicator: Rectangle {
+                                implicitWidth: 20
+                                implicitHeight: 20
+                                x: chkMini.leftPadding
+                                y: parent.height / 2 - height / 2
+                                radius: Estilo.global.radius.xs
+                                border.color: chkMini.enabled ? (chkMini.checked ? Estilo.action.confirm.base : Estilo.global.textDisabled) : Estilo.global.borderCard
+                                border.width: Estilo.global.borderWidth.thick
+                                color: chkMini.enabled ? (chkMini.checked ? Estilo.action.confirm.base : "transparent") : Estilo.global.inputDisabled
+
+                                Icone {
+                                    nome: "fa6s.check"
+                                    cor: Estilo.global.textOnAccent
+                                    tamanho: 12
+                                    anchors.centerIn: parent
+                                    visible: chkMini.checked
+                                }
+                            }
+                        }
+                    }
+                }
+
+                ListView {
+                    id: listaPizzasView
+
+                    width: parent.width
+                    // 225 é o que o cabeçalho, o contador e a busca ocupam acima
+                    // dela; o piso evita que a lista suma numa janela baixa.
+                    height: Math.max(160, parent.height - 225)
+                    model: modeloFiltrado
+                    spacing: Estilo.global.spacing.sm
+                    clip: true
+
+                    // 1. Adiciona a barra de rolagem à direita da lista
+                    ScrollBar.vertical: ScrollBar {
+                        policy: ScrollBar.AlwaysOn
+                        active: true
                     }
 
-                    Text {
-                        text: "Nenhum sabor selecionado"
-                        font.pixelSize: 13
-                        color: "#bdc3c7"
-                        font.italic: true
-                        visible: selecionados.length === 0
-                    }
+                    delegate: Button {
+                        id: btnItem
 
-                    Repeater {
-                        model: selecionados
+                        property bool checado: isSelecionado(model.nome)
 
-                        Row {
-                            spacing: 10
-                            width: parent.width
+                        // 2. Subtrai a largura da ScrollBar (aprox. 12px) para o botão não ficar embaixo dela
+                        width: listaPizzasView.width - (listaPizzasView.ScrollBar.vertical.visible ? listaPizzasView.ScrollBar.vertical.width : 0)
+                        padding: Estilo.global.padding.md
+                        onClicked: {
+                            var listaTemp = selecionados.slice();
+                            if (checado) {
+                                listaTemp = listaTemp.filter(function (item) {
+                                    return item.nome !== model.nome;
+                                });
+                            } else {
+                                if (listaTemp.length < limiteSabores)
+                                    listaTemp.push({
+                                        "nome": model.nome,
+                                        "valorNum": parseValor(model.valor)
+                                    });
+                            }
+                            selecionados = listaTemp;
+                        }
+
+                        contentItem: Row {
+                            spacing: Estilo.global.spacing.md
 
                             Rectangle {
-                                width: 18
-                                height: 18
-                                radius: 9
-                                color: Estilo.cancelar.normal
+                                width: 20
+                                height: 20
+                                radius: Estilo.global.radius.xs
+                                border.color: btnItem.checado ? Estilo.action.confirm.base : Estilo.global.textDisabled
+                                border.width: Estilo.global.borderWidth.thick
+                                color: btnItem.checado ? Estilo.action.confirm.base : "transparent"
                                 anchors.verticalCenter: parent.verticalCenter
 
-                                Text {
-                                    text: index + 1
-                                    color: "#ffffff"
-                                    font.pixelSize: 11
-                                    font.bold: true
+                                Icone {
+                                    nome: "fa6s.check"
+                                    cor: Estilo.global.textOnAccent
+                                    tamanho: 12
                                     anchors.centerIn: parent
+                                    visible: btnItem.checado
                                 }
                             }
 
                             Text {
-                                text: modelData.nome
-                                font.pixelSize: 13
+                                text: model.nome
+                                font.pixelSize: Estilo.global.fontSize.lg
                                 font.bold: true
-                                color: Estilo.cores.texto
-                                width: parent.width - 100
+                                color: Estilo.global.text
+                                // Ajuste proporcional para não encostar nos preços
+                                width: parent.width - 120
                                 elide: Text.ElideRight
                                 anchors.verticalCenter: parent.verticalCenter
                             }
 
                             Text {
-                                text: "R$ " + modelData.valorNum.toFixed(2).replace(".", ",")
-                                font.pixelSize: 12
-                                color: Estilo.cores.textoSecundario
+                                text: "R$ " + model.valor
+                                font.pixelSize: Estilo.global.fontSize.lg
+                                color: Estilo.action.confirm.base
+                                font.bold: true
                                 anchors.verticalCenter: parent.verticalCenter
+                            }
+                        }
+
+                        background: Rectangle {
+                            radius: Estilo.global.radius.md
+                            color: btnItem.checado ? Estilo.category.pizza.soft : (btnItem.down ? Estilo.global.surfacePressed : (btnItem.hovered ? Estilo.global.surfaceHover : Estilo.global.surface))
+                            border.color: btnItem.checado ? Estilo.action.confirm.base : Estilo.global.border
+                            border.width: btnItem.checado ? 2 : 1
+                        }
+                    }
+                }
+            }
+
+            // ================= COLUNA DA DIREITA (Visualização, Legenda e Total) =================
+            Column {
+                Layout.preferredWidth: telaPizzas.larguraColunaDireita
+                Layout.preferredHeight: telaPizzas.alturaColunaDireita
+                Layout.alignment: Qt.AlignTop
+                spacing: Estilo.global.spacing.lg
+
+                // 1. Painel da Pizza Visual
+                Rectangle {
+                    width: parent.width
+                    height: 210
+                    color: Estilo.global.surface
+                    radius: Estilo.global.radius.lg
+                    border.color: Estilo.global.borderCard
+
+                    Canvas {
+                        id: canvasPizza
+
+                        width: 160
+                        height: 160
+                        anchors.centerIn: parent
+                        onPaint: {
+                            var ctx = getContext("2d");
+                            ctx.reset();
+                            var centroX = width / 2;
+                            var centroY = height / 2;
+                            var raio = width / 2 - 5;
+                            // Massa e Borda
+                            ctx.beginPath();
+                            ctx.arc(centroX, centroY, raio, 0, 2 * Math.PI);
+                            ctx.fillStyle = Estilo.illustration.pizzaDough;
+                            ctx.fill();
+                            ctx.lineWidth = 6;
+                            ctx.strokeStyle = Estilo.illustration.pizzaCrust;
+                            ctx.stroke();
+                            var qtd = selecionados.length;
+                            if (qtd === 0)
+                                return;
+
+                            var anguloFatia = (2 * Math.PI) / qtd;
+                            for (var i = 0; i < qtd; i++) {
+                                var inicio = i * anguloFatia - (Math.PI / 2);
+                                if (qtd > 1) {
+                                    ctx.beginPath();
+                                    ctx.moveTo(centroX, centroY);
+                                    ctx.lineTo(centroX + raio * Math.cos(inicio), centroY + raio * Math.sin(inicio));
+                                    ctx.lineWidth = 2;
+                                    ctx.strokeStyle = Estilo.illustration.pizzaSliceLine;
+                                    ctx.stroke();
+                                }
+                                var anguloMeio = inicio + (anguloFatia / 2);
+                                var distTexto = raio * 0.55;
+                                var posX = centroX + distTexto * Math.cos(anguloMeio);
+                                var posY = centroY + distTexto * Math.sin(anguloMeio);
+                                ctx.font = "bold 18px sans-serif";
+                                ctx.fillStyle = Estilo.illustration.pizzaSliceLine;
+                                ctx.textAlign = "center";
+                                ctx.textBaseline = "middle";
+                                ctx.fillText((i + 1).toString(), posX, posY);
+                            }
+                        }
+
+                        Connections {
+                            function onSelecionadosChanged() {
+                                canvasPizza.requestPaint();
+                            }
+
+                            target: telaPizzas
+                        }
+                    }
+                }
+
+                // 2. Legenda dos Sabores
+                Rectangle {
+                    width: parent.width
+                    height: 110
+                    color: Estilo.global.surface
+                    radius: Estilo.global.radius.lg
+                    border.color: Estilo.global.borderCard
+                    clip: true
+
+                    Column {
+                        anchors.fill: parent
+                        anchors.margins: 10
+                        spacing: Estilo.global.spacing.xs
+
+                        Text {
+                            text: "LEGENDA (" + tamanhoSelecionado.toUpperCase() + ")"
+                            font.pixelSize: Estilo.global.fontSize.xs
+                            font.bold: true
+                            color: Estilo.global.textSecondary
+                        }
+
+                        Text {
+                            text: "Nenhum sabor selecionado"
+                            font.pixelSize: Estilo.global.fontSize.md
+                            color: Estilo.global.textDisabled
+                            font.italic: true
+                            visible: selecionados.length === 0
+                        }
+
+                        Repeater {
+                            model: selecionados
+
+                            Row {
+                                spacing: Estilo.global.spacing.md
+                                width: parent.width
+
+                                Rectangle {
+                                    width: 18
+                                    height: 18
+                                    radius: Estilo.global.radius.md
+                                    color: Estilo.action.danger.base
+                                    anchors.verticalCenter: parent.verticalCenter
+
+                                    Text {
+                                        text: index + 1
+                                        color: Estilo.global.textOnAccent
+                                        font.pixelSize: Estilo.global.fontSize.xs
+                                        font.bold: true
+                                        anchors.centerIn: parent
+                                    }
+                                }
+
+                                Text {
+                                    text: modelData.nome
+                                    font.pixelSize: Estilo.global.fontSize.md
+                                    font.bold: true
+                                    color: Estilo.global.text
+                                    width: parent.width - 100
+                                    elide: Text.ElideRight
+                                    anchors.verticalCenter: parent.verticalCenter
+                                }
+
+                                Text {
+                                    text: "R$ " + modelData.valorNum.toFixed(2).replace(".", ",")
+                                    font.pixelSize: Estilo.global.fontSize.sm
+                                    color: Estilo.global.textSecondary
+                                    anchors.verticalCenter: parent.verticalCenter
+                                }
                             }
                         }
                     }
                 }
-            }
 
-            // 3. Botão para fechar a pizza atual e começar a próxima, sem
-            // sair desta tela — é isso que permite montar mais de uma pizza
-            // de uma vez.
-            Button {
-                id: btnAdicionarPizza
+                // 3. Botão para fechar a pizza atual e começar a próxima, sem
+                // sair desta tela — é isso que permite montar mais de uma pizza
+                // de uma vez.
+                Button {
+                    id: btnAdicionarPizza
 
-                width: parent.width
-                height: 42
-                enabled: selecionados.length > 0
-                onClicked: adicionarPizzaAtual()
+                    width: parent.width
+                    height: 42
+                    enabled: selecionados.length > 0
+                    onClicked: adicionarPizzaAtual()
 
-                contentItem: Row {
-                    spacing: 6
-                    anchors.centerIn: parent
-                    opacity: btnAdicionarPizza.enabled ? 1 : 0.6
+                    contentItem: Row {
+                        spacing: Estilo.global.spacing.xs
+                        anchors.centerIn: parent
+                        opacity: btnAdicionarPizza.enabled ? 1 : Estilo.global.opacity.subtle
 
-                    Icone {
-                        nome: "fa6s.plus"
-                        cor: "#ffffff"
-                        tamanho: 14
-                        anchors.verticalCenter: parent.verticalCenter
+                        Icone {
+                            nome: "fa6s.plus"
+                            cor: Estilo.global.textOnAccent
+                            tamanho: 14
+                            anchors.verticalCenter: parent.verticalCenter
+                        }
+                        Text {
+                            text: "Adicionar Pizza (" + tamanhoSelecionado + ")"
+                            font.pixelSize: Estilo.global.fontSize.lg
+                            font.bold: true
+                            color: Estilo.global.textOnAccent
+                            anchors.verticalCenter: parent.verticalCenter
+                        }
                     }
-                    Text {
-                        text: "Adicionar Pizza (" + tamanhoSelecionado + ")"
-                        font.pixelSize: 14
-                        font.bold: true
-                        color: "#ffffff"
-                        anchors.verticalCenter: parent.verticalCenter
-                    }
-                }
 
-                background: Rectangle {
-                    radius: Estilo.rounding.grande
-                    color: !btnAdicionarPizza.enabled ? "#bdc3c7" : (btnAdicionarPizza.down ? "#219150" : (btnAdicionarPizza.hovered ? Estilo.confirmar.hover : Estilo.confirmar.normal))
-                    border.color: !btnAdicionarPizza.enabled ? "#bdc3c7" : "#219150"
-                    border.width: 1
-                }
-            }
-
-            // 3.1. Borda/adicional só fazem sentido numa pizza que já tem
-            // sabores e tamanho fechados — por isso opera sobre
-            // pizzasMontadas, não sobre a pizza em andamento (selecionados).
-            Button {
-                id: btnAdicionaisBordas
-
-                width: parent.width
-                height: 42
-                enabled: pizzasMontadas.length > 0
-                onClicked: popupAdicionaisBordas.open()
-
-                contentItem: Row {
-                    spacing: 6
-                    anchors.centerIn: parent
-                    opacity: btnAdicionaisBordas.enabled ? 1 : 0.6
-
-                    Icone {
-                        nome: "fa6s.plus"
-                        cor: "#ffffff"
-                        tamanho: 14
-                        anchors.verticalCenter: parent.verticalCenter
-                    }
-                    Text {
-                        text: "Adicionais ou Bordas"
-                        font.pixelSize: 14
-                        font.bold: true
-                        color: "#ffffff"
-                        anchors.verticalCenter: parent.verticalCenter
+                    background: Rectangle {
+                        radius: Estilo.global.radius.md
+                        color: !btnAdicionarPizza.enabled ? Estilo.global.surfaceDisabled : (btnAdicionarPizza.down ? Estilo.action.confirm.pressed : (btnAdicionarPizza.hovered ? Estilo.action.confirm.hover : Estilo.action.confirm.base))
+                        border.color: !btnAdicionarPizza.enabled ? Estilo.global.surfaceDisabled : Estilo.action.confirm.border
+                        border.width: Estilo.global.borderWidth.hairline
                     }
                 }
 
-                background: Rectangle {
-                    radius: Estilo.rounding.grande
-                    color: !btnAdicionaisBordas.enabled ? "#bdc3c7" : (btnAdicionaisBordas.down ? "#0f766e" : (btnAdicionaisBordas.hovered ? "#14b8a6" : "#0d9488"))
-                    border.color: !btnAdicionaisBordas.enabled ? "#bdc3c7" : "#0f766e"
-                    border.width: 1
+                // 3.1. Borda/adicional só fazem sentido numa pizza que já tem
+                // sabores e tamanho fechados — por isso opera sobre
+                // pizzasMontadas, não sobre a pizza em andamento (selecionados).
+                Button {
+                    id: btnAdicionaisBordas
+
+                    width: parent.width
+                    height: 42
+                    enabled: pizzasMontadas.length > 0
+                    onClicked: popupAdicionaisBordas.open()
+
+                    contentItem: Row {
+                        spacing: Estilo.global.spacing.xs
+                        anchors.centerIn: parent
+                        opacity: btnAdicionaisBordas.enabled ? 1 : Estilo.global.opacity.subtle
+
+                        Icone {
+                            nome: "fa6s.plus"
+                            cor: Estilo.global.textOnAccent
+                            tamanho: 14
+                            anchors.verticalCenter: parent.verticalCenter
+                        }
+                        Text {
+                            text: "Adicionais ou Bordas"
+                            font.pixelSize: Estilo.global.fontSize.lg
+                            font.bold: true
+                            color: Estilo.global.textOnAccent
+                            anchors.verticalCenter: parent.verticalCenter
+                        }
+                    }
+
+                    background: Rectangle {
+                        radius: Estilo.global.radius.md
+                        color: !btnAdicionaisBordas.enabled ? Estilo.global.surfaceDisabled : (btnAdicionaisBordas.down ? Estilo.category.adicional.pressed : (btnAdicionaisBordas.hovered ? Estilo.category.adicional.hover : Estilo.category.adicional.base))
+                        border.color: !btnAdicionaisBordas.enabled ? Estilo.global.surfaceDisabled : Estilo.category.adicional.pressed
+                        border.width: Estilo.global.borderWidth.hairline
+                    }
                 }
-            }
 
-            // 4. Pizzas já adicionadas ao pedido — cada uma pode ser
-            // removida individualmente antes de confirmar.
-            Rectangle {
-                width: parent.width
-                height: parent.height - 210 - 110 - 42 - 42 - 65 - 46 - (12 * 6)
-                color: "#ffffff"
-                radius: Estilo.rounding.medio
-                border.color: Estilo.cores.bordaCard
-                clip: true
+                // 4. Pizzas já adicionadas ao pedido — cada uma pode ser
+                // removida individualmente antes de confirmar.
+                Rectangle {
+                    width: parent.width
+                    // O que sobra da coluna depois dos blocos de altura fixa (ver
+                    // telaPizzas.alturaBlocosDireita).
+                    height: Math.max(120, parent.height - telaPizzas.alturaBlocosDireita)
+                    color: Estilo.global.surface
+                    radius: Estilo.global.radius.lg
+                    border.color: Estilo.global.borderCard
+                    clip: true
 
-                Column {
-                    anchors.fill: parent
-                    anchors.margins: 10
-                    spacing: 6
+                    Column {
+                        anchors.fill: parent
+                        anchors.margins: 10
+                        spacing: Estilo.global.spacing.xs
 
-                    Text {
-                        text: "PIZZAS ADICIONADAS"
-                        font.pixelSize: 11
-                        font.bold: true
-                        color: Estilo.cores.textoSecundario
-                    }
-
-                    Text {
-                        text: "Nenhuma pizza adicionada ainda"
-                        font.pixelSize: 13
-                        color: "#bdc3c7"
-                        font.italic: true
-                        visible: pizzasMontadas.length === 0
-                    }
-
-                    Flickable {
-                        width: parent.width
-                        height: parent.height - 24
-                        clip: true
-                        contentHeight: colunaPizzasMontadas.height
-                        visible: pizzasMontadas.length > 0
-                        boundsBehavior: Flickable.StopAtBounds
-
-                        ScrollBar.vertical: ScrollBar {
-                            policy: ScrollBar.AsNeeded
+                        Text {
+                            text: "PIZZAS ADICIONADAS"
+                            font.pixelSize: Estilo.global.fontSize.xs
+                            font.bold: true
+                            color: Estilo.global.textSecondary
                         }
 
-                        Column {
-                            id: colunaPizzasMontadas
+                        Text {
+                            text: "Nenhuma pizza adicionada ainda"
+                            font.pixelSize: Estilo.global.fontSize.md
+                            color: Estilo.global.textDisabled
+                            font.italic: true
+                            visible: pizzasMontadas.length === 0
+                        }
 
+                        Flickable {
                             width: parent.width
-                            spacing: 6
+                            height: parent.height - 24
+                            clip: true
+                            contentHeight: colunaPizzasMontadas.height
+                            visible: pizzasMontadas.length > 0
+                            boundsBehavior: Flickable.StopAtBounds
 
-                            Repeater {
-                                model: pizzasMontadas
+                            ScrollBar.vertical: ScrollBar {
+                                policy: ScrollBar.AsNeeded
+                            }
 
-                                // Badge do tamanho e sabores ficam à esquerda; valor e botão de
-                                // remover são ancorados na borda direita do cartão (posição
-                                // fixa), em vez de entrarem num Row somado aos sabores — assim
-                                // eles nunca "vazam" para fora do retângulo, e o texto dos
-                                // sabores ocupa exatamente o espaço que sobra entre o badge e o
-                                // valor (mesmo padrão usado em Lanches.qml).
-                                Rectangle {
-                                    id: itemPizzaMontada
+                            Column {
+                                id: colunaPizzasMontadas
 
-                                    width: colunaPizzasMontadas.width
-                                    height: 40
-                                    radius: Estilo.rounding.grande
-                                    color: Estilo.cores.fundoPagina
-                                    border.color: Estilo.cores.bordaCard
-                                    clip: true
+                                width: parent.width
+                                spacing: Estilo.global.spacing.xs
 
+                                Repeater {
+                                    model: pizzasMontadas
+
+                                    // Badge do tamanho e sabores ficam à esquerda; valor e botão de
+                                    // remover são ancorados na borda direita do cartão (posição
+                                    // fixa), em vez de entrarem num Row somado aos sabores — assim
+                                    // eles nunca "vazam" para fora do retângulo, e o texto dos
+                                    // sabores ocupa exatamente o espaço que sobra entre o badge e o
+                                    // valor (mesmo padrão usado em Lanches.qml).
                                     Rectangle {
-                                        id: badgeTamanhoPizzaMontada
+                                        id: itemPizzaMontada
 
-                                        radius: 6
-                                        width: textoBadgeTamanho.implicitWidth + 14
-                                        height: textoBadgeTamanho.implicitHeight + 6
-                                        color: Estilo.cancelar.normal
-                                        anchors.left: parent.left
-                                        anchors.leftMargin: 8
-                                        anchors.verticalCenter: parent.verticalCenter
+                                        width: colunaPizzasMontadas.width
+                                        height: 40
+                                        radius: Estilo.global.radius.md
+                                        color: Estilo.global.background
+                                        border.color: Estilo.global.borderCard
+                                        clip: true
+
+                                        Rectangle {
+                                            id: badgeTamanhoPizzaMontada
+
+                                            radius: Estilo.global.radius.sm
+                                            width: textoBadgeTamanho.implicitWidth + 14
+                                            height: textoBadgeTamanho.implicitHeight + 6
+                                            color: Estilo.action.danger.base
+                                            anchors.left: parent.left
+                                            anchors.leftMargin: 8
+                                            anchors.verticalCenter: parent.verticalCenter
+
+                                            Text {
+                                                id: textoBadgeTamanho
+
+                                                text: modelData.tamanho
+                                                color: Estilo.global.textOnAccent
+                                                font.bold: true
+                                                font.pixelSize: Estilo.global.fontSize.xs
+                                                anchors.centerIn: parent
+                                            }
+                                        }
+
+                                        // Remove só esta pizza montada.
+                                        Button {
+                                            id: btnRemoverPizzaMontada
+
+                                            width: 22
+                                            height: 22
+                                            padding: 0
+                                            anchors.right: parent.right
+                                            anchors.rightMargin: 5
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            onClicked: removerPizzaMontada(index)
+
+                                            contentItem: Text {
+                                                text: "×"
+                                                color: Estilo.global.textOnAccent
+                                                font.bold: true
+                                                horizontalAlignment: Text.AlignHCenter
+                                                verticalAlignment: Text.AlignVCenter
+                                            }
+
+                                            background: Rectangle {
+                                                radius: Estilo.global.radius.sm
+                                                color: parent.down ? Estilo.action.danger.pressed : (parent.hovered ? Estilo.action.danger.hover : Estilo.action.danger.base)
+                                            }
+                                        }
 
                                         Text {
-                                            id: textoBadgeTamanho
+                                            id: textoValorPizzaMontada
 
-                                            text: modelData.tamanho
-                                            color: "#ffffff"
+                                            text: "R$ " + valorFinalPizza(modelData).toFixed(2).replace(".", ",")
+                                            font.pixelSize: Estilo.global.fontSize.sm
+                                            color: Estilo.global.textSecondary
+                                            anchors.right: btnRemoverPizzaMontada.left
+                                            anchors.rightMargin: 8
+                                            anchors.verticalCenter: parent.verticalCenter
+                                        }
+
+                                        Text {
+                                            text: modelData.sabores.map(function (s) {
+                                                return s.nome;
+                                            }).join(" / ") + resumoExtrasPizza(modelData)
+                                            font.pixelSize: Estilo.global.fontSize.md
                                             font.bold: true
-                                            font.pixelSize: 10
-                                            anchors.centerIn: parent
+                                            color: Estilo.global.text
+                                            anchors.left: badgeTamanhoPizzaMontada.right
+                                            anchors.leftMargin: 8
+                                            anchors.right: textoValorPizzaMontada.left
+                                            anchors.rightMargin: 8
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            elide: Text.ElideRight
                                         }
-                                    }
-
-                                    // Remove só esta pizza montada.
-                                    Button {
-                                        id: btnRemoverPizzaMontada
-
-                                        width: 22
-                                        height: 22
-                                        padding: 0
-                                        anchors.right: parent.right
-                                        anchors.rightMargin: 5
-                                        anchors.verticalCenter: parent.verticalCenter
-                                        onClicked: removerPizzaMontada(index)
-
-                                        contentItem: Text {
-                                            text: "×"
-                                            color: "#ffffff"
-                                            font.bold: true
-                                            horizontalAlignment: Text.AlignHCenter
-                                            verticalAlignment: Text.AlignVCenter
-                                        }
-
-                                        background: Rectangle {
-                                            radius: 6
-                                            color: parent.down ? Estilo.cancelar.pressionado : (parent.hovered ? Estilo.cancelar.hover : Estilo.cancelar.normal)
-                                        }
-                                    }
-
-                                    Text {
-                                        id: textoValorPizzaMontada
-
-                                        text: "R$ " + valorFinalPizza(modelData).toFixed(2).replace(".", ",")
-                                        font.pixelSize: 12
-                                        color: Estilo.cores.textoSecundario
-                                        anchors.right: btnRemoverPizzaMontada.left
-                                        anchors.rightMargin: 8
-                                        anchors.verticalCenter: parent.verticalCenter
-                                    }
-
-                                    Text {
-                                        text: modelData.sabores.map(function (s) {
-                                            return s.nome;
-                                        }).join(" / ") + resumoExtrasPizza(modelData)
-                                        font.pixelSize: 13
-                                        font.bold: true
-                                        color: Estilo.cores.texto
-                                        anchors.left: badgeTamanhoPizzaMontada.right
-                                        anchors.leftMargin: 8
-                                        anchors.right: textoValorPizzaMontada.left
-                                        anchors.rightMargin: 8
-                                        anchors.verticalCenter: parent.verticalCenter
-                                        elide: Text.ElideRight
                                     }
                                 }
                             }
                         }
                     }
                 }
-            }
 
-            // 5. Valor Total
-            Rectangle {
-                width: parent.width
-                height: 65
-                color: Estilo.cores.texto
-                radius: Estilo.rounding.medio
+                // 5. Valor Total
+                Rectangle {
+                    width: parent.width
+                    height: 65
+                    color: Estilo.global.text
+                    radius: Estilo.global.radius.lg
 
-                Column {
-                    anchors.centerIn: parent
-                    spacing: 2
+                    Column {
+                        anchors.centerIn: parent
+                        spacing: 2
 
-                    Text {
-                        text: "VALOR TOTAL DO PEDIDO"
-                        color: "#bdc3c7"
-                        font.pixelSize: 10
-                        font.bold: true
-                        anchors.horizontalCenter: parent
-                    }
-
-                    Text {
-                        text: "R$ " + valorTotalPedido.toFixed(2).replace(".", ",")
-                        color: Estilo.confirmar.hover
-                        font.pixelSize: 20
-                        font.bold: true
-                        anchors.horizontalCenter: parent
-                    }
-                }
-            }
-
-            // 6. Botões de Ação
-            Row {
-                width: parent.width
-                spacing: 12
-
-                // BOTÃO VOLTAR
-                Button {
-                    id: btnVoltar
-
-                    width: (parent.width - parent.spacing) / 2
-                    height: 46
-                    onClicked: pilha.pop()
-
-                    contentItem: Text {
-                        text: "Voltar"
-                        font.pixelSize: 15
-                        font.bold: true
-                        color: "#ffffff"
-                        horizontalAlignment: Text.AlignHCenter
-                        verticalAlignment: Text.AlignVCenter
-                    }
-
-                    background: Rectangle {
-                        radius: Estilo.rounding.grande
-                        color: btnVoltar.down ? Estilo.voltar.pressionado : (btnVoltar.hovered ? Estilo.voltar.hover : Estilo.cancelar.normal)
-                        border.color: Estilo.voltar.pressionado
-                        border.width: 1
-                    }
-                }
-
-                // BOTÃO CONFIRMAR
-                Button {
-                    id: btnConfirmar
-
-                    width: (parent.width - parent.spacing) / 2
-                    height: 46
-                    enabled: pizzasMontadas.length > 0 || selecionados.length > 0
-                    // BOTÃO CONFIRMAR: junta as pizzas já adicionadas com a
-                    // pizza em andamento (se houver) e envia tudo de uma vez.
-                    onClicked: {
-                        var listaFinal = pizzasMontadas.slice();
-                        if (selecionados.length > 0) {
-                            listaFinal.push({
-                                "sabores": selecionados.slice(),
-                                "tamanho": tamanhoSelecionado,
-                                "valorNum": valorAtualMaior,
-                                "borda": null,
-                                "adicionais": []
-                            });
+                        Text {
+                            text: "VALOR TOTAL DO PEDIDO"
+                            color: Estilo.global.textDisabled
+                            font.pixelSize: Estilo.global.fontSize.xs
+                            font.bold: true
+                            anchors.horizontalCenter: parent.horizontalCenter
                         }
-                        if (listaFinal.length === 0)
-                            return;
 
-                        var itens = listaFinal.map(function (pizza) {
-                            var nomesArray = pizza.sabores.map(function (item) {
-                                return item.nome;
-                            });
-                            var borda = pizza.borda ? {
-                                "nome": pizza.borda.nome,
-                                "valor": "R$ " + pizza.borda.valorNum.toFixed(2).replace(".", ",")
-                            } : null;
-                            var adicionais = (pizza.adicionais || []).map(function (adicional) {
+                        Text {
+                            text: "R$ " + valorTotalPedido.toFixed(2).replace(".", ",")
+                            color: Estilo.action.confirm.hover
+                            font.pixelSize: Estilo.global.fontSize.xxl
+                            font.bold: true
+                            anchors.horizontalCenter: parent.horizontalCenter
+                        }
+                    }
+                }
+
+                // 6. Botões de Ação
+                Row {
+                    width: parent.width
+                    spacing: Estilo.global.spacing.lg
+
+                    // BOTÃO VOLTAR
+                    Button {
+                        id: btnVoltar
+
+                        width: (parent.width - parent.spacing) / 2
+                        height: 46
+                        onClicked: pilha.pop()
+
+                        contentItem: Text {
+                            text: "Voltar"
+                            font.pixelSize: Estilo.global.fontSize.xl
+                            font.bold: true
+                            color: Estilo.global.textOnAccent
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+
+                        background: Rectangle {
+                            radius: Estilo.global.radius.md
+                            color: btnVoltar.down ? Estilo.action.back.pressed : (btnVoltar.hovered ? Estilo.action.back.hover : Estilo.action.danger.base)
+                            border.color: Estilo.action.back.pressed
+                            border.width: Estilo.global.borderWidth.hairline
+                        }
+                    }
+
+                    // BOTÃO CONFIRMAR
+                    Button {
+                        id: btnConfirmar
+
+                        width: (parent.width - parent.spacing) / 2
+                        height: 46
+                        enabled: pizzasMontadas.length > 0 || selecionados.length > 0
+                        // BOTÃO CONFIRMAR: junta as pizzas já adicionadas com a
+                        // pizza em andamento (se houver) e envia tudo de uma vez.
+                        onClicked: {
+                            var listaFinal = pizzasMontadas.slice();
+                            if (selecionados.length > 0) {
+                                listaFinal.push({
+                                    "sabores": selecionados.slice(),
+                                    "tamanho": tamanhoSelecionado,
+                                    "valorNum": valorAtualMaior,
+                                    "borda": null,
+                                    "adicionais": []
+                                });
+                            }
+                            if (listaFinal.length === 0)
+                                return;
+
+                            var itens = listaFinal.map(function (pizza) {
+                                var nomesArray = pizza.sabores.map(function (item) {
+                                    return item.nome;
+                                });
+                                var borda = pizza.borda ? {
+                                    "nome": pizza.borda.nome,
+                                    "valor": "R$ " + pizza.borda.valorNum.toFixed(2).replace(".", ",")
+                                } : null;
+                                var adicionais = (pizza.adicionais || []).map(function (adicional) {
+                                    return {
+                                        "sabor": adicional.sabor,
+                                        "nome": adicional.nome,
+                                        "valor": "R$ " + adicional.valorNum.toFixed(2).replace(".", ",")
+                                    };
+                                });
                                 return {
-                                    "sabor": adicional.sabor,
-                                    "nome": adicional.nome,
-                                    "valor": "R$ " + adicional.valorNum.toFixed(2).replace(".", ",")
+                                    "nome": nomesArray.join(" / ") + " (" + pizza.tamanho + ")",
+                                    "valor": "R$ " + valorFinalPizza(pizza).toFixed(2).replace(".", ","),
+                                    "observacao": "",
+                                    "borda": borda,
+                                    "adicionais": adicionais
                                 };
                             });
-                            return {
-                                "nome": nomesArray.join(" / ") + " (" + pizza.tamanho + ")",
-                                "valor": "R$ " + valorFinalPizza(pizza).toFixed(2).replace(".", ","),
-                                "observacao": "",
-                                "borda": borda,
-                                "adicionais": adicionais
-                            };
-                        });
-                        if (typeof onPedidoSelecionado === "function")
-                            onPedidoSelecionado(itens);
-                        pilha.pop(null);
-                    }
+                            if (typeof onPedidoSelecionado === "function")
+                                onPedidoSelecionado(itens);
+                            pilha.pop(null);
+                        }
 
-                    contentItem: Text {
-                        text: "Confirmar"
-                        font.pixelSize: 15
-                        font.bold: true
-                        color: "#ffffff"
-                        horizontalAlignment: Text.AlignHCenter
-                        verticalAlignment: Text.AlignVCenter
-                        opacity: btnConfirmar.enabled ? 1 : 0.6
-                    }
+                        contentItem: Text {
+                            text: "Confirmar"
+                            font.pixelSize: Estilo.global.fontSize.xl
+                            font.bold: true
+                            color: Estilo.global.textOnAccent
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                            opacity: btnConfirmar.enabled ? 1 : Estilo.global.opacity.subtle
+                        }
 
-                    background: Rectangle {
-                        radius: Estilo.rounding.grande
-                        color: !btnConfirmar.enabled ? "#bdc3c7" : (btnConfirmar.down ? "#219150" : (btnConfirmar.hovered ? Estilo.confirmar.hover : Estilo.confirmar.normal))
-                        border.color: !btnConfirmar.enabled ? "#bdc3c7" : "#219150"
-                        border.width: 1
+                        background: Rectangle {
+                            radius: Estilo.global.radius.md
+                            color: !btnConfirmar.enabled ? Estilo.global.surfaceDisabled : (btnConfirmar.down ? Estilo.action.confirm.pressed : (btnConfirmar.hovered ? Estilo.action.confirm.hover : Estilo.action.confirm.base))
+                            border.color: !btnConfirmar.enabled ? Estilo.global.surfaceDisabled : Estilo.action.confirm.border
+                            border.width: Estilo.global.borderWidth.hairline
+                        }
                     }
                 }
             }
         }
+
     }
 
     background: Rectangle {
-        color: Estilo.cores.fundoPagina
-        radius: Estilo.rounding.popup
+        color: Estilo.global.background
+        radius: Estilo.global.radius.xl
     }
 }

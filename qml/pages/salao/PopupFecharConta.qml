@@ -110,7 +110,7 @@ Popup {
     modal: true
     focus: true
     closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
-    padding: 25
+    padding: Estilo.global.padding.popup
     parent: Overlay.overlay
     anchors.centerIn: parent
     // Responsivo: a largura cresce até 960 conforme o espaço disponível na
@@ -122,16 +122,19 @@ Popup {
     // couber (tela bem pequena), ele rola por dentro do popup em vez de
     // vazar.
     width: Math.min(960, (parent ? parent.width : 960) * 0.9)
+    // Abaixo desta largura os controles e a pré-visualização não cabem lado
+    // a lado (a coluna de controles pede ~380 e o resumo, 280).
+    readonly property bool empilhado: width < 700
     height: Math.max(200, Math.min(760, (parent ? parent.height : 760) * 0.9, linhaConteudo.implicitHeight + topPadding + bottomPadding))
 
     Overlay.modal: Rectangle {
-        color: "#99000000"
+        color: Estilo.global.overlay
     }
 
     background: Rectangle {
-        radius: Estilo.rounding.popup
-        color: Estilo.cores.fundoPagina
-        border.color: Estilo.cores.bordaCard
+        radius: Estilo.global.radius.xl
+        color: Estilo.global.background
+        border.color: Estilo.global.borderCard
     }
 
     contentItem: Flickable {
@@ -146,11 +149,16 @@ Popup {
             policy: ScrollBar.AsNeeded
         }
 
-        RowLayout {
+        // Controles à esquerda e pré-visualização à direita enquanto
+        // couberem; um sobre o outro quando não couberem, com o Flickable
+        // acima cuidando da rolagem.
+        GridLayout {
             id: linhaConteudo
 
             width: flickableFechamento.width
-            spacing: 20
+            columns: popupFecharConta.empilhado ? 1 : 2
+            columnSpacing: Estilo.global.spacing.xxl
+            rowSpacing: Estilo.global.spacing.xxl
 
             Column {
         id: colunaFechamento
@@ -160,27 +168,27 @@ Popup {
         spacing: 16
 
         Row {
-            spacing: 8
-            Icone { nome: "fa6s.receipt"; cor: "#0d9488"; tamanho: 20; anchors.verticalCenter: parent.verticalCenter }
+            spacing: Estilo.global.spacing.sm
+            Icone { nome: "fa6s.receipt"; cor: Estilo.screen.salao.accent; tamanho: 20; anchors.verticalCenter: parent.verticalCenter }
             Text {
                 text: "Fechar Conta"
-                font.pixelSize: 18
+                font.pixelSize: Estilo.global.fontSize.xxl
                 font.bold: true
-                color: Estilo.cores.texto
+                color: Estilo.global.text
                 anchors.verticalCenter: parent.verticalCenter
             }
         }
 
         Text {
             text: "Total da conta: R$ " + popupFecharConta.valorTotal.toFixed(2).replace(".", ",")
-            font.pixelSize: 15
+            font.pixelSize: Estilo.global.fontSize.xl
             font.bold: true
-            color: "#0d9488"
+            color: Estilo.screen.salao.accent
         }
 
         // --- SELEÇÃO DO MODO DE DIVISÃO ---
         Row {
-            spacing: 10
+            spacing: Estilo.global.spacing.md
 
             Button {
                 id: btnModoIgual
@@ -194,14 +202,14 @@ Popup {
                 contentItem: Text {
                     text: parent.text
                     font.bold: true
-                    color: popupFecharConta.modoIgual ? "#ffffff" : Estilo.cores.texto
+                    color: popupFecharConta.modoIgual ? Estilo.global.textOnAccent : Estilo.global.text
                     horizontalAlignment: Text.AlignHCenter
                 }
 
                 background: Rectangle {
-                    radius: Estilo.rounding.padrao
-                    color: popupFecharConta.modoIgual ? "#0d9488" : (btnModoIgual.hovered ? "#e6fffa" : "#ffffff")
-                    border.color: "#0d9488"
+                    radius: Estilo.global.radius.sm
+                    color: popupFecharConta.modoIgual ? Estilo.screen.salao.base : (btnModoIgual.hovered ? Estilo.screen.salao.soft : Estilo.global.surface)
+                    border.color: Estilo.screen.salao.accent
                     border.width: btnModoIgual.activeFocus ? 2 : 1
                 }
             }
@@ -218,14 +226,14 @@ Popup {
                 contentItem: Text {
                     text: parent.text
                     font.bold: true
-                    color: !popupFecharConta.modoIgual ? "#ffffff" : Estilo.cores.texto
+                    color: !popupFecharConta.modoIgual ? Estilo.global.textOnAccent : Estilo.global.text
                     horizontalAlignment: Text.AlignHCenter
                 }
 
                 background: Rectangle {
-                    radius: Estilo.rounding.padrao
-                    color: !popupFecharConta.modoIgual ? "#0d9488" : (btnModoAvulso.hovered ? "#e6fffa" : "#ffffff")
-                    border.color: "#0d9488"
+                    radius: Estilo.global.radius.sm
+                    color: !popupFecharConta.modoIgual ? Estilo.screen.salao.base : (btnModoAvulso.hovered ? Estilo.screen.salao.soft : Estilo.global.surface)
+                    border.color: Estilo.screen.salao.accent
                     border.width: btnModoAvulso.activeFocus ? 2 : 1
                 }
             }
@@ -233,14 +241,14 @@ Popup {
 
         // --- QUANTIDADE DE PESSOAS (modo Igual) ---
         Row {
-            spacing: 10
+            spacing: Estilo.global.spacing.md
             visible: popupFecharConta.modoIgual
 
             Text {
                 text: "Número de pessoas"
-                font.pixelSize: 13
+                font.pixelSize: Estilo.global.fontSize.md
                 font.bold: true
-                color: Estilo.cores.textoSecundario
+                color: Estilo.global.textSecondary
                 anchors.verticalCenter: parent.verticalCenter
             }
 
@@ -260,8 +268,8 @@ Popup {
 
                 contentItem: TextInput {
                     text: spinnerPessoas.textFromValue(spinnerPessoas.value, spinnerPessoas.locale)
-                    font.pixelSize: Estilo.fonte.padrao
-                    color: Estilo.cores.textoInput
+                    font.pixelSize: Estilo.global.fontSize.lg
+                    color: Estilo.global.textInput
                     horizontalAlignment: Qt.AlignHCenter
                     verticalAlignment: Qt.AlignVCenter
                     readOnly: !spinnerPessoas.editable
@@ -270,10 +278,10 @@ Popup {
                 }
 
                 background: Rectangle {
-                    radius: Estilo.rounding.padrao
-                    color: "#ffffff"
-                    border.color: spinnerPessoas.activeFocus ? "#0d9488" : Estilo.cores.borda
-                    border.width: 1
+                    radius: Estilo.global.radius.sm
+                    color: Estilo.global.inputBackground
+                    border.color: spinnerPessoas.activeFocus ? Estilo.screen.salao.accent : Estilo.global.border
+                    border.width: Estilo.global.borderWidth.hairline
                 }
             }
         }
@@ -290,13 +298,13 @@ Popup {
             contentItem: Text {
                 text: parent.text
                 font.bold: true
-                color: "#ffffff"
+                color: Estilo.global.textOnAccent
                 horizontalAlignment: Text.AlignHCenter
             }
 
             background: Rectangle {
-                radius: Estilo.rounding.padrao
-                color: parent.down ? "#0f766e" : (parent.hovered ? "#0f8a80" : "#0d9488")
+                radius: Estilo.global.radius.sm
+                color: parent.down ? Estilo.screen.salao.pressed : (parent.hovered ? Estilo.screen.salao.hover : Estilo.screen.salao.base)
             }
         }
 
@@ -304,9 +312,9 @@ Popup {
         Text {
             visible: !popupFecharConta.modoIgual
             text: "Soma das divisões: R$ " + popupFecharConta.somaDivisoes.toFixed(2).replace(".", ",") + " (total da conta: R$ " + popupFecharConta.valorTotal.toFixed(2).replace(".", ",") + ")"
-            font.pixelSize: 12
+            font.pixelSize: Estilo.global.fontSize.sm
             font.italic: true
-            color: Math.abs(popupFecharConta.somaDivisoes - popupFecharConta.valorTotal) > 0.001 ? Estilo.cancelar.normal : Estilo.cores.textoSecundario
+            color: Math.abs(popupFecharConta.somaDivisoes - popupFecharConta.valorTotal) > 0.001 ? Estilo.action.danger.base : Estilo.global.textSecondary
         }
 
         // --- LISTA DE DIVISÕES (uma linha por pessoa) ---
@@ -317,7 +325,7 @@ Popup {
             id: colunaDivisoes
 
             width: parent.width
-            spacing: 10
+            spacing: Estilo.global.spacing.md
 
             Repeater {
                 model: modeloDivisoes
@@ -343,13 +351,13 @@ Popup {
 
                     RowLayout {
                     Layout.fillWidth: true
-                    spacing: 6
+                    spacing: Estilo.global.spacing.xs
 
                     TextField {
                         id: campoNomeDivisao
 
-                        color: Estilo.cores.textoInput
-                        placeholderTextColor: Estilo.cores.placeholderInput
+                        color: Estilo.global.textInput
+                        placeholderTextColor: Estilo.global.textPlaceholder
                         Layout.fillWidth: true
                         // Responsivo: nunca menor que 15 caracteres (ver
                         // fontMetricsNome abaixo), mas cresce além disso se
@@ -374,9 +382,9 @@ Popup {
                         }
 
                         background: Rectangle {
-                            radius: Estilo.rounding.padrao
-                            color: "#ffffff"
-                            border.color: parent.activeFocus ? "#0d9488" : Estilo.cores.borda
+                            radius: Estilo.global.radius.sm
+                            color: Estilo.global.inputBackground
+                            border.color: parent.activeFocus ? Estilo.screen.salao.accent : Estilo.global.border
                             border.width: parent.activeFocus ? 2 : 1
                         }
                     }
@@ -384,8 +392,8 @@ Popup {
                     TextField {
                         id: inputValorDivisao
 
-                        color: Estilo.cores.textoInput
-                        placeholderTextColor: Estilo.cores.placeholderInput
+                        color: Estilo.global.textInput
+                        placeholderTextColor: Estilo.global.textPlaceholder
                         Layout.preferredWidth: 100
                         text: model.valor
                         readOnly: popupFecharConta.modoIgual
@@ -406,9 +414,9 @@ Popup {
                         }
 
                         background: Rectangle {
-                            radius: Estilo.rounding.padrao
-                            color: popupFecharConta.modoIgual ? Estilo.cores.fundoPagina : "#ffffff"
-                            border.color: parent.activeFocus ? "#0d9488" : Estilo.cores.borda
+                            radius: Estilo.global.radius.sm
+                            color: popupFecharConta.modoIgual ? Estilo.global.inputDisabled : Estilo.global.inputBackground
+                            border.color: parent.activeFocus ? Estilo.screen.salao.accent : Estilo.global.border
                             border.width: parent.activeFocus ? 2 : 1
                         }
                     }
@@ -423,7 +431,7 @@ Popup {
 
                         contentItem: Text {
                             text: comboFormaDivisao.displayText
-                            color: Estilo.cores.textoInput
+                            color: Estilo.global.textInput
                             leftPadding: 10
                             rightPadding: 10
                             verticalAlignment: Text.AlignVCenter
@@ -436,15 +444,15 @@ Popup {
                             width: comboFormaDivisao.width
                             text: modelData
                             highlighted: comboFormaDivisao.highlightedIndex === index
-                            palette.text: Estilo.cores.textoInput
-                            palette.highlightedText: Estilo.cores.textoInput
+                            palette.text: Estilo.global.textInput
+                            palette.highlightedText: Estilo.global.textInput
                         }
 
                         background: Rectangle {
-                            radius: Estilo.rounding.padrao
-                            color: "#ffffff"
-                            border.color: parent.activeFocus ? "#0d9488" : Estilo.cores.borda
-                            border.width: 1
+                            radius: Estilo.global.radius.sm
+                            color: Estilo.global.inputBackground
+                            border.color: parent.activeFocus ? Estilo.screen.salao.accent : Estilo.global.border
+                            border.width: Estilo.global.borderWidth.hairline
                             implicitHeight: inputValorDivisao.implicitHeight
                         }
                     }
@@ -463,19 +471,19 @@ Popup {
                         contentItem: Text {
                             text: btnStatusDivisao.text
                             font.bold: true
-                            color: "#ffffff"
+                            color: Estilo.global.textOnAccent
                             horizontalAlignment: Text.AlignHCenter
                             verticalAlignment: Text.AlignVCenter
                         }
 
                         background: Rectangle {
-                            radius: Estilo.rounding.padrao
-                            color: model.status === "PG" ? (btnStatusDivisao.down ? Estilo.confirmar.pressionado : (btnStatusDivisao.hovered ? Estilo.confirmar.hover : Estilo.confirmar.normal)) : (btnStatusDivisao.down ? Estilo.cancelar.pressionado : (btnStatusDivisao.hovered ? Estilo.cancelar.hover : Estilo.cancelar.normal))
+                            radius: Estilo.global.radius.sm
+                            color: model.status === "PG" ? (btnStatusDivisao.down ? Estilo.action.confirm.pressed : (btnStatusDivisao.hovered ? Estilo.action.confirm.hover : Estilo.action.confirm.base)) : (btnStatusDivisao.down ? Estilo.action.danger.pressed : (btnStatusDivisao.hovered ? Estilo.action.danger.hover : Estilo.action.danger.base))
                             // Anel de foco: só aparece navegando por teclado —
                             // mesmo padrão de btnStatusPagamento em Balcao.qml/
                             // Entrega.qml.
-                            border.color: Estilo.cores.texto
-                            border.width: btnStatusDivisao.activeFocus ? 3 : 0
+                            border.color: Estilo.global.text
+                            border.width: btnStatusDivisao.activeFocus ? Estilo.global.borderWidth.focus : 0
                         }
                     }
 
@@ -487,15 +495,15 @@ Popup {
 
                         contentItem: Text {
                             text: "×"
-                            color: "#ffffff"
+                            color: Estilo.global.textOnAccent
                             font.bold: true
                             horizontalAlignment: Text.AlignHCenter
                             verticalAlignment: Text.AlignVCenter
                         }
 
                         background: Rectangle {
-                            radius: Estilo.rounding.padrao
-                            color: parent.down ? Estilo.cancelar.pressionado : (parent.hovered ? Estilo.cancelar.hover : Estilo.cancelar.normal)
+                            radius: Estilo.global.radius.sm
+                            color: parent.down ? Estilo.action.danger.pressed : (parent.hovered ? Estilo.action.danger.hover : Estilo.action.danger.base)
                         }
                     }
                     }
@@ -509,19 +517,19 @@ Popup {
                         Layout.fillWidth: true
                         Layout.leftMargin: 20
                         visible: model.formaPagamento === "Dinheiro"
-                        spacing: 6
+                        spacing: Estilo.global.spacing.xs
 
                         Text {
                             text: "Troco para"
-                            font.pixelSize: 12
-                            color: Estilo.cores.textoSecundario
+                            font.pixelSize: Estilo.global.fontSize.sm
+                            color: Estilo.global.textSecondary
                         }
 
                         TextField {
                             id: campoTrocoRecebido
 
-                            color: Estilo.cores.textoInput
-                            placeholderTextColor: Estilo.cores.placeholderInput
+                            color: Estilo.global.textInput
+                            placeholderTextColor: Estilo.global.textPlaceholder
                             Layout.preferredWidth: 100
                             text: model.trocoRecebido
                             placeholderText: "R$ 0,00"
@@ -550,9 +558,9 @@ Popup {
                             }
 
                             background: Rectangle {
-                                radius: Estilo.rounding.padrao
-                                color: "#ffffff"
-                                border.color: parent.activeFocus ? "#0d9488" : Estilo.cores.borda
+                                radius: Estilo.global.radius.sm
+                                color: Estilo.global.inputBackground
+                                border.color: parent.activeFocus ? Estilo.screen.salao.accent : Estilo.global.border
                                 border.width: parent.activeFocus ? 2 : 1
                             }
                         }
@@ -572,9 +580,9 @@ Popup {
 
                             visible: model.trocoRecebido !== ""
                             text: "Troco a dar: R$ " + Math.max(trocoADar, 0).toFixed(2).replace(".", ",")
-                            font.pixelSize: 12
+                            font.pixelSize: Estilo.global.fontSize.sm
                             font.bold: true
-                            color: trocoADar < 0 ? Estilo.cancelar.normal : Estilo.cores.textoSecundario
+                            color: trocoADar < 0 ? Estilo.action.danger.base : Estilo.global.textSecondary
                         }
                     }
                 }
@@ -587,13 +595,13 @@ Popup {
 
         // --- CÓPIAS + AÇÕES ---
         Row {
-            spacing: 10
+            spacing: Estilo.global.spacing.md
 
             Text {
                 text: "Cópias"
-                font.pixelSize: 13
+                font.pixelSize: Estilo.global.fontSize.md
                 font.bold: true
-                color: Estilo.cores.textoSecundario
+                color: Estilo.global.textSecondary
                 anchors.verticalCenter: parent.verticalCenter
             }
 
@@ -602,19 +610,19 @@ Popup {
 
                 value: 1
                 width: 90
-                corDestaque: "#0d9488"
+                corDestaque: Estilo.screen.salao.accent
             }
         }
 
         Row {
-            spacing: 12
+            spacing: Estilo.global.spacing.lg
             anchors.right: parent.right
 
             Button {
                 id: btnCancelarFechamento
 
                 text: "Cancelar"
-                padding: 10
+                padding: Estilo.global.padding.md
                 focusPolicy: Qt.StrongFocus
                 Keys.onReturnPressed: clicked()
                 onClicked: popupFecharConta.close()
@@ -622,23 +630,23 @@ Popup {
                 contentItem: Text {
                     text: btnCancelarFechamento.text
                     font.bold: true
-                    color: "#ffffff"
+                    color: Estilo.global.textOnAccent
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
                 }
 
                 background: Rectangle {
-                    radius: Estilo.rounding.padrao
-                    color: parent.down ? Estilo.cores.textoSecundario : (parent.hovered ? "#95a5a6" : Estilo.cores.textoSecundario)
-                    border.color: parent.activeFocus ? Estilo.cores.texto : "transparent"
-                    border.width: parent.activeFocus ? 3 : 0
+                    radius: Estilo.global.radius.sm
+                    color: parent.down ? Estilo.action.neutral.pressed : (parent.hovered ? Estilo.action.neutral.hover : Estilo.action.neutral.base)
+                    border.color: parent.activeFocus ? Estilo.global.text : "transparent"
+                    border.width: parent.activeFocus ? Estilo.global.borderWidth.focus : 0
                 }
             }
 
             Button {
                 id: btnConfirmarFechamento
 
-                padding: 10
+                padding: Estilo.global.padding.md
                 focusPolicy: Qt.StrongFocus
                 Keys.onReturnPressed: clicked()
                 onClicked: {
@@ -658,22 +666,22 @@ Popup {
                 }
 
                 contentItem: Row {
-                    spacing: 6
+                    spacing: Estilo.global.spacing.xs
                     anchors.centerIn: parent
-                    Icone { nome: "fa6s.print"; cor: "#ffffff"; tamanho: Estilo.fonte.padrao; anchors.verticalCenter: parent.verticalCenter }
+                    Icone { nome: "fa6s.print"; cor: Estilo.global.textOnAccent; tamanho: Estilo.global.fontSize.lg; anchors.verticalCenter: parent.verticalCenter }
                     Text {
                         text: "Confirmar e Imprimir"
                         font.bold: true
-                        color: "#ffffff"
+                        color: Estilo.global.textOnAccent
                         anchors.verticalCenter: parent.verticalCenter
                     }
                 }
 
                 background: Rectangle {
-                    radius: Estilo.rounding.padrao
-                    color: parent.down ? Estilo.confirmar.pressionado : (parent.hovered ? Estilo.confirmar.hover : Estilo.confirmar.normal)
-                    border.color: parent.activeFocus ? Estilo.cores.texto : Estilo.confirmar.pressionado
-                    border.width: parent.activeFocus ? 3 : 1
+                    radius: Estilo.global.radius.sm
+                    color: parent.down ? Estilo.action.confirm.pressed : (parent.hovered ? Estilo.action.confirm.hover : Estilo.action.confirm.base)
+                    border.color: parent.activeFocus ? Estilo.global.text : Estilo.action.confirm.pressed
+                    border.width: parent.activeFocus ? Estilo.global.borderWidth.focus : Estilo.global.borderWidth.hairline
                 }
             }
         }
@@ -681,7 +689,7 @@ Popup {
 
             // --- PRÉ-VISUALIZAÇÃO (itens da mesa + divisão da conta) ---
             ResumoFechamento {
-                Layout.preferredWidth: 280
+                Layout.preferredWidth: popupFecharConta.empilhado ? linhaConteudo.width : 280
                 Layout.alignment: Qt.AlignTop
                 itensMesa: popupFecharConta.itensMesa
                 divisoes: modeloDivisoes

@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import estilo 1.0
+import "../../components"
 
 // Coluna direita de Consulta.qml ("Área principal"): mostra o conteúdo
 // completo da comanda selecionada na lista, ou uma mensagem de estado vazio.
@@ -11,10 +12,14 @@ Rectangle {
     // Referência à página Consulta.qml (comandaSelecionada/tituloComanda).
     property var pagina
     property int totalComandas: 0
+    // Ligado por AreaPrincipal.qml quando lista e detalhe se revezam na tela
+    // (janela estreita): aí este painel cobre a lista inteira, e sem um
+    // caminho de volta não haveria como escolher outra comanda.
+    property bool mostrarVoltarParaLista: false
 
-    radius: Estilo.rounding.medio
-    color: "#ffffff"
-    border.color: Estilo.cores.bordaCard
+    radius: Estilo.global.radius.lg
+    color: Estilo.global.surface
+    border.color: Estilo.global.borderCard
 
     Text {
         anchors.centerIn: parent
@@ -28,50 +33,86 @@ Rectangle {
                 ? "Nenhuma comanda encontrada em pedidos/"
                 : "← Selecione uma comanda para ver os detalhes";
         }
-        color: "#95a5a6"
+        color: Estilo.global.textMuted
         font.italic: true
-        font.pixelSize: Estilo.fonte.padrao
+        font.pixelSize: Estilo.global.fontSize.lg
         visible: painelDetalhe.pagina.comandaSelecionada === null
     }
 
     ColumnLayout {
         anchors.fill: parent
         anchors.margins: 18
-        spacing: 12
+        spacing: Estilo.global.spacing.lg
         visible: painelDetalhe.pagina.comandaSelecionada !== null
+
+        // Volta para a lista de comandas — existe só quando a lista deu
+        // lugar a este painel por falta de largura (ver AreaPrincipal.qml).
+        Button {
+            Layout.alignment: Qt.AlignLeft
+            visible: painelDetalhe.mostrarVoltarParaLista
+            padding: Estilo.global.padding.sm
+            onClicked: {
+                painelDetalhe.pagina.comandaSelecionada = null;
+                painelDetalhe.pagina.arquivoSelecionado = "";
+            }
+
+            contentItem: Row {
+                spacing: Estilo.global.spacing.xs
+
+                Icone {
+                    nome: "fa6s.arrow-left"
+                    cor: Estilo.screen.consulta.accent
+                    tamanho: Estilo.global.fontSize.md
+                    anchors.verticalCenter: parent.verticalCenter
+                }
+
+                Text {
+                    text: "Voltar para a lista"
+                    font.bold: true
+                    font.pixelSize: Estilo.global.fontSize.md
+                    color: Estilo.screen.consulta.accent
+                    anchors.verticalCenter: parent.verticalCenter
+                }
+            }
+
+            background: Rectangle {
+                radius: Estilo.global.radius.sm
+                color: parent.down ? Estilo.global.surfacePressed : (parent.hovered ? Estilo.global.surfaceHover : "transparent")
+            }
+        }
 
         RowLayout {
             Layout.fillWidth: true
-            spacing: 10
+            spacing: Estilo.global.spacing.md
 
             Column {
               spacing:5
 
                 Rectangle {
-                    radius: 6
+                    radius: Estilo.global.radius.sm
                     width: textoBadgeDetalhe.implicitWidth + 16
                     height: textoBadgeDetalhe.implicitHeight + 8
                     color: {
                         var tipo = painelDetalhe.pagina.comandaSelecionada ? painelDetalhe.pagina.comandaSelecionada.tipo : "";
-                        return tipo === "Entrega" ? "#0284c7" : (tipo === "Mesa" ? "#0d9488" : "#d97706");
+                        return tipo === "Entrega" ? Estilo.orderType.entrega.base : (tipo === "Mesa" ? Estilo.orderType.mesa.base : Estilo.orderType.balcao.base);
                     }
 
                     Text {
                         id: textoBadgeDetalhe
 
                         text: painelDetalhe.pagina.comandaSelecionada ? painelDetalhe.pagina.comandaSelecionada.tipo : ""
-                        color: "#ffffff"
+                        color: Estilo.global.textOnAccent
                         font.bold: true
-                        font.pixelSize: 12
+                        font.pixelSize: Estilo.global.fontSize.sm
                         anchors.centerIn: parent
                     }
                 }
 
                 Text {
                     text: painelDetalhe.pagina.comandaSelecionada ? painelDetalhe.pagina.tituloComanda(painelDetalhe.pagina.comandaSelecionada) : ""
-                    font.pixelSize: 15
+                    font.pixelSize: Estilo.global.fontSize.xl
                     font.bold: true
-                    color: Estilo.cores.texto
+                    color: Estilo.global.text
                 }
 
                 // Mesmo código impresso no papel + máquina onde a comanda
@@ -85,8 +126,8 @@ Rectangle {
                     }
                     visible: text !== ""
                     font.family: "monospace"
-                    font.pixelSize: 12
-                    color: Estilo.cores.textoSecundario
+                    font.pixelSize: Estilo.global.fontSize.sm
+                    color: Estilo.global.textSecondary
                 }
             }
         }
@@ -129,10 +170,10 @@ Rectangle {
             Layout.fillWidth: true
             implicitHeight: colunaConflito.implicitHeight + 24
             visible: detalhe !== null
-            radius: Estilo.rounding.padrao
-            color: Estilo.cores.avisoFundo
-            border.color: Estilo.cores.avisoBorda
-            border.width: 1
+            radius: Estilo.global.radius.sm
+            color: Estilo.status.warning.background
+            border.color: Estilo.status.warning.border
+            border.width: Estilo.global.borderWidth.hairline
 
             Connections {
                 target: painelDetalhe.pagina
@@ -149,14 +190,14 @@ Rectangle {
                 x: 12
                 y: 12
                 width: parent.width - 24
-                spacing: 8
+                spacing: Estilo.global.spacing.sm
 
                 Text {
                     width: parent.width
                     wrapMode: Text.WordWrap
-                    font.pixelSize: 13
+                    font.pixelSize: Estilo.global.fontSize.md
                     font.bold: true
-                    color: Estilo.cores.avisoTexto
+                    color: Estilo.status.warning.content
                     text: {
                         if (faixaConflito.detalhe === null)
                             return "";
@@ -175,8 +216,8 @@ Rectangle {
                 Text {
                     width: parent.width
                     wrapMode: Text.WordWrap
-                    font.pixelSize: 12
-                    color: Estilo.cores.avisoTexto
+                    font.pixelSize: Estilo.global.fontSize.sm
+                    color: Estilo.status.warning.content
                     text: {
                         if (faixaConflito.temDiferencas)
                             return "Confira o que mudou e escolha qual versão vale. Nada foi alterado automaticamente.";
@@ -195,9 +236,9 @@ Rectangle {
                     width: parent.width
                     height: colunaDiferencas.implicitHeight + 16
                     visible: faixaConflito.temDiferencas
-                    radius: Estilo.rounding.padrao
-                    color: "#ffffff"
-                    border.color: Estilo.cores.avisoBorda
+                    radius: Estilo.global.radius.sm
+                    color: Estilo.global.surface
+                    border.color: Estilo.status.warning.border
 
                     Column {
                         id: colunaDiferencas
@@ -205,34 +246,34 @@ Rectangle {
                         x: 8
                         y: 8
                         width: parent.width - 16
-                        spacing: 6
+                        spacing: Estilo.global.spacing.xs
 
                         Row {
                             width: parent.width
-                            spacing: 8
+                            spacing: Estilo.global.spacing.sm
 
                             Text {
                                 width: (parent.width - 16) * 0.3
                                 text: "Campo"
-                                font.pixelSize: 11
+                                font.pixelSize: Estilo.global.fontSize.xs
                                 font.bold: true
-                                color: Estilo.cores.textoSecundario
+                                color: Estilo.global.textSecondary
                             }
                             Text {
                                 width: (parent.width - 16) * 0.35
                                 text: "Esta máquina"
-                                font.pixelSize: 11
+                                font.pixelSize: Estilo.global.fontSize.xs
                                 font.bold: true
-                                color: Estilo.cores.textoSecundario
+                                color: Estilo.global.textSecondary
                             }
                             Text {
                                 width: (parent.width - 16) * 0.35
                                 text: faixaConflito.detalhe && faixaConflito.detalhe.maquinaRemota
                                     ? faixaConflito.detalhe.maquinaRemota
                                     : "Outra máquina"
-                                font.pixelSize: 11
+                                font.pixelSize: Estilo.global.fontSize.xs
                                 font.bold: true
-                                color: Estilo.cores.textoSecundario
+                                color: Estilo.global.textSecondary
                                 elide: Text.ElideRight
                             }
                         }
@@ -246,14 +287,14 @@ Rectangle {
                                 required property var modelData
 
                                 width: colunaDiferencas.width
-                                spacing: 8
+                                spacing: Estilo.global.spacing.sm
 
                                 Text {
                                     width: (linhaDiferenca.width - 16) * 0.3
                                     text: linhaDiferenca.modelData.rotulo
-                                    font.pixelSize: 12
+                                    font.pixelSize: Estilo.global.fontSize.sm
                                     font.bold: true
-                                    color: Estilo.cores.texto
+                                    color: Estilo.global.text
                                     wrapMode: Text.WordWrap
                                 }
                                 Text {
@@ -264,16 +305,16 @@ Rectangle {
                                     // coluna vazia pareça um erro de tela.
                                     text: linhaDiferenca.modelData.local || "—"
                                     font.family: "monospace"
-                                    font.pixelSize: 12
-                                    color: Estilo.cores.texto
+                                    font.pixelSize: Estilo.global.fontSize.sm
+                                    color: Estilo.global.text
                                     wrapMode: Text.Wrap
                                 }
                                 Text {
                                     width: (linhaDiferenca.width - 16) * 0.35
                                     text: linhaDiferenca.modelData.remoto || "—"
                                     font.family: "monospace"
-                                    font.pixelSize: 12
-                                    color: Estilo.cores.avisoTexto
+                                    font.pixelSize: Estilo.global.fontSize.sm
+                                    color: Estilo.status.warning.content
                                     wrapMode: Text.Wrap
                                 }
                             }
@@ -289,9 +330,9 @@ Rectangle {
                     // Com a tabela acima, o cupom inteiro só atrapalharia; ele
                     // fica para os conflitos sem lista de diferenças gravada.
                     visible: faixaConflito.temVersaoRemota && !faixaConflito.temDiferencas
-                    radius: Estilo.rounding.padrao
-                    color: "#ffffff"
-                    border.color: Estilo.cores.avisoBorda
+                    radius: Estilo.global.radius.sm
+                    color: Estilo.global.surface
+                    border.color: Estilo.status.warning.border
 
                     Flickable {
                         anchors.fill: parent
@@ -310,15 +351,15 @@ Rectangle {
 
                             text: faixaConflito.detalhe ? (faixaConflito.detalhe.conteudoRemoto || "") : ""
                             font.family: "monospace"
-                            font.pixelSize: 12
-                            color: "#34495e"
+                            font.pixelSize: Estilo.global.fontSize.sm
+                            color: Estilo.printer.ink
                             wrapMode: Text.NoWrap
                         }
                     }
                 }
 
                 Row {
-                    spacing: 8
+                    spacing: Estilo.global.spacing.sm
 
                     Button {
                         text: "Manter esta versão"
@@ -331,16 +372,16 @@ Rectangle {
 
                         contentItem: Text {
                             text: parent.text
-                            color: "#ffffff"
+                            color: Estilo.global.textOnAccent
                             font.bold: true
-                            font.pixelSize: 12
+                            font.pixelSize: Estilo.global.fontSize.sm
                             horizontalAlignment: Text.AlignHCenter
                             verticalAlignment: Text.AlignVCenter
                         }
 
                         background: Rectangle {
-                            radius: 6
-                            color: parent.down ? Estilo.confirmar.pressionado : (parent.hovered ? Estilo.confirmar.hover : Estilo.confirmar.normal)
+                            radius: Estilo.global.radius.sm
+                            color: parent.down ? Estilo.action.confirm.pressed : (parent.hovered ? Estilo.action.confirm.hover : Estilo.action.confirm.base)
                         }
                     }
 
@@ -355,16 +396,16 @@ Rectangle {
 
                         contentItem: Text {
                             text: parent.text
-                            color: "#ffffff"
+                            color: Estilo.global.textOnAccent
                             font.bold: true
-                            font.pixelSize: 12
+                            font.pixelSize: Estilo.global.fontSize.sm
                             horizontalAlignment: Text.AlignHCenter
                             verticalAlignment: Text.AlignVCenter
                         }
 
                         background: Rectangle {
-                            radius: 6
-                            color: parent.down ? Estilo.cancelar.pressionado : (parent.hovered ? Estilo.cancelar.hover : Estilo.cancelar.normal)
+                            radius: Estilo.global.radius.sm
+                            color: parent.down ? Estilo.action.danger.pressed : (parent.hovered ? Estilo.action.danger.hover : Estilo.action.danger.base)
                         }
                     }
                 }
@@ -374,7 +415,7 @@ Rectangle {
         Rectangle {
             Layout.fillWidth: true
             height: 1
-            color: "#eeeeee"
+            color: Estilo.global.divider
         }
 
         // Área do conteúdo do cupom: fonte monoespaçada e sem quebra
@@ -402,8 +443,8 @@ Rectangle {
 
                 text: painelDetalhe.pagina.comandaSelecionada ? painelDetalhe.pagina.comandaSelecionada.conteudo : ""
                 font.family: "monospace"
-                font.pixelSize: 13
-                color: "#34495e"
+                font.pixelSize: Estilo.global.fontSize.md
+                color: Estilo.printer.ink
                 wrapMode: Text.NoWrap
             }
         }

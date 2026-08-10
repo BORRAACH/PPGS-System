@@ -8,16 +8,22 @@ Rectangle {
 
     property StackView stackView: null
 
+    // Largura do ícone (22) mais o respiro dos dois lados. Em tela estreita a
+    // barra afina em vez de sumir: navegar entre telas é a única coisa que
+    // precisa estar sempre ao alcance, e cada pixel devolvido aqui vira
+    // espaço de formulário do outro lado.
+    readonly property int larguraBarra: Responsivo.compacto ? 52 : 70
+
     Layout.fillHeight: true
-    Layout.preferredWidth: 70
-    Layout.rightMargin: Estilo.preenchimento.pequeno
+    Layout.preferredWidth: larguraBarra
+    Layout.rightMargin: Estilo.global.padding.xs
     // Nada (texto, botão, etc.) pode ser desenhado além dos limites da
     // barra lateral — sem isso, textos mais largos que o espaço disponível
     // vazavam para fora do retângulo.
     clip: true
     // Poucos tons mais escuro que o fundo das páginas (#f8f9fa, usado em
     // Balcao.qml, Pedido.qml, Entregarega.qml etc.), em vez de uma cor solta.
-    color: Qt.darker(Estilo.cores.fundoPagina, 1.8)
+    color: Estilo.global.chrome
 
     ColumnLayout {
         // Espaçador Flexível
@@ -26,11 +32,11 @@ Rectangle {
         // Padding vertical/horizontal e spacing entre os grupos espelham
         // Bar.vPadding (padding.large), BarWrapper.padding (padding.smaller)
         // e o "spacing: Appearance.spacing.normal" do Bar.qml do caelestia.
-        anchors.topMargin: Estilo.preenchimento.grande
-        anchors.bottomMargin: Estilo.preenchimento.grande
-        anchors.leftMargin: Estilo.preenchimento.menor
-        anchors.rightMargin: Estilo.preenchimento.menor
-        spacing: Estilo.espacamento.normal
+        anchors.topMargin: Estilo.global.padding.xl
+        anchors.bottomMargin: Estilo.global.padding.xl
+        anchors.leftMargin: Estilo.global.padding.sm
+        anchors.rightMargin: Estilo.global.padding.sm
+        spacing: Estilo.global.spacing.lg
 
         // --- CÁPSULA DE NAVEGAÇÃO PRINCIPAL (Estilo Ícones Agrupados) ---
         Rectangle {
@@ -39,14 +45,14 @@ Rectangle {
             Layout.fillWidth: true
             // Padding vertical igual ao usado pelos grupos (Workspaces/Tray)
             // do Bar.qml do caelestia: Appearance.padding.small em cima e embaixo.
-            Layout.preferredHeight: colNavegacao.implicitHeight + Estilo.preenchimento.pequeno * 2
+            Layout.preferredHeight: colNavegacao.implicitHeight + Estilo.global.padding.xs * 2
             // Levemente mais clara que o fundo do LateralBar, em vez do
             // tom azulado escuro de antes.
             color: Qt.lighter(sideBar.color, 108)
             // Raio "cheio" (pílula) — mesmo usado nos grupos do Bar.qml do
             // caelestia (radius: Appearance.rounding.full); o Qt limita
             // automaticamente ao raio máximo possível (metade do menor lado).
-            radius: Estilo.rounding.cheio
+            radius: Estilo.global.radius.pill
 
             // Itens de navegação: ícone, texto do tooltip, página de destino
             // e objectName da tela — evita trocar de novo pra mesma página
@@ -109,7 +115,7 @@ Rectangle {
                 id: colNavegacao
 
                 anchors.centerIn: parent
-                width: parent.width - Estilo.preenchimento.pequeno * 2
+                width: parent.width - Estilo.global.padding.xs * 2
 
                 Repeater {
                     model: modeloNavegacao
@@ -120,7 +126,11 @@ Rectangle {
                         Layout.fillWidth: true
                         // Ícone (24) + padding.normal dos dois lados — mesma
                         // relação usada em Power.qml (icon.implicitHeight + padding.small * 2).
-                        implicitHeight: 24 + Estilo.preenchimento.normal * 2
+                        // O padding encolhe junto com o resto em tela pequena,
+                        // mas o botão não desce do alvo mínimo de toque: aqui
+                        // quem aponta é o dedo, e um alvo menor que isso vira
+                        // erro de navegação no meio do atendimento.
+                        implicitHeight: Math.max(Responsivo.alvoToque, 24 + Estilo.global.padding.md * 2)
                         onClicked: {
                             if (sideBar.stackView && sideBar.stackView.currentItem && sideBar.stackView.currentItem.objectName !== nomeTela)
                                 // replace(null, ...) troca a pilha INTEIRA
@@ -149,22 +159,22 @@ Rectangle {
                             text: textoTooltip
                             visible: btnNav.hovered
                             delay: 400
-                            padding: Estilo.preenchimento.normal
-                            x: btnNav.width + Estilo.espacamento.pequeno
+                            padding: Estilo.global.padding.md
+                            x: btnNav.width + Estilo.global.spacing.xs
                             y: (btnNav.height - height) / 2
 
                             background: Rectangle {
-                                radius: Estilo.rounding.popup
+                                radius: Estilo.global.radius.xl
                                 color: capsulaNavegacao.color
-                                border.color: Estilo.cores.bordaCard
-                                border.width: 1
+                                border.color: Estilo.global.borderCard
+                                border.width: Estilo.global.borderWidth.hairline
                             }
 
                         }
 
                         background: Rectangle {
                             color: btnNav.hovered ? Qt.darker(capsulaNavegacao.color, 1.4) : "transparent"
-                            radius: Estilo.rounding.cheio
+                            radius: Estilo.global.radius.pill
                         }
 
                         contentItem: Item {
@@ -172,7 +182,7 @@ Rectangle {
 
                             Icone {
                                 nome: icone
-                                cor: Estilo.cores.texto
+                                cor: Estilo.global.text
                                 tamanho: 22
                                 anchors.centerIn: parent
                             }
@@ -196,9 +206,9 @@ Rectangle {
             id: capsulaRodape
 
             Layout.fillWidth: true
-            implicitHeight: colFooter.implicitHeight + Estilo.preenchimento.pequeno * 2
+            implicitHeight: colFooter.implicitHeight + Estilo.global.padding.xs * 2
             color: Qt.lighter(sideBar.color, 108)
-            radius: Estilo.rounding.cheio
+            radius: Estilo.global.radius.pill
 
             // Telas de manutenção do sistema (o que se mexe de vez em quando),
             // separadas da cápsula de cima, que é o fluxo de atendimento do
@@ -228,8 +238,8 @@ Rectangle {
                 id: colFooter
 
                 anchors.centerIn: parent
-                width: parent.width - Estilo.preenchimento.pequeno * 2
-                spacing: Estilo.espacamento.menor
+                width: parent.width - Estilo.global.padding.xs * 2
+                spacing: Estilo.global.spacing.md
 
                 Repeater {
                     model: modeloRodape
@@ -238,7 +248,11 @@ Rectangle {
                         id: btnRodape
 
                         Layout.fillWidth: true
-                        implicitHeight: 24 + Estilo.preenchimento.normal * 2
+                        // O padding encolhe junto com o resto em tela pequena,
+                        // mas o botão não desce do alvo mínimo de toque: aqui
+                        // quem aponta é o dedo, e um alvo menor que isso vira
+                        // erro de navegação no meio do atendimento.
+                        implicitHeight: Math.max(Responsivo.alvoToque, 24 + Estilo.global.padding.md * 2)
                         onClicked: {
                             if (sideBar.stackView && sideBar.stackView.currentItem && sideBar.stackView.currentItem.objectName !== nomeTela)
                                 // Ver o mesmo comentário no Repeater de
@@ -252,22 +266,22 @@ Rectangle {
                             text: textoTooltip
                             visible: btnRodape.hovered
                             delay: 400
-                            padding: Estilo.preenchimento.normal
-                            x: btnRodape.width + Estilo.espacamento.pequeno
+                            padding: Estilo.global.padding.md
+                            x: btnRodape.width + Estilo.global.spacing.xs
                             y: (btnRodape.height - height) / 2
 
                             background: Rectangle {
-                                radius: Estilo.rounding.popup
+                                radius: Estilo.global.radius.xl
                                 color: capsulaRodape.color
-                                border.color: Estilo.cores.bordaCard
-                                border.width: 1
+                                border.color: Estilo.global.borderCard
+                                border.width: Estilo.global.borderWidth.hairline
                             }
 
                         }
 
                         background: Rectangle {
                             color: btnRodape.hovered ? Qt.darker(capsulaRodape.color, 1.4) : "transparent"
-                            radius: Estilo.rounding.cheio
+                            radius: Estilo.global.radius.pill
                         }
 
                         contentItem: Item {
@@ -275,7 +289,7 @@ Rectangle {
 
                             Icone {
                                 nome: icone
-                                cor: Estilo.cores.texto
+                                cor: Estilo.global.text
                                 tamanho: 22
                                 anchors.centerIn: parent
                             }

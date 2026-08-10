@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Layouts
 import "../pedidos"
 import "../../components"
 import estilo 1.0
@@ -216,7 +217,26 @@ Page {
         id: conteudoEntregaComponent
 
         Item {
+            id: conteudoEntrega
+
             anchors.fill: parent
+
+            // ===== MEDIDAS DO LAYOUT =====
+            // Mesma conta do Balcão (ver Balcao.qml): formulário e resumo
+            // eram larguras cravadas — 690 e 300 — dentro de um Row, e abaixo
+            // de ~1020px de janela o conteúdo saía pela borda sem rolagem
+            // horizontal que o alcançasse.
+            readonly property real larguraDisponivel: width - Estilo.global.padding.xl * 2
+            readonly property bool empilhado: larguraDisponivel < 690 + 300 + Estilo.global.spacing.xxl
+            readonly property int larguraResumo: empilhado ? Math.min(360, larguraDisponivel) : 300
+            readonly property int larguraFormulario: empilhado ? Math.min(690, larguraDisponivel) : Math.min(690, larguraDisponivel - larguraResumo - Estilo.global.spacing.xxl)
+            // Os campos de cliente/endereço são mais estreitos que a lista de
+            // itens: 420px no desenho original, contra os 690 da lista. Esta é
+            // a largura desse bloco de cima, e as duplas de campos
+            // (telefone+nome, endereço+número) repartem exatamente ela.
+            readonly property int larguraCampos: Math.min(420, larguraFormulario)
+            readonly property var gradePedido: Responsivo.gradePedido(larguraFormulario)
+            readonly property int larguraBotaoAcao: Math.max(140, Math.min(200, Math.floor((larguraFormulario - Estilo.global.spacing.xl * 2) / 3)))
 
             // Exposto para telaEntrega.StackView.onActivated poder focar o
             // primeiro campo assim que a tela vira a atual (ver comentário
@@ -378,57 +398,67 @@ Page {
                     policy: ScrollBar.AsNeeded
                 }
 
-            Row {
+            // Uma ou duas colunas conforme o espaço — ver o comentário
+            // equivalente em Balcao.qml.
+            GridLayout {
                 id: rowConteudo
 
                 anchors.horizontalCenter: parent.horizontalCenter
                 anchors.verticalCenter: parent.verticalCenter
-                spacing: 30
+                columns: conteudoEntrega.empilhado ? 1 : 2
+                columnSpacing: Estilo.global.spacing.xxl
+                rowSpacing: Estilo.global.spacing.xxl
 
                 Column {
-                    anchors.verticalCenter: parent.verticalCenter
-                    spacing: 20
+                    Layout.preferredWidth: conteudoEntrega.larguraFormulario
+                    Layout.alignment: Qt.AlignHCenter | Qt.AlignVCenter
+                    spacing: Estilo.global.spacing.xxl
 
                     Row {
-                        spacing: 10
-                        anchors.horizontalCenter: parent
-                        Icone { nome: "fa6s.motorcycle"; cor: "#e67e22"; tamanho: Estilo.fonte.titulo; anchors.verticalCenter: parent.verticalCenter }
+                        spacing: Estilo.global.spacing.md
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        Icone { nome: "fa6s.motorcycle"; cor: Estilo.screen.entrega.accent; tamanho: Estilo.global.fontSize.title; anchors.verticalCenter: parent.verticalCenter }
                         Text {
                             text: "PEDIDO DE ENTREGA"
-                            font.pixelSize: Estilo.fonte.titulo
-                            font.bold: true
-                            color: "#e67e22"
+                            font.pixelSize: Estilo.global.fontSize.title
+                            font.family: Estilo.global.fontFamily.title
+                            color: Estilo.screen.entrega.accent
                             anchors.verticalCenter: parent.verticalCenter
                         }
                     }
 
                     // Campos Telefone e Nome do Cliente
+                    // Alinhados à esquerda, e não centralizados: são mais
+                    // estreitos que o formulário (ver larguraCampos), e
+                    // centralizados começavam deslocados em relação à lista de
+                    // itens e ao bloco de pagamento logo abaixo. Numa tela
+                    // estreita, onde ocupam a largura toda, os dois
+                    // alinhamentos coincidem.
                     Row {
-                        spacing: 10
-                        anchors.horizontalCenter: parent
+                        spacing: Estilo.global.spacing.md
 
                         Column {
                             spacing: 4
 
                             Text {
                                 text: "Telefone"
-                                font.pixelSize: 12
+                                font.pixelSize: Estilo.global.fontSize.sm
                                 font.bold: true
-                                color: Estilo.cores.textoSecundario
+                                color: Estilo.global.textSecondary
                             }
 
                             TextField {
                                 id: inputTelefone
 
-                                color: Estilo.cores.textoInput
-                                placeholderTextColor: Estilo.cores.placeholderInput
+                                color: Estilo.global.textInput
+                                placeholderTextColor: Estilo.global.textPlaceholder
                                 // Evita recursão: reformatar o texto abaixo dispara
                                 // onTextChanged de novo, então ignoramos essa segunda
                                 // chamada enquanto a primeira ainda está ajustando o texto.
                                 property bool reformatando: false
 
                                 placeholderText: "TELEFONE"
-                                width: 190
+                                width: Math.round((conteudoEntrega.larguraCampos - Estilo.global.spacing.md) * 0.46)
                                 topPadding: 10
                                 bottomPadding: 10
                                 leftPadding: 10
@@ -459,10 +489,10 @@ Page {
                                 }
 
                                 background: Rectangle {
-                                    radius: Estilo.rounding.padrao
-                                    color: "#ffffff"
-                                    border.color: parent.activeFocus ? "#e67e22" : Estilo.cores.borda
-                                    border.width: 1
+                                    radius: Estilo.global.radius.sm
+                                    color: Estilo.global.inputBackground
+                                    border.color: parent.activeFocus ? Estilo.screen.entrega.accent : Estilo.global.border
+                                    border.width: Estilo.global.borderWidth.hairline
                                 }
 
                             }
@@ -473,18 +503,18 @@ Page {
 
                             Text {
                                 text: "Nome do Cliente"
-                                font.pixelSize: 12
+                                font.pixelSize: Estilo.global.fontSize.sm
                                 font.bold: true
-                                color: Estilo.cores.textoSecundario
+                                color: Estilo.global.textSecondary
                             }
 
                             TextField {
                                 id: inputNomeCliente
 
-                                color: Estilo.cores.textoInput
-                                placeholderTextColor: Estilo.cores.placeholderInput
+                                color: Estilo.global.textInput
+                                placeholderTextColor: Estilo.global.textPlaceholder
                                 placeholderText: "NOME DO CLIENTE"
-                                width: 220
+                                width: (conteudoEntrega.larguraCampos - Estilo.global.spacing.md) - Math.round((conteudoEntrega.larguraCampos - Estilo.global.spacing.md) * 0.46)
                                 topPadding: 10
                                 bottomPadding: 10
                                 leftPadding: 10
@@ -495,10 +525,10 @@ Page {
                                 Keys.onReturnPressed: inputEndereco.forceActiveFocus()
 
                                 background: Rectangle {
-                                    radius: Estilo.rounding.padrao
-                                    color: "#ffffff"
-                                    border.color: parent.activeFocus ? "#e67e22" : Estilo.cores.borda
-                                    border.width: 1
+                                    radius: Estilo.global.radius.sm
+                                    color: Estilo.global.inputBackground
+                                    border.color: parent.activeFocus ? Estilo.screen.entrega.accent : Estilo.global.border
+                                    border.width: Estilo.global.borderWidth.hairline
                                 }
 
                             }
@@ -508,26 +538,25 @@ Page {
 
                     // Campos Endereço e Número
                     Row {
-                        spacing: 10
-                        anchors.horizontalCenter: parent
+                        spacing: Estilo.global.spacing.md
 
                         Column {
                             spacing: 4
 
                             Text {
                                 text: "Endereço"
-                                font.pixelSize: 12
+                                font.pixelSize: Estilo.global.fontSize.sm
                                 font.bold: true
-                                color: Estilo.cores.textoSecundario
+                                color: Estilo.global.textSecondary
                             }
 
                             TextField {
                                 id: inputEndereco
 
-                                color: Estilo.cores.textoInput
-                                placeholderTextColor: Estilo.cores.placeholderInput
+                                color: Estilo.global.textInput
+                                placeholderTextColor: Estilo.global.textPlaceholder
                                 placeholderText: "ENDEREÇO"
-                                width: 320
+                                width: Math.round((conteudoEntrega.larguraCampos - Estilo.global.spacing.md) * 0.78)
                                 topPadding: 10
                                 bottomPadding: 10
                                 leftPadding: 10
@@ -538,10 +567,10 @@ Page {
                                 Keys.onReturnPressed: inputNumero.forceActiveFocus()
 
                                 background: Rectangle {
-                                    radius: Estilo.rounding.padrao
-                                    color: "#ffffff"
-                                    border.color: parent.activeFocus ? "#e67e22" : Estilo.cores.borda
-                                    border.width: 1
+                                    radius: Estilo.global.radius.sm
+                                    color: Estilo.global.inputBackground
+                                    border.color: parent.activeFocus ? Estilo.screen.entrega.accent : Estilo.global.border
+                                    border.width: Estilo.global.borderWidth.hairline
                                 }
 
                             }
@@ -552,18 +581,18 @@ Page {
 
                             Text {
                                 text: "Número"
-                                font.pixelSize: 12
+                                font.pixelSize: Estilo.global.fontSize.sm
                                 font.bold: true
-                                color: Estilo.cores.textoSecundario
+                                color: Estilo.global.textSecondary
                             }
 
                             TextField {
                                 id: inputNumero
 
-                                color: Estilo.cores.textoInput
-                                placeholderTextColor: Estilo.cores.placeholderInput
+                                color: Estilo.global.textInput
+                                placeholderTextColor: Estilo.global.textPlaceholder
                                 placeholderText: "NÚMERO"
-                                width: 90
+                                width: (conteudoEntrega.larguraCampos - Estilo.global.spacing.md) - Math.round((conteudoEntrega.larguraCampos - Estilo.global.spacing.md) * 0.78)
                                 topPadding: 10
                                 bottomPadding: 10
                                 leftPadding: 10
@@ -579,10 +608,10 @@ Page {
                                 }
 
                                 background: Rectangle {
-                                    radius: Estilo.rounding.padrao
-                                    color: "#ffffff"
-                                    border.color: parent.activeFocus ? "#e67e22" : Estilo.cores.borda
-                                    border.width: 1
+                                    radius: Estilo.global.radius.sm
+                                    color: Estilo.global.inputBackground
+                                    border.color: parent.activeFocus ? Estilo.screen.entrega.accent : Estilo.global.border
+                                    border.width: Estilo.global.borderWidth.hairline
                                 }
 
                             }
@@ -592,23 +621,22 @@ Page {
 
                     // Campo Bairro
                     Column {
-                        anchors.horizontalCenter: parent
                         spacing: 4
 
                         Text {
                             text: "Bairro"
-                            font.pixelSize: 12
+                            font.pixelSize: Estilo.global.fontSize.sm
                             font.bold: true
-                            color: Estilo.cores.textoSecundario
+                            color: Estilo.global.textSecondary
                         }
 
                         TextField {
                             id: inputBairro
 
-                            color: Estilo.cores.textoInput
-                            placeholderTextColor: Estilo.cores.placeholderInput
+                            color: Estilo.global.textInput
+                            placeholderTextColor: Estilo.global.textPlaceholder
                             placeholderText: "BAIRRO"
-                            width: 420
+                            width: conteudoEntrega.larguraCampos
                             topPadding: 10
                             bottomPadding: 10
                             leftPadding: 10
@@ -619,10 +647,10 @@ Page {
                             Keys.onReturnPressed: inputObservacao.forceActiveFocus()
 
                             background: Rectangle {
-                                radius: Estilo.rounding.padrao
-                                color: "#ffffff"
-                                border.color: parent.activeFocus ? "#e67e22" : Estilo.cores.borda
-                                border.width: 1
+                                radius: Estilo.global.radius.sm
+                                color: Estilo.global.inputBackground
+                                border.color: parent.activeFocus ? Estilo.screen.entrega.accent : Estilo.global.border
+                                border.width: Estilo.global.borderWidth.hairline
                             }
 
                         }
@@ -630,23 +658,22 @@ Page {
 
                     // Campo Observação (geral da entrega)
                     Column {
-                        anchors.horizontalCenter: parent
                         spacing: 4
 
                         Text {
                             text: "Observação"
-                            font.pixelSize: 12
+                            font.pixelSize: Estilo.global.fontSize.sm
                             font.bold: true
-                            color: Estilo.cores.textoSecundario
+                            color: Estilo.global.textSecondary
                         }
 
                         TextField {
                             id: inputObservacao
 
-                            color: Estilo.cores.textoInput
-                            placeholderTextColor: Estilo.cores.placeholderInput
+                            color: Estilo.global.textInput
+                            placeholderTextColor: Estilo.global.textPlaceholder
                             placeholderText: "OBSERVAÇÃO"
-                            width: 420
+                            width: conteudoEntrega.larguraCampos
                             topPadding: 10
                             bottomPadding: 10
                             leftPadding: 10
@@ -661,10 +688,10 @@ Page {
                             Keys.onReturnPressed: primeiroCampoPedido().forceActiveFocus()
 
                             background: Rectangle {
-                                radius: Estilo.rounding.padrao
-                                color: "#ffffff"
-                                border.color: parent.activeFocus ? "#e67e22" : Estilo.cores.borda
-                                border.width: 1
+                                radius: Estilo.global.radius.sm
+                                color: Estilo.global.inputBackground
+                                border.color: parent.activeFocus ? Estilo.screen.entrega.accent : Estilo.global.border
+                                border.width: Estilo.global.borderWidth.hairline
                             }
 
                         }
@@ -677,14 +704,14 @@ Page {
                     }
 
                     Row {
-                        spacing: 8
-                        anchors.horizontalCenter: parent
-                        Icone { nome: "fa6s.pizza-slice"; cor: "#e67e22"; tamanho: 16; anchors.verticalCenter: parent.verticalCenter }
+                        spacing: Estilo.global.spacing.sm
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        Icone { nome: "fa6s.pizza-slice"; cor: Estilo.screen.entrega.accent; tamanho: 16; anchors.verticalCenter: parent.verticalCenter }
                         Text {
                             text: "ITENS DO PEDIDO"
-                            font.pixelSize: 16
+                            font.pixelSize: Estilo.global.fontSize.xl
                             font.bold: true
-                            color: "#e67e22"
+                            color: Estilo.screen.entrega.accent
                             anchors.verticalCenter: parent.verticalCenter
                         }
                     }
@@ -692,25 +719,25 @@ Page {
                     // --- CABEÇALHO DA LISTA DE PEDIDOS (rótulo das colunas, uma vez só —
                     // repetir em cada linha do delegate abaixo poluiria a lista) ---
                     Row {
-                        width: 690
-                        anchors.horizontalCenter: parent
-                        spacing: 10
+                        width: conteudoEntrega.larguraFormulario
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        spacing: Estilo.global.spacing.md
 
-                        Text { text: "Pedido"; width: 200; font.pixelSize: 12; font.bold: true; color: Estilo.cores.textoSecundario }
-                        Text { text: "Observação"; width: 180; font.pixelSize: 12; font.bold: true; color: Estilo.cores.textoSecundario }
-                        Text { text: "Valor"; width: 110; font.pixelSize: 12; font.bold: true; color: Estilo.cores.textoSecundario }
+                        Text { text: "Pedido"; width: conteudoEntrega.gradePedido.pedido; font.pixelSize: Estilo.global.fontSize.sm; font.bold: true; color: Estilo.global.textSecondary }
+                        Text { text: "Observação"; width: conteudoEntrega.gradePedido.observacao; font.pixelSize: Estilo.global.fontSize.sm; font.bold: true; color: Estilo.global.textSecondary }
+                        Text { text: "Valor"; width: conteudoEntrega.gradePedido.valor; font.pixelSize: Estilo.global.fontSize.sm; font.bold: true; color: Estilo.global.textSecondary }
                     }
 
                     // --- LISTA DINÂMICA DE PEDIDOS ---
                     ListView {
                         id: listaPedidos
 
-                        width: 690
+                        width: conteudoEntrega.larguraFormulario
                         height: Math.min(count * 60, 240)
                         clip: true
                         model: modeloPedidos // Consome o modelo declarado na raiz da Page
-                        spacing: 10
-                        anchors.horizontalCenter: parent
+                        spacing: Estilo.global.spacing.md
+                        anchors.horizontalCenter: parent.horizontalCenter
 
                         ScrollBar.vertical: ScrollBar {
                             policy: ScrollBar.AsNeeded
@@ -731,7 +758,7 @@ Page {
                         }
 
                         delegate: LinhaPedido {
-                            corDestaque: "#e67e22"
+                            corDestaque: Estilo.screen.entrega.accent
                             campoExternoAnterior: inputObservacao
                             campoExternoProximo: camposPagamento.primeiroCampo
                             onSelecionarPedido: function(indice) {
@@ -744,26 +771,33 @@ Page {
 
                     // --- SEÇÃO DE PAGAMENTO ---
                     Row {
-                        spacing: 8
-                        anchors.horizontalCenter: parent
-                        Icone { nome: "fa6s.credit-card"; cor: "#e67e22"; tamanho: 16; anchors.verticalCenter: parent.verticalCenter }
+                        spacing: Estilo.global.spacing.sm
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        Icone { nome: "fa6s.credit-card"; cor: Estilo.screen.entrega.accent; tamanho: 16; anchors.verticalCenter: parent.verticalCenter }
                         Text {
                             text: "PAGAMENTO"
-                            font.pixelSize: 16
+                            font.pixelSize: Estilo.global.fontSize.xl
                             font.bold: true
-                            color: "#e67e22"
+                            color: Estilo.screen.entrega.accent
                             anchors.verticalCenter: parent.verticalCenter
                         }
                     }
 
-                    Row {
-                        spacing: 10
-                        anchors.horizontalCenter: parent
+                    // Flow: se os campos de pagamento (que aqui são quatro,
+                    // com a taxa de entrega) e o seletor de cópias não
+                    // couberem lado a lado, "Cópias" desce uma linha em vez de
+                    // ficar fora da tela.
+                    Flow {
+                        spacing: Estilo.global.spacing.md
+                        width: conteudoEntrega.larguraFormulario
 
                         CamposPagamento {
                             id: camposPagamento
 
-                            corDestaque: "#e67e22"
+                            // Desconta o seletor de cópias — o que sobra é o
+                            // que os campos têm para dividir entre si.
+                            larguraDisponivel: conteudoEntrega.larguraFormulario - 100
+                            corDestaque: Estilo.screen.entrega.accent
                             formaPagamentoInicial: telaEntrega.formaPagamentoInicial
                             trocoInicial: telaEntrega.trocoInicial
                             statusPagamentoInicial: telaEntrega.statusPagamentoInicial
@@ -786,16 +820,16 @@ Page {
 
                             Text {
                                 text: "Cópias"
-                                font.pixelSize: 12
+                                font.pixelSize: Estilo.global.fontSize.sm
                                 font.bold: true
-                                color: Estilo.cores.textoSecundario
+                                color: Estilo.global.textSecondary
                             }
 
                             SpinnerCopias {
                                 id: spinnerCopias
 
                                 value: 2
-                                corDestaque: "#e67e22"
+                                corDestaque: Estilo.screen.entrega.accent
                                 KeyNavigation.tab: btnImprimir
                                 KeyNavigation.backtab: camposPagamento.ultimoCampo
                             }
@@ -804,16 +838,19 @@ Page {
                     }
 
                     // --- BOTÕES DE AÇÃO INFERIORES ---
-                    Row {
-                        spacing: 15
-                        anchors.horizontalCenter: parent
+                    // Flow pelo mesmo motivo do Balcão: os três botões
+                    // repartem a largura do formulário e quebram para a linha
+                    // de baixo quando nem assim couberem.
+                    Flow {
+                        spacing: Estilo.global.spacing.xl
+                        width: conteudoEntrega.larguraFormulario
 
                         // Botão Imprimir
                         Button {
                             id: btnImprimir
 
-                            padding: 10
-                            width: 200
+                            padding: Estilo.global.padding.md
+                            width: conteudoEntrega.larguraBotaoAcao
                             focusPolicy: Qt.StrongFocus
                             KeyNavigation.tab: btnLancar
                             KeyNavigation.backtab: spinnerCopias
@@ -828,24 +865,24 @@ Page {
                             }
 
                             contentItem: Row {
-                                spacing: 6
+                                spacing: Estilo.global.spacing.xs
                                 anchors.centerIn: parent
-                                Icone { nome: "fa6s.print"; cor: "#ffffff"; tamanho: Estilo.fonte.padrao; anchors.verticalCenter: parent.verticalCenter }
+                                Icone { nome: "fa6s.print"; cor: Estilo.global.textOnAccent; tamanho: Estilo.global.fontSize.lg; anchors.verticalCenter: parent.verticalCenter }
                                 Text {
                                     text: "Imprimir"
                                     font.bold: true
-                                    color: "#ffffff"
+                                    color: Estilo.global.textOnAccent
                                     anchors.verticalCenter: parent.verticalCenter
                                 }
                             }
 
                             background: Rectangle {
-                                radius: Estilo.rounding.padrao
-                                color: parent.down ? Estilo.confirmar.pressionado : (parent.hovered ? Estilo.confirmar.hover : Estilo.confirmar.normal)
+                                radius: Estilo.global.radius.sm
+                                color: parent.down ? Estilo.action.confirm.pressed : (parent.hovered ? Estilo.action.confirm.hover : Estilo.action.confirm.base)
                                 // Anel de foco mais grosso: só aparece navegando
                                 // por teclado, para dar pra ver onde o Tab chegou.
-                                border.color: parent.activeFocus ? Estilo.cores.texto : Estilo.confirmar.pressionado
-                                border.width: parent.activeFocus ? 3 : 1
+                                border.color: parent.activeFocus ? Estilo.global.text : Estilo.action.confirm.pressed
+                                border.width: parent.activeFocus ? Estilo.global.borderWidth.focus : Estilo.global.borderWidth.hairline
                             }
 
                         }
@@ -855,8 +892,8 @@ Page {
                         Button {
                             id: btnLancar
 
-                            padding: 10
-                            width: 200
+                            padding: Estilo.global.padding.md
+                            width: conteudoEntrega.larguraBotaoAcao
                             focusPolicy: Qt.StrongFocus
                             KeyNavigation.tab: btnVoltar
                             KeyNavigation.backtab: btnImprimir
@@ -871,24 +908,24 @@ Page {
                             }
 
                             contentItem: Row {
-                                spacing: 6
+                                spacing: Estilo.global.spacing.xs
                                 anchors.centerIn: parent
-                                Icone { nome: "fa6s.floppy-disk"; cor: "#ffffff"; tamanho: Estilo.fonte.padrao; anchors.verticalCenter: parent.verticalCenter }
+                                Icone { nome: "fa6s.floppy-disk"; cor: Estilo.global.textOnAccent; tamanho: Estilo.global.fontSize.lg; anchors.verticalCenter: parent.verticalCenter }
                                 Text {
                                     text: "Lançar"
                                     font.bold: true
-                                    color: "#ffffff"
+                                    color: Estilo.global.textOnAccent
                                     anchors.verticalCenter: parent.verticalCenter
                                 }
                             }
 
                             background: Rectangle {
-                                radius: Estilo.rounding.padrao
-                                color: parent.down ? "#1d4ed8" : (parent.hovered ? "#1e40af" : "#2563eb")
+                                radius: Estilo.global.radius.sm
+                                color: parent.down ? Estilo.action.save.pressed : (parent.hovered ? Estilo.action.save.hover : Estilo.action.save.base)
                                 // Anel de foco mais grosso: só aparece navegando
                                 // por teclado, para dar pra ver onde o Tab chegou.
-                                border.color: parent.activeFocus ? Estilo.cores.texto : "#1d4ed8"
-                                border.width: parent.activeFocus ? 3 : 1
+                                border.color: parent.activeFocus ? Estilo.global.focusRing : Estilo.action.save.border
+                                border.width: parent.activeFocus ? Estilo.global.borderWidth.focus : Estilo.global.borderWidth.hairline
                             }
 
                         }
@@ -897,8 +934,8 @@ Page {
                         Button {
                             id: btnVoltar
 
-                            padding: 10
-                            width: 200
+                            padding: Estilo.global.padding.md
+                            width: conteudoEntrega.larguraBotaoAcao
                             focusPolicy: Qt.StrongFocus
                             KeyNavigation.tab: inputTelefone
                             KeyNavigation.backtab: btnLancar
@@ -912,24 +949,24 @@ Page {
                             }
 
                             contentItem: Row {
-                                spacing: 6
+                                spacing: Estilo.global.spacing.xs
                                 anchors.centerIn: parent
-                                Icone { nome: "fa6s.arrow-left"; cor: "#ffffff"; tamanho: Estilo.fonte.padrao; anchors.verticalCenter: parent.verticalCenter }
+                                Icone { nome: "fa6s.arrow-left"; cor: Estilo.global.textOnAccent; tamanho: Estilo.global.fontSize.lg; anchors.verticalCenter: parent.verticalCenter }
                                 Text {
                                     text: "Voltar para o Menu"
                                     font.bold: true
-                                    color: "#ffffff"
+                                    color: Estilo.global.textOnAccent
                                     anchors.verticalCenter: parent.verticalCenter
                                 }
                             }
 
                             background: Rectangle {
-                                radius: Estilo.rounding.padrao
-                                color: parent.down ? Estilo.cancelar.pressionado : (parent.hovered ? Estilo.cancelar.hover : Estilo.cancelar.normal)
+                                radius: Estilo.global.radius.sm
+                                color: parent.down ? Estilo.action.danger.pressed : (parent.hovered ? Estilo.action.danger.hover : Estilo.action.danger.base)
                                 // Anel de foco mais grosso: só aparece navegando
                                 // por teclado, para dar pra ver onde o Tab chegou.
-                                border.color: parent.activeFocus ? Estilo.cores.texto : Estilo.cancelar.pressionado
-                                border.width: parent.activeFocus ? 3 : 1
+                                border.color: parent.activeFocus ? Estilo.global.text : Estilo.action.danger.pressed
+                                border.width: parent.activeFocus ? Estilo.global.borderWidth.focus : Estilo.global.borderWidth.hairline
                             }
 
                         }
@@ -939,9 +976,10 @@ Page {
                 }
 
                 ResumoComanda {
-                    anchors.verticalCenter: parent.verticalCenter
+                    Layout.preferredWidth: conteudoEntrega.larguraResumo
+                    Layout.alignment: Qt.AlignHCenter | Qt.AlignVCenter
                     itens: modeloPedidos
-                    corDestaque: "#e67e22"
+                    corDestaque: Estilo.screen.entrega.accent
                     formaPagamento: camposPagamento.formaPagamento
                     troco: camposPagamento.formaPagamento === "Dinheiro" ? camposPagamento.troco : ""
                     pago: camposPagamento.pago
@@ -982,8 +1020,8 @@ Page {
     }
 
     background: Rectangle {
-        color: Estilo.cores.fundoPagina
-        radius: Estilo.rounding.popup
+        color: Estilo.global.background
+        radius: Estilo.global.radius.xl
     }
 
 }

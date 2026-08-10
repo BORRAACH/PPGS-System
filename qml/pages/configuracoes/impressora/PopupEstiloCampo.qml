@@ -44,47 +44,47 @@ Popup {
     modal: true
     focus: true
     closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
-    padding: 25
+    padding: Estilo.global.padding.popup
     // Fixada explicitamente: sem isso, o Popup calcula sua largura a partir
     // do implicitWidth do contentItem, que os filhos (Row largura:
     // parent.width) não alimentam de volta a tempo — resultado observado:
     // o popup nascia bem mais estreito que os 320px pedidos no Column
     // abaixo, cortando o título do campo.
-    width: 320 + leftPadding + rightPadding
+    width: Responsivo.larguraPopup(320) + leftPadding + rightPadding
     parent: Overlay.overlay
     anchors.centerIn: parent
 
     Overlay.modal: Rectangle {
-        color: "#99000000"
+        color: Estilo.global.overlay
     }
 
     background: Rectangle {
-        radius: 16
-        color: Estilo.cores.fundoPagina
-        border.color: Estilo.cores.bordaCard
+        radius: Estilo.global.radius.xl
+        color: Estilo.global.background
+        border.color: Estilo.global.borderCard
     }
 
     contentItem: Column {
-        spacing: 20
-        width: 320
+        spacing: Estilo.global.spacing.xxl
+        width: Responsivo.larguraPopup(320)
 
         Row {
-            spacing: 8
+            spacing: Estilo.global.spacing.sm
             width: parent.width
 
-            Icone { nome: "fa6s.pen"; cor: "#475569"; tamanho: 17; anchors.verticalCenter: parent.verticalCenter }
+            Icone { nome: "fa6s.pen"; cor: Estilo.screen.config.accent; tamanho: 17; anchors.verticalCenter: parent.verticalCenter }
             Text {
                 text: popup.campoRotulo
-                font.pixelSize: 17
+                font.pixelSize: Estilo.global.fontSize.xl
                 font.bold: true
-                color: Estilo.cores.texto
+                color: Estilo.global.text
                 elide: Text.ElideRight
                 width: parent.width - 30
                 anchors.verticalCenter: parent.verticalCenter
             }
         }
 
-        Rectangle { width: parent.width; height: 1; color: Estilo.cores.bordaCard }
+        Rectangle { width: parent.width; height: 1; color: Estilo.global.borderCard }
 
         // --- Atributos booleanos ---
         // Os três CheckBox fixam implicitWidth/implicitHeight no mesmo 22 do
@@ -99,7 +99,7 @@ Popup {
             spacing: 14
 
             Row {
-                spacing: 12
+                spacing: Estilo.global.spacing.lg
 
                 CheckBox {
                     id: chkNegrito
@@ -114,14 +114,14 @@ Popup {
                     indicator: Rectangle {
                         implicitWidth: 22
                         implicitHeight: 22
-                        radius: 4
-                        border.color: chkNegrito.checked ? "#475569" : "#bdc3c7"
-                        border.width: 2
-                        color: chkNegrito.checked ? "#475569" : "transparent"
+                        radius: Estilo.global.radius.xs
+                        border.color: chkNegrito.checked ? Estilo.screen.config.accent : Estilo.global.borderStrong
+                        border.width: Estilo.global.borderWidth.thick
+                        color: chkNegrito.checked ? Estilo.screen.config.accent : "transparent"
 
                         Icone {
                             nome: "fa6s.check"
-                            cor: "white"
+                            cor: Estilo.global.textOnAccent
                             tamanho: 13
                             anchors.centerIn: parent
                             visible: chkNegrito.checked
@@ -131,14 +131,14 @@ Popup {
 
                 Text {
                     text: "Negrito"
-                    font.pixelSize: 14
-                    color: Estilo.cores.texto
+                    font.pixelSize: Estilo.global.fontSize.lg
+                    color: Estilo.global.text
                     anchors.verticalCenter: parent.verticalCenter
                 }
             }
 
             Row {
-                spacing: 12
+                spacing: Estilo.global.spacing.lg
 
                 CheckBox {
                     id: chkSublinhado
@@ -153,14 +153,14 @@ Popup {
                     indicator: Rectangle {
                         implicitWidth: 22
                         implicitHeight: 22
-                        radius: 4
-                        border.color: chkSublinhado.checked ? "#475569" : "#bdc3c7"
-                        border.width: 2
-                        color: chkSublinhado.checked ? "#475569" : "transparent"
+                        radius: Estilo.global.radius.xs
+                        border.color: chkSublinhado.checked ? Estilo.screen.config.accent : Estilo.global.borderStrong
+                        border.width: Estilo.global.borderWidth.thick
+                        color: chkSublinhado.checked ? Estilo.screen.config.accent : "transparent"
 
                         Icone {
                             nome: "fa6s.check"
-                            cor: "white"
+                            cor: Estilo.global.textOnAccent
                             tamanho: 13
                             anchors.centerIn: parent
                             visible: chkSublinhado.checked
@@ -170,14 +170,14 @@ Popup {
 
                 Text {
                     text: "Sublinhado"
-                    font.pixelSize: 14
-                    color: Estilo.cores.texto
+                    font.pixelSize: Estilo.global.fontSize.lg
+                    color: Estilo.global.text
                     anchors.verticalCenter: parent.verticalCenter
                 }
             }
 
             Row {
-                spacing: 12
+                spacing: Estilo.global.spacing.lg
 
                 CheckBox {
                     id: chkFundoPreto
@@ -192,14 +192,14 @@ Popup {
                     indicator: Rectangle {
                         implicitWidth: 22
                         implicitHeight: 22
-                        radius: 4
-                        border.color: chkFundoPreto.checked ? "#475569" : "#bdc3c7"
-                        border.width: 2
-                        color: chkFundoPreto.checked ? "#475569" : "transparent"
+                        radius: Estilo.global.radius.xs
+                        border.color: chkFundoPreto.checked ? Estilo.screen.config.accent : Estilo.global.borderStrong
+                        border.width: Estilo.global.borderWidth.thick
+                        color: chkFundoPreto.checked ? Estilo.screen.config.accent : "transparent"
 
                         Icone {
                             nome: "fa6s.check"
-                            cor: "white"
+                            cor: Estilo.global.textOnAccent
                             tamanho: 13
                             anchors.centerIn: parent
                             visible: chkFundoPreto.checked
@@ -209,14 +209,14 @@ Popup {
 
                 Text {
                     text: "Fundo preto"
-                    font.pixelSize: 14
-                    color: Estilo.cores.texto
+                    font.pixelSize: Estilo.global.fontSize.lg
+                    color: Estilo.global.text
                     anchors.verticalCenter: parent.verticalCenter
                 }
             }
         }
 
-        Rectangle { width: parent.width; height: 1; color: Estilo.cores.bordaCard }
+        Rectangle { width: parent.width; height: 1; color: Estilo.global.borderCard }
 
         // --- Tamanho da fonte ---
         // Um campo livre em pixels dava a falsa impressão de controle
@@ -231,15 +231,15 @@ Popup {
 
             Text {
                 text: "Tamanho da fonte"
-                font.pixelSize: 14
-                color: Estilo.cores.texto
+                font.pixelSize: Estilo.global.fontSize.lg
+                color: Estilo.global.text
                 anchors.left: parent.left
                 anchors.verticalCenter: parent.verticalCenter
             }
 
             Row {
                 anchors.right: parent.right
-                spacing: 12
+                spacing: Estilo.global.spacing.lg
 
                 Button {
                     text: "-"
@@ -250,11 +250,11 @@ Popup {
                     onClicked: popup._definirNivelFonte(popup.nivelFonte - 1)
 
                     background: Rectangle {
-                        radius: Estilo.rounding.padrao
-                        color: parent.down ? Estilo.cores.bordaCard : "#ffffff"
-                        border.color: Estilo.cores.borda
-                        border.width: 1
-                        opacity: parent.enabled ? 1 : 0.5
+                        radius: Estilo.global.radius.sm
+                        color: parent.down ? Estilo.global.surfacePressed : Estilo.global.surface
+                        border.color: Estilo.global.border
+                        border.width: Estilo.global.borderWidth.hairline
+                        opacity: parent.enabled ? 1 : Estilo.global.opacity.disabled
                     }
                 }
 
@@ -262,9 +262,9 @@ Popup {
                     width: 60
                     text: popup.nivelFonte === 1 ? "Normal" : (popup.nivelFonte + "x")
                     horizontalAlignment: Text.AlignHCenter
-                    font.pixelSize: 14
+                    font.pixelSize: Estilo.global.fontSize.lg
                     font.bold: true
-                    color: Estilo.cores.texto
+                    color: Estilo.global.text
                     anchors.verticalCenter: parent.verticalCenter
                 }
 
@@ -277,11 +277,11 @@ Popup {
                     onClicked: popup._definirNivelFonte(popup.nivelFonte + 1)
 
                     background: Rectangle {
-                        radius: Estilo.rounding.padrao
-                        color: parent.down ? Estilo.cores.bordaCard : "#ffffff"
-                        border.color: Estilo.cores.borda
-                        border.width: 1
-                        opacity: parent.enabled ? 1 : 0.5
+                        radius: Estilo.global.radius.sm
+                        color: parent.down ? Estilo.global.surfacePressed : Estilo.global.surface
+                        border.color: Estilo.global.border
+                        border.width: Estilo.global.borderWidth.hairline
+                        opacity: parent.enabled ? 1 : Estilo.global.opacity.disabled
                     }
                 }
             }
@@ -295,20 +295,20 @@ Popup {
                 id: btnFechar
 
                 text: "Fechar"
-                padding: 10
+                padding: Estilo.global.padding.md
                 onClicked: popup.close()
 
                 contentItem: Text {
                     text: btnFechar.text
                     font.bold: true
-                    color: "#ffffff"
+                    color: Estilo.global.textOnAccent
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
                 }
 
                 background: Rectangle {
-                    radius: Estilo.rounding.padrao
-                    color: parent.down ? "#334155" : (parent.hovered ? "#64748b" : "#475569")
+                    radius: Estilo.global.radius.sm
+                    color: parent.down ? Estilo.screen.config.pressed : (parent.hovered ? Estilo.screen.config.hover : Estilo.screen.config.base)
                 }
             }
         }

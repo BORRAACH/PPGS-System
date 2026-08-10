@@ -12,13 +12,20 @@ import estilo 1.0
 Row {
     id: linhaDelegate
 
-    spacing: 10
-    anchors.horizontalCenter: parent
+    spacing: Estilo.global.spacing.md
+
+    // Largura das três colunas. Calculada a partir da largura da lista que
+    // hospeda esta linha, pela mesma função que a página usa para desenhar o
+    // cabeçalho — é o que garante que rótulo e campo continuem um em cima do
+    // outro em qualquer tamanho de tela (ver Responsivo.gradePedido).
+    // O fallback de 690 é a largura original da lista, e só vale no instante
+    // em que o delegate existe antes de a view ter medida.
+    readonly property var grade: Responsivo.gradePedido(ListView.view ? ListView.view.width : 690)
 
     property alias campoPedido: campoPedido
     property alias campoObservacao: campoObservacao
     property alias campoValor: campoValor
-    property color corDestaque: Estilo.confirmar.normal
+    property color corDestaque: Estilo.action.confirm.base
     // Alvo de foco quando esta é a PRIMEIRA linha e o usuário dá
     // Shift+Tab a partir do campo Pedido.
     property Item campoExternoAnterior: null
@@ -59,10 +66,10 @@ Row {
     TextField {
         id: campoPedido
 
-        color: Estilo.cores.textoInput
-        placeholderTextColor: Estilo.cores.placeholderInput
+        color: Estilo.global.textInput
+        placeholderTextColor: Estilo.global.textPlaceholder
         placeholderText: "SELECIONAR PEDIDO"
-        width: 200
+        width: linhaDelegate.grade.pedido
         topPadding: 10
         bottomPadding: 10
         leftPadding: 10
@@ -89,10 +96,10 @@ Row {
         }
 
         background: Rectangle {
-            radius: Estilo.rounding.padrao
-            color: mouseAreaPedido.containsMouse ? "#f0f0f0" : "#ffffff"
-            border.color: parent.activeFocus ? linhaDelegate.corDestaque : Estilo.cores.borda
-            border.width: 1
+            radius: Estilo.global.radius.sm
+            color: mouseAreaPedido.containsMouse ? Estilo.global.surfaceHover : Estilo.global.inputBackground
+            border.color: parent.activeFocus ? linhaDelegate.corDestaque : Estilo.global.border
+            border.width: Estilo.global.borderWidth.hairline
         }
     }
 
@@ -100,10 +107,10 @@ Row {
     TextField {
         id: campoObservacao
 
-        color: Estilo.cores.textoInput
-        placeholderTextColor: Estilo.cores.placeholderInput
+        color: Estilo.global.textInput
+        placeholderTextColor: Estilo.global.textPlaceholder
         placeholderText: "OBSERVAÇÃO"
-        width: 180
+        width: linhaDelegate.grade.observacao
         topPadding: 10
         bottomPadding: 10
         leftPadding: 10
@@ -115,10 +122,10 @@ Row {
         Keys.onReturnPressed: campoValor.forceActiveFocus()
 
         background: Rectangle {
-            radius: Estilo.rounding.padrao
-            color: "#ffffff"
-            border.color: parent.activeFocus ? linhaDelegate.corDestaque : Estilo.cores.borda
-            border.width: 1
+            radius: Estilo.global.radius.sm
+            color: Estilo.global.inputBackground
+            border.color: parent.activeFocus ? linhaDelegate.corDestaque : Estilo.global.border
+            border.width: Estilo.global.borderWidth.hairline
         }
     }
 
@@ -126,10 +133,10 @@ Row {
     TextField {
         id: campoValor
 
-        color: Estilo.cores.textoInput
-        placeholderTextColor: Estilo.cores.placeholderInput
+        color: Estilo.global.textInput
+        placeholderTextColor: Estilo.global.textPlaceholder
         placeholderText: "R$ 0,00"
-        width: 110
+        width: linhaDelegate.grade.valor
         topPadding: 10
         bottomPadding: 10
         leftPadding: 10
@@ -160,10 +167,10 @@ Row {
         }
 
         background: Rectangle {
-            radius: Estilo.rounding.padrao
-            color: "#ffffff"
-            border.color: parent.activeFocus ? linhaDelegate.corDestaque : Estilo.cores.borda
-            border.width: 1
+            radius: Estilo.global.radius.sm
+            color: Estilo.global.inputBackground
+            border.color: parent.activeFocus ? linhaDelegate.corDestaque : Estilo.global.border
+            border.width: Estilo.global.borderWidth.hairline
         }
     }
 
@@ -178,7 +185,7 @@ Row {
     // na propriedade anexada correta.
     Button {
         text: "+"
-        padding: 10
+        padding: Estilo.global.padding.md
         height: campoPedido.implicitHeight
         width: height
         anchors.verticalCenter: parent.verticalCenter
@@ -196,17 +203,17 @@ Row {
         }
 
         background: Rectangle {
-            radius: Estilo.rounding.padrao
-            color: parent.down ? linhaDelegate.corDestaque : (parent.hovered ? Estilo.cores.bordaCard : "#ffffff")
-            border.color: Estilo.cores.borda
-            border.width: 1
+            radius: Estilo.global.radius.sm
+            color: parent.down ? linhaDelegate.corDestaque : (parent.hovered ? Estilo.global.surfaceHover : Estilo.global.surface)
+            border.color: Estilo.global.border
+            border.width: Estilo.global.borderWidth.hairline
         }
     }
 
     // Botão "-" — remove esta linha, exceto quando é a única.
     Button {
         text: "-"
-        padding: 10
+        padding: Estilo.global.padding.md
         height: campoPedido.implicitHeight
         width: height
         anchors.verticalCenter: parent.verticalCenter
@@ -216,10 +223,10 @@ Row {
         }
 
         background: Rectangle {
-            radius: Estilo.rounding.padrao
-            color: parent.down ? Estilo.cancelar.normal : (parent.hovered ? Estilo.cores.bordaCard : "#ffffff")
-            border.color: Estilo.cores.borda
-            border.width: 1
+            radius: Estilo.global.radius.sm
+            color: parent.down ? Estilo.action.danger.base : (parent.hovered ? Estilo.global.surfaceHover : Estilo.global.surface)
+            border.color: Estilo.global.border
+            border.width: Estilo.global.borderWidth.hairline
         }
     }
 }

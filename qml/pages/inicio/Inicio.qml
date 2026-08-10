@@ -20,31 +20,59 @@ Item {
     objectName: "pageHome"
     anchors.fill: parent
 
+    // Tamanho do cartão: os 120x120 de sempre, encolhendo só quando três
+    // deles lado a lado não couberem mais na largura disponível — e nunca
+    // abaixo de 90, onde o ícone e o rótulo deixariam de caber juntos.
+    readonly property int ladoCartao: Math.max(90, Math.min(120, Math.floor((width - Estilo.global.spacing.xxl * 2 - 40) / 3)))
+
     Column {
+        // "left/right" em vez de centerIn: com a largura amarrada ao pai, a
+        // Flow de baixo sabe quanto espaço tem para decidir se os três
+        // cartões cabem numa linha só (um Column centralizado teria largura
+        // igual à do maior filho, e a conta seria circular).
         anchors.centerIn: parent
-        spacing: 25
+        width: parent.width - Estilo.global.padding.xl * 2
+        spacing: Estilo.global.spacing.xxl
 
         Text {
             id: textoBoasVindas
 
             text: "Selecione o Tipo de Atendimento"
-            font.pixelSize: 20
-            font.bold: true
-            color: Estilo.cores.texto
-            anchors.horizontalCenter: parent
+            font.pixelSize: Estilo.global.fontSize.xxl
+            // Título da tela, mesma fonte de heading das outras páginas —
+            // sem bold, que nela seria sintetizado (Caprasimo só tem o peso
+            // 400). Ver Estilo.global.fontFamily.
+            font.family: Estilo.global.fontFamily.title
+            color: Estilo.global.text
+            width: parent.width
+            horizontalAlignment: Text.AlignHCenter
+            wrapMode: Text.WordWrap
         }
 
-        Row {
-            spacing: 20
-            anchors.horizontalCenter: parent
+        // Flow, e não Row: quando os três cartões não couberem na largura
+        // disponível, eles quebram para a linha de baixo em vez de sumirem
+        // pela borda da tela. A largura é a da GRADE (só as colunas que
+        // cabem), não a do pai — é isso que mantém os cartões centralizados
+        // em qualquer quantidade de colunas, já que Flow sempre empilha a
+        // partir da borda esquerda do próprio espaço.
+        // (Os "anchors.horizontalCenter: parent" que havia aqui e nos filhos
+        // eram inválidos — falta o ".horizontalCenter" do lado direito — e o
+        // Qt os descartava com aviso a cada abertura, deixando tudo alinhado
+        // à esquerda em vez de centralizado.)
+        Flow {
+            readonly property int colunas: Math.min(3, Responsivo.colunas(parent.width, telaInicio.ladoCartao, Estilo.global.spacing.xxl))
+
+            spacing: Estilo.global.spacing.xxl
+            width: colunas * telaInicio.ladoCartao + (colunas - 1) * spacing
+            anchors.horizontalCenter: parent.horizontalCenter
 
             // Botão Balcão
             Button {
                 id: btnBalcao
 
-                implicitWidth: 120
-                implicitHeight: 120
-                padding: 10
+                implicitWidth: telaInicio.ladoCartao
+                implicitHeight: telaInicio.ladoCartao
+                padding: Estilo.global.padding.md
                 onClicked: {
                     telaInicio.StackView.view.replace(null, "../balcao/Balcao.qml", {}, StackView.Immediate);
                 }
@@ -52,16 +80,16 @@ Item {
                 background: Rectangle {
                     id: bgBalcao
 
-                    color: btnBalcao.pressed ? "#35d97706" : (btnBalcao.hovered ? "#20d97706" : "#0ad97706")
-                    border.color: btnBalcao.hovered ? "#d97706" : "#fcd34d"
-                    border.width: 2
-                    radius: Estilo.rounding.medio
+                    color: btnBalcao.pressed ? Estilo.orderType.balcao.surfacePressed : (btnBalcao.hovered ? Estilo.orderType.balcao.surfaceHover : Estilo.orderType.balcao.surface)
+                    border.color: btnBalcao.hovered ? Estilo.orderType.balcao.base : Estilo.orderType.balcao.border
+                    border.width: Estilo.global.borderWidth.thick
+                    radius: Estilo.global.radius.lg
 
                     MultiEffect {
                         anchors.fill: parent
                         source: bgBalcao
                         shadowEnabled: true
-                        shadowColor: "#20000000"
+                        shadowColor: Estilo.global.shadow
                         shadowBlur: btnBalcao.hovered ? 0.8 : 0.4
                         shadowVerticalOffset: btnBalcao.pressed ? 1 : (btnBalcao.hovered ? 4 : 2)
                         shadowHorizontalOffset: 0
@@ -71,22 +99,22 @@ Item {
 
                 contentItem: Column {
                     anchors.centerIn: parent
-                    spacing: 8
+                    spacing: Estilo.global.spacing.sm
 
                     Icone {
                         nome: "fa6s.bag-shopping"
-                        cor: "#d97706"
-                        tamanho: 36
-                        anchors.horizontalCenter: parent
+                        cor: Estilo.orderType.balcao.base
+                        tamanho: Math.round(36 * Responsivo.escalaTexto)
+                        anchors.horizontalCenter: parent.horizontalCenter
                     }
 
                     Text {
                         text: "Balcão"
-                        font.pixelSize: Estilo.fonte.padrao
+                        font.pixelSize: Estilo.global.fontSize.lg
                         font.bold: true
-                        color: btnBalcao.pressed ? "#92400e" : "#b45309"
+                        color: btnBalcao.pressed ? Estilo.orderType.balcao.labelPressed : Estilo.orderType.balcao.label
                         horizontalAlignment: Text.AlignHCenter
-                        anchors.horizontalCenter: parent
+                        anchors.horizontalCenter: parent.horizontalCenter
                     }
                 }
             }
@@ -95,9 +123,9 @@ Item {
             Button {
                 id: btnEntrega
 
-                implicitWidth: 120
-                implicitHeight: 120
-                padding: 10
+                implicitWidth: telaInicio.ladoCartao
+                implicitHeight: telaInicio.ladoCartao
+                padding: Estilo.global.padding.md
                 onClicked: {
                     telaInicio.StackView.view.replace(null, "../entrega/Entrega.qml", {}, StackView.Immediate);
                 }
@@ -105,16 +133,16 @@ Item {
                 background: Rectangle {
                     id: bgEntrega
 
-                    color: btnEntrega.pressed ? "#350284c7" : (btnEntrega.hovered ? "#200284c7" : "#0a0284c7")
-                    border.color: btnEntrega.hovered ? "#0284c7" : "#7dd3fc"
-                    border.width: 2
-                    radius: Estilo.rounding.medio
+                    color: btnEntrega.pressed ? Estilo.orderType.entrega.surfacePressed : (btnEntrega.hovered ? Estilo.orderType.entrega.surfaceHover : Estilo.orderType.entrega.surface)
+                    border.color: btnEntrega.hovered ? Estilo.orderType.entrega.base : Estilo.orderType.entrega.border
+                    border.width: Estilo.global.borderWidth.thick
+                    radius: Estilo.global.radius.lg
 
                     MultiEffect {
                         anchors.fill: parent
                         source: bgEntrega
                         shadowEnabled: true
-                        shadowColor: "#20000000"
+                        shadowColor: Estilo.global.shadow
                         shadowBlur: btnEntrega.hovered ? 0.8 : 0.4
                         shadowVerticalOffset: btnEntrega.pressed ? 1 : (btnEntrega.hovered ? 4 : 2)
                         shadowHorizontalOffset: 0
@@ -124,22 +152,22 @@ Item {
 
                 contentItem: Column {
                     anchors.centerIn: parent
-                    spacing: 8
+                    spacing: Estilo.global.spacing.sm
 
                     Icone {
                         nome: "fa6s.motorcycle"
-                        cor: "#0284c7"
-                        tamanho: 36
-                        anchors.horizontalCenter: parent
+                        cor: Estilo.orderType.entrega.base
+                        tamanho: Math.round(36 * Responsivo.escalaTexto)
+                        anchors.horizontalCenter: parent.horizontalCenter
                     }
 
                     Text {
                         text: "Entrega"
-                        font.pixelSize: Estilo.fonte.padrao
+                        font.pixelSize: Estilo.global.fontSize.lg
                         font.bold: true
-                        color: btnEntrega.pressed ? "#075985" : "#0369a1"
+                        color: btnEntrega.pressed ? Estilo.orderType.entrega.labelPressed : Estilo.orderType.entrega.label
                         horizontalAlignment: Text.AlignHCenter
-                        anchors.horizontalCenter: parent
+                        anchors.horizontalCenter: parent.horizontalCenter
                     }
                 }
             }
@@ -148,9 +176,9 @@ Item {
             Button {
                 id: btnSalao
 
-                implicitWidth: 120
-                implicitHeight: 120
-                padding: 10
+                implicitWidth: telaInicio.ladoCartao
+                implicitHeight: telaInicio.ladoCartao
+                padding: Estilo.global.padding.md
                 onClicked: {
                     telaInicio.StackView.view.replace(null, "../salao/Salao.qml", {}, StackView.Immediate);
                 }
@@ -158,16 +186,16 @@ Item {
                 background: Rectangle {
                     id: bgSalao
 
-                    color: btnSalao.pressed ? "#350d9488" : (btnSalao.hovered ? "#200d9488" : "#0a0d9488")
-                    border.color: btnSalao.hovered ? "#0d9488" : "#5eead4"
-                    border.width: 2
-                    radius: Estilo.rounding.medio
+                    color: btnSalao.pressed ? Estilo.orderType.mesa.surfacePressed : (btnSalao.hovered ? Estilo.orderType.mesa.surfaceHover : Estilo.orderType.mesa.surface)
+                    border.color: btnSalao.hovered ? Estilo.orderType.mesa.base : Estilo.orderType.mesa.border
+                    border.width: Estilo.global.borderWidth.thick
+                    radius: Estilo.global.radius.lg
 
                     MultiEffect {
                         anchors.fill: parent
                         source: bgSalao
                         shadowEnabled: true
-                        shadowColor: "#20000000"
+                        shadowColor: Estilo.global.shadow
                         shadowBlur: btnSalao.hovered ? 0.8 : 0.4
                         shadowVerticalOffset: btnSalao.pressed ? 1 : (btnSalao.hovered ? 4 : 2)
                         shadowHorizontalOffset: 0
@@ -177,22 +205,22 @@ Item {
 
                 contentItem: Column {
                     anchors.centerIn: parent
-                    spacing: 8
+                    spacing: Estilo.global.spacing.sm
 
                     Icone {
                         nome: "fa6s.utensils"
-                        cor: "#0d9488"
-                        tamanho: 36
-                        anchors.horizontalCenter: parent
+                        cor: Estilo.orderType.mesa.base
+                        tamanho: Math.round(36 * Responsivo.escalaTexto)
+                        anchors.horizontalCenter: parent.horizontalCenter
                     }
 
                     Text {
                         text: "Salão"
-                        font.pixelSize: Estilo.fonte.padrao
+                        font.pixelSize: Estilo.global.fontSize.lg
                         font.bold: true
-                        color: btnSalao.pressed ? "#115e59" : "#0f766e"
+                        color: btnSalao.pressed ? Estilo.orderType.mesa.labelPressed : Estilo.orderType.mesa.label
                         horizontalAlignment: Text.AlignHCenter
-                        anchors.horizontalCenter: parent
+                        anchors.horizontalCenter: parent.horizontalCenter
                     }
                 }
             }

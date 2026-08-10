@@ -34,9 +34,14 @@ Popup {
     modal: true
     focus: true
     closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
-    padding: 25
+    padding: Estilo.global.padding.popup
     parent: Overlay.overlay
     anchors.centerIn: parent
+    // A lista de adicionais cresce com o cardápio: presa à altura da janela,
+    // a sobra vira rolagem do conteúdo em vez de empurrar os botões de
+    // confirmar/cancelar para fora da tela — num popup modal, isso deixaria
+    // o atendente sem saída a não ser pelo Esc.
+    height: Math.min(implicitHeight, Responsivo.alturaPopup(implicitHeight))
     onOpened: {
         etapa = "categoria";
         categoriaAtual = "";
@@ -46,13 +51,13 @@ Popup {
     }
 
     Overlay.modal: Rectangle {
-        color: "#99000000"
+        color: Estilo.global.overlay
     }
 
     background: Rectangle {
-        radius: Estilo.rounding.popup
-        color: Estilo.cores.fundoPagina
-        border.color: Estilo.cores.bordaCard
+        radius: Estilo.global.radius.xl
+        color: Estilo.global.background
+        border.color: Estilo.global.borderCard
     }
 
     ListModel {
@@ -164,258 +169,271 @@ Popup {
         return "Em qual sabor?";
     }
 
-    contentItem: Column {
-        id: colunaPopup
+    contentItem: Flickable {
+        contentWidth: width
+        contentHeight: colunaPopup.implicitHeight
+        boundsBehavior: Flickable.StopAtBounds
+        implicitWidth: colunaPopup.implicitWidth
+        implicitHeight: colunaPopup.implicitHeight
 
-        width: 380
-        spacing: 16
-
-        Text {
-            text: popupAdicionaisBordas.tituloEtapa()
-            font.pixelSize: Estilo.fonte.titulo
-            font.bold: true
-            color: Estilo.cores.texto
-            anchors.horizontalCenter: parent.horizontalCenter
+        ScrollBar.vertical: ScrollBar {
+            policy: ScrollBar.AsNeeded
         }
 
-        // ---------- ETAPA 1: categoria (Bordas / Adicionais) ----------
-        Row {
-            visible: popupAdicionaisBordas.etapa === "categoria"
-            anchors.horizontalCenter: parent.horizontalCenter
-            spacing: 15
+        Column {
+            id: colunaPopup
 
-            Button {
-                width: 170
-                height: 110
-                onClicked: popupAdicionaisBordas.selecionarCategoria("bordas")
+            width: Responsivo.larguraPopup(380)
+            spacing: 16
 
-                contentItem: Column {
-                    anchors.centerIn: parent
-                    spacing: 8
+            Text {
+                text: popupAdicionaisBordas.tituloEtapa()
+                font.pixelSize: Estilo.global.fontSize.title
+                font.family: Estilo.global.fontFamily.title
+                color: Estilo.global.text
+                anchors.horizontalCenter: parent.horizontalCenter
+            }
 
-                    Icone {
-                        nome: "fa6s.bread-slice"
-                        cor: "#ffffff"
-                        tamanho: 32
-                        anchors.horizontalCenter: parent.horizontalCenter
+            // ---------- ETAPA 1: categoria (Bordas / Adicionais) ----------
+            Row {
+                visible: popupAdicionaisBordas.etapa === "categoria"
+                anchors.horizontalCenter: parent.horizontalCenter
+                spacing: Estilo.global.spacing.xl
+
+                Button {
+                    width: 170
+                    height: 110
+                    onClicked: popupAdicionaisBordas.selecionarCategoria("bordas")
+
+                    contentItem: Column {
+                        anchors.centerIn: parent
+                        spacing: Estilo.global.spacing.sm
+
+                        Icone {
+                            nome: "fa6s.bread-slice"
+                            cor: Estilo.global.textOnAccent
+                            tamanho: 32
+                            anchors.horizontalCenter: parent.horizontalCenter
+                        }
+
+                        Text {
+                            text: "Bordas"
+                            font.pixelSize: Estilo.global.fontSize.xl
+                            font.bold: true
+                            color: Estilo.global.textOnAccent
+                            anchors.horizontalCenter: parent.horizontalCenter
+                        }
                     }
 
-                    Text {
-                        text: "Bordas"
-                        font.pixelSize: 15
-                        font.bold: true
-                        color: "#ffffff"
-                        anchors.horizontalCenter: parent.horizontalCenter
+                    background: Rectangle {
+                        radius: Estilo.global.radius.lg
+                        color: parent.down ? Estilo.category.borda.pressed : (parent.hovered ? Estilo.category.borda.hover : Estilo.category.borda.base)
                     }
                 }
 
-                background: Rectangle {
-                    radius: Estilo.rounding.medio
-                    color: parent.down ? Qt.darker("#d97706", 1.2) : (parent.hovered ? Qt.lighter("#d97706", 1.1) : "#d97706")
+                Button {
+                    width: 170
+                    height: 110
+                    onClicked: popupAdicionaisBordas.selecionarCategoria("adicionais")
+
+                    contentItem: Column {
+                        anchors.centerIn: parent
+                        spacing: Estilo.global.spacing.sm
+
+                        Icone {
+                            nome: "fa6s.layer-group"
+                            cor: Estilo.global.textOnAccent
+                            tamanho: 32
+                            anchors.horizontalCenter: parent.horizontalCenter
+                        }
+
+                        Text {
+                            text: "Adicionais"
+                            font.pixelSize: Estilo.global.fontSize.xl
+                            font.bold: true
+                            color: Estilo.global.textOnAccent
+                            anchors.horizontalCenter: parent.horizontalCenter
+                        }
+                    }
+
+                    background: Rectangle {
+                        radius: Estilo.global.radius.lg
+                        color: parent.down ? Estilo.category.adicional.pressed : (parent.hovered ? Estilo.category.adicional.hover : Estilo.category.adicional.base)
+                    }
                 }
             }
 
-            Button {
-                width: 170
-                height: 110
-                onClicked: popupAdicionaisBordas.selecionarCategoria("adicionais")
+            // ---------- ETAPA 2: lista de itens (bordas ou adicionais) ----------
+            ListView {
+                visible: popupAdicionaisBordas.etapa === "itens"
+                width: parent.width
+                height: Math.min(300, count * 54)
+                clip: true
+                spacing: Estilo.global.spacing.xs
+                model: popupAdicionaisBordas.categoriaAtual === "bordas" ? modeloBordas : modeloAdicionais
 
-                contentItem: Column {
-                    anchors.centerIn: parent
-                    spacing: 8
-
-                    Icone {
-                        nome: "fa6s.layer-group"
-                        cor: "#ffffff"
-                        tamanho: 32
-                        anchors.horizontalCenter: parent.horizontalCenter
-                    }
-
-                    Text {
-                        text: "Adicionais"
-                        font.pixelSize: 15
-                        font.bold: true
-                        color: "#ffffff"
-                        anchors.horizontalCenter: parent.horizontalCenter
-                    }
+                ScrollBar.vertical: ScrollBar {
+                    policy: ScrollBar.AsNeeded
                 }
 
-                background: Rectangle {
-                    radius: Estilo.rounding.medio
-                    color: parent.down ? Qt.darker("#0d9488", 1.2) : (parent.hovered ? Qt.lighter("#0d9488", 1.1) : "#0d9488")
+                delegate: Button {
+                    width: ListView.view.width
+                    height: 48
+                    padding: Estilo.global.padding.md
+                    onClicked: popupAdicionaisBordas.selecionarItem(model.nome, model.valor)
+
+                    contentItem: Row {
+                        spacing: Estilo.global.spacing.md
+
+                        Text {
+                            text: model.nome
+                            font.pixelSize: Estilo.global.fontSize.lg
+                            font.bold: true
+                            color: Estilo.global.text
+                            width: parent.width - 90
+                            elide: Text.ElideRight
+                            anchors.verticalCenter: parent.verticalCenter
+                        }
+
+                        Text {
+                            text: "R$ " + model.valor
+                            font.pixelSize: Estilo.global.fontSize.lg
+                            color: Estilo.action.confirm.base
+                            font.bold: true
+                            anchors.verticalCenter: parent.verticalCenter
+                        }
+                    }
+
+                    background: Rectangle {
+                        radius: Estilo.global.radius.md
+                        color: parent.down ? Estilo.global.surfacePressed : (parent.hovered ? Estilo.global.surfaceHover : Estilo.global.surface)
+                        border.color: Estilo.global.border
+                        border.width: Estilo.global.borderWidth.hairline
+                    }
                 }
             }
-        }
 
-        // ---------- ETAPA 2: lista de itens (bordas ou adicionais) ----------
-        ListView {
-            visible: popupAdicionaisBordas.etapa === "itens"
-            width: parent.width
-            height: Math.min(300, count * 54)
-            clip: true
-            spacing: 6
-            model: popupAdicionaisBordas.categoriaAtual === "bordas" ? modeloBordas : modeloAdicionais
+            // ---------- ETAPA 3: lista de pizzas já adicionadas ----------
+            ListView {
+                visible: popupAdicionaisBordas.etapa === "pizzas"
+                width: parent.width
+                height: Math.min(300, count * 54)
+                clip: true
+                spacing: Estilo.global.spacing.xs
+                model: popupAdicionaisBordas.pizzasMontadas
 
-            ScrollBar.vertical: ScrollBar {
-                policy: ScrollBar.AsNeeded
-            }
+                ScrollBar.vertical: ScrollBar {
+                    policy: ScrollBar.AsNeeded
+                }
 
-            delegate: Button {
-                width: ListView.view.width
-                height: 48
-                padding: 10
-                onClicked: popupAdicionaisBordas.selecionarItem(model.nome, model.valor)
+                delegate: Button {
+                    width: ListView.view.width
+                    height: 48
+                    padding: Estilo.global.padding.md
+                    onClicked: popupAdicionaisBordas.selecionarPizza(index)
 
-                contentItem: Row {
-                    spacing: 10
-
-                    Text {
-                        text: model.nome
-                        font.pixelSize: Estilo.fonte.padrao
+                    contentItem: Text {
+                        text: popupAdicionaisBordas.nomesSaboresPizza(modelData)
+                        font.pixelSize: Estilo.global.fontSize.lg
                         font.bold: true
-                        color: Estilo.cores.texto
-                        width: parent.width - 90
+                        color: Estilo.global.text
                         elide: Text.ElideRight
-                        anchors.verticalCenter: parent.verticalCenter
+                        verticalAlignment: Text.AlignVCenter
                     }
 
-                    Text {
-                        text: "R$ " + model.valor
-                        font.pixelSize: Estilo.fonte.padrao
-                        color: Estilo.confirmar.normal
+                    background: Rectangle {
+                        radius: Estilo.global.radius.md
+                        color: parent.down ? Estilo.global.surfacePressed : (parent.hovered ? Estilo.global.surfaceHover : Estilo.global.surface)
+                        border.color: Estilo.global.border
+                        border.width: Estilo.global.borderWidth.hairline
+                    }
+                }
+            }
+
+            // ---------- ETAPA 4: sabores da pizza escolhida (só p/ adicional) ----------
+            ListView {
+                visible: popupAdicionaisBordas.etapa === "sabores"
+                width: parent.width
+                height: Math.min(300, count * 54)
+                clip: true
+                spacing: Estilo.global.spacing.xs
+                model: popupAdicionaisBordas.indicePizzaSelecionada >= 0 ? popupAdicionaisBordas.pizzasMontadas[popupAdicionaisBordas.indicePizzaSelecionada].sabores : []
+
+                ScrollBar.vertical: ScrollBar {
+                    policy: ScrollBar.AsNeeded
+                }
+
+                delegate: Button {
+                    width: ListView.view.width
+                    height: 48
+                    padding: Estilo.global.padding.md
+                    onClicked: popupAdicionaisBordas.selecionarSabor(modelData.nome)
+
+                    contentItem: Text {
+                        text: modelData.nome
+                        font.pixelSize: Estilo.global.fontSize.lg
                         font.bold: true
-                        anchors.verticalCenter: parent.verticalCenter
+                        color: Estilo.global.text
+                        elide: Text.ElideRight
+                        verticalAlignment: Text.AlignVCenter
+                    }
+
+                    background: Rectangle {
+                        radius: Estilo.global.radius.md
+                        color: parent.down ? Estilo.global.surfacePressed : (parent.hovered ? Estilo.global.surfaceHover : Estilo.global.surface)
+                        border.color: Estilo.global.border
+                        border.width: Estilo.global.borderWidth.hairline
+                    }
+                }
+            }
+
+            // ---------- Rodapé: Voltar/Cancelar ----------
+            Row {
+                anchors.horizontalCenter: parent.horizontalCenter
+                spacing: Estilo.global.spacing.lg
+
+                Button {
+                    text: "Voltar"
+                    visible: popupAdicionaisBordas.etapa !== "categoria"
+                    padding: Estilo.global.padding.md
+                    width: 150
+                    onClicked: popupAdicionaisBordas.voltar()
+
+                    contentItem: Text {
+                        text: "Voltar"
+                        font.bold: true
+                        color: Estilo.global.textOnAccent
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+
+                    background: Rectangle {
+                        radius: Estilo.global.radius.sm
+                        color: parent.down ? Estilo.action.back.pressed : (parent.hovered ? Estilo.action.back.hover : Estilo.action.danger.base)
                     }
                 }
 
-                background: Rectangle {
-                    radius: Estilo.rounding.grande
-                    color: parent.down ? Estilo.cores.bordaCard : (parent.hovered ? "#f1f1f1" : "#ffffff")
-                    border.color: Estilo.cores.borda
-                    border.width: 1
-                }
-            }
-        }
-
-        // ---------- ETAPA 3: lista de pizzas já adicionadas ----------
-        ListView {
-            visible: popupAdicionaisBordas.etapa === "pizzas"
-            width: parent.width
-            height: Math.min(300, count * 54)
-            clip: true
-            spacing: 6
-            model: popupAdicionaisBordas.pizzasMontadas
-
-            ScrollBar.vertical: ScrollBar {
-                policy: ScrollBar.AsNeeded
-            }
-
-            delegate: Button {
-                width: ListView.view.width
-                height: 48
-                padding: 10
-                onClicked: popupAdicionaisBordas.selecionarPizza(index)
-
-                contentItem: Text {
-                    text: popupAdicionaisBordas.nomesSaboresPizza(modelData)
-                    font.pixelSize: Estilo.fonte.padrao
-                    font.bold: true
-                    color: Estilo.cores.texto
-                    elide: Text.ElideRight
-                    verticalAlignment: Text.AlignVCenter
-                }
-
-                background: Rectangle {
-                    radius: Estilo.rounding.grande
-                    color: parent.down ? Estilo.cores.bordaCard : (parent.hovered ? "#f1f1f1" : "#ffffff")
-                    border.color: Estilo.cores.borda
-                    border.width: 1
-                }
-            }
-        }
-
-        // ---------- ETAPA 4: sabores da pizza escolhida (só p/ adicional) ----------
-        ListView {
-            visible: popupAdicionaisBordas.etapa === "sabores"
-            width: parent.width
-            height: Math.min(300, count * 54)
-            clip: true
-            spacing: 6
-            model: popupAdicionaisBordas.indicePizzaSelecionada >= 0 ? popupAdicionaisBordas.pizzasMontadas[popupAdicionaisBordas.indicePizzaSelecionada].sabores : []
-
-            ScrollBar.vertical: ScrollBar {
-                policy: ScrollBar.AsNeeded
-            }
-
-            delegate: Button {
-                width: ListView.view.width
-                height: 48
-                padding: 10
-                onClicked: popupAdicionaisBordas.selecionarSabor(modelData.nome)
-
-                contentItem: Text {
-                    text: modelData.nome
-                    font.pixelSize: Estilo.fonte.padrao
-                    font.bold: true
-                    color: Estilo.cores.texto
-                    elide: Text.ElideRight
-                    verticalAlignment: Text.AlignVCenter
-                }
-
-                background: Rectangle {
-                    radius: Estilo.rounding.grande
-                    color: parent.down ? Estilo.cores.bordaCard : (parent.hovered ? "#f1f1f1" : "#ffffff")
-                    border.color: Estilo.cores.borda
-                    border.width: 1
-                }
-            }
-        }
-
-        // ---------- Rodapé: Voltar/Cancelar ----------
-        Row {
-            anchors.horizontalCenter: parent.horizontalCenter
-            spacing: 12
-
-            Button {
-                text: "Voltar"
-                visible: popupAdicionaisBordas.etapa !== "categoria"
-                padding: 10
-                width: 150
-                onClicked: popupAdicionaisBordas.voltar()
-
-                contentItem: Text {
-                    text: "Voltar"
-                    font.bold: true
-                    color: "#ffffff"
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
-                }
-
-                background: Rectangle {
-                    radius: Estilo.rounding.padrao
-                    color: parent.down ? Estilo.voltar.pressionado : (parent.hovered ? Estilo.voltar.hover : Estilo.cancelar.normal)
-                }
-            }
-
-            Button {
-                text: "Cancelar"
-                padding: 10
-                width: 150
-                onClicked: popupAdicionaisBordas.close()
-
-                contentItem: Text {
+                Button {
                     text: "Cancelar"
-                    font.bold: true
-                    color: "#ffffff"
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
-                }
+                    padding: Estilo.global.padding.md
+                    width: 150
+                    onClicked: popupAdicionaisBordas.close()
 
-                background: Rectangle {
-                    radius: Estilo.rounding.padrao
-                    color: parent.down ? Qt.darker(Estilo.cores.textoSecundario, 1.2) : (parent.hovered ? Qt.lighter(Estilo.cores.textoSecundario, 1.1) : Estilo.cores.textoSecundario)
+                    contentItem: Text {
+                        text: "Cancelar"
+                        font.bold: true
+                        color: Estilo.global.textOnAccent
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+
+                    background: Rectangle {
+                        radius: Estilo.global.radius.sm
+                        color: parent.down ? Qt.darker(Estilo.global.textSecondary, 1.2) : (parent.hovered ? Qt.lighter(Estilo.global.textSecondary, 1.1) : Estilo.global.textSecondary)
+                    }
                 }
             }
         }
+
     }
 }

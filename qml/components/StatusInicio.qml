@@ -95,15 +95,15 @@ Item {
 
         width: 280
         height: colunaEtapas.implicitHeight + 20
-        radius: Estilo.rounding.medio
-        color: "#ffffff"
-        border.color: Estilo.cores.bordaCard
-        border.width: 1
+        radius: Estilo.global.radius.lg
+        color: Estilo.global.surface
+        border.color: Estilo.global.borderCard
+        border.width: Estilo.global.borderWidth.hairline
         opacity: caixaStatus.visible ? 1 : 0
 
         Behavior on opacity {
             NumberAnimation {
-                duration: 250
+                duration: Estilo.global.motion.normal
             }
         }
 
@@ -113,7 +113,7 @@ Item {
             x: 10
             y: 10
             width: parent.width - 20
-            spacing: 6
+            spacing: Estilo.global.spacing.xs
 
             Repeater {
                 model: modeloEtapas
@@ -125,7 +125,7 @@ Item {
                     required property string estado
 
                     width: colunaEtapas.width
-                    spacing: 8
+                    spacing: Estilo.global.spacing.sm
 
                     // Indicador de estado: gira enquanto está em andamento,
                     // vira ✓ ou ✕ quando termina.
@@ -144,7 +144,7 @@ Item {
                             anchors.centerIn: parent
                             visible: linhaEtapa.estado !== "andamento"
                             nome: linhaEtapa.estado === "concluido" ? "fa6s.circle-check" : "fa6s.circle-xmark"
-                            cor: linhaEtapa.estado === "concluido" ? Estilo.confirmar.normal : Estilo.cancelar.normal
+                            cor: linhaEtapa.estado === "concluido" ? Estilo.action.confirm.base : Estilo.action.danger.base
                             tamanho: 14
                         }
                     }
@@ -152,8 +152,8 @@ Item {
                     Text {
                         width: linhaEtapa.width - 24
                         text: linhaEtapa.texto
-                        font.pixelSize: 12
-                        color: linhaEtapa.estado === "falha" ? Estilo.cancelar.normal : Estilo.cores.texto
+                        font.pixelSize: Estilo.global.fontSize.sm
+                        color: linhaEtapa.estado === "falha" ? Estilo.action.danger.base : Estilo.global.text
                         wrapMode: Text.WordWrap
                         anchors.verticalCenter: parent.verticalCenter
                     }

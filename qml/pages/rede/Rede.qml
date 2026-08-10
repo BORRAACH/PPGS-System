@@ -10,6 +10,14 @@ import "../../components"
 Page {
     id: telaRede
 
+    // ===== MEDIDAS DO LAYOUT =====
+    // A lista de máquinas/histórico e o painel de impressora dividiam a
+    // largura em dois — o segundo com 240px fixos. Numa tela estreita
+    // sobravam ~200px para o primeiro, e o texto de estado vazio ("nenhuma
+    // outra máquina conectada...") vazava para fora da coluna.
+    readonly property real larguraUtil: width - Estilo.global.padding.xl * 2
+    readonly property bool empilhado: larguraUtil < 760
+
     objectName: "telaRede"
 
     property var _todosPeers: []
@@ -153,8 +161,8 @@ Page {
     }
 
     background: Rectangle {
-        color: Estilo.cores.fundoPagina
-        radius: Estilo.rounding.popup
+        color: Estilo.global.background
+        radius: Estilo.global.radius.xl
     }
 
     ListModel {
@@ -168,21 +176,21 @@ Page {
     ColumnLayout {
         anchors.fill: parent
         anchors.margins: 20
-        spacing: 15
+        spacing: Estilo.global.spacing.xl
 
         // --- CABEÇALHO ---
         RowLayout {
             Layout.fillWidth: true
-            spacing: 15
+            spacing: Estilo.global.spacing.xl
 
             Row {
-                spacing: 8
-                Icone { nome: "fa6s.globe"; cor: "#0ea5e9"; tamanho: Estilo.fonte.titulo; anchors.verticalCenter: parent.verticalCenter }
+                spacing: Estilo.global.spacing.sm
+                Icone { nome: "fa6s.globe"; cor: Estilo.screen.rede.accent; tamanho: Estilo.global.fontSize.title; anchors.verticalCenter: parent.verticalCenter }
                 Text {
                     text: "REDE LOCAL"
-                    font.pixelSize: Estilo.fonte.titulo
-                    font.bold: true
-                    color: "#0ea5e9"
+                    font.pixelSize: Estilo.global.fontSize.title
+                    font.family: Estilo.global.fontFamily.title
+                    color: Estilo.screen.rede.accent
                     anchors.verticalCenter: parent.verticalCenter
                 }
             }
@@ -215,20 +223,20 @@ Page {
                 }
 
                 contentItem: Row {
-                    spacing: 6
-                    Icone { nome: "fa6s.arrows-rotate"; cor: "#ffffff"; tamanho: Estilo.fonte.padrao; anchors.verticalCenter: parent.verticalCenter }
+                    spacing: Estilo.global.spacing.xs
+                    Icone { nome: "fa6s.arrows-rotate"; cor: Estilo.global.textOnAccent; tamanho: Estilo.global.fontSize.lg; anchors.verticalCenter: parent.verticalCenter }
                     Text {
                         text: "Atualizar"
                         font.bold: true
-                        color: "#ffffff"
+                        color: Estilo.global.textOnAccent
                         verticalAlignment: Text.AlignVCenter
                         anchors.verticalCenter: parent.verticalCenter
                     }
                 }
 
                 background: Rectangle {
-                    radius: Estilo.rounding.padrao
-                    color: parent.down ? "#0369a1" : (parent.hovered ? "#0ea5e9" : "#0284c7")
+                    radius: Estilo.global.radius.sm
+                    color: parent.down ? Estilo.screen.rede.pressed : (parent.hovered ? Estilo.screen.rede.hover : Estilo.screen.rede.base)
                 }
             }
         }
@@ -237,21 +245,21 @@ Page {
         Rectangle {
             Layout.fillWidth: true
             implicitHeight: linhaEstaMaquina.implicitHeight + 20
-            radius: Estilo.rounding.grande
-            color: "#f0f9ff"
-            border.color: "#bae6fd"
-            border.width: 1
+            radius: Estilo.global.radius.md
+            color: Estilo.status.info.background
+            border.color: Estilo.status.info.border
+            border.width: Estilo.global.borderWidth.hairline
 
             RowLayout {
                 id: linhaEstaMaquina
                 anchors.fill: parent
                 anchors.margins: 10
-                spacing: 10
+                spacing: Estilo.global.spacing.md
 
                 Icone {
                     nome: "fa6s.desktop"
-                    cor: Estilo.cores.texto
-                    tamanho: Estilo.fonte.titulo
+                    cor: Estilo.global.text
+                    tamanho: Estilo.global.fontSize.title
                 }
 
                 ColumnLayout {
@@ -260,35 +268,39 @@ Page {
                     Text {
                         text: "Esta máquina: " + redeController.nomeLocal + " (" + redeController.letraLocal + ")"
                         font.bold: true
-                        font.pixelSize: Estilo.fonte.padrao
-                        color: Estilo.cores.texto
+                        font.pixelSize: Estilo.global.fontSize.lg
+                        color: Estilo.global.text
                     }
 
                     Text {
                         text: "Compartilhando pedidos com " + redeController.quantidadeConectados + " máquina(s) na rede local"
-                        font.pixelSize: 11
-                        color: Estilo.cores.textoSecundario
+                        font.pixelSize: Estilo.global.fontSize.xs
+                        color: Estilo.global.textSecondary
                     }
                 }
             }
         }
 
         // --- MÁQUINAS CONECTADAS (esquerda) + IMPRESSORA DESTA MÁQUINA (direita) ---
-        RowLayout {
+        // Máquinas/histórico e impressora lado a lado enquanto couberem;
+        // empilhados quando não couberem.
+        GridLayout {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            spacing: 15
+            columns: telaRede.empilhado ? 1 : 2
+            columnSpacing: Estilo.global.spacing.xl
+            rowSpacing: Estilo.global.spacing.xl
 
             ColumnLayout {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                spacing: 8
+                spacing: Estilo.global.spacing.sm
 
                 Text {
                     text: "Máquinas conectadas (" + modeloPeers.count + ")"
-                    font.pixelSize: Estilo.fonte.padrao
+                    font.pixelSize: Estilo.global.fontSize.lg
                     font.bold: true
-                    color: Estilo.cores.textoSecundario
+                    color: Estilo.global.textSecondary
                 }
 
                 ListView {
@@ -299,7 +311,7 @@ Page {
                     // cresce com a janela é o histórico, que é a lista longa.
                     Layout.preferredHeight: Math.max(90, Math.min(contentHeight, 220))
                     clip: true
-                    spacing: 8
+                    spacing: Estilo.global.spacing.sm
                     model: modeloPeers
 
                     ScrollBar.vertical: ScrollBar {
@@ -314,17 +326,22 @@ Page {
                         visible: modeloPeers.count === 0
                         text: "Nenhuma outra máquina conectada ainda.\nAbra o sistema nas outras máquinas da rede local para elas aparecerem aqui."
                         horizontalAlignment: Text.AlignHCenter
-                        color: Estilo.cores.textoSecundario
-                        font.pixelSize: Estilo.fonte.padrao
+                        // Preso à largura da lista e quebrando linha: as duas
+                        // frases longas eram mais largas que a coluna numa
+                        // tela estreita e vazavam pelos dois lados dela.
+                        width: parent.width - Estilo.global.padding.xl * 2
+                        wrapMode: Text.WordWrap
+                        color: Estilo.global.textSecondary
+                        font.pixelSize: Estilo.global.fontSize.lg
                     }
 
                     delegate: Rectangle {
                         width: ListView.view.width - (ListView.view.ScrollBar.vertical.visible ? ListView.view.ScrollBar.vertical.width : 0)
                         height: colunaPeer.implicitHeight + 20
-                        radius: Estilo.rounding.grande
-                        color: "#ffffff"
-                        border.color: Estilo.cores.bordaCard
-                        border.width: 1
+                        radius: Estilo.global.radius.md
+                        color: Estilo.global.surface
+                        border.color: Estilo.global.borderCard
+                        border.width: Estilo.global.borderWidth.hairline
 
                         RowLayout {
                             id: colunaPeer
@@ -332,12 +349,12 @@ Page {
                             anchors.right: parent.right
                             anchors.verticalCenter: parent.verticalCenter
                             anchors.margins: 10
-                            spacing: 10
+                            spacing: Estilo.global.spacing.md
 
                             Icone {
                                 nome: "fa6s.desktop"
-                                cor: Estilo.cores.texto
-                                tamanho: Estilo.fonte.titulo
+                                cor: Estilo.global.text
+                                tamanho: Estilo.global.fontSize.title
                             }
 
                             ColumnLayout {
@@ -347,21 +364,21 @@ Page {
                                 Text {
                                     text: model.nome
                                     font.bold: true
-                                    font.pixelSize: Estilo.fonte.padrao
-                                    color: Estilo.cores.texto
+                                    font.pixelSize: Estilo.global.fontSize.lg
+                                    color: Estilo.global.text
                                 }
 
                                 Text {
                                     text: model.endereco
-                                    font.pixelSize: 11
-                                    color: Estilo.cores.textoSecundario
+                                    font.pixelSize: Estilo.global.fontSize.xs
+                                    color: Estilo.global.textSecondary
                                 }
                             }
 
                             Text {
                                 text: "conectado há " + telaRede.formatarDuracao(relogio.agora / 1000 - model.conectadoEm)
-                                font.pixelSize: 11
-                                color: Estilo.cores.textoSecundario
+                                font.pixelSize: Estilo.global.fontSize.xs
+                                color: Estilo.global.textSecondary
                             }
                         }
                     }
@@ -375,16 +392,16 @@ Page {
                 // rastro de "o que aconteceu" eram os prints em logs/app.log.
                 Text {
                     text: "Histórico da rede"
-                    font.pixelSize: Estilo.fonte.padrao
+                    font.pixelSize: Estilo.global.fontSize.lg
                     font.bold: true
-                    color: Estilo.cores.textoSecundario
+                    color: Estilo.global.textSecondary
                 }
 
                 ListView {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     clip: true
-                    spacing: 6
+                    spacing: Estilo.global.spacing.xs
                     model: modeloHistorico
 
                     ScrollBar.vertical: ScrollBar {
@@ -396,8 +413,8 @@ Page {
                         visible: modeloHistorico.count === 0
                         text: "Nada registrado ainda.\nComandas, cardápio, caixa e configurações aparecem aqui conforme forem mudando."
                         horizontalAlignment: Text.AlignHCenter
-                        color: Estilo.cores.textoSecundario
-                        font.pixelSize: Estilo.fonte.padrao
+                        color: Estilo.global.textSecondary
+                        font.pixelSize: Estilo.global.fontSize.lg
                     }
 
                     // `evento` é preenchido pelo Qt a partir do papel de mesmo
@@ -413,26 +430,27 @@ Page {
 
             // --- IMPRESSORA DESTA MÁQUINA ---
             ColumnLayout {
-                Layout.preferredWidth: 240
+                Layout.preferredWidth: telaRede.empilhado ? telaRede.larguraUtil : 240
+                Layout.fillWidth: telaRede.empilhado
                 Layout.alignment: Qt.AlignTop
-                spacing: 8
+                spacing: Estilo.global.spacing.sm
 
                 // --- IMPRESSORA PRINCIPAL (a que a malha está usando pra
                 // imprimir agora — ver RedeService.impressoraPrincipal) ---
                 Text {
                     text: "Impressora principal"
-                    font.pixelSize: Estilo.fonte.padrao
+                    font.pixelSize: Estilo.global.fontSize.lg
                     font.bold: true
-                    color: Estilo.cores.textoSecundario
+                    color: Estilo.global.textSecondary
                 }
 
                 Rectangle {
                     Layout.fillWidth: true
                     implicitHeight: colunaImpressoraPrincipal.implicitHeight + 20
-                    radius: Estilo.rounding.grande
-                    color: "#ffffff"
-                    border.color: Estilo.cores.bordaCard
-                    border.width: 1
+                    radius: Estilo.global.radius.md
+                    color: Estilo.global.surface
+                    border.color: Estilo.global.borderCard
+                    border.width: Estilo.global.borderWidth.hairline
 
                     ColumnLayout {
                         id: colunaImpressoraPrincipal
@@ -440,24 +458,24 @@ Page {
                         anchors.right: parent.right
                         anchors.top: parent.top
                         anchors.margins: 10
-                        spacing: 6
+                        spacing: Estilo.global.spacing.xs
 
                         RowLayout {
                             Layout.fillWidth: true
-                            spacing: 8
+                            spacing: Estilo.global.spacing.sm
 
                             Icone {
                                 nome: telaRede.infoImpressoraPrincipal.nome ? "fa6s.print" : "fa6s.ban"
-                                cor: telaRede.infoImpressoraPrincipal.nome ? Estilo.cores.texto : Estilo.cores.textoSecundario
-                                tamanho: Estilo.fonte.titulo
+                                cor: telaRede.infoImpressoraPrincipal.nome ? Estilo.global.text : Estilo.global.textSecondary
+                                tamanho: Estilo.global.fontSize.title
                             }
 
                             Text {
                                 Layout.fillWidth: true
                                 text: telaRede.infoImpressoraPrincipal.nome ? telaRede.infoImpressoraPrincipal.nome : "Nenhuma impressora disponível na rede"
                                 font.bold: true
-                                font.pixelSize: Estilo.fonte.padrao
-                                color: Estilo.cores.texto
+                                font.pixelSize: Estilo.global.fontSize.lg
+                                color: Estilo.global.text
                                 wrapMode: Text.WordWrap
                             }
                         }
@@ -466,9 +484,9 @@ Page {
                             Layout.fillWidth: true
                             visible: !!telaRede.infoImpressoraPrincipal.fixadoManualmente
                             text: "Selecionada manualmente"
-                            font.pixelSize: 11
+                            font.pixelSize: Estilo.global.fontSize.xs
                             font.italic: true
-                            color: "#0ea5e9"
+                            color: Estilo.screen.rede.accent
                         }
 
                         // Detalhes só fazem sentido quando alguma máquina da
@@ -481,8 +499,8 @@ Page {
                             Text {
                                 Layout.fillWidth: true
                                 text: telaRede.infoImpressoraPrincipal.local ? "Conectada nesta máquina" : ("Conectada na máquina " + telaRede.infoImpressoraPrincipal.maquina)
-                                font.pixelSize: 11
-                                color: Estilo.cores.textoSecundario
+                                font.pixelSize: Estilo.global.fontSize.xs
+                                color: Estilo.global.textSecondary
                                 wrapMode: Text.WordWrap
                             }
 
@@ -490,8 +508,8 @@ Page {
                                 Layout.fillWidth: true
                                 visible: !!telaRede.infoImpressoraPrincipal.fabricante
                                 text: telaRede.infoImpressoraPrincipal.fabricante + (telaRede.infoImpressoraPrincipal.modelo ? " · " + telaRede.infoImpressoraPrincipal.modelo : "")
-                                font.pixelSize: 11
-                                color: Estilo.cores.textoSecundario
+                                font.pixelSize: Estilo.global.fontSize.xs
+                                color: Estilo.global.textSecondary
                                 wrapMode: Text.WordWrap
                             }
 
@@ -499,8 +517,8 @@ Page {
                                 Layout.fillWidth: true
                                 visible: !!telaRede.infoImpressoraPrincipal.tipoPorta
                                 text: "Porta: " + telaRede.infoImpressoraPrincipal.porta + " (" + telaRede.infoImpressoraPrincipal.tipoPorta + ")"
-                                font.pixelSize: 11
-                                color: Estilo.cores.textoSecundario
+                                font.pixelSize: Estilo.global.fontSize.xs
+                                color: Estilo.global.textSecondary
                                 wrapMode: Text.WordWrap
                             }
                         }
@@ -509,8 +527,8 @@ Page {
                             Layout.fillWidth: true
                             visible: !telaRede.infoImpressoraPrincipal.nome
                             text: "Os pedidos continuam sendo salvos normalmente — só a impressão fica indisponível até alguma máquina da rede ter uma impressora conectada."
-                            font.pixelSize: 11
-                            color: Estilo.cores.textoSecundario
+                            font.pixelSize: Estilo.global.fontSize.xs
+                            color: Estilo.global.textSecondary
                             wrapMode: Text.WordWrap
                         }
                     }
@@ -518,9 +536,9 @@ Page {
 
                 Text {
                     text: "Escolher manualmente"
-                    font.pixelSize: Estilo.fonte.padrao
+                    font.pixelSize: Estilo.global.fontSize.lg
                     font.bold: true
-                    color: Estilo.cores.textoSecundario
+                    color: Estilo.global.textSecondary
                 }
 
                 ComboBox {
@@ -567,13 +585,13 @@ Page {
                         width: comboImpressoraPrincipal.width
                         text: modelData
                         highlighted: comboImpressoraPrincipal.highlightedIndex === index
-                        palette.text: Estilo.cores.textoInput
-                        palette.highlightedText: Estilo.cores.textoInput
+                        palette.text: Estilo.global.textInput
+                        palette.highlightedText: Estilo.global.textInput
                     }
 
                     contentItem: Text {
                         text: comboImpressoraPrincipal.displayText
-                        color: Estilo.cores.textoInput
+                        color: Estilo.global.textInput
                         leftPadding: 10
                         rightPadding: 10
                         verticalAlignment: Text.AlignVCenter
@@ -581,9 +599,9 @@ Page {
                     }
 
                     background: Rectangle {
-                        radius: Estilo.rounding.padrao
-                        color: "#ffffff"
-                        border.color: comboImpressoraPrincipal.activeFocus ? "#0ea5e9" : Estilo.cores.borda
+                        radius: Estilo.global.radius.sm
+                        color: Estilo.global.inputBackground
+                        border.color: comboImpressoraPrincipal.activeFocus ? Estilo.screen.rede.accent : Estilo.global.border
                         border.width: comboImpressoraPrincipal.activeFocus ? 2 : 1
                         implicitHeight: 38
                     }
@@ -591,18 +609,18 @@ Page {
 
                 Text {
                     text: "Impressora desta máquina"
-                    font.pixelSize: Estilo.fonte.padrao
+                    font.pixelSize: Estilo.global.fontSize.lg
                     font.bold: true
-                    color: Estilo.cores.textoSecundario
+                    color: Estilo.global.textSecondary
                 }
 
                 Rectangle {
                     Layout.fillWidth: true
                     implicitHeight: colunaImpressora.implicitHeight + 20
-                    radius: Estilo.rounding.grande
-                    color: "#ffffff"
-                    border.color: Estilo.cores.bordaCard
-                    border.width: 1
+                    radius: Estilo.global.radius.md
+                    color: Estilo.global.surface
+                    border.color: Estilo.global.borderCard
+                    border.width: Estilo.global.borderWidth.hairline
 
                     ColumnLayout {
                         id: colunaImpressora
@@ -610,24 +628,24 @@ Page {
                         anchors.right: parent.right
                         anchors.top: parent.top
                         anchors.margins: 10
-                        spacing: 6
+                        spacing: Estilo.global.spacing.xs
 
                         RowLayout {
                             Layout.fillWidth: true
-                            spacing: 8
+                            spacing: Estilo.global.spacing.sm
 
                             Icone {
                                 nome: telaRede.carregandoImpressora ? "fa6s.hourglass-half" : (telaRede.infoImpressora.encontrada ? "fa6s.print" : "fa6s.ban")
-                                cor: telaRede.infoImpressora.encontrada ? Estilo.cores.texto : Estilo.cores.textoSecundario
-                                tamanho: Estilo.fonte.titulo
+                                cor: telaRede.infoImpressora.encontrada ? Estilo.global.text : Estilo.global.textSecondary
+                                tamanho: Estilo.global.fontSize.title
                             }
 
                             Text {
                                 Layout.fillWidth: true
                                 text: telaRede.carregandoImpressora ? "Verificando..." : (telaRede.infoImpressora.encontrada ? telaRede.infoImpressora.nome : "Nenhuma impressora encontrada")
                                 font.bold: true
-                                font.pixelSize: Estilo.fonte.padrao
-                                color: Estilo.cores.texto
+                                font.pixelSize: Estilo.global.fontSize.lg
+                                color: Estilo.global.text
                                 wrapMode: Text.WordWrap
                             }
                         }
@@ -643,8 +661,8 @@ Page {
                                 Layout.fillWidth: true
                                 visible: !!telaRede.infoImpressora.fabricante
                                 text: telaRede.infoImpressora.fabricante + (telaRede.infoImpressora.modelo ? " · " + telaRede.infoImpressora.modelo : "")
-                                font.pixelSize: 11
-                                color: Estilo.cores.textoSecundario
+                                font.pixelSize: Estilo.global.fontSize.xs
+                                color: Estilo.global.textSecondary
                                 wrapMode: Text.WordWrap
                             }
 
@@ -652,8 +670,8 @@ Page {
                                 Layout.fillWidth: true
                                 visible: !!telaRede.infoImpressora.porta
                                 text: "Porta: " + telaRede.infoImpressora.porta + (telaRede.infoImpressora.tipoPorta ? " (" + telaRede.infoImpressora.tipoPorta + ")" : "")
-                                font.pixelSize: 11
-                                color: Estilo.cores.textoSecundario
+                                font.pixelSize: Estilo.global.fontSize.xs
+                                color: Estilo.global.textSecondary
                                 wrapMode: Text.WordWrap
                             }
 
@@ -661,17 +679,17 @@ Page {
                                 Layout.fillWidth: true
                                 visible: !!telaRede.infoImpressora.status
                                 text: "Status: " + telaRede.infoImpressora.status
-                                font.pixelSize: 11
-                                color: Estilo.cores.textoSecundario
+                                font.pixelSize: Estilo.global.fontSize.xs
+                                color: Estilo.global.textSecondary
                                 wrapMode: Text.WordWrap
                             }
 
                             Text {
                                 visible: !!telaRede.infoImpressora.padrao
                                 text: "Impressora padrão do sistema"
-                                font.pixelSize: 11
+                                font.pixelSize: Estilo.global.fontSize.xs
                                 font.italic: true
-                                color: Estilo.cores.textoSecundario
+                                color: Estilo.global.textSecondary
                             }
 
                             // "disponivel" vem False quando o SO ainda tem a
@@ -684,9 +702,9 @@ Page {
                                 Layout.fillWidth: true
                                 visible: telaRede.infoImpressora.disponivel === false
                                 text: "Instalada, mas não parece conectada agora — não concorre à eleição da malha."
-                                font.pixelSize: 11
+                                font.pixelSize: Estilo.global.fontSize.xs
                                 font.italic: true
-                                color: Estilo.cores.textoSecundario
+                                color: Estilo.global.textSecondary
                                 wrapMode: Text.WordWrap
                             }
                         }
@@ -695,8 +713,8 @@ Page {
                             Layout.fillWidth: true
                             visible: !telaRede.carregandoImpressora && !telaRede.infoImpressora.encontrada
                             text: "Os pedidos continuam sendo salvos normalmente — só a impressão fica indisponível."
-                            font.pixelSize: 11
-                            color: Estilo.cores.textoSecundario
+                            font.pixelSize: Estilo.global.fontSize.xs
+                            color: Estilo.global.textSecondary
                             wrapMode: Text.WordWrap
                         }
                     }

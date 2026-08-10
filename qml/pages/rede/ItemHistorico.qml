@@ -27,10 +27,10 @@ Rectangle {
     required property var formatarDuracao
 
     implicitHeight: linha.implicitHeight + 16
-    radius: Estilo.rounding.padrao
-    color: "#ffffff"
-    border.color: Estilo.cores.bordaCard
-    border.width: 1
+    radius: Estilo.global.radius.sm
+    color: Estilo.global.surface
+    border.color: Estilo.global.borderCard
+    border.width: Estilo.global.borderWidth.hairline
 
     RowLayout {
         id: linha
@@ -40,12 +40,12 @@ Rectangle {
         anchors.verticalCenter: parent.verticalCenter
         anchors.leftMargin: 10
         anchors.rightMargin: 10
-        spacing: 10
+        spacing: Estilo.global.spacing.md
 
         Icone {
             nome: itemHistorico.evento.icone
-            cor: Estilo.cores.textoSecundario
-            tamanho: Estilo.fonte.padrao
+            cor: Estilo.global.textSecondary
+            tamanho: Estilo.global.fontSize.lg
             Layout.alignment: Qt.AlignTop
             Layout.topMargin: 2
         }
@@ -57,9 +57,9 @@ Rectangle {
             Text {
                 Layout.fillWidth: true
                 text: itemHistorico.evento.rotulo
-                font.pixelSize: 13
+                font.pixelSize: Estilo.global.fontSize.md
                 font.bold: true
-                color: Estilo.cores.texto
+                color: Estilo.global.text
                 elide: Text.ElideRight
             }
 
@@ -70,9 +70,9 @@ Rectangle {
                 Layout.fillWidth: true
                 visible: text !== ""
                 text: itemHistorico.evento.detalhe
-                font.pixelSize: 11
+                font.pixelSize: Estilo.global.fontSize.xs
                 font.family: "monospace"
-                color: Estilo.cores.textoSecundario
+                color: Estilo.global.textSecondary
                 elide: Text.ElideMiddle
             }
 
@@ -81,8 +81,8 @@ Rectangle {
                 text: itemHistorico.evento.maquina
                     ? itemHistorico.evento.rotuloCategoria + " · " + itemHistorico.evento.maquina
                     : itemHistorico.evento.rotuloCategoria
-                font.pixelSize: 11
-                color: Estilo.cores.textoSecundario
+                font.pixelSize: Estilo.global.fontSize.xs
+                color: Estilo.global.textSecondary
                 elide: Text.ElideRight
             }
         }
@@ -95,8 +95,8 @@ Rectangle {
             text: itemHistorico.evento.quando > 0
                 ? "há " + itemHistorico.formatarDuracao(itemHistorico.agoraSegundos - itemHistorico.evento.quando)
                 : ""
-            font.pixelSize: 11
-            color: Estilo.cores.textoSecundario
+            font.pixelSize: Estilo.global.fontSize.xs
+            color: Estilo.global.textSecondary
         }
     }
 }

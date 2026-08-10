@@ -23,6 +23,24 @@ Popup {
     // motivo de usarPromocoes: as demais categorias não declaram esta prop.
     property bool comandaDeMesa: false
 
+    // Cor de cada categoria. Fica numa função, e não numa role do ListModel,
+    // porque ListElement só aceita valores literais — uma referência a
+    // Estilo.* ali dentro não compila ("cannot use script for property value").
+    function corDaCategoria(chave) {
+        switch (chave) {
+        case "pizza":
+            return Estilo.category.pizza.base;
+        case "lanche":
+            return Estilo.category.lanche.base;
+        case "bebida":
+            return Estilo.category.bebida.base;
+        case "acai":
+            return Estilo.category.acai.base;
+        default:
+            return Estilo.category.outros.base;
+        }
+    }
+
     // Abre a categoria correspondente ao índice, ou fecha se for o Cancelar
     function acionarItem(indice) {
         if (indice >= modeloCategorias.count) {
@@ -55,7 +73,7 @@ Popup {
     modal: true
     focus: true
     closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
-    padding: 25
+    padding: Estilo.global.padding.popup
     parent: Overlay.overlay
     anchors.centerIn: parent
     onOpened: {
@@ -64,13 +82,13 @@ Popup {
     }
 
     Overlay.modal: Rectangle {
-        color: "#99000000"
+        color: Estilo.global.overlay
     }
 
     background: Rectangle {
-        radius: Estilo.rounding.popup
-        color: Estilo.cores.fundoPagina
-        border.color: Estilo.cores.bordaCard
+        radius: Estilo.global.radius.xl
+        color: Estilo.global.background
+        border.color: Estilo.global.borderCard
     }
 
     // Modelo com o caminho da página de cada categoria
@@ -80,35 +98,35 @@ Popup {
         ListElement {
             nome: "Pizza"
             icone: "fa6s.pizza-slice"
-            cor: "#e74c3c"
+            categoria: "pizza"
             pagina: "pizzas/Pizzas.qml"
         }
 
         ListElement {
             nome: "Lanche"
             icone: "fa6s.burger"
-            cor: "#e67e22"
+            categoria: "lanche"
             pagina: "lanches/Lanches.qml"
         }
 
         ListElement {
             nome: "Bebidas"
             icone: "fa6s.glass-water"
-            cor: "#3498db"
+            categoria: "bebida"
             pagina: "bebidas/Bebidas.qml"
         }
         
         ListElement {
             nome: "Açaí"
             icone: "fa6s.ice-cream"
-            cor: "#8e44ad"
+            categoria: "acai"
             pagina: "acai/Acai.qml"
         }
 
         ListElement {
             nome: "Outros"
             icone: "fa6s.box"
-            cor: "#9b59b6"
+            categoria: "outros"
             pagina: "outros/Outros.qml"
         }
     }
@@ -116,7 +134,7 @@ Popup {
     contentItem: Column {
         id: colunaSelecao
 
-        spacing: 20
+        spacing: Estilo.global.spacing.xxl
         focus: true
         // Navegação por teclado: TAB / SHIFT+TAB percorrem os itens e
         // ENTER (ou espaço) aciona o item em foco.
@@ -135,24 +153,29 @@ Popup {
 
         Text {
             text: "Selecione a Categoria"
-            font.pixelSize: Estilo.fonte.titulo
-            font.bold: true
-            color: Estilo.cores.texto
+            font.pixelSize: Estilo.global.fontSize.title
+            font.family: Estilo.global.fontFamily.title
+            color: Estilo.global.text
             anchors.horizontalCenter: parent.horizontalCenter
         }
 
         Grid {
             id: gradeCategorias
 
-            // Uma coluna por categoria: com "columns" menor que o número de
-            // categorias, a última sobra sozinha numa segunda linha alinhada
-            // à esquerda (foi o que aconteceu ao entrar o Açaí, o 5º item).
-            // A largura acompanha o número de categorias para o botão não
+            // Uma coluna por categoria enquanto todas couberem numa fila —
+            // com "columns" menor que o necessário, a que sobra vai para uma
+            // segunda linha (foi o que aconteceu ao entrar o Açaí, o 5º
+            // item). A largura acompanha o número de colunas para o botão não
             // encolher a ponto de cortar o rótulo ("Bebidas").
-            columns: modeloCategorias.count
+            //
+            // As cinco categorias em fila pedem 535px; numa janela menor que
+            // isso elas passam a ocupar duas linhas em vez de vazar para fora
+            // do popup — que, sendo modal, deixaria o atendente sem como
+            // escolher a categoria nem como sair.
+            columns: Math.max(2, Math.min(modeloCategorias.count, Responsivo.colunas(Responsivo.larguraPopup(95 * modeloCategorias.count + Estilo.global.spacing.xl * (modeloCategorias.count - 1)), 95, Estilo.global.spacing.xl)))
             width: (95 * columns) + (spacing * (columns - 1))
             anchors.horizontalCenter: parent.horizontalCenter
-            spacing: 15
+            spacing: Estilo.global.spacing.xl
 
             Repeater {
                 model: modeloCategorias
@@ -184,40 +207,42 @@ Popup {
 
                         Behavior on scale {
                             NumberAnimation {
-                                duration: 100
+                                duration: Estilo.global.motion.instant
                                 easing.type: Easing.OutQuad
                             }
                         }
 
                         contentItem: Column {
                             anchors.centerIn: parent
-                            spacing: 8
+                            spacing: Estilo.global.spacing.sm
 
                             Icone {
                                 nome: model.icone
-                                cor: "#ffffff"
+                                cor: Estilo.global.textOnAccent
                                 tamanho: btnCategoria.width * 0.35
                                 anchors.horizontalCenter: parent.horizontalCenter
                             }
 
                             Text {
                                 text: model.nome
-                                font.pixelSize: 15
+                                font.pixelSize: Estilo.global.fontSize.xl
                                 font.bold: true
-                                color: "#ffffff"
+                                color: Estilo.global.textOnAccent
                                 anchors.horizontalCenter: parent.horizontalCenter
                             }
                         }
 
                         background: Rectangle {
-                            radius: Estilo.rounding.medio
-                            color: btnCategoria.down ? Qt.darker(model.cor, 1.2) : (btnCategoria.emFoco ? Qt.lighter(model.cor, 1.1) : model.cor)
-                            border.width: btnCategoria.emFoco ? 3 : 0
-                            border.color: Qt.darker(modeloCategorias.cor, 0.4)
+                            radius: Estilo.global.radius.lg
+                            readonly property color corCategoria: popupSelecaoPedido.corDaCategoria(model.categoria)
+
+                            color: btnCategoria.down ? Qt.darker(corCategoria, 1.2) : (btnCategoria.emFoco ? Qt.lighter(corCategoria, 1.1) : corCategoria)
+                            border.width: btnCategoria.emFoco ? Estilo.global.borderWidth.focus : 0
+                            border.color: Qt.darker(corCategoria, 0.4)
 
                             Behavior on color {
                                 ColorAnimation {
-                                    duration: 100
+                                    duration: Estilo.global.motion.instant
                                 }
                             }
                         }
@@ -232,7 +257,7 @@ Popup {
             readonly property bool emFoco: popupSelecaoPedido.indiceFoco === modeloCategorias.count
 
             text: "Cancelar"
-            padding: 10
+            padding: Estilo.global.padding.md
             width: Math.min(gradeCategorias.width, 200)
             anchors.horizontalCenter: parent.horizontalCenter
             focusPolicy: Qt.NoFocus
@@ -245,7 +270,7 @@ Popup {
 
             Behavior on scale {
                 NumberAnimation {
-                    duration: 100
+                    duration: Estilo.global.motion.instant
                     easing.type: Easing.OutQuad
                 }
             }
@@ -253,16 +278,16 @@ Popup {
             contentItem: Text {
                 text: btnCancelar.text
                 font.bold: true
-                color: "#ffffff"
+                color: Estilo.global.textOnAccent
                 horizontalAlignment: Text.AlignHCenter
                 verticalAlignment: Text.AlignVCenter
             }
 
             background: Rectangle {
-                radius: Estilo.rounding.padrao
-                color: btnCancelar.emFoco ? "#95a5a6" : Estilo.cores.textoSecundario
-                border.width: btnCancelar.emFoco ? 3 : 0
-                border.color: "#ffffff"
+                radius: Estilo.global.radius.sm
+                color: btnCancelar.emFoco ? Estilo.action.neutral.hover : Estilo.action.neutral.base
+                border.width: btnCancelar.emFoco ? Estilo.global.borderWidth.focus : 0
+                border.color: Estilo.global.textOnAccent
             }
         }
     }

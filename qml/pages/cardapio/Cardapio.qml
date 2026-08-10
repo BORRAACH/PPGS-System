@@ -32,7 +32,33 @@ Page {
     // gravada em disco: só é substituída depois de uma gravação bem-sucedida.
     property var itens: []
     readonly property var categoriaAtual: indiceCategoria >= 0 && indiceCategoria < categorias.length ? categorias[indiceCategoria] : null
-    readonly property color corDestaque: categoriaAtual ? categoriaAtual.cor : Estilo.cores.texto
+    readonly property color corDestaque: categoriaAtual ? telaCardapio.corDaCategoria(categoriaAtual.chave) : Estilo.global.text
+
+    // A cor de cada categoria é resolvida aqui pela chave, e não lida do
+    // "cor" que services/cardapioService.py devolve junto: cor é decisão de
+    // apresentação, e mantê-la no Python deixava duas paletas concorrentes —
+    // o cardápio ficava com as cores antigas enquanto o resto do app seguia
+    // os tokens. O Python continua mandando "cor"; esta tela só ignora.
+    function corDaCategoria(chave) {
+        switch (chave) {
+        case "pizzas":
+            return Estilo.category.pizza.base;
+        case "pizzaBordas":
+            return Estilo.category.borda.base;
+        case "pizzaAdicionais":
+            return Estilo.category.adicional.base;
+        case "lanches":
+        case "lanchesAdicionais":
+            return Estilo.category.lanche.base;
+        case "bebidas":
+            return Estilo.category.bebida.base;
+        case "acaiTamanhos":
+        case "acaiAdicionais":
+            return Estilo.category.acai.base;
+        default:
+            return Estilo.category.outros.base;
+        }
+    }
 
     focus: true
     // Mesmo motivo das telas de pedido: o StackView assume o controle do foco
@@ -188,34 +214,34 @@ Page {
     }
 
     background: Rectangle {
-        color: Estilo.cores.fundoPagina
-        radius: Estilo.rounding.popup
+        color: Estilo.global.background
+        radius: Estilo.global.radius.xl
     }
 
     ColumnLayout {
         anchors.fill: parent
         anchors.margins: 20
-        spacing: 15
+        spacing: Estilo.global.spacing.xl
 
         // --- CABEÇALHO ---
         RowLayout {
             Layout.fillWidth: true
-            spacing: 15
+            spacing: Estilo.global.spacing.xl
 
             Row {
-                spacing: 8
+                spacing: Estilo.global.spacing.sm
 
                 Icone {
                     nome: "fa6s.book-open"
                     cor: telaCardapio.corDestaque
-                    tamanho: Estilo.fonte.titulo
+                    tamanho: Estilo.global.fontSize.title
                     anchors.verticalCenter: parent.verticalCenter
                 }
 
                 Text {
                     text: "CARDÁPIO"
-                    font.pixelSize: Estilo.fonte.titulo
-                    font.bold: true
+                    font.pixelSize: Estilo.global.fontSize.title
+                    font.family: Estilo.global.fontFamily.title
                     color: telaCardapio.corDestaque
                     anchors.verticalCenter: parent.verticalCenter
                 }
@@ -227,15 +253,19 @@ Page {
 
             Text {
                 text: telaCardapio.itens.length === 1 ? "1 item nesta categoria" : telaCardapio.itens.length + " itens nesta categoria"
-                font.pixelSize: 13
-                color: Estilo.cores.textoSecundario
+                font.pixelSize: Estilo.global.fontSize.md
+                color: Estilo.global.textSecondary
             }
         }
 
         // --- ABAS DE CATEGORIA ---
-        Row {
+        // Flow, e não Row: são sete categorias, e numa tela estreita a fila
+        // inteira era mais larga que a janela — as últimas ficavam fora de
+        // alcance, sem rolagem horizontal nenhuma. Agora elas quebram para a
+        // linha de baixo.
+        Flow {
             Layout.fillWidth: true
-            spacing: 10
+            spacing: Estilo.global.spacing.md
 
             Repeater {
                 model: telaCardapio.categorias
@@ -254,33 +284,33 @@ Page {
                     onClicked: telaCardapio.selecionarCategoria(index)
 
                     contentItem: Row {
-                        spacing: 8
+                        spacing: Estilo.global.spacing.sm
 
                         Icone {
                             nome: btnCategoria.categoria.icone
-                            cor: btnCategoria.ativa ? "#ffffff" : btnCategoria.categoria.cor
-                            tamanho: Estilo.fonte.padrao
+                            cor: btnCategoria.ativa ? Estilo.global.textOnAccent : telaCardapio.corDaCategoria(btnCategoria.categoria.chave)
+                            tamanho: Estilo.global.fontSize.lg
                             anchors.verticalCenter: parent.verticalCenter
                         }
 
                         Text {
                             text: btnCategoria.categoria.rotulo
-                            font.pixelSize: Estilo.fonte.padrao
+                            font.pixelSize: Estilo.global.fontSize.lg
                             font.bold: true
-                            color: btnCategoria.ativa ? "#ffffff" : Estilo.cores.texto
+                            color: btnCategoria.ativa ? Estilo.global.textOnAccent : Estilo.global.text
                             anchors.verticalCenter: parent.verticalCenter
                         }
                     }
 
                     background: Rectangle {
-                        radius: Estilo.rounding.grande
-                        color: btnCategoria.ativa ? btnCategoria.categoria.cor : (btnCategoria.hovered ? "#f1f1f1" : "#ffffff")
-                        border.color: btnCategoria.ativa ? btnCategoria.categoria.cor : Estilo.cores.borda
+                        radius: Estilo.global.radius.md
+                        color: btnCategoria.ativa ? telaCardapio.corDaCategoria(btnCategoria.categoria.chave) : (btnCategoria.hovered ? Estilo.global.surfaceHover : Estilo.global.surface)
+                        border.color: btnCategoria.ativa ? telaCardapio.corDaCategoria(btnCategoria.categoria.chave) : Estilo.global.border
                         border.width: btnCategoria.ativa ? 2 : 1
 
                         Behavior on color {
                             ColorAnimation {
-                                duration: 100
+                                duration: Estilo.global.motion.instant
                             }
                         }
                     }
@@ -304,7 +334,7 @@ Page {
             // RowLayout por um Row logo abaixo. A altura de 42 já vem de
             // sobra da altura dos próprios filhos (Search/Button).
             Layout.fillWidth: true
-            spacing: 12
+            spacing: Estilo.global.spacing.lg
 
             Search {
                 id: campoBusca
@@ -324,26 +354,26 @@ Page {
                 onClicked: telaCardapio.abrirEditor(-1)
 
                 contentItem: Row {
-                    spacing: 8
+                    spacing: Estilo.global.spacing.sm
 
                     Icone {
                         nome: "fa6s.plus"
-                        cor: "#ffffff"
-                        tamanho: Estilo.fonte.padrao
+                        cor: Estilo.global.textOnAccent
+                        tamanho: Estilo.global.fontSize.lg
                         anchors.verticalCenter: parent.verticalCenter
                     }
 
                     Text {
                         text: telaCardapio.categoriaAtual ? telaCardapio.categoriaAtual.novoRotulo : "Novo item"
-                        font.pixelSize: Estilo.fonte.padrao
+                        font.pixelSize: Estilo.global.fontSize.lg
                         font.bold: true
-                        color: "#ffffff"
+                        color: Estilo.global.textOnAccent
                         anchors.verticalCenter: parent.verticalCenter
                     }
                 }
 
                 background: Rectangle {
-                    radius: Estilo.rounding.grande
+                    radius: Estilo.global.radius.md
                     color: btnAdicionar.down ? Qt.darker(telaCardapio.corDestaque, 1.2) : (btnAdicionar.hovered ? Qt.lighter(telaCardapio.corDestaque, 1.1) : telaCardapio.corDestaque)
                 }
             }
@@ -356,7 +386,7 @@ Page {
             Layout.fillWidth: true
             Layout.fillHeight: true
             model: modeloVisiveis
-            spacing: 8
+            spacing: Estilo.global.spacing.sm
             clip: true
 
             ScrollBar.vertical: ScrollBar {
@@ -369,9 +399,9 @@ Page {
                 anchors.centerIn: parent
                 visible: modeloVisiveis.count === 0
                 text: telaCardapio.itens.length === 0 ? "Nenhum item cadastrado nesta categoria." : "Nenhum item encontrado para esta busca."
-                font.pixelSize: 13
+                font.pixelSize: Estilo.global.fontSize.md
                 font.italic: true
-                color: "#bdc3c7"
+                color: Estilo.global.textMuted
             }
 
             delegate: Rectangle {
@@ -388,10 +418,10 @@ Page {
 
                 width: listaItens.width - (listaItens.ScrollBar.vertical.visible ? listaItens.ScrollBar.vertical.width : 0)
                 height: 64
-                radius: Estilo.rounding.grande
-                color: areaItem.containsMouse ? "#f7f7f7" : "#ffffff"
-                border.color: Estilo.cores.borda
-                border.width: 1
+                radius: Estilo.global.radius.md
+                color: areaItem.containsMouse ? Estilo.global.surfaceHover : Estilo.global.surface
+                border.color: Estilo.global.border
+                border.width: Estilo.global.borderWidth.hairline
 
                 // Clicar em qualquer lugar da linha abre o mesmo formulário do
                 // botão de editar — o botão fica só como pista visual.
@@ -407,7 +437,7 @@ Page {
                 Row {
                     id: acoesItem
 
-                    spacing: 8
+                    spacing: Estilo.global.spacing.sm
                     anchors.right: parent.right
                     anchors.rightMargin: 12
                     anchors.verticalCenter: parent.verticalCenter
@@ -422,13 +452,13 @@ Page {
 
                         contentItem: Icone {
                             nome: "fa6s.pen"
-                            cor: "#ffffff"
+                            cor: Estilo.global.textOnAccent
                             tamanho: 13
                             anchors.centerIn: parent
                         }
 
                         background: Rectangle {
-                            radius: Estilo.rounding.padrao
+                            radius: Estilo.global.radius.sm
                             color: btnEditar.down ? Qt.darker(telaCardapio.corDestaque, 1.2) : (btnEditar.hovered ? Qt.lighter(telaCardapio.corDestaque, 1.1) : telaCardapio.corDestaque)
                         }
                     }
@@ -443,14 +473,14 @@ Page {
 
                         contentItem: Icone {
                             nome: "fa6s.trash-can"
-                            cor: "#ffffff"
+                            cor: Estilo.global.textOnAccent
                             tamanho: 13
                             anchors.centerIn: parent
                         }
 
                         background: Rectangle {
-                            radius: Estilo.rounding.padrao
-                            color: btnRemover.down ? Estilo.cancelar.pressionado : (btnRemover.hovered ? Estilo.cancelar.hover : Estilo.cancelar.normal)
+                            radius: Estilo.global.radius.sm
+                            color: btnRemover.down ? Estilo.action.danger.pressed : (btnRemover.hovered ? Estilo.action.danger.hover : Estilo.action.danger.base)
                         }
                     }
                 }
@@ -459,9 +489,9 @@ Page {
                     id: textoPrecos
 
                     text: linhaItem.precos
-                    font.pixelSize: 12
+                    font.pixelSize: Estilo.global.fontSize.sm
                     font.bold: true
-                    color: Estilo.confirmar.normal
+                    color: Estilo.action.confirm.base
                     anchors.right: acoesItem.left
                     anchors.rightMargin: 12
                     anchors.verticalCenter: parent.verticalCenter
@@ -482,9 +512,9 @@ Page {
                     Text {
                         width: parent.width
                         text: linhaItem.nome
-                        font.pixelSize: Estilo.fonte.padrao
+                        font.pixelSize: Estilo.global.fontSize.lg
                         font.bold: true
-                        color: Estilo.cores.texto
+                        color: Estilo.global.text
                         elide: Text.ElideRight
                     }
 
@@ -492,8 +522,8 @@ Page {
                         width: parent.width
                         visible: linhaItem.detalhe !== ""
                         text: linhaItem.detalhe
-                        font.pixelSize: 12
-                        color: Estilo.cores.textoSecundario
+                        font.pixelSize: Estilo.global.fontSize.sm
+                        color: Estilo.global.textSecondary
                         elide: Text.ElideRight
                     }
                 }
@@ -504,7 +534,7 @@ Page {
         Button {
             id: btnVoltar
 
-            padding: 10
+            padding: Estilo.global.padding.md
             Layout.alignment: Qt.AlignHCenter
             Layout.preferredWidth: 200
             onClicked: {
@@ -513,29 +543,29 @@ Page {
             }
 
             contentItem: Row {
-                spacing: 6
+                spacing: Estilo.global.spacing.xs
                 anchors.centerIn: parent
 
                 Icone {
                     nome: "fa6s.arrow-left"
-                    cor: "#ffffff"
-                    tamanho: Estilo.fonte.padrao
+                    cor: Estilo.global.textOnAccent
+                    tamanho: Estilo.global.fontSize.lg
                     anchors.verticalCenter: parent.verticalCenter
                 }
 
                 Text {
                     text: "Voltar para o Menu"
                     font.bold: true
-                    color: "#ffffff"
+                    color: Estilo.global.textOnAccent
                     anchors.verticalCenter: parent.verticalCenter
                 }
             }
 
             background: Rectangle {
-                radius: Estilo.rounding.padrao
-                color: btnVoltar.down ? Estilo.cancelar.pressionado : (btnVoltar.hovered ? Estilo.cancelar.hover : Estilo.cancelar.normal)
-                border.color: Estilo.cancelar.pressionado
-                border.width: 1
+                radius: Estilo.global.radius.sm
+                color: btnVoltar.down ? Estilo.action.danger.pressed : (btnVoltar.hovered ? Estilo.action.danger.hover : Estilo.action.danger.base)
+                border.color: Estilo.action.danger.pressed
+                border.width: Estilo.global.borderWidth.hairline
             }
         }
     }
@@ -544,6 +574,7 @@ Page {
     PopupItemCardapio {
         id: popupItem
 
+        corDestaque: telaCardapio.corDestaque
         onConfirmado: function (indice, item) {
             telaCardapio.aplicarItem(indice, item);
         }

@@ -20,7 +20,7 @@ Rectangle {
     id: root
 
     property alias itens: repeaterItens.model
-    property color corDestaque: Estilo.confirmar.normal
+    property color corDestaque: Estilo.action.confirm.base
     property string formaPagamento: ""
     property string troco: ""
     property bool pago: false
@@ -61,8 +61,8 @@ Rectangle {
             anchors.left: parent.left
             anchors.top: parent.top
             text: linhaDetalhe.rotulo
-            font.pixelSize: 13
-            color: Estilo.cores.textoSecundario
+            font.pixelSize: Estilo.global.fontSize.md
+            color: Estilo.global.textSecondary
         }
 
         Text {
@@ -73,8 +73,8 @@ Rectangle {
             anchors.right: parent.right
             anchors.top: parent.top
             text: linhaDetalhe.valor
-            font.pixelSize: 13
-            color: Estilo.cores.texto
+            font.pixelSize: Estilo.global.fontSize.md
+            color: Estilo.global.text
             horizontalAlignment: Text.AlignRight
             wrapMode: Text.WordWrap
         }
@@ -213,23 +213,23 @@ Rectangle {
     // largura (o popup do Fechamento, que ocupa a largura toda) passa a poder
     // simplesmente atribuir width.
     implicitWidth: 300
-    implicitHeight: colunaResumo.implicitHeight + Estilo.preenchimento.grande * 2
-    radius: Estilo.rounding.painel
-    color: "#ffffff"
-    border.color: Estilo.cores.bordaCard
-    border.width: 1
+    implicitHeight: colunaResumo.implicitHeight + Estilo.global.padding.xl * 2
+    radius: Estilo.global.radius.lg
+    color: Estilo.global.surface
+    border.color: Estilo.global.borderCard
+    border.width: Estilo.global.borderWidth.hairline
 
     Column {
         id: colunaResumo
 
-        width: parent.width - Estilo.preenchimento.grande * 2
+        width: parent.width - Estilo.global.padding.xl * 2
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.top: parent.top
-        anchors.topMargin: Estilo.preenchimento.grande
-        spacing: Estilo.espacamento.normal
+        anchors.topMargin: Estilo.global.padding.xl
+        spacing: Estilo.global.spacing.lg
 
         Row {
-            spacing: 8
+            spacing: Estilo.global.spacing.sm
 
             Icone {
                 nome: "fa6s.receipt"
@@ -240,7 +240,7 @@ Rectangle {
 
             Text {
                 text: "RESUMO DA COMANDA"
-                font.pixelSize: 15
+                font.pixelSize: Estilo.global.fontSize.xl
                 font.bold: true
                 color: root.corDestaque
                 anchors.verticalCenter: parent.verticalCenter
@@ -251,7 +251,7 @@ Rectangle {
         Rectangle {
             width: parent.width
             height: 1
-            color: Estilo.cores.bordaCard
+            color: Estilo.global.borderCard
         }
 
         // --- Dados do cliente (só no modo detalhado) ---
@@ -292,7 +292,7 @@ Rectangle {
         Rectangle {
             width: parent.width
             height: 1
-            color: Estilo.cores.bordaCard
+            color: Estilo.global.borderCard
             visible: root.temDadosCliente
         }
 
@@ -302,9 +302,9 @@ Rectangle {
             width: parent.width
             visible: root.quantidadeItens === 0
             text: "Nenhum item adicionado ainda."
-            font.pixelSize: 13
+            font.pixelSize: Estilo.global.fontSize.md
             font.italic: true
-            color: Estilo.cores.textoSecundario
+            color: Estilo.global.textSecondary
             wrapMode: Text.WordWrap
         }
 
@@ -350,8 +350,8 @@ Rectangle {
                             anchors.right: textoValorItem.left
                             anchors.rightMargin: 8
                             text: "• " + grupoItem.nomeItem
-                            font.pixelSize: 13
-                            color: Estilo.cores.texto
+                            font.pixelSize: Estilo.global.fontSize.md
+                            color: Estilo.global.text
                             elide: Text.ElideRight
                         }
 
@@ -360,8 +360,8 @@ Rectangle {
 
                             anchors.right: parent.right
                             text: grupoItem.valorItem || "R$ 0,00"
-                            font.pixelSize: 13
-                            color: Estilo.cores.textoSecundario
+                            font.pixelSize: Estilo.global.fontSize.md
+                            color: Estilo.global.textSecondary
                         }
 
                     }
@@ -393,8 +393,8 @@ Rectangle {
                                     // Só a primeira fração leva o marcador do
                                     // item; as outras alinham por baixo dele.
                                     text: (linhaFracao.index === 0 ? "• " : "   ") + linhaFracao.modelData.texto
-                                    font.pixelSize: 13
-                                    color: Estilo.cores.texto
+                                    font.pixelSize: Estilo.global.fontSize.md
+                                    color: Estilo.global.text
                                     wrapMode: Text.WordWrap
                                 }
 
@@ -407,9 +407,9 @@ Rectangle {
                                     // fração — sai só na primeira linha, igual
                                     // ao cupom (comandaTextoService.formatar_tabela).
                                     text: linhaFracao.index === 0 ? grupoItem.valorItem : ""
-                                    font.pixelSize: 13
+                                    font.pixelSize: Estilo.global.fontSize.md
                                     font.bold: true
-                                    color: Estilo.cores.texto
+                                    color: Estilo.global.text
                                 }
 
                             }
@@ -423,8 +423,8 @@ Rectangle {
                                     width: linhaFracao.width - 20
                                     x: 20
                                     text: modelData
-                                    font.pixelSize: 12
-                                    color: Estilo.cores.textoSecundario
+                                    font.pixelSize: Estilo.global.fontSize.sm
+                                    color: Estilo.global.textSecondary
                                     wrapMode: Text.WordWrap
                                 }
 
@@ -441,8 +441,8 @@ Rectangle {
                         x: 20
                         visible: root.detalhado && grupoItem.textoBorda !== ""
                         text: grupoItem.textoBorda
-                        font.pixelSize: 12
-                        color: Estilo.cores.textoSecundario
+                        font.pixelSize: Estilo.global.fontSize.sm
+                        color: Estilo.global.textSecondary
                         wrapMode: Text.WordWrap
                     }
 
@@ -451,9 +451,9 @@ Rectangle {
                         x: 20
                         visible: root.detalhado && grupoItem.observacaoItem !== ""
                         text: grupoItem.observacaoItem
-                        font.pixelSize: 12
+                        font.pixelSize: Estilo.global.fontSize.sm
                         font.italic: true
-                        color: Estilo.cores.texto
+                        color: Estilo.global.text
                         wrapMode: Text.WordWrap
                     }
 
@@ -466,7 +466,7 @@ Rectangle {
         Rectangle {
             width: parent.width
             height: 1
-            color: Estilo.cores.bordaCard
+            color: Estilo.global.borderCard
         }
 
         // --- Taxa de entrega (só aparece na tela de Entrega) ---
@@ -480,15 +480,15 @@ Rectangle {
 
                 anchors.left: parent.left
                 text: "Taxa de entrega"
-                font.pixelSize: 13
-                color: Estilo.cores.texto
+                font.pixelSize: Estilo.global.fontSize.md
+                color: Estilo.global.text
             }
 
             Text {
                 anchors.right: parent.right
                 text: root._formatarMoeda(root.valorTaxa)
-                font.pixelSize: 13
-                color: Estilo.cores.texto
+                font.pixelSize: Estilo.global.fontSize.md
+                color: Estilo.global.text
             }
 
         }
@@ -503,16 +503,16 @@ Rectangle {
 
                 anchors.left: parent.left
                 text: "Forma de pagamento"
-                font.pixelSize: 13
-                color: Estilo.cores.texto
+                font.pixelSize: Estilo.global.fontSize.md
+                color: Estilo.global.text
             }
 
             Text {
                 anchors.right: parent.right
                 text: root.formaPagamento || "—"
-                font.pixelSize: 13
+                font.pixelSize: Estilo.global.fontSize.md
                 font.bold: true
-                color: Estilo.cores.texto
+                color: Estilo.global.text
             }
 
         }
@@ -539,15 +539,15 @@ Rectangle {
 
                         anchors.left: parent.left
                         text: "Troco para"
-                        font.pixelSize: 13
-                        color: Estilo.cores.texto
+                        font.pixelSize: Estilo.global.fontSize.md
+                        color: Estilo.global.text
                     }
 
                     Text {
                         anchors.right: parent.right
                         text: root.troco
-                        font.pixelSize: 13
-                        color: Estilo.cores.texto
+                        font.pixelSize: Estilo.global.fontSize.md
+                        color: Estilo.global.text
                     }
 
                 }
@@ -561,16 +561,16 @@ Rectangle {
 
                         anchors.left: parent.left
                         text: "Troco a dar"
-                        font.pixelSize: 13
-                        color: Estilo.cores.texto
+                        font.pixelSize: Estilo.global.fontSize.md
+                        color: Estilo.global.text
                     }
 
                     Text {
                         anchors.right: parent.right
                         text: root._formatarMoeda(Math.max(root.trocoADar, 0))
-                        font.pixelSize: 13
+                        font.pixelSize: Estilo.global.fontSize.md
                         font.bold: true
-                        color: root.trocoADar < 0 ? Estilo.cancelar.normal : Estilo.cores.texto
+                        color: root.trocoADar < 0 ? Estilo.action.danger.base : Estilo.global.text
                     }
 
                 }
@@ -588,8 +588,8 @@ Rectangle {
                 anchors.left: parent.left
                 anchors.verticalCenter: parent.verticalCenter
                 text: "Status"
-                font.pixelSize: 13
-                color: Estilo.cores.texto
+                font.pixelSize: Estilo.global.fontSize.md
+                color: Estilo.global.text
             }
 
             Rectangle {
@@ -598,17 +598,17 @@ Rectangle {
                 anchors.right: parent.right
                 width: textoStatus.implicitWidth + 20
                 height: textoStatus.implicitHeight + 8
-                radius: Estilo.rounding.cheio
-                color: root.pago ? Estilo.confirmar.normal : Estilo.cancelar.normal
+                radius: Estilo.global.radius.pill
+                color: root.pago ? Estilo.action.confirm.base : Estilo.action.danger.base
 
                 Text {
                     id: textoStatus
 
                     anchors.centerIn: parent
                     text: root.pago ? "PAGO" : "NÃO PAGO"
-                    font.pixelSize: 12
+                    font.pixelSize: Estilo.global.fontSize.sm
                     font.bold: true
-                    color: "#ffffff"
+                    color: Estilo.global.textOnAccent
                 }
 
             }
@@ -618,7 +618,7 @@ Rectangle {
         Rectangle {
             width: parent.width
             height: 1
-            color: Estilo.cores.bordaCard
+            color: Estilo.global.borderCard
         }
 
         // --- Total ---
@@ -632,7 +632,7 @@ Rectangle {
                 anchors.left: parent.left
                 anchors.verticalCenter: parent.verticalCenter
                 text: "TOTAL"
-                font.pixelSize: 16
+                font.pixelSize: Estilo.global.fontSize.xl
                 font.bold: true
                 color: root.corDestaque
             }
@@ -641,7 +641,7 @@ Rectangle {
                 anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
                 text: root._formatarMoeda(root.valorTotal)
-                font.pixelSize: 18
+                font.pixelSize: Estilo.global.fontSize.xxl
                 font.bold: true
                 color: root.corDestaque
             }
