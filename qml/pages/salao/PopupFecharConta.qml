@@ -201,13 +201,13 @@ Popup {
 
                 contentItem: Text {
                     text: parent.text
-                    font.bold: true
+                    font.family: Estilo.global.fontFamily.title
                     color: popupFecharConta.modoIgual ? Estilo.global.textOnAccent : Estilo.global.text
                     horizontalAlignment: Text.AlignHCenter
                 }
 
                 background: Rectangle {
-                    radius: Estilo.global.radius.sm
+                    radius: Estilo.global.radius.pill
                     color: popupFecharConta.modoIgual ? Estilo.screen.salao.base : (btnModoIgual.hovered ? Estilo.screen.salao.soft : Estilo.global.surface)
                     border.color: Estilo.screen.salao.accent
                     border.width: btnModoIgual.activeFocus ? 2 : 1
@@ -225,13 +225,13 @@ Popup {
 
                 contentItem: Text {
                     text: parent.text
-                    font.bold: true
+                    font.family: Estilo.global.fontFamily.title
                     color: !popupFecharConta.modoIgual ? Estilo.global.textOnAccent : Estilo.global.text
                     horizontalAlignment: Text.AlignHCenter
                 }
 
                 background: Rectangle {
-                    radius: Estilo.global.radius.sm
+                    radius: Estilo.global.radius.pill
                     color: !popupFecharConta.modoIgual ? Estilo.screen.salao.base : (btnModoAvulso.hovered ? Estilo.screen.salao.soft : Estilo.global.surface)
                     border.color: Estilo.screen.salao.accent
                     border.width: btnModoAvulso.activeFocus ? 2 : 1
@@ -278,7 +278,7 @@ Popup {
                 }
 
                 background: Rectangle {
-                    radius: Estilo.global.radius.sm
+                    radius: Estilo.global.radius.pill
                     color: Estilo.global.inputBackground
                     border.color: spinnerPessoas.activeFocus ? Estilo.screen.salao.accent : Estilo.global.border
                     border.width: Estilo.global.borderWidth.hairline
@@ -297,13 +297,13 @@ Popup {
 
             contentItem: Text {
                 text: parent.text
-                font.bold: true
+                font.family: Estilo.global.fontFamily.title
                 color: Estilo.global.textOnAccent
                 horizontalAlignment: Text.AlignHCenter
             }
 
             background: Rectangle {
-                radius: Estilo.global.radius.sm
+                radius: Estilo.global.radius.pill
                 color: parent.down ? Estilo.screen.salao.pressed : (parent.hovered ? Estilo.screen.salao.hover : Estilo.screen.salao.base)
             }
         }
@@ -382,7 +382,7 @@ Popup {
                         }
 
                         background: Rectangle {
-                            radius: Estilo.global.radius.sm
+                            radius: Estilo.global.radius.pill
                             color: Estilo.global.inputBackground
                             border.color: parent.activeFocus ? Estilo.screen.salao.accent : Estilo.global.border
                             border.width: parent.activeFocus ? 2 : 1
@@ -414,7 +414,7 @@ Popup {
                         }
 
                         background: Rectangle {
-                            radius: Estilo.global.radius.sm
+                            radius: Estilo.global.radius.pill
                             color: popupFecharConta.modoIgual ? Estilo.global.inputDisabled : Estilo.global.inputBackground
                             border.color: parent.activeFocus ? Estilo.screen.salao.accent : Estilo.global.border
                             border.width: parent.activeFocus ? 2 : 1
@@ -449,7 +449,7 @@ Popup {
                         }
 
                         background: Rectangle {
-                            radius: Estilo.global.radius.sm
+                            radius: Estilo.global.radius.pill
                             color: Estilo.global.inputBackground
                             border.color: parent.activeFocus ? Estilo.screen.salao.accent : Estilo.global.border
                             border.width: Estilo.global.borderWidth.hairline
@@ -470,14 +470,14 @@ Popup {
 
                         contentItem: Text {
                             text: btnStatusDivisao.text
-                            font.bold: true
+                            font.family: Estilo.global.fontFamily.title
                             color: Estilo.global.textOnAccent
                             horizontalAlignment: Text.AlignHCenter
                             verticalAlignment: Text.AlignVCenter
                         }
 
                         background: Rectangle {
-                            radius: Estilo.global.radius.sm
+                            radius: Estilo.global.radius.pill
                             color: model.status === "PG" ? (btnStatusDivisao.down ? Estilo.action.confirm.pressed : (btnStatusDivisao.hovered ? Estilo.action.confirm.hover : Estilo.action.confirm.base)) : (btnStatusDivisao.down ? Estilo.action.danger.pressed : (btnStatusDivisao.hovered ? Estilo.action.danger.hover : Estilo.action.danger.base))
                             // Anel de foco: só aparece navegando por teclado —
                             // mesmo padrão de btnStatusPagamento em Balcao.qml/
@@ -496,13 +496,13 @@ Popup {
                         contentItem: Text {
                             text: "×"
                             color: Estilo.global.textOnAccent
-                            font.bold: true
+                            font.family: Estilo.global.fontFamily.title
                             horizontalAlignment: Text.AlignHCenter
                             verticalAlignment: Text.AlignVCenter
                         }
 
                         background: Rectangle {
-                            radius: Estilo.global.radius.sm
+                            radius: Estilo.global.radius.pill
                             color: parent.down ? Estilo.action.danger.pressed : (parent.hovered ? Estilo.action.danger.hover : Estilo.action.danger.base)
                         }
                     }
@@ -558,7 +558,7 @@ Popup {
                             }
 
                             background: Rectangle {
-                                radius: Estilo.global.radius.sm
+                                radius: Estilo.global.radius.pill
                                 color: Estilo.global.inputBackground
                                 border.color: parent.activeFocus ? Estilo.screen.salao.accent : Estilo.global.border
                                 border.width: parent.activeFocus ? 2 : 1
@@ -629,14 +629,14 @@ Popup {
 
                 contentItem: Text {
                     text: btnCancelarFechamento.text
-                    font.bold: true
+                    font.family: Estilo.global.fontFamily.title
                     color: Estilo.global.textOnAccent
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
                 }
 
                 background: Rectangle {
-                    radius: Estilo.global.radius.sm
+                    radius: Estilo.global.radius.pill
                     color: parent.down ? Estilo.action.neutral.pressed : (parent.hovered ? Estilo.action.neutral.hover : Estilo.action.neutral.base)
                     border.color: parent.activeFocus ? Estilo.global.text : "transparent"
                     border.width: parent.activeFocus ? Estilo.global.borderWidth.focus : 0
@@ -671,14 +671,14 @@ Popup {
                     Icone { nome: "fa6s.print"; cor: Estilo.global.textOnAccent; tamanho: Estilo.global.fontSize.lg; anchors.verticalCenter: parent.verticalCenter }
                     Text {
                         text: "Confirmar e Imprimir"
-                        font.bold: true
+                        font.family: Estilo.global.fontFamily.title
                         color: Estilo.global.textOnAccent
                         anchors.verticalCenter: parent.verticalCenter
                     }
                 }
 
                 background: Rectangle {
-                    radius: Estilo.global.radius.sm
+                    radius: Estilo.global.radius.pill
                     color: parent.down ? Estilo.action.confirm.pressed : (parent.hovered ? Estilo.action.confirm.hover : Estilo.action.confirm.base)
                     border.color: parent.activeFocus ? Estilo.global.text : Estilo.action.confirm.pressed
                     border.width: parent.activeFocus ? Estilo.global.borderWidth.focus : Estilo.global.borderWidth.hairline

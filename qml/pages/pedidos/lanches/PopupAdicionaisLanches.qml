@@ -239,14 +239,14 @@ Popup {
 
                     contentItem: Text {
                         text: "Voltar"
-                        font.bold: true
+                        font.family: Estilo.global.fontFamily.title
                         color: Estilo.global.textOnAccent
                         horizontalAlignment: Text.AlignHCenter
                         verticalAlignment: Text.AlignVCenter
                     }
 
                     background: Rectangle {
-                        radius: Estilo.global.radius.sm
+                        radius: Estilo.global.radius.pill
                         color: parent.down ? Estilo.action.back.pressed : (parent.hovered ? Estilo.action.back.hover : Estilo.action.danger.base)
                     }
                 }
@@ -259,14 +259,14 @@ Popup {
 
                     contentItem: Text {
                         text: "Cancelar"
-                        font.bold: true
+                        font.family: Estilo.global.fontFamily.title
                         color: Estilo.global.textOnAccent
                         horizontalAlignment: Text.AlignHCenter
                         verticalAlignment: Text.AlignVCenter
                     }
 
                     background: Rectangle {
-                        radius: Estilo.global.radius.sm
+                        radius: Estilo.global.radius.pill
                         color: parent.down ? Qt.darker(Estilo.global.textSecondary, 1.2) : (parent.hovered ? Qt.lighter(Estilo.global.textSecondary, 1.1) : Estilo.global.textSecondary)
                     }
                 }

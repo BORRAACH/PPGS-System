@@ -68,7 +68,7 @@ Rectangle {
 
                 Text {
                     text: "Voltar para a lista"
-                    font.bold: true
+                    font.family: Estilo.global.fontFamily.title
                     font.pixelSize: Estilo.global.fontSize.md
                     color: Estilo.screen.consulta.accent
                     anchors.verticalCenter: parent.verticalCenter
@@ -76,7 +76,7 @@ Rectangle {
             }
 
             background: Rectangle {
-                radius: Estilo.global.radius.sm
+                radius: Estilo.global.radius.pill
                 color: parent.down ? Estilo.global.surfacePressed : (parent.hovered ? Estilo.global.surfaceHover : "transparent")
             }
         }
@@ -373,14 +373,14 @@ Rectangle {
                         contentItem: Text {
                             text: parent.text
                             color: Estilo.global.textOnAccent
-                            font.bold: true
+                            font.family: Estilo.global.fontFamily.title
                             font.pixelSize: Estilo.global.fontSize.sm
                             horizontalAlignment: Text.AlignHCenter
                             verticalAlignment: Text.AlignVCenter
                         }
 
                         background: Rectangle {
-                            radius: Estilo.global.radius.sm
+                            radius: Estilo.global.radius.pill
                             color: parent.down ? Estilo.action.confirm.pressed : (parent.hovered ? Estilo.action.confirm.hover : Estilo.action.confirm.base)
                         }
                     }
@@ -397,14 +397,14 @@ Rectangle {
                         contentItem: Text {
                             text: parent.text
                             color: Estilo.global.textOnAccent
-                            font.bold: true
+                            font.family: Estilo.global.fontFamily.title
                             font.pixelSize: Estilo.global.fontSize.sm
                             horizontalAlignment: Text.AlignHCenter
                             verticalAlignment: Text.AlignVCenter
                         }
 
                         background: Rectangle {
-                            radius: Estilo.global.radius.sm
+                            radius: Estilo.global.radius.pill
                             color: parent.down ? Estilo.action.danger.pressed : (parent.hovered ? Estilo.action.danger.hover : Estilo.action.danger.base)
                         }
                     }

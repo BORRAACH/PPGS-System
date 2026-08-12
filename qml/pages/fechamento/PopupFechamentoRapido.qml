@@ -333,7 +333,7 @@ Popup {
                 contentItem: Text {
                     text: "‹"
                     font.pixelSize: Estilo.global.fontSize.xxl
-                    font.bold: true
+                    font.family: Estilo.global.fontFamily.title
                     color: btnAnterior.enabled ? Estilo.global.text : Estilo.global.border
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
@@ -417,7 +417,7 @@ Popup {
                 contentItem: Text {
                     text: "›"
                     font.pixelSize: Estilo.global.fontSize.xxl
-                    font.bold: true
+                    font.family: Estilo.global.fontFamily.title
                     color: btnProxima.enabled ? Estilo.global.text : Estilo.global.border
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
@@ -641,14 +641,14 @@ Popup {
 
                         contentItem: Text {
                             text: "Manter conferida"
-                            font.bold: true
+                            font.family: Estilo.global.fontFamily.title
                             color: Estilo.global.textOnAccent
                             horizontalAlignment: Text.AlignHCenter
                             verticalAlignment: Text.AlignVCenter
                         }
 
                         background: Rectangle {
-                            radius: Estilo.global.radius.sm
+                            radius: Estilo.global.radius.pill
                             color: btnManterConferida.down ? Estilo.action.confirm.pressed : (btnManterConferida.hovered ? Estilo.action.confirm.hover : Estilo.action.confirm.base)
                         }
                     }
@@ -661,14 +661,14 @@ Popup {
 
                         contentItem: Text {
                             text: "Reconferir depois"
-                            font.bold: true
+                            font.family: Estilo.global.fontFamily.title
                             color: Estilo.status.warning.content
                             horizontalAlignment: Text.AlignHCenter
                             verticalAlignment: Text.AlignVCenter
                         }
 
                         background: Rectangle {
-                            radius: Estilo.global.radius.sm
+                            radius: Estilo.global.radius.pill
                             color: btnReconferirDepois.down ? Estilo.status.warning.border : (btnReconferirDepois.hovered ? Estilo.status.warning.background : "transparent")
                             border.color: Estilo.status.warning.border
                             border.width: Estilo.global.borderWidth.hairline
@@ -683,13 +683,14 @@ Popup {
 
                         contentItem: Text {
                             text: "Cancelar"
+                            font.family: Estilo.global.fontFamily.title
                             color: Estilo.global.textSecondary
                             horizontalAlignment: Text.AlignHCenter
                             verticalAlignment: Text.AlignVCenter
                         }
 
                         background: Rectangle {
-                            radius: Estilo.global.radius.sm
+                            radius: Estilo.global.radius.pill
                             color: btnCancelarEscolha.hovered ? Estilo.action.ghost.hover : Estilo.action.ghost.base
                         }
                     }
@@ -734,14 +735,14 @@ Popup {
                     }
                     Text {
                         text: "Baixa"
-                        font.bold: true
+                        font.family: Estilo.global.fontFamily.title
                         color: Estilo.global.textOnAccent
                         anchors.verticalCenter: parent.verticalCenter
                     }
                 }
 
                 background: Rectangle {
-                    radius: Estilo.global.radius.sm
+                    radius: Estilo.global.radius.pill
                     color: btnBaixa.down ? Estilo.action.confirm.pressed : (btnBaixa.hovered ? Estilo.action.confirm.hover : Estilo.action.confirm.base)
                     border.color: Estilo.action.confirm.pressed
                     border.width: Estilo.global.borderWidth.hairline
@@ -770,14 +771,14 @@ Popup {
                     }
                     Text {
                         text: "Editar"
-                        font.bold: true
+                        font.family: Estilo.global.fontFamily.title
                         color: btnEditar.enabled ? Estilo.global.textOnAccent : Estilo.global.textSecondary
                         anchors.verticalCenter: parent.verticalCenter
                     }
                 }
 
                 background: Rectangle {
-                    radius: Estilo.global.radius.sm
+                    radius: Estilo.global.radius.pill
                     color: {
                         if (!btnEditar.enabled)
                             return Estilo.global.border;
@@ -807,14 +808,14 @@ Popup {
                     }
                     Text {
                         text: "Reimprimir"
-                        font.bold: true
+                        font.family: Estilo.global.fontFamily.title
                         color: Estilo.global.text
                         anchors.verticalCenter: parent.verticalCenter
                     }
                 }
 
                 background: Rectangle {
-                    radius: Estilo.global.radius.sm
+                    radius: Estilo.global.radius.pill
                     color: btnReimprimir.down ? Estilo.action.ghost.pressed : (btnReimprimir.hovered ? Estilo.action.ghost.hover : Estilo.action.ghost.base)
                     border.color: Estilo.global.border
                     border.width: Estilo.global.borderWidth.hairline
@@ -839,14 +840,14 @@ Popup {
                     }
                     Text {
                         text: "Excluir"
-                        font.bold: true
+                        font.family: Estilo.global.fontFamily.title
                         color: Estilo.global.textOnAccent
                         anchors.verticalCenter: parent.verticalCenter
                     }
                 }
 
                 background: Rectangle {
-                    radius: Estilo.global.radius.sm
+                    radius: Estilo.global.radius.pill
                     color: btnExcluir.down ? Estilo.action.danger.pressed : (btnExcluir.hovered ? Estilo.action.danger.hover : Estilo.action.danger.base)
                     border.color: Estilo.action.danger.pressed
                     border.width: Estilo.global.borderWidth.hairline
@@ -865,14 +866,14 @@ Popup {
 
                 contentItem: Text {
                     text: "Sair"
-                    font.bold: true
+                    font.family: Estilo.global.fontFamily.title
                     color: Estilo.global.textOnAccent
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
                 }
 
                 background: Rectangle {
-                    radius: Estilo.global.radius.sm
+                    radius: Estilo.global.radius.pill
                     color: btnSair.down ? Estilo.action.neutral.pressed : (btnSair.hovered ? Estilo.action.neutral.hover : Estilo.action.neutral.base)
                 }
             }

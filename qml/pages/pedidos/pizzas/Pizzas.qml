@@ -885,14 +885,14 @@ Page {
                         Text {
                             text: "Adicionar Pizza (" + tamanhoSelecionado + ")"
                             font.pixelSize: Estilo.global.fontSize.lg
-                            font.bold: true
+                            font.family: Estilo.global.fontFamily.title
                             color: Estilo.global.textOnAccent
                             anchors.verticalCenter: parent.verticalCenter
                         }
                     }
 
                     background: Rectangle {
-                        radius: Estilo.global.radius.md
+                        radius: Estilo.global.radius.pill
                         color: !btnAdicionarPizza.enabled ? Estilo.global.surfaceDisabled : (btnAdicionarPizza.down ? Estilo.action.confirm.pressed : (btnAdicionarPizza.hovered ? Estilo.action.confirm.hover : Estilo.action.confirm.base))
                         border.color: !btnAdicionarPizza.enabled ? Estilo.global.surfaceDisabled : Estilo.action.confirm.border
                         border.width: Estilo.global.borderWidth.hairline
@@ -924,14 +924,14 @@ Page {
                         Text {
                             text: "Adicionais ou Bordas"
                             font.pixelSize: Estilo.global.fontSize.lg
-                            font.bold: true
+                            font.family: Estilo.global.fontFamily.title
                             color: Estilo.global.textOnAccent
                             anchors.verticalCenter: parent.verticalCenter
                         }
                     }
 
                     background: Rectangle {
-                        radius: Estilo.global.radius.md
+                        radius: Estilo.global.radius.pill
                         color: !btnAdicionaisBordas.enabled ? Estilo.global.surfaceDisabled : (btnAdicionaisBordas.down ? Estilo.category.adicional.pressed : (btnAdicionaisBordas.hovered ? Estilo.category.adicional.hover : Estilo.category.adicional.base))
                         border.color: !btnAdicionaisBordas.enabled ? Estilo.global.surfaceDisabled : Estilo.category.adicional.pressed
                         border.width: Estilo.global.borderWidth.hairline
@@ -1044,13 +1044,13 @@ Page {
                                             contentItem: Text {
                                                 text: "×"
                                                 color: Estilo.global.textOnAccent
-                                                font.bold: true
+                                                font.family: Estilo.global.fontFamily.title
                                                 horizontalAlignment: Text.AlignHCenter
                                                 verticalAlignment: Text.AlignVCenter
                                             }
 
                                             background: Rectangle {
-                                                radius: Estilo.global.radius.sm
+                                                radius: Estilo.global.radius.pill
                                                 color: parent.down ? Estilo.action.danger.pressed : (parent.hovered ? Estilo.action.danger.hover : Estilo.action.danger.base)
                                             }
                                         }
@@ -1132,14 +1132,14 @@ Page {
                         contentItem: Text {
                             text: "Voltar"
                             font.pixelSize: Estilo.global.fontSize.xl
-                            font.bold: true
+                            font.family: Estilo.global.fontFamily.title
                             color: Estilo.global.textOnAccent
                             horizontalAlignment: Text.AlignHCenter
                             verticalAlignment: Text.AlignVCenter
                         }
 
                         background: Rectangle {
-                            radius: Estilo.global.radius.md
+                            radius: Estilo.global.radius.pill
                             color: btnVoltar.down ? Estilo.action.back.pressed : (btnVoltar.hovered ? Estilo.action.back.hover : Estilo.action.danger.base)
                             border.color: Estilo.action.back.pressed
                             border.width: Estilo.global.borderWidth.hairline
@@ -1200,7 +1200,7 @@ Page {
                         contentItem: Text {
                             text: "Confirmar"
                             font.pixelSize: Estilo.global.fontSize.xl
-                            font.bold: true
+                            font.family: Estilo.global.fontFamily.title
                             color: Estilo.global.textOnAccent
                             horizontalAlignment: Text.AlignHCenter
                             verticalAlignment: Text.AlignVCenter
@@ -1208,7 +1208,7 @@ Page {
                         }
 
                         background: Rectangle {
-                            radius: Estilo.global.radius.md
+                            radius: Estilo.global.radius.pill
                             color: !btnConfirmar.enabled ? Estilo.global.surfaceDisabled : (btnConfirmar.down ? Estilo.action.confirm.pressed : (btnConfirmar.hovered ? Estilo.action.confirm.hover : Estilo.action.confirm.base))
                             border.color: !btnConfirmar.enabled ? Estilo.global.surfaceDisabled : Estilo.action.confirm.border
                             border.width: Estilo.global.borderWidth.hairline

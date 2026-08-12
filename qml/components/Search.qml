@@ -20,7 +20,7 @@ TextField {
     selectByMouse: true
 
     background: Rectangle {
-        radius: Estilo.global.radius.md
+        radius: Estilo.global.radius.pill
         color: root.enabled ? Estilo.global.inputBackground : Estilo.global.inputDisabled
         border.color: root.activeFocus ? root.corDestaque : Estilo.global.border
         border.width: root.activeFocus ? 2 : 1

@@ -439,7 +439,7 @@ Page {
                                     Keys.onReturnPressed: inputMesa.forceActiveFocus()
 
                                     background: Rectangle {
-                                        radius: Estilo.global.radius.sm
+                                        radius: Estilo.global.radius.pill
                                         color: Estilo.global.inputBackground
                                         border.color: parent.activeFocus ? Estilo.screen.salao.accent : Estilo.global.border
                                         border.width: Estilo.global.borderWidth.hairline
@@ -482,7 +482,7 @@ Page {
                                     }
 
                                     background: Rectangle {
-                                        radius: Estilo.global.radius.sm
+                                        radius: Estilo.global.radius.pill
                                         color: Estilo.global.inputBackground
                                         border.color: inputMesa.activeFocus ? Estilo.screen.salao.accent : Estilo.global.border
                                         border.width: inputMesa.activeFocus ? 2 : 1
@@ -575,14 +575,14 @@ Page {
                                     Icone { nome: "fa6s.floppy-disk"; cor: Estilo.global.textOnAccent; tamanho: Estilo.global.fontSize.lg; anchors.verticalCenter: parent.verticalCenter }
                                     Text {
                                         text: "Salvar Mesa"
-                                        font.bold: true
+                                        font.family: Estilo.global.fontFamily.title
                                         color: Estilo.global.textOnAccent
                                         anchors.verticalCenter: parent.verticalCenter
                                     }
                                 }
 
                                 background: Rectangle {
-                                    radius: Estilo.global.radius.sm
+                                    radius: Estilo.global.radius.pill
                                     color: parent.down ? Estilo.action.save.pressed : (parent.hovered ? Estilo.action.save.hover : Estilo.action.save.base)
                                     border.color: parent.activeFocus ? Estilo.global.focusRing : Estilo.action.save.border
                                     border.width: parent.activeFocus ? Estilo.global.borderWidth.focus : Estilo.global.borderWidth.hairline
@@ -620,14 +620,14 @@ Page {
                                     Icone { nome: "fa6s.receipt"; cor: Estilo.global.textOnAccent; tamanho: Estilo.global.fontSize.lg; anchors.verticalCenter: parent.verticalCenter }
                                     Text {
                                         text: "Fechar Conta"
-                                        font.bold: true
+                                        font.family: Estilo.global.fontFamily.title
                                         color: Estilo.global.textOnAccent
                                         anchors.verticalCenter: parent.verticalCenter
                                     }
                                 }
 
                                 background: Rectangle {
-                                    radius: Estilo.global.radius.sm
+                                    radius: Estilo.global.radius.pill
                                     color: parent.down ? Estilo.action.confirm.pressed : (parent.hovered ? Estilo.action.confirm.hover : Estilo.action.confirm.base)
                                     border.color: parent.activeFocus ? Estilo.global.text : Estilo.action.confirm.pressed
                                     border.width: parent.activeFocus ? Estilo.global.borderWidth.focus : Estilo.global.borderWidth.hairline
@@ -658,14 +658,14 @@ Page {
                                     Icone { nome: "fa6s.arrow-left"; cor: Estilo.global.textOnAccent; tamanho: Estilo.global.fontSize.lg; anchors.verticalCenter: parent.verticalCenter }
                                     Text {
                                         text: "Voltar para o Menu"
-                                        font.bold: true
+                                        font.family: Estilo.global.fontFamily.title
                                         color: Estilo.global.textOnAccent
                                         anchors.verticalCenter: parent.verticalCenter
                                     }
                                 }
 
                                 background: Rectangle {
-                                    radius: Estilo.global.radius.sm
+                                    radius: Estilo.global.radius.pill
                                     color: parent.down ? Estilo.action.danger.pressed : (parent.hovered ? Estilo.action.danger.hover : Estilo.action.danger.base)
                                     border.color: parent.activeFocus ? Estilo.global.text : Estilo.action.danger.pressed
                                     border.width: parent.activeFocus ? Estilo.global.borderWidth.focus : Estilo.global.borderWidth.hairline
@@ -860,7 +860,7 @@ Page {
                     text: "Nova Mesa"
                     width: parent.width
                     font.pixelSize: Estilo.global.fontSize.sm
-                    font.bold: true
+                    font.family: Estilo.global.fontFamily.title
                     color: Estilo.screen.salao.accent
                     horizontalAlignment: Text.AlignHCenter
                 }

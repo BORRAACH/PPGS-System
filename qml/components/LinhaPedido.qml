@@ -96,7 +96,7 @@ Row {
         }
 
         background: Rectangle {
-            radius: Estilo.global.radius.sm
+            radius: Estilo.global.radius.pill
             color: mouseAreaPedido.containsMouse ? Estilo.global.surfaceHover : Estilo.global.inputBackground
             border.color: parent.activeFocus ? linhaDelegate.corDestaque : Estilo.global.border
             border.width: Estilo.global.borderWidth.hairline
@@ -122,7 +122,7 @@ Row {
         Keys.onReturnPressed: campoValor.forceActiveFocus()
 
         background: Rectangle {
-            radius: Estilo.global.radius.sm
+            radius: Estilo.global.radius.pill
             color: Estilo.global.inputBackground
             border.color: parent.activeFocus ? linhaDelegate.corDestaque : Estilo.global.border
             border.width: Estilo.global.borderWidth.hairline
@@ -167,7 +167,7 @@ Row {
         }
 
         background: Rectangle {
-            radius: Estilo.global.radius.sm
+            radius: Estilo.global.radius.pill
             color: Estilo.global.inputBackground
             border.color: parent.activeFocus ? linhaDelegate.corDestaque : Estilo.global.border
             border.width: Estilo.global.borderWidth.hairline
@@ -185,6 +185,7 @@ Row {
     // na propriedade anexada correta.
     Button {
         text: "+"
+        font.family: Estilo.global.fontFamily.title
         padding: Estilo.global.padding.md
         height: campoPedido.implicitHeight
         width: height
@@ -203,7 +204,7 @@ Row {
         }
 
         background: Rectangle {
-            radius: Estilo.global.radius.sm
+            radius: Estilo.global.radius.pill
             color: parent.down ? linhaDelegate.corDestaque : (parent.hovered ? Estilo.global.surfaceHover : Estilo.global.surface)
             border.color: Estilo.global.border
             border.width: Estilo.global.borderWidth.hairline
@@ -213,6 +214,7 @@ Row {
     // Botão "-" — remove esta linha, exceto quando é a única.
     Button {
         text: "-"
+        font.family: Estilo.global.fontFamily.title
         padding: Estilo.global.padding.md
         height: campoPedido.implicitHeight
         width: height
@@ -223,7 +225,7 @@ Row {
         }
 
         background: Rectangle {
-            radius: Estilo.global.radius.sm
+            radius: Estilo.global.radius.pill
             color: parent.down ? Estilo.action.danger.base : (parent.hovered ? Estilo.global.surfaceHover : Estilo.global.surface)
             border.color: Estilo.global.border
             border.width: Estilo.global.borderWidth.hairline

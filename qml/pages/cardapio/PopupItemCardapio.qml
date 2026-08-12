@@ -215,7 +215,7 @@ Popup {
                             }
 
                             background: Rectangle {
-                                radius: Estilo.global.radius.md
+                                radius: Estilo.global.radius.pill
                                 color: Estilo.global.inputBackground
                                 border.color: campoLinha.activeFocus ? raiz.corDestaque : Estilo.global.border
                                 border.width: campoLinha.activeFocus ? 2 : 1
@@ -287,14 +287,14 @@ Popup {
 
                     contentItem: Text {
                         text: btnCancelar.text
-                        font.bold: true
+                        font.family: Estilo.global.fontFamily.title
                         color: Estilo.global.textOnAccent
                         horizontalAlignment: Text.AlignHCenter
                         verticalAlignment: Text.AlignVCenter
                     }
 
                     background: Rectangle {
-                        radius: Estilo.global.radius.sm
+                        radius: Estilo.global.radius.pill
                         color: btnCancelar.down ? Estilo.action.neutral.pressed : (btnCancelar.hovered ? Estilo.action.neutral.hover : Estilo.action.neutral.base)
                     }
                 }
@@ -318,14 +318,14 @@ Popup {
 
                         Text {
                             text: "Salvar"
-                            font.bold: true
+                            font.family: Estilo.global.fontFamily.title
                             color: Estilo.global.textOnAccent
                             anchors.verticalCenter: parent.verticalCenter
                         }
                     }
 
                     background: Rectangle {
-                        radius: Estilo.global.radius.sm
+                        radius: Estilo.global.radius.pill
                         color: btnSalvar.down ? Estilo.action.confirm.pressed : (btnSalvar.hovered ? Estilo.action.confirm.hover : Estilo.action.confirm.base)
                         border.color: Estilo.action.confirm.pressed
                         border.width: Estilo.global.borderWidth.hairline

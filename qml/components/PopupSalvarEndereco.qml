@@ -68,56 +68,22 @@ Popup {
             spacing: Estilo.global.spacing.lg
             anchors.right: parent.right
 
-            Button {
-                id: btnNaoSalvar
-
+            Botao {
+                tom: Estilo.action.neutral
                 text: "Não salvar"
-                padding: Estilo.global.padding.md
                 onClicked: {
                     popupSalvarEndereco.close();
                     popupSalvarEndereco.respondido(false);
                 }
-
-                contentItem: Text {
-                    text: btnNaoSalvar.text
-                    font.bold: true
-                    color: Estilo.global.textOnAccent
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
-                }
-
-                background: Rectangle {
-                    radius: Estilo.global.radius.sm
-                    color: parent.down ? Estilo.action.neutral.pressed : (parent.hovered ? Estilo.action.neutral.hover : Estilo.action.neutral.base)
-                }
             }
 
-            Button {
-                id: btnSalvar
-
-                padding: Estilo.global.padding.md
+            Botao {
+                tom: Estilo.action.confirm
+                nomeIcone: "fa6s.floppy-disk"
+                text: popupSalvarEndereco.jaExiste ? "Sobrescrever" : "Salvar"
                 onClicked: {
                     popupSalvarEndereco.close();
                     popupSalvarEndereco.respondido(true);
-                }
-
-                contentItem: Row {
-                    spacing: Estilo.global.spacing.xs
-                    anchors.centerIn: parent
-                    Icone { nome: "fa6s.floppy-disk"; cor: Estilo.global.textOnAccent; tamanho: Estilo.global.fontSize.lg; anchors.verticalCenter: parent.verticalCenter }
-                    Text {
-                        text: popupSalvarEndereco.jaExiste ? "Sobrescrever" : "Salvar"
-                        font.bold: true
-                        color: Estilo.global.textOnAccent
-                        anchors.verticalCenter: parent.verticalCenter
-                    }
-                }
-
-                background: Rectangle {
-                    radius: Estilo.global.radius.sm
-                    color: parent.down ? Estilo.action.confirm.pressed : (parent.hovered ? Estilo.action.confirm.hover : Estilo.action.confirm.base)
-                    border.color: Estilo.action.confirm.pressed
-                    border.width: Estilo.global.borderWidth.hairline
                 }
             }
         }

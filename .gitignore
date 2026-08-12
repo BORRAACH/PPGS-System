@@ -47,3 +47,7 @@ Config/formula_lucro.json
 # Log de diagnóstico (stdout/stderr redirecionados + rotação) — gerado em
 # tempo de execução, específico de cada máquina. Ver Config/logConfig.py.
 logs/
+
+# Referência estática de design systems importados via claude.ai/design —
+# material de consulta, não código-fonte do app.
+design/templates/

@@ -147,14 +147,14 @@ Page {
                     }
                     Text {
                         text: btnAplicar.enabled ? "Aplicar alterações" : "Tudo aplicado"
-                        font.bold: true
+                        font.family: Estilo.global.fontFamily.title
                         color: Estilo.global.textOnAccent
                         anchors.verticalCenter: parent.verticalCenter
                     }
                 }
 
                 background: Rectangle {
-                    radius: Estilo.global.radius.sm
+                    radius: Estilo.global.radius.pill
                     color: parent.down ? Estilo.action.confirm.pressed : (parent.hovered ? Estilo.action.confirm.hover : Estilo.action.confirm.base)
                     // Sem enabled, o verde vira um cinza esverdeado: continua
                     // legível como "este é o botão de aplicar", só que sem
@@ -176,14 +176,14 @@ Page {
                     Icone { nome: "fa6s.arrow-left"; cor: Estilo.global.textOnAccent; tamanho: Estilo.global.fontSize.lg; anchors.verticalCenter: parent.verticalCenter }
                     Text {
                         text: "Voltar para o Menu"
-                        font.bold: true
+                        font.family: Estilo.global.fontFamily.title
                         color: Estilo.global.textOnAccent
                         anchors.verticalCenter: parent.verticalCenter
                     }
                 }
 
                 background: Rectangle {
-                    radius: Estilo.global.radius.sm
+                    radius: Estilo.global.radius.pill
                     color: parent.down ? Estilo.action.danger.pressed : (parent.hovered ? Estilo.action.danger.hover : Estilo.action.danger.base)
                     border.color: Estilo.action.danger.pressed
                     border.width: Estilo.global.borderWidth.hairline
@@ -267,14 +267,14 @@ Page {
 
                     contentItem: Text {
                         text: btnDescartar.text
-                        font.bold: true
+                        font.family: Estilo.global.fontFamily.title
                         color: Estilo.global.textOnAccent
                         horizontalAlignment: Text.AlignHCenter
                         verticalAlignment: Text.AlignVCenter
                     }
 
                     background: Rectangle {
-                        radius: Estilo.global.radius.sm
+                        radius: Estilo.global.radius.pill
                         color: parent.down ? Estilo.action.danger.pressed : (parent.hovered ? Estilo.action.danger.hover : Estilo.action.danger.base)
                     }
                 }
@@ -292,14 +292,14 @@ Page {
 
                     contentItem: Text {
                         text: btnAplicarESair.text
-                        font.bold: true
+                        font.family: Estilo.global.fontFamily.title
                         color: Estilo.global.textOnAccent
                         horizontalAlignment: Text.AlignHCenter
                         verticalAlignment: Text.AlignVCenter
                     }
 
                     background: Rectangle {
-                        radius: Estilo.global.radius.sm
+                        radius: Estilo.global.radius.pill
                         color: parent.down ? Estilo.action.confirm.pressed : (parent.hovered ? Estilo.action.confirm.hover : Estilo.action.confirm.base)
                     }
                 }

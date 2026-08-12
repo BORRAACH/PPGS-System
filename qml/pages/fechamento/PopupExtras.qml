@@ -178,7 +178,7 @@ Popup {
                     Keys.onReturnPressed: inputValor.forceActiveFocus()
 
                     background: Rectangle {
-                        radius: Estilo.global.radius.sm
+                        radius: Estilo.global.radius.pill
                         color: Estilo.global.inputBackground
                         border.color: inputNome.activeFocus ? Estilo.finance.outflow : Estilo.global.border
                         border.width: Estilo.global.borderWidth.hairline
@@ -216,7 +216,7 @@ Popup {
                     Keys.onReturnPressed: popupExtras._confirmar()
 
                     background: Rectangle {
-                        radius: Estilo.global.radius.sm
+                        radius: Estilo.global.radius.pill
                         color: Estilo.global.inputBackground
                         border.color: inputValor.activeFocus ? Estilo.finance.outflow : Estilo.global.border
                         border.width: Estilo.global.borderWidth.hairline
@@ -242,13 +242,13 @@ Button {
 
                     contentItem: Text {
                         text: "Confirmar"
-                        font.bold: true
+                        font.family: Estilo.global.fontFamily.title
                         color: Estilo.global.textOnAccent
                         horizontalAlignment: Text.AlignHCenter
                     }
 
                     background: Rectangle {
-                        radius: Estilo.global.radius.sm
+                        radius: Estilo.global.radius.pill
                         opacity: btnConfirmarExtra.enabled ? 1 : Estilo.global.opacity.disabled
                         color: btnConfirmarExtra.down ? Estilo.action.confirm.pressed : (btnConfirmarExtra.hovered ? Estilo.action.confirm.hover : Estilo.action.confirm.base)
                         border.color: Estilo.action.confirm.pressed
@@ -266,13 +266,13 @@ Button {
 
                     contentItem: Text {
                         text: "Cancelar"
-                        font.bold: true
+                        font.family: Estilo.global.fontFamily.title
                         color: Estilo.global.textOnAccent
                         horizontalAlignment: Text.AlignHCenter
                     }
 
                     background: Rectangle {
-                        radius: Estilo.global.radius.sm
+                        radius: Estilo.global.radius.pill
                         color: btnCancelarExtra.down ? Estilo.action.danger.pressed : (btnCancelarExtra.hovered ? Estilo.action.danger.hover : Estilo.action.danger.base)
                         border.color: Estilo.action.danger.pressed
                         border.width: Estilo.global.borderWidth.hairline
@@ -293,14 +293,14 @@ Button {
                         Icone { nome: "fa6s.trash-can"; cor: Estilo.action.danger.base; tamanho: Estilo.global.fontSize.lg; anchors.verticalCenter: parent.verticalCenter }
                         Text {
                             text: "Excluir"
-                            font.bold: true
+                            font.family: Estilo.global.fontFamily.title
                             color: Estilo.action.danger.base
                             anchors.verticalCenter: parent.verticalCenter
                         }
                     }
 
                     background: Rectangle {
-                        radius: Estilo.global.radius.sm
+                        radius: Estilo.global.radius.pill
                         color: btnExcluirExtra.down ? Estilo.status.error.border : (btnExcluirExtra.hovered ? Estilo.status.error.background : "transparent")
                         border.color: Estilo.action.danger.base
                         border.width: Estilo.global.borderWidth.hairline
@@ -341,13 +341,13 @@ Button {
 
                     contentItem: Text {
                         text: "Cancelar"
-                        font.bold: true
+                        font.family: Estilo.global.fontFamily.title
                         color: Estilo.global.textSecondary
                         horizontalAlignment: Text.AlignHCenter
                     }
 
                     background: Rectangle {
-                        radius: Estilo.global.radius.sm
+                        radius: Estilo.global.radius.pill
                         color: btnCancelarExclusaoExtra.down ? Estilo.action.ghost.pressed : (btnCancelarExclusaoExtra.hovered ? Estilo.action.ghost.hover : Estilo.action.ghost.base)
                         border.color: Estilo.global.border
                         border.width: Estilo.global.borderWidth.hairline
@@ -367,14 +367,14 @@ Button {
                         Icone { nome: "fa6s.trash-can"; cor: Estilo.global.textOnAccent; tamanho: Estilo.global.fontSize.lg; anchors.verticalCenter: parent.verticalCenter }
                         Text {
                             text: "Excluir"
-                            font.bold: true
+                            font.family: Estilo.global.fontFamily.title
                             color: Estilo.global.textOnAccent
                             anchors.verticalCenter: parent.verticalCenter
                         }
                     }
 
                     background: Rectangle {
-                        radius: Estilo.global.radius.sm
+                        radius: Estilo.global.radius.pill
                         color: btnConfirmarExclusaoExtra.down ? Estilo.action.danger.pressed : (btnConfirmarExclusaoExtra.hovered ? Estilo.action.danger.hover : Estilo.action.danger.base)
                         border.color: Estilo.action.danger.pressed
                         border.width: Estilo.global.borderWidth.hairline
@@ -413,13 +413,13 @@ Button {
 
                     contentItem: Text {
                         text: "Não"
-                        font.bold: true
+                        font.family: Estilo.global.fontFamily.title
                         color: Estilo.global.textSecondary
                         horizontalAlignment: Text.AlignHCenter
                     }
 
                     background: Rectangle {
-                        radius: Estilo.global.radius.sm
+                        radius: Estilo.global.radius.pill
                         color: btnNaoImprimirExtra.down ? Estilo.action.ghost.pressed : (btnNaoImprimirExtra.hovered ? Estilo.action.ghost.hover : Estilo.action.ghost.base)
                         border.color: Estilo.global.border
                         border.width: Estilo.global.borderWidth.hairline
@@ -439,14 +439,14 @@ Button {
                         Icone { nome: "fa6s.print"; cor: Estilo.global.textOnAccent; tamanho: Estilo.global.fontSize.lg; anchors.verticalCenter: parent.verticalCenter }
                         Text {
                             text: "Sim, imprimir"
-                            font.bold: true
+                            font.family: Estilo.global.fontFamily.title
                             color: Estilo.global.textOnAccent
                             anchors.verticalCenter: parent.verticalCenter
                         }
                     }
 
                     background: Rectangle {
-                        radius: Estilo.global.radius.sm
+                        radius: Estilo.global.radius.pill
                         color: btnSimImprimirExtra.down ? Estilo.action.confirm.pressed : (btnSimImprimirExtra.hovered ? Estilo.action.confirm.hover : Estilo.action.confirm.base)
                         border.color: Estilo.action.confirm.pressed
                         border.width: Estilo.global.borderWidth.hairline

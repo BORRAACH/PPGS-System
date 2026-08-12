@@ -356,7 +356,7 @@ Page {
 
                                 text: paoPendente ? ("R$ " + parseValor(paoPendente[modelData.chave]).toFixed(2).replace(".", ",")) : ""
                                 font.pixelSize: Estilo.global.fontSize.xl
-                                font.bold: true
+                                font.family: Estilo.global.fontFamily.title
                                 color: Estilo.global.textOnAccent
                                 anchors.right: parent.right
                                 anchors.verticalCenter: parent.verticalCenter
@@ -368,7 +368,7 @@ Page {
                             Text {
                                 text: modelData.nome
                                 font.pixelSize: Estilo.global.fontSize.xl
-                                font.bold: true
+                                font.family: Estilo.global.fontFamily.title
                                 color: Estilo.global.textOnAccent
                                 anchors.left: iconePao.right
                                 anchors.leftMargin: 8
@@ -380,7 +380,7 @@ Page {
                         }
 
                         background: Rectangle {
-                            radius: Estilo.global.radius.md
+                            radius: Estilo.global.radius.pill
                             color: parent.down ? Qt.darker(modelData.cor, 1.2) : (parent.hovered ? Qt.lighter(modelData.cor, 1.1) : modelData.cor)
 
                             Behavior on color {
@@ -404,14 +404,14 @@ Page {
 
                 contentItem: Text {
                     text: btnCancelarPao.text
-                    font.bold: true
+                    font.family: Estilo.global.fontFamily.title
                     color: Estilo.global.textOnAccent
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
                 }
 
                 background: Rectangle {
-                    radius: Estilo.global.radius.sm
+                    radius: Estilo.global.radius.pill
                     color: parent.down ? Estilo.action.neutral.pressed : (parent.hovered ? Estilo.action.neutral.hover : Estilo.action.neutral.base)
                 }
             }
@@ -705,14 +705,14 @@ Page {
                         Text {
                             text: "Adicionais"
                             font.pixelSize: Estilo.global.fontSize.lg
-                            font.bold: true
+                            font.family: Estilo.global.fontFamily.title
                             color: Estilo.global.textOnAccent
                             anchors.verticalCenter: parent.verticalCenter
                         }
                     }
 
                     background: Rectangle {
-                        radius: Estilo.global.radius.md
+                        radius: Estilo.global.radius.pill
                         color: !btnAdicionaisLanche.enabled ? Estilo.global.surfaceDisabled : (btnAdicionaisLanche.down ? Estilo.category.lanche.pressed : (btnAdicionaisLanche.hovered ? Estilo.category.lanche.hover : Estilo.category.lanche.base))
                         border.color: !btnAdicionaisLanche.enabled ? Estilo.global.surfaceDisabled : Estilo.category.lanche.pressed
                         border.width: Estilo.global.borderWidth.hairline
@@ -827,13 +827,13 @@ Page {
                                             contentItem: Text {
                                                 text: "×"
                                                 color: Estilo.global.textOnAccent
-                                                font.bold: true
+                                                font.family: Estilo.global.fontFamily.title
                                                 horizontalAlignment: Text.AlignHCenter
                                                 verticalAlignment: Text.AlignVCenter
                                             }
 
                                             background: Rectangle {
-                                                radius: Estilo.global.radius.sm
+                                                radius: Estilo.global.radius.pill
                                                 color: parent.down ? Estilo.action.danger.pressed : (parent.hovered ? Estilo.action.danger.hover : Estilo.action.danger.base)
                                             }
                                         }
@@ -884,14 +884,14 @@ Page {
                         contentItem: Text {
                             text: "Voltar"
                             font.pixelSize: Estilo.global.fontSize.xl
-                            font.bold: true
+                            font.family: Estilo.global.fontFamily.title
                             color: Estilo.global.textOnAccent
                             horizontalAlignment: Text.AlignHCenter
                             verticalAlignment: Text.AlignVCenter
                         }
 
                         background: Rectangle {
-                            radius: Estilo.global.radius.md
+                            radius: Estilo.global.radius.pill
                             color: btnVoltar.down ? Estilo.action.back.pressed : (btnVoltar.hovered ? Estilo.action.back.hover : Estilo.action.danger.base)
                             border.color: Estilo.action.back.pressed
                             border.width: Estilo.global.borderWidth.hairline
@@ -945,7 +945,7 @@ Page {
                         contentItem: Text {
                             text: "Confirmar"
                             font.pixelSize: Estilo.global.fontSize.xl
-                            font.bold: true
+                            font.family: Estilo.global.fontFamily.title
                             color: Estilo.global.textOnAccent
                             horizontalAlignment: Text.AlignHCenter
                             verticalAlignment: Text.AlignVCenter
@@ -953,7 +953,7 @@ Page {
                         }
 
                         background: Rectangle {
-                            radius: Estilo.global.radius.md
+                            radius: Estilo.global.radius.pill
                             color: !btnConfirmar.enabled ? Estilo.global.surfaceDisabled : (btnConfirmar.down ? Estilo.category.lanche.pressed : (btnConfirmar.hovered ? Estilo.category.lanche.hover : Estilo.category.lanche.base))
                             border.color: !btnConfirmar.enabled ? Estilo.global.surfaceDisabled : Estilo.category.lanche.pressed
                             border.width: Estilo.global.borderWidth.hairline

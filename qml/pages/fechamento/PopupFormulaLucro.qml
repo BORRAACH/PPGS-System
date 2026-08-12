@@ -144,13 +144,13 @@ Popup {
 
                 contentItem: Text {
                     text: "Cancelar"
-                    font.bold: true
+                    font.family: Estilo.global.fontFamily.title
                     color: Estilo.global.textOnAccent
                     horizontalAlignment: Text.AlignHCenter
                 }
 
                 background: Rectangle {
-                    radius: Estilo.global.radius.sm
+                    radius: Estilo.global.radius.pill
                     color: btnCancelarFormula.down ? Estilo.action.danger.pressed : (btnCancelarFormula.hovered ? Estilo.action.danger.hover : Estilo.action.danger.base)
                     border.color: Estilo.action.danger.pressed
                     border.width: Estilo.global.borderWidth.hairline
@@ -166,13 +166,13 @@ Popup {
 
                 contentItem: Text {
                     text: "Confirmar"
-                    font.bold: true
+                    font.family: Estilo.global.fontFamily.title
                     color: Estilo.global.textOnAccent
                     horizontalAlignment: Text.AlignHCenter
                 }
 
                 background: Rectangle {
-                    radius: Estilo.global.radius.sm
+                    radius: Estilo.global.radius.pill
                     color: btnConfirmarFormula.down ? Estilo.action.confirm.pressed : (btnConfirmarFormula.hovered ? Estilo.action.confirm.hover : Estilo.action.confirm.base)
                     border.color: Estilo.action.confirm.pressed
                     border.width: Estilo.global.borderWidth.hairline

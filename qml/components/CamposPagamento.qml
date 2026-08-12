@@ -136,7 +136,7 @@ Row {
             }
 
             background: Rectangle {
-                radius: Estilo.global.radius.sm
+                radius: Estilo.global.radius.pill
                 color: Estilo.global.inputBackground
                 border.color: comboFormaPagamento.activeFocus ? camposPagamento.corDestaque : Estilo.global.border
                 border.width: Estilo.global.borderWidth.hairline
@@ -189,7 +189,7 @@ Row {
             }
 
             background: Rectangle {
-                radius: Estilo.global.radius.sm
+                radius: Estilo.global.radius.pill
                 color: Estilo.global.inputBackground
                 border.color: parent.activeFocus ? camposPagamento.corDestaque : Estilo.global.border
                 border.width: Estilo.global.borderWidth.hairline
@@ -241,7 +241,7 @@ Row {
             }
 
             background: Rectangle {
-                radius: Estilo.global.radius.sm
+                radius: Estilo.global.radius.pill
                 color: Estilo.global.inputBackground
                 border.color: parent.activeFocus ? camposPagamento.corDestaque : Estilo.global.border
                 border.width: Estilo.global.borderWidth.hairline
@@ -280,14 +280,14 @@ Row {
 
             contentItem: Text {
                 text: btnStatusPagamento.text
-                font.bold: true
+                font.family: Estilo.global.fontFamily.title
                 color: Estilo.global.textOnAccent
                 horizontalAlignment: Text.AlignHCenter
                 verticalAlignment: Text.AlignVCenter
             }
 
             background: Rectangle {
-                radius: Estilo.global.radius.sm
+                radius: Estilo.global.radius.pill
                 color: btnStatusPagamento.pago ? (parent.down ? Estilo.action.confirm.pressed : (parent.hovered ? Estilo.action.confirm.hover : Estilo.action.confirm.base)) : (parent.down ? Estilo.action.danger.pressed : (parent.hovered ? Estilo.action.danger.hover : Estilo.action.danger.base))
                 // Anel de foco: só aparece navegando por teclado — sem
                 // isso, Tab chegava ao botão sem nenhum sinal visual de

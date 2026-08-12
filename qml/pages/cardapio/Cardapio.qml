@@ -296,14 +296,14 @@ Page {
                         Text {
                             text: btnCategoria.categoria.rotulo
                             font.pixelSize: Estilo.global.fontSize.lg
-                            font.bold: true
+                            font.family: Estilo.global.fontFamily.title
                             color: btnCategoria.ativa ? Estilo.global.textOnAccent : Estilo.global.text
                             anchors.verticalCenter: parent.verticalCenter
                         }
                     }
 
                     background: Rectangle {
-                        radius: Estilo.global.radius.md
+                        radius: Estilo.global.radius.pill
                         color: btnCategoria.ativa ? telaCardapio.corDaCategoria(btnCategoria.categoria.chave) : (btnCategoria.hovered ? Estilo.global.surfaceHover : Estilo.global.surface)
                         border.color: btnCategoria.ativa ? telaCardapio.corDaCategoria(btnCategoria.categoria.chave) : Estilo.global.border
                         border.width: btnCategoria.ativa ? 2 : 1
@@ -366,14 +366,14 @@ Page {
                     Text {
                         text: telaCardapio.categoriaAtual ? telaCardapio.categoriaAtual.novoRotulo : "Novo item"
                         font.pixelSize: Estilo.global.fontSize.lg
-                        font.bold: true
+                        font.family: Estilo.global.fontFamily.title
                         color: Estilo.global.textOnAccent
                         anchors.verticalCenter: parent.verticalCenter
                     }
                 }
 
                 background: Rectangle {
-                    radius: Estilo.global.radius.md
+                    radius: Estilo.global.radius.pill
                     color: btnAdicionar.down ? Qt.darker(telaCardapio.corDestaque, 1.2) : (btnAdicionar.hovered ? Qt.lighter(telaCardapio.corDestaque, 1.1) : telaCardapio.corDestaque)
                 }
             }
@@ -458,7 +458,7 @@ Page {
                         }
 
                         background: Rectangle {
-                            radius: Estilo.global.radius.sm
+                            radius: Estilo.global.radius.pill
                             color: btnEditar.down ? Qt.darker(telaCardapio.corDestaque, 1.2) : (btnEditar.hovered ? Qt.lighter(telaCardapio.corDestaque, 1.1) : telaCardapio.corDestaque)
                         }
                     }
@@ -479,7 +479,7 @@ Page {
                         }
 
                         background: Rectangle {
-                            radius: Estilo.global.radius.sm
+                            radius: Estilo.global.radius.pill
                             color: btnRemover.down ? Estilo.action.danger.pressed : (btnRemover.hovered ? Estilo.action.danger.hover : Estilo.action.danger.base)
                         }
                     }
@@ -555,14 +555,14 @@ Page {
 
                 Text {
                     text: "Voltar para o Menu"
-                    font.bold: true
+                    font.family: Estilo.global.fontFamily.title
                     color: Estilo.global.textOnAccent
                     anchors.verticalCenter: parent.verticalCenter
                 }
             }
 
             background: Rectangle {
-                radius: Estilo.global.radius.sm
+                radius: Estilo.global.radius.pill
                 color: btnVoltar.down ? Estilo.action.danger.pressed : (btnVoltar.hovered ? Estilo.action.danger.hover : Estilo.action.danger.base)
                 border.color: Estilo.action.danger.pressed
                 border.width: Estilo.global.borderWidth.hairline

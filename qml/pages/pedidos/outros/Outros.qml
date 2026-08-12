@@ -342,13 +342,13 @@ Page {
                                 contentItem: Text {
                                     text: "−"
                                     color: Estilo.global.surface
-                                    font.bold: true
+                                    font.family: Estilo.global.fontFamily.title
                                     horizontalAlignment: Text.AlignHCenter
                                     verticalAlignment: Text.AlignVCenter
                                 }
 
                                 background: Rectangle {
-                                    radius: Estilo.global.radius.sm
+                                    radius: Estilo.global.radius.pill
                                     color: parent.down ? Estilo.action.danger.pressed : (parent.hovered ? Estilo.action.danger.hover : Estilo.action.danger.base)
                                 }
                             }
@@ -373,13 +373,13 @@ Page {
                                 contentItem: Text {
                                     text: "+"
                                     color: Estilo.global.surface
-                                    font.bold: true
+                                    font.family: Estilo.global.fontFamily.title
                                     horizontalAlignment: Text.AlignHCenter
                                     verticalAlignment: Text.AlignVCenter
                                 }
 
                                 background: Rectangle {
-                                    radius: Estilo.global.radius.sm
+                                    radius: Estilo.global.radius.pill
                                     color: parent.down ? Estilo.category.outros.pressed : (parent.hovered ? Estilo.category.outros.hover : Estilo.category.outros.base)
                                 }
                             }
@@ -572,14 +572,14 @@ Page {
                         contentItem: Text {
                             text: "Voltar"
                             font.pixelSize: Estilo.global.fontSize.xl
-                            font.bold: true
+                            font.family: Estilo.global.fontFamily.title
                             color: Estilo.global.surface
                             horizontalAlignment: Text.AlignHCenter
                             verticalAlignment: Text.AlignVCenter
                         }
 
                         background: Rectangle {
-                            radius: Estilo.global.radius.md
+                            radius: Estilo.global.radius.pill
                             color: btnVoltar.down ? Estilo.action.back.pressed : (btnVoltar.hovered ? Estilo.action.back.hover : Estilo.action.danger.base)
                             border.color: Estilo.action.back.pressed
                             border.width: Estilo.global.borderWidth.hairline
@@ -619,7 +619,7 @@ Page {
                         contentItem: Text {
                             text: "Confirmar"
                             font.pixelSize: Estilo.global.fontSize.xl
-                            font.bold: true
+                            font.family: Estilo.global.fontFamily.title
                             color: Estilo.global.surface
                             horizontalAlignment: Text.AlignHCenter
                             verticalAlignment: Text.AlignVCenter
@@ -627,7 +627,7 @@ Page {
                         }
 
                         background: Rectangle {
-                            radius: Estilo.global.radius.md
+                            radius: Estilo.global.radius.pill
                             color: !btnConfirmar.enabled ? Estilo.global.surfaceDisabled : (btnConfirmar.down ? Estilo.category.outros.pressed : (btnConfirmar.hovered ? Estilo.category.outros.hover : Estilo.category.outros.base))
                             border.color: !btnConfirmar.enabled ? Estilo.global.surfaceDisabled : Estilo.category.outros.pressed
                             border.width: Estilo.global.borderWidth.hairline

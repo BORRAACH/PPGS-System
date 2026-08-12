@@ -277,14 +277,14 @@ Popup {
 
             contentItem: Text {
                 text: btnCancelar.text
-                font.bold: true
+                font.family: Estilo.global.fontFamily.title
                 color: Estilo.global.textOnAccent
                 horizontalAlignment: Text.AlignHCenter
                 verticalAlignment: Text.AlignVCenter
             }
 
             background: Rectangle {
-                radius: Estilo.global.radius.sm
+                radius: Estilo.global.radius.pill
                 color: btnCancelar.emFoco ? Estilo.action.neutral.hover : Estilo.action.neutral.base
                 border.width: btnCancelar.emFoco ? Estilo.global.borderWidth.focus : 0
                 border.color: Estilo.global.textOnAccent

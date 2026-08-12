@@ -90,8 +90,8 @@ Item {
                         source: bgBalcao
                         shadowEnabled: true
                         shadowColor: Estilo.global.shadow
-                        shadowBlur: btnBalcao.hovered ? 0.8 : 0.4
-                        shadowVerticalOffset: btnBalcao.pressed ? 1 : (btnBalcao.hovered ? 4 : 2)
+                        shadowBlur: btnBalcao.hovered ? Estilo.global.elevation.lg.blur : Estilo.global.elevation.sm.blur
+                        shadowVerticalOffset: btnBalcao.pressed ? Estilo.global.elevation.sm.deslocamento : (btnBalcao.hovered ? Estilo.global.elevation.lg.deslocamento : Estilo.global.elevation.md.deslocamento)
                         shadowHorizontalOffset: 0
                         z: -1
                     }
@@ -110,8 +110,8 @@ Item {
 
                     Text {
                         text: "Balcão"
+                        font.family: Estilo.global.fontFamily.title
                         font.pixelSize: Estilo.global.fontSize.lg
-                        font.bold: true
                         color: btnBalcao.pressed ? Estilo.orderType.balcao.labelPressed : Estilo.orderType.balcao.label
                         horizontalAlignment: Text.AlignHCenter
                         anchors.horizontalCenter: parent.horizontalCenter
@@ -143,8 +143,8 @@ Item {
                         source: bgEntrega
                         shadowEnabled: true
                         shadowColor: Estilo.global.shadow
-                        shadowBlur: btnEntrega.hovered ? 0.8 : 0.4
-                        shadowVerticalOffset: btnEntrega.pressed ? 1 : (btnEntrega.hovered ? 4 : 2)
+                        shadowBlur: btnEntrega.hovered ? Estilo.global.elevation.lg.blur : Estilo.global.elevation.sm.blur
+                        shadowVerticalOffset: btnEntrega.pressed ? Estilo.global.elevation.sm.deslocamento : (btnEntrega.hovered ? Estilo.global.elevation.lg.deslocamento : Estilo.global.elevation.md.deslocamento)
                         shadowHorizontalOffset: 0
                         z: -1
                     }
@@ -163,8 +163,8 @@ Item {
 
                     Text {
                         text: "Entrega"
+                        font.family: Estilo.global.fontFamily.title
                         font.pixelSize: Estilo.global.fontSize.lg
-                        font.bold: true
                         color: btnEntrega.pressed ? Estilo.orderType.entrega.labelPressed : Estilo.orderType.entrega.label
                         horizontalAlignment: Text.AlignHCenter
                         anchors.horizontalCenter: parent.horizontalCenter
@@ -196,8 +196,8 @@ Item {
                         source: bgSalao
                         shadowEnabled: true
                         shadowColor: Estilo.global.shadow
-                        shadowBlur: btnSalao.hovered ? 0.8 : 0.4
-                        shadowVerticalOffset: btnSalao.pressed ? 1 : (btnSalao.hovered ? 4 : 2)
+                        shadowBlur: btnSalao.hovered ? Estilo.global.elevation.lg.blur : Estilo.global.elevation.sm.blur
+                        shadowVerticalOffset: btnSalao.pressed ? Estilo.global.elevation.sm.deslocamento : (btnSalao.hovered ? Estilo.global.elevation.lg.deslocamento : Estilo.global.elevation.md.deslocamento)
                         shadowHorizontalOffset: 0
                         z: -1
                     }
@@ -216,8 +216,8 @@ Item {
 
                     Text {
                         text: "Salão"
+                        font.family: Estilo.global.fontFamily.title
                         font.pixelSize: Estilo.global.fontSize.lg
-                        font.bold: true
                         color: btnSalao.pressed ? Estilo.orderType.mesa.labelPressed : Estilo.orderType.mesa.label
                         horizontalAlignment: Text.AlignHCenter
                         anchors.horizontalCenter: parent.horizontalCenter

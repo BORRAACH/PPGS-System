@@ -586,14 +586,14 @@ Column {
                 Icone { nome: "fa6s.arrow-rotate-left"; cor: Estilo.global.textOnAccent; tamanho: Estilo.global.fontSize.lg; anchors.verticalCenter: parent.verticalCenter }
                 Text {
                     text: "Restaurar padrões"
-                    font.bold: true
+                    font.family: Estilo.global.fontFamily.title
                     color: Estilo.global.textOnAccent
                     anchors.verticalCenter: parent.verticalCenter
                 }
             }
 
             background: Rectangle {
-                radius: Estilo.global.radius.sm
+                radius: Estilo.global.radius.pill
                 color: parent.down ? Estilo.action.danger.pressed : (parent.hovered ? Estilo.action.danger.hover : Estilo.action.danger.base)
             }
         }
@@ -677,14 +677,14 @@ Column {
                             contentItem: Text {
                                 text: botaoTipo.modelData
                                 font.pixelSize: Estilo.global.fontSize.md
-                                font.bold: botaoTipo._ativo
+                                font.family: Estilo.global.fontFamily.title
                                 color: botaoTipo._ativo ? Estilo.global.textOnAccent : Estilo.global.text
                                 horizontalAlignment: Text.AlignHCenter
                                 verticalAlignment: Text.AlignVCenter
                             }
 
                             background: Rectangle {
-                                radius: Estilo.global.radius.sm
+                                radius: Estilo.global.radius.pill
                                 color: botaoTipo._ativo ? raiz.corDestaque : (botaoTipo.hovered ? Estilo.global.surfaceHover : Estilo.global.surface)
                                 border.color: botaoTipo._ativo ? raiz.corDestaque : Estilo.global.border
                                 border.width: Estilo.global.borderWidth.hairline
@@ -1012,7 +1012,7 @@ Column {
                                 }
 
                                 background: Rectangle {
-                                    radius: Estilo.global.radius.sm
+                                    radius: Estilo.global.radius.pill
                                     color: parent.down ? Estilo.global.surfacePressed : Estilo.global.surface
                                     border.color: Estilo.global.border
                                     border.width: Estilo.global.borderWidth.hairline
@@ -1035,7 +1035,7 @@ Column {
                                 }
 
                                 background: Rectangle {
-                                    radius: Estilo.global.radius.sm
+                                    radius: Estilo.global.radius.pill
                                     color: parent.down ? Estilo.global.surfacePressed : Estilo.global.surface
                                     border.color: Estilo.global.border
                                     border.width: Estilo.global.borderWidth.hairline
@@ -1058,14 +1058,14 @@ Column {
                                     Text {
                                         text: "Estilo…"
                                         font.pixelSize: Estilo.global.fontSize.md
-                                        font.bold: true
+                                        font.family: Estilo.global.fontFamily.title
                                         color: Estilo.global.textOnAccent
                                         anchors.verticalCenter: parent.verticalCenter
                                     }
                                 }
 
                                 background: Rectangle {
-                                    radius: Estilo.global.radius.sm
+                                    radius: Estilo.global.radius.pill
                                     color: parent.down ? Estilo.screen.config.pressed : (parent.hovered ? Estilo.screen.config.hover : raiz.corDestaque)
                                 }
                             }
@@ -1102,13 +1102,14 @@ Column {
                                 contentItem: Text {
                                     text: "−"
                                     font.pixelSize: Estilo.global.fontSize.lg
+                                    font.family: Estilo.global.fontFamily.title
                                     color: Estilo.global.text
                                     horizontalAlignment: Text.AlignHCenter
                                     verticalAlignment: Text.AlignVCenter
                                 }
 
                                 background: Rectangle {
-                                    radius: Estilo.global.radius.sm
+                                    radius: Estilo.global.radius.pill
                                     color: parent.down ? Estilo.global.surfacePressed : Estilo.global.surface
                                     border.color: Estilo.global.border
                                     border.width: Estilo.global.borderWidth.hairline
@@ -1143,13 +1144,14 @@ Column {
                                 contentItem: Text {
                                     text: "+"
                                     font.pixelSize: Estilo.global.fontSize.lg
+                                    font.family: Estilo.global.fontFamily.title
                                     color: Estilo.global.text
                                     horizontalAlignment: Text.AlignHCenter
                                     verticalAlignment: Text.AlignVCenter
                                 }
 
                                 background: Rectangle {
-                                    radius: Estilo.global.radius.sm
+                                    radius: Estilo.global.radius.pill
                                     color: parent.down ? Estilo.global.surfacePressed : Estilo.global.surface
                                     border.color: Estilo.global.border
                                     border.width: Estilo.global.borderWidth.hairline
@@ -1180,7 +1182,7 @@ Column {
                                 }
 
                                 background: Rectangle {
-                                    radius: Estilo.global.radius.sm
+                                    radius: Estilo.global.radius.pill
                                     color: parent.down ? Estilo.global.surfacePressed : Estilo.global.surface
                                     border.color: Estilo.global.border
                                     border.width: Estilo.global.borderWidth.hairline
@@ -1243,7 +1245,7 @@ Column {
                                 }
 
                                 background: Rectangle {
-                                    radius: Estilo.global.radius.sm
+                                    radius: Estilo.global.radius.pill
                                     color: parent.down ? Estilo.global.surfacePressed : Estilo.global.surface
                                     border.color: Estilo.global.border
                                     border.width: Estilo.global.borderWidth.hairline
@@ -1268,7 +1270,7 @@ Column {
                                 onClicked: raiz.espacamentoSecoes += 1
 
                                 background: Rectangle {
-                                    radius: Estilo.global.radius.sm
+                                    radius: Estilo.global.radius.pill
                                     color: parent.down ? Estilo.global.surfacePressed : Estilo.global.surface
                                     border.color: Estilo.global.border
                                     border.width: Estilo.global.borderWidth.hairline
@@ -1300,7 +1302,7 @@ Column {
                                 onClicked: raiz.definirLinhasSeparadorPadrao(raiz.linhasSeparadorPadrao - 1)
 
                                 background: Rectangle {
-                                    radius: Estilo.global.radius.sm
+                                    radius: Estilo.global.radius.pill
                                     color: parent.down ? Estilo.global.surfacePressed : Estilo.global.surface
                                     border.color: Estilo.global.border
                                     border.width: Estilo.global.borderWidth.hairline
@@ -1327,7 +1329,7 @@ Column {
                                 onClicked: raiz.definirLinhasSeparadorPadrao(raiz.linhasSeparadorPadrao + 1)
 
                                 background: Rectangle {
-                                    radius: Estilo.global.radius.sm
+                                    radius: Estilo.global.radius.pill
                                     color: parent.down ? Estilo.global.surfacePressed : Estilo.global.surface
                                     border.color: Estilo.global.border
                                     border.width: Estilo.global.borderWidth.hairline
@@ -1358,7 +1360,7 @@ Column {
                                 }
 
                                 background: Rectangle {
-                                    radius: Estilo.global.radius.sm
+                                    radius: Estilo.global.radius.pill
                                     color: parent.down ? Estilo.global.surfacePressed : Estilo.global.surface
                                     border.color: Estilo.global.border
                                     border.width: Estilo.global.borderWidth.hairline
@@ -1383,7 +1385,7 @@ Column {
                                 onClicked: raiz.espacamentoCorte += 1
 
                                 background: Rectangle {
-                                    radius: Estilo.global.radius.sm
+                                    radius: Estilo.global.radius.pill
                                     color: parent.down ? Estilo.global.surfacePressed : Estilo.global.surface
                                     border.color: Estilo.global.border
                                     border.width: Estilo.global.borderWidth.hairline

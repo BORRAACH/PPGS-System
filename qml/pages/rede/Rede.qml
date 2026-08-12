@@ -227,7 +227,7 @@ Page {
                     Icone { nome: "fa6s.arrows-rotate"; cor: Estilo.global.textOnAccent; tamanho: Estilo.global.fontSize.lg; anchors.verticalCenter: parent.verticalCenter }
                     Text {
                         text: "Atualizar"
-                        font.bold: true
+                        font.family: Estilo.global.fontFamily.title
                         color: Estilo.global.textOnAccent
                         verticalAlignment: Text.AlignVCenter
                         anchors.verticalCenter: parent.verticalCenter
@@ -235,7 +235,7 @@ Page {
                 }
 
                 background: Rectangle {
-                    radius: Estilo.global.radius.sm
+                    radius: Estilo.global.radius.pill
                     color: parent.down ? Estilo.screen.rede.pressed : (parent.hovered ? Estilo.screen.rede.hover : Estilo.screen.rede.base)
                 }
             }
@@ -338,7 +338,7 @@ Page {
                         Icone { nome: "fa6s.arrows-rotate"; cor: Estilo.global.textOnAccent; tamanho: Estilo.global.fontSize.md; anchors.verticalCenter: parent.verticalCenter }
                         Text {
                             text: "Testar agora"
-                            font.bold: true
+                            font.family: Estilo.global.fontFamily.title
                             font.pixelSize: Estilo.global.fontSize.sm
                             color: Estilo.global.textOnAccent
                             verticalAlignment: Text.AlignVCenter
@@ -347,7 +347,7 @@ Page {
                     }
 
                     background: Rectangle {
-                        radius: Estilo.global.radius.sm
+                        radius: Estilo.global.radius.pill
                         color: parent.down ? Estilo.screen.rede.pressed : (parent.hovered ? Estilo.screen.rede.hover : Estilo.screen.rede.base)
                     }
                 }
@@ -672,7 +672,7 @@ Page {
                     }
 
                     background: Rectangle {
-                        radius: Estilo.global.radius.sm
+                        radius: Estilo.global.radius.pill
                         color: Estilo.global.inputBackground
                         border.color: comboImpressoraPrincipal.activeFocus ? Estilo.screen.rede.accent : Estilo.global.border
                         border.width: comboImpressoraPrincipal.activeFocus ? 2 : 1

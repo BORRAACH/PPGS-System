@@ -205,6 +205,10 @@ QtObject {
         motion: MotionScale {
         }
 
+        readonly property ElevationScale
+        elevation: ElevationScale {
+        }
+
     }
 
     // ===== Raios de canto =====
@@ -355,6 +359,32 @@ QtObject {
         readonly property int fast: 150 // fade-out, reordenação
         readonly property int normal: 250 // entrada de notificação
         readonly property int slow: 300 // slide do toast
+    }
+
+    // Um nível de elevação: blur/deslocamento de MultiEffect (a cor vem
+    // sempre de Estilo.global.shadow, à parte).
+    component NivelElevacao: QtObject {
+        property real blur
+        property real deslocamento
+    }
+
+    // ===== Elevação (sombra projetada) =====
+    // Três níveis sobre Estilo.global.shadow — trocar de nível nunca troca a
+    // cor, só o alcance. Antes de existir, cada tela que precisava de sombra
+    // (Inicio.qml) repetia esses números soltos em cada botão.
+    component ElevationScale: QtObject {
+        readonly property NivelElevacao sm: NivelElevacao {
+            blur: 0.4
+            deslocamento: 1
+        }
+        readonly property NivelElevacao md: NivelElevacao {
+            blur: 0.6
+            deslocamento: 2
+        }
+        readonly property NivelElevacao lg: NivelElevacao {
+            blur: 0.8
+            deslocamento: 4
+        }
     }
 
     // =========================================================================

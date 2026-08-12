@@ -92,14 +92,14 @@ Popup {
 
                 contentItem: Text {
                     text: btnCancelarRemocao.text
-                    font.bold: true
+                    font.family: Estilo.global.fontFamily.title
                     color: Estilo.global.textOnAccent
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
                 }
 
                 background: Rectangle {
-                    radius: Estilo.global.radius.sm
+                    radius: Estilo.global.radius.pill
                     color: btnCancelarRemocao.down ? Estilo.action.neutral.pressed : (btnCancelarRemocao.hovered ? Estilo.action.neutral.hover : Estilo.action.neutral.base)
                 }
             }
@@ -126,14 +126,14 @@ Popup {
 
                     Text {
                         text: "Remover"
-                        font.bold: true
+                        font.family: Estilo.global.fontFamily.title
                         color: Estilo.global.textOnAccent
                         anchors.verticalCenter: parent.verticalCenter
                     }
                 }
 
                 background: Rectangle {
-                    radius: Estilo.global.radius.sm
+                    radius: Estilo.global.radius.pill
                     color: btnConfirmarRemocao.down ? Estilo.action.danger.pressed : (btnConfirmarRemocao.hovered ? Estilo.action.danger.hover : Estilo.action.danger.base)
                     border.color: Estilo.action.danger.pressed
                     border.width: Estilo.global.borderWidth.hairline

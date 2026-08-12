@@ -250,7 +250,7 @@ Popup {
                     onClicked: popup._definirNivelFonte(popup.nivelFonte - 1)
 
                     background: Rectangle {
-                        radius: Estilo.global.radius.sm
+                        radius: Estilo.global.radius.pill
                         color: parent.down ? Estilo.global.surfacePressed : Estilo.global.surface
                         border.color: Estilo.global.border
                         border.width: Estilo.global.borderWidth.hairline
@@ -277,7 +277,7 @@ Popup {
                     onClicked: popup._definirNivelFonte(popup.nivelFonte + 1)
 
                     background: Rectangle {
-                        radius: Estilo.global.radius.sm
+                        radius: Estilo.global.radius.pill
                         color: parent.down ? Estilo.global.surfacePressed : Estilo.global.surface
                         border.color: Estilo.global.border
                         border.width: Estilo.global.borderWidth.hairline
@@ -300,14 +300,14 @@ Popup {
 
                 contentItem: Text {
                     text: btnFechar.text
-                    font.bold: true
+                    font.family: Estilo.global.fontFamily.title
                     color: Estilo.global.textOnAccent
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
                 }
 
                 background: Rectangle {
-                    radius: Estilo.global.radius.sm
+                    radius: Estilo.global.radius.pill
                     color: parent.down ? Estilo.screen.config.pressed : (parent.hovered ? Estilo.screen.config.hover : Estilo.screen.config.base)
                 }
             }

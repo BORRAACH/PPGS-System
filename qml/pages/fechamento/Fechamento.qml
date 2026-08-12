@@ -449,13 +449,13 @@ Page {
 
                         contentItem: Text {
                             text: parent.text
-                            font.bold: true
+                            font.family: Estilo.global.fontFamily.title
                             color: Estilo.global.textOnAccent
                             horizontalAlignment: Text.AlignHCenter
                         }
 
                         background: Rectangle {
-                            radius: Estilo.global.radius.sm
+                            radius: Estilo.global.radius.pill
                             color: parent.down ? Estilo.screen.caixa.pressed : (parent.hovered ? Estilo.screen.caixa.hover : Estilo.screen.caixa.base)
                         }
                     }
@@ -487,14 +487,14 @@ Page {
 
                         contentItem: Text {
                             text: parent.text
-                            font.bold: true
+                            font.family: Estilo.global.fontFamily.title
                             color: Estilo.global.textOnAccent
                             horizontalAlignment: Text.AlignHCenter
                             opacity: parent.enabled ? 1 : Estilo.global.opacity.disabled
                         }
 
                         background: Rectangle {
-                            radius: Estilo.global.radius.sm
+                            radius: Estilo.global.radius.pill
                             opacity: parent.enabled ? 1 : Estilo.global.opacity.disabled
                             color: parent.down ? Estilo.screen.caixa.pressed : (parent.hovered ? Estilo.screen.caixa.hover : Estilo.screen.caixa.base)
                         }
@@ -515,14 +515,14 @@ Page {
                         Icone { nome: "fa6s.pen-to-square"; cor: Estilo.global.textOnAccent; tamanho: Estilo.global.fontSize.lg; anchors.verticalCenter: parent.verticalCenter }
                         Text {
                             text: "Editar caixa"
-                            font.bold: true
+                            font.family: Estilo.global.fontFamily.title
                             color: Estilo.global.textOnAccent
                             anchors.verticalCenter: parent.verticalCenter
                         }
                     }
 
                     background: Rectangle {
-                        radius: Estilo.global.radius.sm
+                        radius: Estilo.global.radius.pill
                         color: {
                             if (!btnEditarCaixa.enabled)
                                 return Estilo.global.border;
@@ -549,14 +549,14 @@ Page {
                             text: telaFechamento.quantidadeAberta > 0
                                 ? "Fechamento rápido (" + telaFechamento.quantidadeAberta + ")"
                                 : "Fechamento rápido"
-                            font.bold: true
+                            font.family: Estilo.global.fontFamily.title
                             color: Estilo.global.textOnAccent
                             anchors.verticalCenter: parent.verticalCenter
                         }
                     }
 
                     background: Rectangle {
-                        radius: Estilo.global.radius.sm
+                        radius: Estilo.global.radius.pill
                         color: {
                             if (!btnFechamentoRapido.enabled)
                                 return Estilo.global.border;
@@ -580,14 +580,14 @@ Page {
                         Icone { nome: "fa6s.hand-holding-dollar"; cor: Estilo.global.textOnAccent; tamanho: Estilo.global.fontSize.lg; anchors.verticalCenter: parent.verticalCenter }
                         Text {
                             text: "Extras"
-                            font.bold: true
+                            font.family: Estilo.global.fontFamily.title
                             color: Estilo.global.textOnAccent
                             anchors.verticalCenter: parent.verticalCenter
                         }
                     }
 
                     background: Rectangle {
-                        radius: Estilo.global.radius.sm
+                        radius: Estilo.global.radius.pill
                         color: btnExtras.down ? Estilo.action.outflow.pressed : (btnExtras.hovered ? Estilo.action.outflow.hover : Estilo.action.outflow.base)
                         border.color: btnExtras.activeFocus ? Estilo.global.text : "transparent"
                         border.width: btnExtras.activeFocus ? Estilo.global.borderWidth.focus : Estilo.global.borderWidth.hairline
@@ -607,14 +607,14 @@ Page {
                         Icone { nome: "fa6s.lock"; cor: Estilo.global.textOnAccent; tamanho: Estilo.global.fontSize.lg; anchors.verticalCenter: parent.verticalCenter }
                         Text {
                             text: "Fechar Caixa"
-                            font.bold: true
+                            font.family: Estilo.global.fontFamily.title
                             color: Estilo.global.textOnAccent
                             anchors.verticalCenter: parent.verticalCenter
                         }
                     }
 
                     background: Rectangle {
-                        radius: Estilo.global.radius.sm
+                        radius: Estilo.global.radius.pill
                         color: parent.down ? Estilo.action.confirm.pressed : (parent.hovered ? Estilo.action.confirm.hover : Estilo.action.confirm.base)
                         border.color: parent.activeFocus ? Estilo.global.text : Estilo.action.confirm.pressed
                         border.width: parent.activeFocus ? Estilo.global.borderWidth.focus : Estilo.global.borderWidth.hairline
@@ -728,7 +728,7 @@ Page {
                     Rectangle {
                         Layout.fillWidth: true
                         implicitHeight: 38
-                        radius: Estilo.global.radius.sm
+                        radius: Estilo.global.radius.pill
                         color: Estilo.global.inputBackground
                         border.color: campoBusca.activeFocus ? Estilo.screen.caixa.accent : Estilo.global.borderCard
                         border.width: campoBusca.activeFocus ? 2 : 1
@@ -786,7 +786,7 @@ Page {
                                 }
 
                                 background: Rectangle {
-                                    radius: Estilo.global.radius.sm
+                                    radius: Estilo.global.radius.pill
                                     color: parent.down ? Estilo.global.borderCard : "transparent"
                                 }
                             }
@@ -1194,7 +1194,7 @@ Page {
                                     }
 
                                     background: Rectangle {
-                                        radius: Estilo.global.radius.sm
+                                        radius: Estilo.global.radius.pill
                                         color: Estilo.global.inputBackground
                                         border.color: inputCartao.activeFocus ? Estilo.screen.caixa.base : Estilo.global.border
                                         border.width: Estilo.global.borderWidth.hairline
@@ -1239,7 +1239,7 @@ Page {
                                     }
 
                                     background: Rectangle {
-                                        radius: Estilo.global.radius.sm
+                                        radius: Estilo.global.radius.pill
                                         color: Estilo.global.inputBackground
                                         border.color: inputDinheiro.activeFocus ? Estilo.screen.caixa.base : Estilo.global.border
                                         border.width: Estilo.global.borderWidth.hairline
@@ -1284,7 +1284,7 @@ Page {
                                     }
 
                                     background: Rectangle {
-                                        radius: Estilo.global.radius.sm
+                                        radius: Estilo.global.radius.pill
                                         color: Estilo.global.inputBackground
                                         border.color: inputPix.activeFocus ? Estilo.screen.caixa.base : Estilo.global.border
                                         border.width: Estilo.global.borderWidth.hairline
@@ -1301,13 +1301,13 @@ Page {
 
                                 contentItem: Text {
                                     text: "Salvar contagem"
-                                    font.bold: true
+                                    font.family: Estilo.global.fontFamily.title
                                     color: Estilo.global.textOnAccent
                                     horizontalAlignment: Text.AlignHCenter
                                 }
 
                                 background: Rectangle {
-                                    radius: Estilo.global.radius.sm
+                                    radius: Estilo.global.radius.pill
                                     color: btnSalvarContagem.down ? Estilo.screen.caixa.pressed : (btnSalvarContagem.hovered ? Estilo.screen.caixa.hover : Estilo.screen.caixa.base)
                                 }
                             }
@@ -1365,14 +1365,14 @@ Page {
                     Icone { nome: "fa6s.arrow-left"; cor: Estilo.global.textOnAccent; tamanho: Estilo.global.fontSize.lg; anchors.verticalCenter: parent.verticalCenter }
                     Text {
                         text: "Voltar para o Menu"
-                        font.bold: true
+                        font.family: Estilo.global.fontFamily.title
                         color: Estilo.global.textOnAccent
                         anchors.verticalCenter: parent.verticalCenter
                     }
                 }
 
                 background: Rectangle {
-                    radius: Estilo.global.radius.sm
+                    radius: Estilo.global.radius.pill
                     color: parent.down ? Estilo.action.danger.pressed : (parent.hovered ? Estilo.action.danger.hover : Estilo.action.danger.base)
                     border.color: Estilo.action.danger.pressed
                     border.width: Estilo.global.borderWidth.hairline

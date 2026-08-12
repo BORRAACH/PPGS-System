@@ -625,13 +625,13 @@ Page {
                                 contentItem: Text {
                                     text: "−"
                                     color: Estilo.global.surface
-                                    font.bold: true
+                                    font.family: Estilo.global.fontFamily.title
                                     horizontalAlignment: Text.AlignHCenter
                                     verticalAlignment: Text.AlignVCenter
                                 }
 
                                 background: Rectangle {
-                                    radius: Estilo.global.radius.sm
+                                    radius: Estilo.global.radius.pill
                                     color: parent.down ? Estilo.action.danger.pressed : (parent.hovered ? Estilo.action.danger.hover : Estilo.action.danger.base)
                                 }
                             }
@@ -656,13 +656,13 @@ Page {
                                 contentItem: Text {
                                     text: "+"
                                     color: Estilo.global.surface
-                                    font.bold: true
+                                    font.family: Estilo.global.fontFamily.title
                                     horizontalAlignment: Text.AlignHCenter
                                     verticalAlignment: Text.AlignVCenter
                                 }
 
                                 background: Rectangle {
-                                    radius: Estilo.global.radius.sm
+                                    radius: Estilo.global.radius.pill
                                     color: parent.down ? Estilo.category.acai.pressed : (parent.hovered ? Estilo.category.acai.hover : Estilo.category.acai.base)
                                 }
                             }
@@ -760,14 +760,14 @@ Page {
                         Text {
                             text: "Adicionar Copo (" + tamanhoSelecionado + ")"
                             font.pixelSize: Estilo.global.fontSize.lg
-                            font.bold: true
+                            font.family: Estilo.global.fontFamily.title
                             color: Estilo.global.surface
                             anchors.verticalCenter: parent.verticalCenter
                         }
                     }
 
                     background: Rectangle {
-                        radius: Estilo.global.radius.md
+                        radius: Estilo.global.radius.pill
                         color: btnAdicionarCopo.down ? Estilo.action.confirm.pressed : (btnAdicionarCopo.hovered ? Estilo.action.confirm.hover : Estilo.action.confirm.base)
                         border.color: Estilo.action.confirm.border
                         border.width: Estilo.global.borderWidth.hairline
@@ -877,13 +877,13 @@ Page {
                                             contentItem: Text {
                                                 text: "×"
                                                 color: Estilo.global.surface
-                                                font.bold: true
+                                                font.family: Estilo.global.fontFamily.title
                                                 horizontalAlignment: Text.AlignHCenter
                                                 verticalAlignment: Text.AlignVCenter
                                             }
 
                                             background: Rectangle {
-                                                radius: Estilo.global.radius.sm
+                                                radius: Estilo.global.radius.pill
                                                 color: parent.down ? Estilo.action.danger.pressed : (parent.hovered ? Estilo.action.danger.hover : Estilo.action.danger.base)
                                             }
                                         }
@@ -963,14 +963,14 @@ Page {
                         contentItem: Text {
                             text: "Voltar"
                             font.pixelSize: Estilo.global.fontSize.xl
-                            font.bold: true
+                            font.family: Estilo.global.fontFamily.title
                             color: Estilo.global.surface
                             horizontalAlignment: Text.AlignHCenter
                             verticalAlignment: Text.AlignVCenter
                         }
 
                         background: Rectangle {
-                            radius: Estilo.global.radius.md
+                            radius: Estilo.global.radius.pill
                             color: btnVoltar.down ? Estilo.action.back.pressed : (btnVoltar.hovered ? Estilo.action.back.hover : Estilo.action.danger.base)
                             border.color: Estilo.action.back.pressed
                             border.width: Estilo.global.borderWidth.hairline
@@ -1025,7 +1025,7 @@ Page {
                         contentItem: Text {
                             text: "Confirmar"
                             font.pixelSize: Estilo.global.fontSize.xl
-                            font.bold: true
+                            font.family: Estilo.global.fontFamily.title
                             color: Estilo.global.surface
                             horizontalAlignment: Text.AlignHCenter
                             verticalAlignment: Text.AlignVCenter
@@ -1033,7 +1033,7 @@ Page {
                         }
 
                         background: Rectangle {
-                            radius: Estilo.global.radius.md
+                            radius: Estilo.global.radius.pill
                             color: !btnConfirmar.enabled ? Estilo.global.surfaceDisabled : (btnConfirmar.down ? Estilo.category.acai.pressed : (btnConfirmar.hovered ? Estilo.category.acai.hover : Estilo.category.acai.base))
                             border.color: !btnConfirmar.enabled ? Estilo.global.surfaceDisabled : Estilo.category.acai.pressed
                             border.width: Estilo.global.borderWidth.hairline

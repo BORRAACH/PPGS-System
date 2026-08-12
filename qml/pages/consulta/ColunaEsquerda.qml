@@ -113,14 +113,14 @@ Column {
                 }
                 Text {
                     text: colunaEsquerda.modoEdicao ? "Concluir" : "Editar"
-                    font.bold: true
+                    font.family: Estilo.global.fontFamily.title
                     color: Estilo.global.textOnAccent
                     anchors.verticalCenter: parent.verticalCenter
                 }
             }
 
             background: Rectangle {
-                radius: Estilo.global.radius.md
+                radius: Estilo.global.radius.pill
                 color: colunaEsquerda.modoEdicao ? (parent.down ? Estilo.screen.consulta.pressed : (parent.hovered ? Estilo.screen.consulta.hover : Estilo.screen.consulta.base)) : (parent.down ? Estilo.action.neutral.pressed : (parent.hovered ? Estilo.action.neutral.base : Estilo.action.neutral.hover))
             }
         }
@@ -160,6 +160,7 @@ Column {
                 contentItem: Text {
                     text: botaoFiltro.modelData.rotulo
                     font.pixelSize: Estilo.global.fontSize.sm
+                    font.family: Estilo.global.fontFamily.title
                     font.bold: botaoFiltro.ativo
                     color: botaoFiltro.ativo ? Estilo.global.textOnAccent : Estilo.global.textSecondary
                     horizontalAlignment: Text.AlignHCenter

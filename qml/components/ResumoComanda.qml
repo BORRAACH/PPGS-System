@@ -592,25 +592,12 @@ Rectangle {
                 color: Estilo.global.text
             }
 
-            Rectangle {
+            Rotulo {
                 id: chipStatus
 
                 anchors.right: parent.right
-                width: textoStatus.implicitWidth + 20
-                height: textoStatus.implicitHeight + 8
-                radius: Estilo.global.radius.pill
-                color: root.pago ? Estilo.action.confirm.base : Estilo.action.danger.base
-
-                Text {
-                    id: textoStatus
-
-                    anchors.centerIn: parent
-                    text: root.pago ? "PAGO" : "NÃO PAGO"
-                    font.pixelSize: Estilo.global.fontSize.sm
-                    font.bold: true
-                    color: Estilo.global.textOnAccent
-                }
-
+                texto: root.pago ? "PAGO" : "NÃO PAGO"
+                tom: root.pago ? Estilo.action.confirm : Estilo.action.danger
             }
 
         }

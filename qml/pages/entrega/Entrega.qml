@@ -578,7 +578,7 @@ Page {
                                 }
 
                                 background: Rectangle {
-                                    radius: Estilo.global.radius.sm
+                                    radius: Estilo.global.radius.pill
                                     color: Estilo.global.inputBackground
                                     border.color: parent.activeFocus ? Estilo.screen.entrega.accent : Estilo.global.border
                                     border.width: Estilo.global.borderWidth.hairline
@@ -614,7 +614,7 @@ Page {
                                 Keys.onReturnPressed: inputEndereco.forceActiveFocus()
 
                                 background: Rectangle {
-                                    radius: Estilo.global.radius.sm
+                                    radius: Estilo.global.radius.pill
                                     color: Estilo.global.inputBackground
                                     border.color: parent.activeFocus ? Estilo.screen.entrega.accent : Estilo.global.border
                                     border.width: Estilo.global.borderWidth.hairline
@@ -656,7 +656,7 @@ Page {
                                 Keys.onReturnPressed: inputNumero.forceActiveFocus()
 
                                 background: Rectangle {
-                                    radius: Estilo.global.radius.sm
+                                    radius: Estilo.global.radius.pill
                                     color: Estilo.global.inputBackground
                                     border.color: parent.activeFocus ? Estilo.screen.entrega.accent : Estilo.global.border
                                     border.width: Estilo.global.borderWidth.hairline
@@ -697,7 +697,7 @@ Page {
                                 }
 
                                 background: Rectangle {
-                                    radius: Estilo.global.radius.sm
+                                    radius: Estilo.global.radius.pill
                                     color: Estilo.global.inputBackground
                                     border.color: parent.activeFocus ? Estilo.screen.entrega.accent : Estilo.global.border
                                     border.width: Estilo.global.borderWidth.hairline
@@ -736,7 +736,7 @@ Page {
                             Keys.onReturnPressed: inputObservacao.forceActiveFocus()
 
                             background: Rectangle {
-                                radius: Estilo.global.radius.sm
+                                radius: Estilo.global.radius.pill
                                 color: Estilo.global.inputBackground
                                 border.color: parent.activeFocus ? Estilo.screen.entrega.accent : Estilo.global.border
                                 border.width: Estilo.global.borderWidth.hairline
@@ -777,7 +777,7 @@ Page {
                             Keys.onReturnPressed: primeiroCampoPedido().forceActiveFocus()
 
                             background: Rectangle {
-                                radius: Estilo.global.radius.sm
+                                radius: Estilo.global.radius.pill
                                 color: Estilo.global.inputBackground
                                 border.color: parent.activeFocus ? Estilo.screen.entrega.accent : Estilo.global.border
                                 border.width: Estilo.global.borderWidth.hairline
@@ -959,14 +959,14 @@ Page {
                                 Icone { nome: "fa6s.print"; cor: Estilo.global.textOnAccent; tamanho: Estilo.global.fontSize.lg; anchors.verticalCenter: parent.verticalCenter }
                                 Text {
                                     text: "Imprimir"
-                                    font.bold: true
+                                    font.family: Estilo.global.fontFamily.title
                                     color: Estilo.global.textOnAccent
                                     anchors.verticalCenter: parent.verticalCenter
                                 }
                             }
 
                             background: Rectangle {
-                                radius: Estilo.global.radius.sm
+                                radius: Estilo.global.radius.pill
                                 color: parent.down ? Estilo.action.confirm.pressed : (parent.hovered ? Estilo.action.confirm.hover : Estilo.action.confirm.base)
                                 // Anel de foco mais grosso: só aparece navegando
                                 // por teclado, para dar pra ver onde o Tab chegou.
@@ -1002,14 +1002,14 @@ Page {
                                 Icone { nome: "fa6s.floppy-disk"; cor: Estilo.global.textOnAccent; tamanho: Estilo.global.fontSize.lg; anchors.verticalCenter: parent.verticalCenter }
                                 Text {
                                     text: "Lançar"
-                                    font.bold: true
+                                    font.family: Estilo.global.fontFamily.title
                                     color: Estilo.global.textOnAccent
                                     anchors.verticalCenter: parent.verticalCenter
                                 }
                             }
 
                             background: Rectangle {
-                                radius: Estilo.global.radius.sm
+                                radius: Estilo.global.radius.pill
                                 color: parent.down ? Estilo.action.save.pressed : (parent.hovered ? Estilo.action.save.hover : Estilo.action.save.base)
                                 // Anel de foco mais grosso: só aparece navegando
                                 // por teclado, para dar pra ver onde o Tab chegou.
@@ -1043,14 +1043,14 @@ Page {
                                 Icone { nome: "fa6s.arrow-left"; cor: Estilo.global.textOnAccent; tamanho: Estilo.global.fontSize.lg; anchors.verticalCenter: parent.verticalCenter }
                                 Text {
                                     text: "Voltar para o Menu"
-                                    font.bold: true
+                                    font.family: Estilo.global.fontFamily.title
                                     color: Estilo.global.textOnAccent
                                     anchors.verticalCenter: parent.verticalCenter
                                 }
                             }
 
                             background: Rectangle {
-                                radius: Estilo.global.radius.sm
+                                radius: Estilo.global.radius.pill
                                 color: parent.down ? Estilo.action.danger.pressed : (parent.hovered ? Estilo.action.danger.hover : Estilo.action.danger.base)
                                 // Anel de foco mais grosso: só aparece navegando
                                 // por teclado, para dar pra ver onde o Tab chegou.
