@@ -519,7 +519,18 @@ Column {
         ] }];
     }
 
-    Component.onCompleted: carregarConfiguracao()
+    // São seis chamadas seguidas ao comandaEstiloController mais a montagem
+    // dos rótulos dos 18 campos — tudo antes do primeiro pixel, se rodasse
+    // direto daqui (ver components/CargaDiferida.qml).
+    CargaDiferida {
+        id: carga
+
+        tarefa: function() {
+            carregarConfiguracao();
+        }
+    }
+
+    Component.onCompleted: carga.agendar()
     // Cobre o caso de a Page ser realmente destruída (botão Voltar, botão
     // Início, fechar o app) — o caso de "empurrada pra baixo na pilha por
     // outra tela da barra lateral" (sem ser destruída) é coberto por

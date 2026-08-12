@@ -283,16 +283,17 @@ Page {
     // pedidos/ do disco e remontar a lista — leva tempo suficiente pra
     // segurar o primeiro quadro da página inteira.
     //
-    // O timer resolve duas coisas de uma vez: devolve o controle ao loop de
-    // eventos, pra interface aparecer antes das comandas, e junta numa
-    // leitura só as chamadas em rajada (a página chama duas vezes ao abrir,
+    // A CargaDiferida resolve duas coisas de uma vez: segura a leitura até o
+    // primeiro quadro da página estar na tela, pra interface aparecer antes
+    // das comandas, e junta numa leitura só as chamadas em rajada (a página
+    // chama duas vezes ao abrir,
     // por Component.onCompleted e StackView.onActivated, e a malha chama uma
     // vez por pedido recebido durante uma sincronização).
     function carregarComandas() {
         telaConsulta.carregando = true;
         telaConsulta.comandaSelecionada = null;
         telaConsulta.arquivoSelecionado = "";
-        timerCarregar.restart();
+        carga.agendar();
     }
 
     function _lerDoDisco() {
@@ -388,17 +389,17 @@ Page {
         id: modeloComandas
     }
 
-    // 50ms, e não 0/1ms, porque o objetivo é que um quadro chegue mesmo a ser
-    // desenhado antes da leitura começar — um timer curto demais dispara
-    // dentro do mesmo ciclo em que a página está sendo montada, e a tela
-    // continuaria aparecendo só depois das comandas, que é justamente o que
-    // isto veio resolver. Perto do tempo da leitura, é pausa que ninguém vê.
-    Timer {
-        id: timerCarregar
+    // Era um Timer de 50ms chutado "na esperança" de que um quadro coubesse
+    // nesse meio-tempo. CargaDiferida não chuta: espera o frameSwapped da
+    // janela, o sinal que significa literalmente "este quadro foi entregue à
+    // tela" — e nas máquinas lentas, onde um quadro leva bem mais de 50ms, é
+    // justamente onde o chute falhava (ver components/CargaDiferida.qml).
+    CargaDiferida {
+        id: carga
 
-        interval: 50
-        repeat: false
-        onTriggered: telaConsulta._lerDoDisco()
+        tarefa: function() {
+            telaConsulta._lerDoDisco();
+        }
     }
 
     // Um lote por quadro (ver _proximoLote). 16ms é o intervalo de um quadro

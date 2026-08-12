@@ -204,9 +204,19 @@ Page {
         }
     }
 
-    Component.onCompleted: {
-        carregarCategorias();
+    // listarCategorias() lê os data/cardapio/*.json pelo Python e
+    // selecionarCategoria(0) ainda preenche a lista de itens em cima disso —
+    // trabalho demais pra rodar antes do primeiro pixel da página (ver
+    // components/CargaDiferida.qml).
+    CargaDiferida {
+        id: carga
+
+        tarefa: function() {
+            carregarCategorias();
+        }
     }
+
+    Component.onCompleted: carga.agendar()
 
     // Itens exibidos na lista (todos, ou só os que casam com a busca)
     ListModel {

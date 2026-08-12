@@ -129,23 +129,25 @@ Page {
         }
     }
 
-    Component.onCompleted: {
-        // A lista de peers já é local (sem I/O externo) — carrega e mostra
-        // a página na hora. A impressora só é buscada depois, em thread,
-        // pra não atrasar a abertura da tela.
-        carregarPeers();
-        carregarHistorico();
-        carregarImpressora();
-        carregarImpressoraPrincipal();
-        carregarCandidatosImpressora();
+    // Nada disto é local de graça como parecia: listarPeers/listarHistorico/
+    // candidatosImpressora atravessam a ponte pro Python e mexem em estado do
+    // RedeService, e carregarImpressora ainda dispara a busca da impressora.
+    // Somado, é tempo suficiente pra segurar o primeiro quadro da tela inteira
+    // — daí passarem todos pela CargaDiferida (ver components/CargaDiferida.qml).
+    CargaDiferida {
+        id: carga
+
+        tarefa: function() {
+            carregarPeers();
+            carregarHistorico();
+            carregarImpressora();
+            carregarImpressoraPrincipal();
+            carregarCandidatosImpressora();
+        }
     }
-    StackView.onActivated: {
-        carregarPeers();
-        carregarHistorico();
-        carregarImpressora();
-        carregarImpressoraPrincipal();
-        carregarCandidatosImpressora();
-    }
+
+    Component.onCompleted: carga.agendar()
+    StackView.onActivated: carga.agendar()
 
     // Só para as durações ("conectado há...") avançarem sozinhas na tela,
     // sem precisar reconsultar a rede a cada segundo.

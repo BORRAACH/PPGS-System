@@ -363,15 +363,35 @@ Page {
         inputPix.text = "R$ " + Number(telaFechamento.contagemAtual.pix || 0).toFixed(2).replace(".", ",");
     }
 
+    // obterFechamento/obterContagem varrem as comandas do dia no disco e
+    // remontam o resumo; obterConfiguracao lê a fórmula de lucro. Chamados
+    // direto de Component.onCompleted, seguravam a tela inteira antes do
+    // primeiro pixel — agora entram depois do primeiro quadro, com a página já
+    // desenhada (ver components/CargaDiferida.qml).
+    CargaDiferida {
+        id: carga
+
+        tarefa: function() {
+            _carregarFormula();
+            carregarDia(telaFechamento.dataSelecionada || hojeIso());
+        }
+    }
+
     Component.onCompleted: {
-        _carregarFormula();
-        carregarDia(hojeIso());
+        // A data em si é só uma conta de calendário (nenhum acesso a disco), e
+        // é ela que o cabeçalho mostra — fica aqui pra tela já nascer com o dia
+        // certo escrito, em vez de piscar um campo de data vazio até a leitura
+        // terminar.
+        telaFechamento.dataSelecionada = hojeIso();
+        carga.agendar();
     }
     StackView.onActivated: {
-        carregarDia(telaFechamento.dataSelecionada || hojeIso());
+        carga.agendar();
         // Sem isto, a primeira tecla digitada ao chegar na tela não chega em
         // Keys.onPressed: o foco do teclado continua em quem estava antes na
-        // pilha de telas.
+        // pilha de telas. Fica FORA da tarefa diferida de propósito: mexer no
+        // foco é parte de montar a tela, não de carregar dado, e adiar isso
+        // perderia as primeiras teclas de quem já chega digitando.
         telaFechamento.forceActiveFocus();
     }
 

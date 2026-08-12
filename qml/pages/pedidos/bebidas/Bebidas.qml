@@ -170,9 +170,19 @@ Page {
         }
     }
 
-    Component.onCompleted: {
-        carregarBebidas();
+    // Ler o JSON do cardápio, interpretar e preencher o ListModel roda antes
+    // do primeiro pixel se ficar solto em Component.onCompleted — nesta tela
+    // isso é a diferença entre o popup de categoria fechar na hora e o app
+    // parecer engasgado no clique (ver components/CargaDiferida.qml).
+    CargaDiferida {
+        id: carga
+
+        tarefa: function() {
+            carregarBebidas();
+        }
     }
+
+    Component.onCompleted: carga.agendar()
 
     // Modelo base contendo as bebidas, carregado de data/cardapio/bebidas.json
     // (caminho absoluto a partir de "raizProjeto", exposto pelo main.py)

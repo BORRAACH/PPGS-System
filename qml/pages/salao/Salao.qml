@@ -45,9 +45,12 @@ Page {
         target: salaoController
 
         // Recarrega sozinho quando uma mesa muda/fecha em qualquer máquina
-        // da malha.
+        // da malha. Via carga.agendar(), e não direto: numa sincronização a
+        // malha dispara este sinal uma vez por mesa recebida, e a CargaDiferida
+        // junta a rajada inteira numa releitura só, entre quadros — em vez de
+        // travar a tela uma vez por mesa.
         function onMesasAtualizadas() {
-            carregarMesasAbertas();
+            carga.agendar();
         }
     }
 
@@ -64,11 +67,24 @@ Page {
         }
     }
 
-    Component.onCompleted: {
-        carregarMesasAbertas();
+    // listarMesasAbertas() atravessa a ponte pro Python e lê as comandas de
+    // mesa abertas — o suficiente pra segurar o primeiro quadro da tela se for
+    // chamado direto daqui. Diferida, a tela aparece antes e a lista de mesas
+    // entra logo em seguida (ver components/CargaDiferida.qml).
+    CargaDiferida {
+        id: carga
+
+        tarefa: function() {
+            carregarMesasAbertas();
+        }
     }
+
+    Component.onCompleted: carga.agendar()
     StackView.onActivated: {
-        carregarMesasAbertas();
+        carga.agendar();
+        // Foco fica fora da tarefa diferida de propósito: faz parte de montar
+        // a tela, não de carregar dado — adiar isso perderia as primeiras
+        // teclas de quem já chega digitando o nome do cliente.
         if (stackViewLocal.currentItem)
             stackViewLocal.currentItem.inputNomeCliente.forceActiveFocus();
     }

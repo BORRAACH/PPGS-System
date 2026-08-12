@@ -318,9 +318,19 @@ Page {
         }
     }
 
-    Component.onCompleted: {
-        carregarPizzas();
+    // Ler o JSON do cardápio, interpretar e preencher o ListModel roda antes
+    // do primeiro pixel se ficar solto em Component.onCompleted — nesta tela
+    // isso é a diferença entre o popup de categoria fechar na hora e o app
+    // parecer engasgado no clique (ver components/CargaDiferida.qml).
+    CargaDiferida {
+        id: carga
+
+        tarefa: function() {
+            carregarPizzas();
+        }
     }
+
+    Component.onCompleted: carga.agendar()
     onSelecionadosChanged: {
         filtrarPizzas(campoBusca.text);
     }
