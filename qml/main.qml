@@ -151,6 +151,29 @@ ApplicationWindow {
     StatusInicio {
     }
 
+    // --- CONSULTA RÁPIDA AO CARDÁPIO (Ctrl+S) ---
+    // Vive na janela raiz pelo mesmo motivo da notificação de impressão
+    // abaixo: é global. Uma instância por página morreria na troca de tela, e
+    // o atalho só valeria nas páginas que lembrassem de declará-lo.
+    //
+    // Qt.ApplicationShortcut, e não o contexto padrão (janela): sem isso o
+    // atalho não dispara quando o foco está dentro de um popup modal — que é
+    // exatamente onde o atendente está ao montar um pedido pelo popup de
+    // seleção. Ctrl+S não conflita com nada: as telas de pedido usam Ctrl+A e
+    // Ctrl+R, e o app não tem "salvar" por teclado.
+    Shortcut {
+        sequence: "Ctrl+S"
+        context: Qt.ApplicationShortcut
+        // Alterna: com o popup aberto, o mesmo Ctrl+S fecha. Sem isto a
+        // segunda batida no atalho seria um no-op silencioso, e o atendente
+        // fica com a mão no teclado — Esc é outro alcance.
+        onActivated: popupBuscaCardapio.opened ? popupBuscaCardapio.close() : popupBuscaCardapio.open()
+    }
+
+    PopupBuscaCardapio {
+        id: popupBuscaCardapio
+    }
+
     Rectangle {
         id: notificacaoImpressao
 
