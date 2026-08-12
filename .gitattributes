@@ -1,0 +1,9 @@
+# O sistema roda em Windows e em Linux. Sem normalizacao, um arquivo salvo no
+# Windows volta com CRLF e o git ve o arquivo inteiro como alterado: diffs de
+# centenas de linhas sem uma unica mudanca de conteudo (foi o que aconteceu com
+# data/cardapio/*.json). Tudo que e texto fica com LF no repositorio.
+* text=auto eol=lf
+
+# Binarios: nunca normalizar (uma "conversao" de linha aqui corrompe o arquivo).
+*.woff2 binary
+*.webp binary
