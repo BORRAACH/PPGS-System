@@ -183,20 +183,27 @@ class ConsultaController(QObject):
         apagados = tombstones.carregar("pedidos")
         limite = (datetime.now() - timedelta(days=_JANELA_RECONCILIACAO_PEDIDOS_DIAS)).strftime("%Y%m%d")
         itens = {}
-        for nome_arquivo in nomes:
-            # Uma comanda pode existir em disco E ter tombstone: é o caso do
-            # conflito "apagada em outra máquina, mas a versão daqui é mais
-            # nova" (ver _aplicar_exclusao), em que o arquivo é mantido de
-            # propósito à espera de decisão manual. Ela não entra no resumo
-            # anunciado à malha — para a malha ela está apagada, e anunciar
-            # as duas coisas ao mesmo tempo faria os peers ficarem pedindo e
-            # reapagando a mesma chave a cada ciclo.
-            if nome_arquivo in apagados:
-                continue
-            data = parser.data_arquivo_aaaammdd(nome_arquivo)
-            if data is not None and data < limite:
-                continue
-            itens[nome_arquivo] = indicePedidos.versao(nome_arquivo)
+        # Uma leitura só do índice de eventos pra varredura inteira — sem
+        # isto, indicePedidos.versao() releria eventos.json duas vezes por
+        # comanda, e este laço roda a cada ciclo de anti-entropy (ver
+        # indicePedidos.varredura). Mesmo cuidado que listarComandas já toma
+        # com `conflitos` e `baixas`.
+        with indicePedidos.varredura():
+            for nome_arquivo in nomes:
+                # Uma comanda pode existir em disco E ter tombstone: é o caso
+                # do conflito "apagada em outra máquina, mas a versão daqui é
+                # mais nova" (ver _aplicar_exclusao), em que o arquivo é
+                # mantido de propósito à espera de decisão manual. Ela não
+                # entra no resumo anunciado à malha — para a malha ela está
+                # apagada, e anunciar as duas coisas ao mesmo tempo faria os
+                # peers ficarem pedindo e reapagando a mesma chave a cada
+                # ciclo.
+                if nome_arquivo in apagados:
+                    continue
+                data = parser.data_arquivo_aaaammdd(nome_arquivo)
+                if data is not None and data < limite:
+                    continue
+                itens[nome_arquivo] = indicePedidos.versao(nome_arquivo)
         return {"itens": itens, "apagados": apagados}
 
     def _comparar_pedido_reconciliacao(self, nome_arquivo, versao_local, versao_peer):
@@ -272,65 +279,70 @@ class ConsultaController(QObject):
         mais recentes primeiro."""
         os.makedirs(self.pasta_pedidos, exist_ok=True)
 
-        conflitos = indicePedidos.carregar_conflitos()
-        nomes_maquinas = self._nomes_maquinas_conhecidas()
-        # Uma leitura só do mapa de baixas pra lista inteira — o mesmo
-        # cuidado que já vale pra `conflitos` acima. Consultar
-        # baixaComandas.esta_fechada() por comanda releria o JSON a cada
-        # volta do laço.
-        baixas = baixaComandas.carregar()
+        # Uma leitura só do índice de eventos pra lista inteira — sem isto,
+        # _maquina_origem() releria eventos.json uma vez por comanda (ver
+        # indicePedidos.varredura), que é o mesmo desperdício que os
+        # carregamentos de `conflitos` e `baixas` logo abaixo já evitam.
+        with indicePedidos.varredura():
+            conflitos = indicePedidos.carregar_conflitos()
+            nomes_maquinas = self._nomes_maquinas_conhecidas()
+            # Uma leitura só do mapa de baixas pra lista inteira — o mesmo
+            # cuidado que já vale pra `conflitos` acima. Consultar
+            # baixaComandas.esta_fechada() por comanda releria o JSON a cada
+            # volta do laço.
+            baixas = baixaComandas.carregar()
 
-        comandas = []
-        for nome_arquivo in os.listdir(self.pasta_pedidos):
-            if not nome_arquivo.endswith(".txt"):
-                continue
+            comandas = []
+            for nome_arquivo in os.listdir(self.pasta_pedidos):
+                if not nome_arquivo.endswith(".txt"):
+                    continue
 
-            caminho = os.path.join(self.pasta_pedidos, nome_arquivo)
-            try:
-                with open(caminho, "rb") as arquivo:
-                    conteudo_bytes = arquivo.read()
-                modificado_em = os.path.getmtime(caminho)
-            except OSError as erro:
-                print(f"Falha ao ler {caminho}: {erro}")
-                continue
+                caminho = os.path.join(self.pasta_pedidos, nome_arquivo)
+                try:
+                    with open(caminho, "rb") as arquivo:
+                        conteudo_bytes = arquivo.read()
+                    modificado_em = os.path.getmtime(caminho)
+                except OSError as erro:
+                    print(f"Falha ao ler {caminho}: {erro}")
+                    continue
 
-            conteudo = conteudo_bytes.decode(parser.CODEPAGE_IMPRESSORA, errors="replace")
-            conteudo = parser.limpar_codigos_impressora(conteudo).strip("\n")
-            tipo = parser.tipo_comanda(nome_arquivo)
-            codigo = parser.codigo_comanda(nome_arquivo, conteudo)
-            conflito = conflitos.get(nome_arquivo) or {}
-            cliente = parser.extrair_campo(parser.PADRAO_CLIENTE, conteudo)
+                conteudo = conteudo_bytes.decode(parser.CODEPAGE_IMPRESSORA, errors="replace")
+                conteudo = parser.limpar_codigos_impressora(conteudo).strip("\n")
+                tipo = parser.tipo_comanda(nome_arquivo)
+                codigo = parser.codigo_comanda(nome_arquivo, conteudo)
+                conflito = conflitos.get(nome_arquivo) or {}
+                cliente = parser.extrair_campo(parser.PADRAO_CLIENTE, conteudo)
 
-            comandas.append({
-                "arquivo": nome_arquivo,
-                "tipo": tipo,
-                "conteudo": conteudo,
-                "cliente": cliente,
-                "dataHora": parser.extrair_campo(parser.PADRAO_DATA, conteudo),
-                "modificadoEm": modificado_em,
-                "codigo": codigo,
-                # Aberta (ainda não conferida, fora do caixa) x fechada (com
-                # baixa dada, contando no fechamento do dia) — ver
-                # services/rede/baixaComandas.py. Sem registro = aberta.
-                "fechada": nome_arquivo in baixas,
-                "maquinaOrigem": self._maquina_origem(nome_arquivo, codigo, nomes_maquinas),
-                "emConflito": bool(conflito),
-                "motivoConflito": conflito.get("motivo", ""),
-                "maquinaConflito": conflito.get("maquinaRemota", ""),
-                # Borda vermelha em ItemComandaDelegate.qml — ver
-                # comandaParserService.eh_suspeita. Calculado independente
-                # de aberta/fechada: um erro de digitação vale a pena
-                # sinalizar assim que a comanda existe, não só depois de
-                # baixada (diferente do fechamento, que só soma o que já
-                # tem baixa).
-                "suspeita": parser.eh_suspeita(
-                    tipo,
-                    cliente,
-                    parser.extrair_campo(parser.PADRAO_FORMA_PAGAMENTO, conteudo),
-                    parser.extrair_status_pagamento(conteudo),
-                    parser.extrair_campo(parser.PADRAO_ENDERECO, conteudo),
-                ),
-            })
+                comandas.append({
+                    "arquivo": nome_arquivo,
+                    "tipo": tipo,
+                    "conteudo": conteudo,
+                    "cliente": cliente,
+                    "dataHora": parser.extrair_campo(parser.PADRAO_DATA, conteudo),
+                    "modificadoEm": modificado_em,
+                    "codigo": codigo,
+                    # Aberta (ainda não conferida, fora do caixa) x fechada (com
+                    # baixa dada, contando no fechamento do dia) — ver
+                    # services/rede/baixaComandas.py. Sem registro = aberta.
+                    "fechada": nome_arquivo in baixas,
+                    "maquinaOrigem": self._maquina_origem(nome_arquivo, codigo, nomes_maquinas),
+                    "emConflito": bool(conflito),
+                    "motivoConflito": conflito.get("motivo", ""),
+                    "maquinaConflito": conflito.get("maquinaRemota", ""),
+                    # Borda vermelha em ItemComandaDelegate.qml — ver
+                    # comandaParserService.eh_suspeita. Calculado independente
+                    # de aberta/fechada: um erro de digitação vale a pena
+                    # sinalizar assim que a comanda existe, não só depois de
+                    # baixada (diferente do fechamento, que só soma o que já
+                    # tem baixa).
+                    "suspeita": parser.eh_suspeita(
+                        tipo,
+                        cliente,
+                        parser.extrair_campo(parser.PADRAO_FORMA_PAGAMENTO, conteudo),
+                        parser.extrair_status_pagamento(conteudo),
+                        parser.extrair_campo(parser.PADRAO_ENDERECO, conteudo),
+                    ),
+                })
 
         comandas.sort(key=lambda c: c["modificadoEm"], reverse=True)
         return comandas
