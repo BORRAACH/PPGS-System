@@ -173,20 +173,9 @@ Row {
             KeyNavigation.tab: camposPagamento.mostrarTaxaEntrega ? inputTaxaEntrega : (btnStatusPagamento.visible ? btnStatusPagamento : camposPagamento.proximoCampo)
             KeyNavigation.backtab: comboFormaPagamento
             Keys.onReturnPressed: (camposPagamento.mostrarTaxaEntrega ? inputTaxaEntrega : (btnStatusPagamento.visible ? btnStatusPagamento : camposPagamento.proximoCampo)).forceActiveFocus()
-            onEditingFinished: {
-                if (text !== "") {
-                    var numLimpo = text.replace("R$", "").replace(" ", "").replace(",", ".");
-                    var valorFloat = parseFloat(numLimpo);
-                    if (!isNaN(valorFloat))
-                        text = "R$ " + valorFloat.toFixed(2).replace(".", ",");
-                }
-            }
+            onEditingFinished: text = Moeda.formatar(text)
 
-            validator: DoubleValidator {
-                bottom: 0
-                decimals: 2
-                notation: DoubleValidator.StandardNotation
-            }
+            validator: Moeda.validador
 
             background: Rectangle {
                 radius: Estilo.global.radius.pill
@@ -225,20 +214,9 @@ Row {
             KeyNavigation.tab: btnStatusPagamento.visible ? btnStatusPagamento : camposPagamento.proximoCampo
             KeyNavigation.backtab: inputTroco.visible ? inputTroco : comboFormaPagamento
             Keys.onReturnPressed: (btnStatusPagamento.visible ? btnStatusPagamento : camposPagamento.proximoCampo).forceActiveFocus()
-            onEditingFinished: {
-                if (text !== "") {
-                    var numLimpo = text.replace("R$", "").replace(" ", "").replace(",", ".");
-                    var valorFloat = parseFloat(numLimpo);
-                    if (!isNaN(valorFloat))
-                        text = "R$ " + valorFloat.toFixed(2).replace(".", ",");
-                }
-            }
+            onEditingFinished: text = Moeda.formatar(text)
 
-            validator: DoubleValidator {
-                bottom: 0
-                decimals: 2
-                notation: DoubleValidator.StandardNotation
-            }
+            validator: Moeda.validador
 
             background: Rectangle {
                 radius: Estilo.global.radius.pill

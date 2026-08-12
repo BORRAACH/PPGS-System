@@ -208,11 +208,7 @@ Popup {
                     bottomPadding: 10
                     leftPadding: 10
                     rightPadding: 10
-                    validator: DoubleValidator {
-                        bottom: 0
-                        decimals: 2
-                        notation: DoubleValidator.StandardNotation
-                    }
+                    validator: Moeda.validador
                     Keys.onReturnPressed: popupExtras._confirmar()
 
                     background: Rectangle {

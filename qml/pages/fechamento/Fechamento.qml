@@ -1197,21 +1197,10 @@ Page {
                                     bottomPadding: 10
                                     leftPadding: 10
                                     rightPadding: 10
-                                    validator: DoubleValidator {
-                                        bottom: 0
-                                        decimals: 2
-                                        notation: DoubleValidator.StandardNotation
-                                    }
+                                    validator: Moeda.validador
                                     // Mesmo padrão de inputTroco/inputTaxaEntrega
                                     // em CamposPagamento.qml.
-                                    onEditingFinished: {
-                                        if (text !== "") {
-                                            var numLimpo = text.replace("R$", "").replace(" ", "").replace(",", ".");
-                                            var valorFloat = parseFloat(numLimpo);
-                                            if (!isNaN(valorFloat))
-                                                text = "R$ " + valorFloat.toFixed(2).replace(".", ",");
-                                        }
-                                    }
+                                    onEditingFinished: text = Moeda.formatar(text)
 
                                     background: Rectangle {
                                         radius: Estilo.global.radius.pill
@@ -1244,19 +1233,8 @@ Page {
                                     bottomPadding: 10
                                     leftPadding: 10
                                     rightPadding: 10
-                                    validator: DoubleValidator {
-                                        bottom: 0
-                                        decimals: 2
-                                        notation: DoubleValidator.StandardNotation
-                                    }
-                                    onEditingFinished: {
-                                        if (text !== "") {
-                                            var numLimpo = text.replace("R$", "").replace(" ", "").replace(",", ".");
-                                            var valorFloat = parseFloat(numLimpo);
-                                            if (!isNaN(valorFloat))
-                                                text = "R$ " + valorFloat.toFixed(2).replace(".", ",");
-                                        }
-                                    }
+                                    validator: Moeda.validador
+                                    onEditingFinished: text = Moeda.formatar(text)
 
                                     background: Rectangle {
                                         radius: Estilo.global.radius.pill
@@ -1289,19 +1267,8 @@ Page {
                                     bottomPadding: 10
                                     leftPadding: 10
                                     rightPadding: 10
-                                    validator: DoubleValidator {
-                                        bottom: 0
-                                        decimals: 2
-                                        notation: DoubleValidator.StandardNotation
-                                    }
-                                    onEditingFinished: {
-                                        if (text !== "") {
-                                            var numLimpo = text.replace("R$", "").replace(" ", "").replace(",", ".");
-                                            var valorFloat = parseFloat(numLimpo);
-                                            if (!isNaN(valorFloat))
-                                                text = "R$ " + valorFloat.toFixed(2).replace(".", ",");
-                                        }
-                                    }
+                                    validator: Moeda.validador
+                                    onEditingFinished: text = Moeda.formatar(text)
 
                                     background: Rectangle {
                                         radius: Estilo.global.radius.pill
