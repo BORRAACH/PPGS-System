@@ -32,6 +32,13 @@ Page {
     // apagar-e-recriar, a comanda nova nasceria fora do caixa do dia — isto
     // pede que a baixa seja transferida pra ela assim que for salva.
     property bool manterBaixaAoSalvar: false
+    // Estado do autofill por telefone (ver Connections com
+    // pizzeriaServerController mais abaixo): se o telefone atual já tem
+    // endereço salvo no servidor, e quais dígitos foram usados na última
+    // busca disparada — usado para descartar uma resposta que chegue
+    // depois do atendente já ter trocado o telefone de novo.
+    property bool enderecoEncontradoNoServidor: false
+    property string telefoneEmConsulta: ""
     // Índice da linha de modeloPedidos que está sendo editada pelo popup de
     // seleção — precisa ficar fora do delegate porque o popup é um único
     // item reaproveitado, não recriado a cada clique.
@@ -55,6 +62,41 @@ Page {
                 sucesso ? ("Comanda impressa (" + mensagem + ")") : ("Falha ao imprimir: " + mensagem),
                 sucesso
             );
+        }
+    }
+
+    // Resultado da busca de endereço por telefone (buscarPorTelefone) e do
+    // salvamento (salvarEndereco) — ver PizzeriaServerService. A consulta é
+    // assíncrona, então tanto onEnderecoEncontrado quanto
+    // onEnderecoNaoEncontrado só valem se ainda forem sobre o telefone que
+    // está no campo agora (telefoneEmConsulta); senão o atendente já apagou
+    // e redigitou outro número enquanto a resposta ainda estava a caminho.
+    Connections {
+        target: pizzeriaServerController
+
+        function onEnderecoEncontrado(dados) {
+            if (stackViewLocal.currentItem.inputTelefone.text.replace(/\D/g, "") !== telaEntrega.telefoneEmConsulta)
+                return ;
+
+            var campos = stackViewLocal.currentItem;
+            campos.inputNomeCliente.text = dados.nome || "";
+            campos.inputEndereco.text = dados.rua || "";
+            campos.inputNumero.text = dados.numero || "";
+            campos.inputBairro.text = dados.bairro || "";
+            campos.inputObservacao.text = dados.observacao || "";
+            telaEntrega.enderecoEncontradoNoServidor = true;
+            telaEntrega.mostrarNotificacao("Endereço encontrado e preenchido automaticamente.", true);
+        }
+
+        function onEnderecoNaoEncontrado() {
+            if (stackViewLocal.currentItem.inputTelefone.text.replace(/\D/g, "") !== telaEntrega.telefoneEmConsulta)
+                return ;
+
+            telaEntrega.enderecoEncontradoNoServidor = false;
+        }
+
+        function onEnderecoSalvo(sucesso, mensagem) {
+            telaEntrega.mostrarNotificacao(mensagem, sucesso);
         }
     }
 
@@ -243,6 +285,15 @@ Page {
             // lá — Component.onCompleted sozinho é cedo demais: o StackView
             // externo ainda assume o foco de volta ao concluir a transição).
             property alias inputTelefone: inputTelefone
+            // Expostos para o Connections de pizzeriaServerController (fora
+            // deste Component) poder preencher os campos quando a busca por
+            // telefone encontra um endereço salvo — mesmo motivo do alias
+            // acima.
+            property alias inputNomeCliente: inputNomeCliente
+            property alias inputEndereco: inputEndereco
+            property alias inputNumero: inputNumero
+            property alias inputBairro: inputBairro
+            property alias inputObservacao: inputObservacao
 
             // Precisam ficar aqui dentro do Component, não na raiz da Page:
             // os campos que elas leem (inputNomeCliente, camposPagamento
@@ -356,12 +407,34 @@ Page {
                 }
             }
 
+            // Chamada pelos botões Imprimir/Lançar no lugar de
+            // prosseguirImprimir/prosseguirLancar diretos, quando a comanda
+            // não está vazia: se houver telefone + algum dado de endereço,
+            // pergunta antes se deve salvar/sobrescrever no servidor (ver
+            // PopupSalvarEndereco e o onRespondido dele, mais abaixo). Sem
+            // telefone/endereço suficiente não faz sentido perguntar — segue
+            // direto.
+            function confirmarSalvarEnderecoEProsseguir(acao, dadosPedido) {
+                var temTelefone = dadosPedido.telefone.replace(/\D/g, "").length >= 10;
+                var temEndereco = dadosPedido.endereco.trim() !== "" || dadosPedido.numero !== "" || dadosPedido.bairro.trim() !== "";
+                if (temTelefone && temEndereco) {
+                    popupSalvarEndereco.abrirPara(acao, dadosPedido, telaEntrega.enderecoEncontradoNoServidor);
+                    return ;
+                }
+                if (acao === "imprimir")
+                    prosseguirImprimir(dadosPedido);
+                else
+                    prosseguirLancar(dadosPedido);
+            }
+
             function limparFormularioPedido() {
                 if (telaEntrega.arquivoOriginal !== "") {
                     consultaController.apagarComanda(telaEntrega.arquivoOriginal);
                     telaEntrega.arquivoOriginal = "";
                 }
                 telaEntrega.manterBaixaAoSalvar = false;
+                telaEntrega.enderecoEncontradoNoServidor = false;
+                telaEntrega.telefoneEmConsulta = "";
                 inputNomeCliente.text = "";
                 inputTelefone.text = "";
                 inputEndereco.text = "";
@@ -486,6 +559,22 @@ Page {
                                     }
                                     text = formatado;
                                     reformatando = false;
+                                }
+
+                                // Dispara a busca de endereço salvo ao SAIR do
+                                // campo (não a cada tecla) — ver Connections
+                                // com pizzeriaServerController, que preenche
+                                // Nome/Endereço/Número/Bairro/Observação quando
+                                // a resposta chegar.
+                                onEditingFinished: {
+                                    var digitos = text.replace(/\D/g, "");
+                                    if (digitos.length < 10) {
+                                        telaEntrega.telefoneEmConsulta = "";
+                                        telaEntrega.enderecoEncontradoNoServidor = false;
+                                        return ;
+                                    }
+                                    telaEntrega.telefoneEmConsulta = digitos;
+                                    pizzeriaServerController.buscarPorTelefone(digitos);
                                 }
 
                                 background: Rectangle {
@@ -861,7 +950,7 @@ Page {
                                     popupComandaTeste.abrirPara("imprimir", dados);
                                     return ;
                                 }
-                                prosseguirImprimir(dados);
+                                confirmarSalvarEnderecoEProsseguir("imprimir", dados);
                             }
 
                             contentItem: Row {
@@ -904,7 +993,7 @@ Page {
                                     popupComandaTeste.abrirPara("lancar", dados);
                                     return ;
                                 }
-                                prosseguirLancar(dados);
+                                confirmarSalvarEnderecoEProsseguir("lancar", dados);
                             }
 
                             contentItem: Row {
@@ -1007,6 +1096,22 @@ Page {
                         prosseguirImprimir(dadosPedido);
                     else
                         prosseguirLancar(dadosPedido);
+                }
+            }
+
+            // Só abre quando confirmarSalvarEnderecoEProsseguir() decide que
+            // vale perguntar (telefone + algum dado de endereço presentes).
+            PopupSalvarEndereco {
+                id: popupSalvarEndereco
+
+                onRespondido: function(salvar) {
+                    if (salvar)
+                        pizzeriaServerController.salvarEndereco(dados);
+
+                    if (acaoPendente === "imprimir")
+                        prosseguirImprimir(dados);
+                    else
+                        prosseguirLancar(dados);
                 }
             }
 
