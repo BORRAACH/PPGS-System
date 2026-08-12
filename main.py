@@ -50,6 +50,7 @@ try:
     from controllers.consultaController import ConsultaController
     from controllers.fechamentoController import FechamentoController
     from services.rede import rede
+    from services.pizzeriaServerService import pizzeria_server
     from services.iconProvider import IconProvider
     from services.comandaEstiloService import ComandaEstiloController
     from services.cardapioService import CardapioController
@@ -223,6 +224,7 @@ if __name__ == "__main__":
     rede.pedidoRemovidoRemoto.connect(consultaController.removerPedidoRemoto)
     engine.rootContext().setContextProperty("redeController", rede)
     engine.rootContext().setContextProperty("statusController", status)
+    engine.rootContext().setContextProperty("pizzeriaServerController", pizzeria_server)
 
     engine.addImportPath(qml_dir)
 

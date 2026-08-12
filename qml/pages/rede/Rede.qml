@@ -281,6 +281,79 @@ Page {
             }
         }
 
+        // --- SERVIDOR CENTRAL (ppgs_server, máquina Alpine) ---
+        // Diferente da malha local acima (P2P entre as máquinas do balcão),
+        // este é o backend HTTP separado que guarda endereços de entrega
+        // (ver services/pizzeriaServerService.py, usado por Entrega.qml) —
+        // reflete pizzeriaServerController.conectado, que o service mantém
+        // com um ping periódico de 30s.
+        Rectangle {
+            Layout.fillWidth: true
+            implicitHeight: linhaServidorCentral.implicitHeight + 20
+            radius: Estilo.global.radius.md
+            color: pizzeriaServerController.conectado ? Estilo.status.success.background : Estilo.status.error.background
+            border.color: pizzeriaServerController.conectado ? Estilo.status.success.border : Estilo.status.error.border
+            border.width: Estilo.global.borderWidth.hairline
+
+            RowLayout {
+                id: linhaServidorCentral
+                anchors.fill: parent
+                anchors.margins: 10
+                spacing: Estilo.global.spacing.md
+
+                Icone {
+                    nome: pizzeriaServerController.conectado ? "fa6s.server" : "fa6s.triangle-exclamation"
+                    cor: pizzeriaServerController.conectado ? Estilo.status.success.content : Estilo.status.error.content
+                    tamanho: Estilo.global.fontSize.title
+                }
+
+                ColumnLayout {
+                    spacing: 2
+
+                    Text {
+                        text: pizzeriaServerController.conectado ? "Servidor central conectado" : "Servidor central inacessível"
+                        font.bold: true
+                        font.pixelSize: Estilo.global.fontSize.lg
+                        color: pizzeriaServerController.conectado ? Estilo.status.success.content : Estilo.status.error.content
+                    }
+
+                    Text {
+                        text: pizzeriaServerController.conectado ? ("Autofill de endereço disponível (" + pizzeriaServerController.urlServidor + ")") : ("Não foi possível falar com " + pizzeriaServerController.urlServidor + " — autofill de endereço na Entrega fica indisponível.")
+                        font.pixelSize: Estilo.global.fontSize.xs
+                        color: Estilo.global.textSecondary
+                        wrapMode: Text.WordWrap
+                    }
+                }
+
+                Item {
+                    Layout.fillWidth: true
+                }
+
+                Button {
+                    padding: 8
+                    onClicked: pizzeriaServerController.verificarConexao()
+
+                    contentItem: Row {
+                        spacing: Estilo.global.spacing.xs
+                        Icone { nome: "fa6s.arrows-rotate"; cor: Estilo.global.textOnAccent; tamanho: Estilo.global.fontSize.md; anchors.verticalCenter: parent.verticalCenter }
+                        Text {
+                            text: "Testar agora"
+                            font.bold: true
+                            font.pixelSize: Estilo.global.fontSize.sm
+                            color: Estilo.global.textOnAccent
+                            verticalAlignment: Text.AlignVCenter
+                            anchors.verticalCenter: parent.verticalCenter
+                        }
+                    }
+
+                    background: Rectangle {
+                        radius: Estilo.global.radius.sm
+                        color: parent.down ? Estilo.screen.rede.pressed : (parent.hovered ? Estilo.screen.rede.hover : Estilo.screen.rede.base)
+                    }
+                }
+            }
+        }
+
         // --- MÁQUINAS CONECTADAS (esquerda) + IMPRESSORA DESTA MÁQUINA (direita) ---
         // Máquinas/histórico e impressora lado a lado enquanto couberem;
         // empilhados quando não couberem.
