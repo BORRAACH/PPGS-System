@@ -401,16 +401,16 @@ Popup {
                         bottomPadding: 10
                         leftPadding: 10
                         rightPadding: 10
+                        // Sem validador este campo aceitava letra — e escrever
+                        // direto no `text` desfazia o vínculo com o modelo, o
+                        // que travava o valor digitado na tela quando o rateio
+                        // voltava pro modo igual e recalculava a divisão.
+                        validator: Moeda.validador
                         onEditingFinished: {
-                            if (text !== "") {
-                                var numLimpo = text.replace("R$", "").replace(" ", "").replace(",", ".");
-                                var valorFloat = parseFloat(numLimpo);
-                                if (!isNaN(valorFloat)) {
-                                    var formatado = "R$ " + valorFloat.toFixed(2).replace(".", ",");
-                                    model.valor = formatado;
-                                    text = formatado;
-                                }
-                            }
+                            model.valor = Moeda.formatar(text);
+                            text = Qt.binding(function () {
+                                return model.valor;
+                            });
                         }
 
                         background: Rectangle {
@@ -538,24 +538,16 @@ Popup {
                             leftPadding: 10
                             rightPadding: 10
                             onEditingFinished: {
-                                if (text !== "") {
-                                    var numLimpo = text.replace("R$", "").replace(" ", "").replace(",", ".");
-                                    var valorFloat = parseFloat(numLimpo);
-                                    if (!isNaN(valorFloat)) {
-                                        var formatado = "R$ " + valorFloat.toFixed(2).replace(".", ",");
-                                        model.trocoRecebido = formatado;
-                                        text = formatado;
-                                        return;
-                                    }
-                                }
-                                model.trocoRecebido = text;
+                                model.trocoRecebido = Moeda.formatar(text);
+                                // Digitar desfaz o vínculo "text: model.trocoRecebido" — sem
+                                // restabelecer, esta linha pararia de acompanhar o modelo (mesmo
+                                // motivo detalhado em components/LinhaPedido.qml).
+                                text = Qt.binding(function () {
+                                    return model.trocoRecebido;
+                                });
                             }
 
-                            validator: DoubleValidator {
-                                bottom: 0
-                                decimals: 2
-                                notation: DoubleValidator.StandardNotation
-                            }
+                            validator: Moeda.validador
 
                             background: Rectangle {
                                 radius: Estilo.global.radius.pill

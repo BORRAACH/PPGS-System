@@ -284,8 +284,21 @@ QtObject {
         // font.family devolve string vazia — que no Qt significa "a fonte
         // padrão", exatamente o comportamento anterior. Nenhum título fica
         // sem texto por causa disto.
+        //
+        // .ttf, e não .woff2: o Qt no Windows (motor DirectWrite) não lê
+        // WOFF2 — só o do Linux lia, e por acaso, porque lá quem decodifica é
+        // o FreeType. Ver Config/fontes.py para a história completa.
         readonly property FontLoader carregadorTitulo: FontLoader {
-            source: Qt.resolvedUrl("fontes/Caprasimo-Regular.woff2")
+            source: Qt.resolvedUrl("fontes/Caprasimo-Regular.ttf")
+
+            // Sem este aviso a falha é invisível no log: o título simplesmente
+            // sai na fonte do corpo e ninguém liga uma coisa à outra. Foi
+            // assim que a Caprasimo ficou sumida nas máquinas Windows sem
+            // deixar rastro nenhum em logs/app.log.
+            onStatusChanged: {
+                if (status === FontLoader.Error)
+                    console.warn("[fontes] Falha ao carregar a fonte de título (" + source + ") — os títulos vão sair na fonte do corpo.");
+            }
         }
 
         readonly property string title: carregadorTitulo.font.family

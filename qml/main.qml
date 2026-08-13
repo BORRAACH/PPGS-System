@@ -151,6 +151,47 @@ ApplicationWindow {
     StatusInicio {
     }
 
+    // --- CONSULTA RÁPIDA AO CARDÁPIO (Ctrl+S) ---
+    // Vive na janela raiz pelo mesmo motivo da notificação de impressão
+    // abaixo: é global. Uma instância por página morreria na troca de tela, e
+    // o atalho só valeria nas páginas que lembrassem de declará-lo.
+    //
+    // Qt.ApplicationShortcut, e não o contexto padrão (janela): sem isso o
+    // atalho não dispara quando o foco está dentro de um popup modal — que é
+    // exatamente onde o atendente está ao montar um pedido pelo popup de
+    // seleção. Ctrl+S não conflita com nada: as telas de pedido usam Ctrl+A e
+    // Ctrl+R, e o app não tem "salvar" por teclado.
+    Shortcut {
+        sequence: "Ctrl+S"
+        context: Qt.ApplicationShortcut
+        // Uma ativação por batida, não uma por repetição do teclado. O padrão
+        // de Shortcut.autoRepeat é TRUE: segurar Ctrl+S faz o Qt disparar
+        // onActivated a cada repetição que o sistema manda (no Windows, a
+        // primeira vem em ~250-500 ms e depois até ~30 por segundo), e como
+        // este onActivated ALTERNA, o resultado é abre/fecha/abre/fecha —
+        // terminando fechado em número par de repetições. Ou seja: o atalho
+        // "não funciona" exatamente para quem segura a tecla, que é o que se
+        // faz quando a máquina demora a responder — e as máquinas do balcão
+        // são justamente as lentas (2 núcleos). Aqui não passa despercebido
+        // porque a primeira abertura ainda lê os arquivos do cardápio e monta
+        // o índice (ver services/buscaCardapio.py).
+        autoRepeat: false
+        // Alterna: com o popup aberto, o mesmo Ctrl+S fecha. Sem isto a
+        // segunda batida no atalho seria um no-op silencioso, e o atendente
+        // fica com a mão no teclado — Esc é outro alcance.
+        //
+        // `visible`, e não `opened`: `opened` só fica true quando a transição
+        // de entrada TERMINA, então num estilo com animação de popup a batida
+        // seguinte cairia no `open()` de novo em vez de fechar. O estilo hoje
+        // é o Fusion (fixado em Config/preConfig.py), que não anima popup, mas
+        // `visible` é verdade nos dois casos e não depende disso.
+        onActivated: popupBuscaCardapio.visible ? popupBuscaCardapio.close() : popupBuscaCardapio.open()
+    }
+
+    PopupBuscaCardapio {
+        id: popupBuscaCardapio
+    }
+
     Rectangle {
         id: notificacaoImpressao
 

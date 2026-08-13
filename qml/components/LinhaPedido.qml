@@ -62,6 +62,23 @@ Row {
         return linhaDelegate.campoExternoProximo;
     }
 
+    // Normaliza o que foi digitado no campo Valor e devolve pro modelo, que
+    // é de onde saem tanto o total da tela (components/ResumoComanda.qml)
+    // quanto o valor impresso na comanda — escrever só no `text` do campo
+    // deixaria os dois discordando do que está na tela.
+    function aplicarValorDigitado(campo) {
+        model.valor = Moeda.formatar(campo.text);
+
+        // Digitar desfaz o vínculo "text: model.valor" — a partir da
+        // primeira tecla, quem manda no text é o usuário. Sem restabelecer o
+        // vínculo aqui, escolher outro pedido NESTA linha depois de editar o
+        // preço à mão não atualizaria mais o campo: ele ficaria preso no
+        // último valor digitado, mostrando um preço que não é o do item.
+        campo.text = Qt.binding(function () {
+            return model.valor;
+        });
+    }
+
     // Campo Pedido
     TextField {
         id: campoPedido
@@ -148,23 +165,19 @@ Row {
         // Pedido.
         Keys.onTabPressed: linhaDelegate.campoPedidoProximo().forceActiveFocus()
         Keys.onReturnPressed: linhaDelegate.campoPedidoProximo().forceActiveFocus()
-        onEditingFinished: {
-            if (text !== "") {
-                var numLimpo = text.replace("R$", "").replace(" ", "").replace(",", ".");
-                var valorFloat = parseFloat(numLimpo);
-                if (!isNaN(valorFloat)) {
-                    var formatado = "R$ " + valorFloat.toFixed(2).replace(".", ",");
-                    model.valor = formatado;
-                    text = formatado;
-                }
-            }
+        onEditingFinished: linhaDelegate.aplicarValorDigitado(campoValor)
+        // Entrar no campo já seleciona o valor inteiro: a intenção de quem
+        // vem parar aqui é trocar o preço, não emendar dígitos no que a
+        // seleção de pedido preencheu.
+        onActiveFocusChanged: {
+            if (activeFocus)
+                selectAll();
         }
 
-        validator: DoubleValidator {
-            bottom: 0
-            decimals: 2
-            notation: DoubleValidator.StandardNotation
-        }
+        // Precisa aceitar o "R$ " que este mesmo campo escreve — ver
+        // estilo/Moeda.qml para por que o DoubleValidator que estava aqui
+        // impedia a edição manual de chegar no modelo.
+        validator: Moeda.validador
 
         background: Rectangle {
             radius: Estilo.global.radius.pill

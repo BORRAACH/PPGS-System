@@ -25,6 +25,17 @@ máquina: o app roda em computadores que ninguém administra, e uma fonte
 "que precisa ser instalada antes" acaba não existindo em metade deles.
 Como o .exe não empacota o código (ver launcher/gerar_exe.bat), elas
 viajam junto pela auto-atualização por git, como qualquer outro arquivo.
+
+Por que TTF e não WOFF2, que é metade do tamanho: o Qt não decodifica WOFF2
+sozinho. No Linux quem faz isso é o FreeType (libQt6Gui -> libfreetype ->
+libbrotlidec), e por isso funcionava aqui; no Windows o Qt usa o motor
+DirectWrite/GDI, que não lê WOFF2 nem tem brotli. O resultado era que TODAS
+as cinco fontes falhavam calado nas máquinas Windows e o app inteiro caía na
+fonte do sistema — o sintoma visível era o título da página sair igual ao
+texto dos campos, porque as duas famílias tinham virado a mesma substituta.
+TTF é o formato que todo build do Qt lê em qualquer plataforma, e a
+conversão é sem perda: mesmas famílias, mesmos pesos e as mesmas métricas
+(conferido com QFontMetricsF antes da troca).
 """
 
 from pathlib import Path
@@ -44,10 +55,10 @@ _PASTA = Path(__file__).resolve().parent.parent / "qml" / "estilo" / "fontes"
 # FontLoader do Estilo.qml, e registrar o mesmo arquivo duas vezes só
 # duplicaria a família na QFontDatabase.
 _ARQUIVOS = (
-    "Figtree-Regular.woff2",   # 400 — corpo de texto
-    "Figtree-Medium.woff2",    # 500 — rótulos, ênfase leve
-    "Figtree-SemiBold.woff2",  # 600 — títulos de seção, valores
-    "Figtree-Bold.woff2",      # 700 — totais e destaques (font.bold cai aqui)
+    "Figtree-Regular.ttf",   # 400 — corpo de texto
+    "Figtree-Medium.ttf",    # 500 — rótulos, ênfase leve
+    "Figtree-SemiBold.ttf",  # 600 — títulos de seção, valores
+    "Figtree-Bold.ttf",      # 700 — totais e destaques (font.bold cai aqui)
 )
 
 _FAMILIA_CORPO = "Figtree"
@@ -70,8 +81,10 @@ def aplicar(app) -> None:
         if not caminho.exists():
             print(f"[fontes] Arquivo não encontrado, ignorando: {caminho}")
             continue
-        # -1 = o Qt não entendeu o arquivo (woff2 corrompido, build do Qt sem
-        # suporte a woff2...). Não é motivo para impedir o app de abrir.
+        # -1 = o Qt não entendeu o arquivo (arquivo corrompido, formato que
+        # este build do Qt não lê...). Não é motivo para impedir o app de
+        # abrir — mas tem que aparecer no log, porque o sintoma na tela é
+        # discreto: o texto continua legível, só sai na fonte errada.
         if QFontDatabase.addApplicationFont(str(caminho)) == -1:
             print(f"[fontes] O Qt não conseguiu carregar: {nome}")
             continue

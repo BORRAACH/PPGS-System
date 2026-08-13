@@ -2,3 +2,4 @@ module estilo
 singleton Estilo 1.0 Estilo.qml
 singleton Colors 1.0 Colors.qml
 singleton Responsivo 1.0 Responsivo.qml
+singleton Moeda 1.0 Moeda.qml

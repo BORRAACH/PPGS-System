@@ -665,6 +665,30 @@ class CardapioController(QObject):
     def listarItens(self, chave_categoria):
         return carregar(chave_categoria)
 
+    # ---------- Consulta rápida (Ctrl+S de qualquer tela) ----------
+    # Mora neste controller, e não num novo, por dois motivos: é cardápio, e
+    # cada controller a mais é mais um objeto construído no caminho de abertura
+    # do app (ver main.py) numa máquina que já demora a abrir. O índice em si é
+    # preguiçoso — nada é lido do disco até o primeiro Ctrl+S.
+    #
+    # Import local: services/buscaCardapio.py importa este módulo pra ler
+    # CATEGORIAS, então trazê-lo no topo daqui fecharia um ciclo.
+
+    @pyqtSlot(str, result="QVariantList")
+    @protegido([])
+    def buscar(self, termo):
+        """Itens do cardápio que casam com `termo` — ver services/buscaCardapio.py."""
+        from services import buscaCardapio
+
+        return buscaCardapio.buscar(termo)
+
+    @pyqtSlot(result=int)
+    @protegido(0)
+    def totalItensCardapio(self):
+        from services import buscaCardapio
+
+        return buscaCardapio.total()
+
     @pyqtSlot(str, "QVariantList", result=str)
     @protegido("Falha inesperada ao salvar o cardápio — ver logs/app.log.")
     def salvarItens(self, chave_categoria, itens):
