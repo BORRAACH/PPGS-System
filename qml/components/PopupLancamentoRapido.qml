@@ -727,6 +727,26 @@ Popup {
         Keys.onReturnPressed: popupLancamento._acionarFoco()
         Keys.onEnterPressed: popupLancamento._acionarFoco()
         Keys.onEscapePressed: popupLancamento.voltar()
+        // Alt+← volta uma etapa, ao lado do Esc e do botão "Voltar".
+        //
+        // É o Alt da ESQUERDA: no teclado ABNT2 o da direita é o AltGr, que
+        // serve pra digitar caractere, e o Qt não separa os dois em
+        // `modifiers` — os dois chegam como Qt.AltModifier. O que os distingue
+        // é o modificador EXTRA que o AltGr carrega: GroupSwitchModifier no
+        // X11 e Ctrl+Alt no Windows. Exigir a ausência dos dois deixa passar
+        // só o Alt esquerdo, nas duas plataformas em que este app roda.
+        Keys.onLeftPressed: function (evento) {
+            var comAlt = (evento.modifiers & Qt.AltModifier) !== 0;
+            var ehAltGr = (evento.modifiers & (Qt.GroupSwitchModifier | Qt.ControlModifier)) !== 0;
+
+            if (!comAlt || ehAltGr) {
+                evento.accepted = false;
+                return;
+            }
+
+            popupLancamento.voltar();
+            evento.accepted = true;
+        }
         // Na etapa de várias escolhas, Enter marca/desmarca e é o Tab que
         // conclui — senão não haveria como dizer "terminei de marcar".
         //
@@ -941,9 +961,10 @@ Popup {
                     anchors.right: btnAvancar.visible ? btnAvancar.left : parent.right
                     anchors.rightMargin: Estilo.global.spacing.md
                     anchors.verticalCenter: parent.verticalCenter
-                    text: popupLancamento.etapa === "adicionais"
-                        ? "Enter marca   ·   Tab continua"
-                        : "↑ ↓ navegar   ·   Enter escolher"
+                    text: (popupLancamento.etapa === "adicionais"
+                            ? "Enter marca   ·   Tab continua"
+                            : "↑ ↓ navegar   ·   Enter escolher")
+                        + "   ·   Alt+← volta"
                     font.pixelSize: Estilo.global.fontSize.sm
                     color: Estilo.global.textSecondary
                     elide: Text.ElideRight
