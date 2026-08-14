@@ -127,8 +127,55 @@ Rectangle {
             if (!adicional || (adicional.sabor || "").trim().toUpperCase() !== alvo)
                 continue;
 
-            var valor = adicional.valor || "";
-            extras.push("+ " + (adicional.nome || "") + (valor ? " (" + valor + ")" : ""));
+            extras.push(root._textoAdicional(adicional));
+        }
+        return extras;
+    }
+
+    // Prefixo "+" igual ao do cupom (PREFIXO_ADICIONAL).
+    function _textoAdicional(adicional) {
+        var valor = adicional.valor || "";
+        return "+ " + (adicional.nome || "") + (valor ? " (" + valor + ")" : "");
+    }
+
+    // Os sabores de um item, e o tamanho entre parênteses no fim quando
+    // houver. Mesma leitura que comandaTextoService.dividir_sabores faz do
+    // outro lado.
+    function _saboresDe(pedido) {
+        var corpo = pedido;
+        var tamanho = "";
+
+        var casou = /^(.*)\s\(([^)]+)\)$/.exec(pedido);
+        if (casou) {
+            corpo = casou[1];
+            tamanho = casou[2];
+        }
+
+        return {
+            "sabores": corpo.split(root.separadorSabores).filter(function (s) {
+                return s.trim() !== "";
+            }),
+            "tamanho": tamanho
+        };
+    }
+
+    // Todos os adicionais do item numa lista só, sem separar por fração — é o
+    // que o modo compacto mostra, já que ali o item ocupa uma linha só e não
+    // há fração a que pendurar cada um. Numa pizza dividida o sabor vai junto,
+    // senão "+ Bacon" não diria em qual metade ele entra.
+    function _extrasDoItem(pedido, adicionaisBrutos) {
+        var adicionais = _comoObjeto(adicionaisBrutos, []);
+        var varios = root._saboresDe(pedido).sabores.length > 1;
+        var extras = [];
+
+        for (var i = 0; i < adicionais.length; i++) {
+            var adicional = adicionais[i];
+            if (!adicional)
+                continue;
+
+            var texto = root._textoAdicional(adicional);
+            var sabor = (adicional.sabor || "").trim();
+            extras.push(varios && sabor ? texto + " — " + sabor : texto);
         }
         return extras;
     }
@@ -140,18 +187,9 @@ Rectangle {
     // fração a que pertence. Item comum vira uma linha só.
     function _linhasDoItem(pedido, adicionaisBrutos) {
         var adicionais = _comoObjeto(adicionaisBrutos, []);
-        var corpo = pedido;
-        var tamanho = "";
-
-        var casou = /^(.*)\s\(([^)]+)\)$/.exec(pedido);
-        if (casou) {
-            corpo = casou[1];
-            tamanho = casou[2];
-        }
-
-        var sabores = corpo.split(root.separadorSabores).filter(function(s) {
-            return s.trim() !== "";
-        });
+        var partes = root._saboresDe(pedido);
+        var sabores = partes.sabores;
+        var tamanho = partes.tamanho;
 
         if (sabores.length <= 1)
             return [{
@@ -331,7 +369,13 @@ Rectangle {
                     // Calculado uma vez por item, e não dentro do Repeater
                     // aninhado, pra não refazer o split/parse a cada binding.
                     readonly property var linhas: root.detalhado ? root._linhasDoItem(nomeItem, model.adicionais) : []
-                    readonly property string textoBorda: root.detalhado ? root._linhaBorda(model.borda) : ""
+                    // Borda e adicionais aparecem nos DOIS modos. Eles entram
+                    // no preço do item e saem no cupom impresso, então um
+                    // resumo que os esconde mostra um total que não bate com o
+                    // que está listado — era o que acontecia em Balcão,
+                    // Entrega e Salão, que usam o modo compacto.
+                    readonly property var extrasItem: root.detalhado ? [] : root._extrasDoItem(nomeItem, model.adicionais)
+                    readonly property string textoBorda: root._linhaBorda(model.borda)
 
                     width: colunaResumo.width
                     visible: nomeItem !== ""
@@ -364,6 +408,25 @@ Rectangle {
                             color: Estilo.global.textSecondary
                         }
 
+                    }
+
+                    // Adicionais no modo compacto: aqui o item é uma linha só,
+                    // então todos entram recuados logo abaixo dela. No modo
+                    // detalhado cada um já sai sob a sua fração (ver o Repeater
+                    // aninhado mais abaixo), e por isso `extrasItem` vem vazio.
+                    Repeater {
+                        model: grupoItem.extrasItem
+
+                        delegate: Text {
+                            required property string modelData
+
+                            width: grupoItem.width - 20
+                            x: 20
+                            text: modelData
+                            font.pixelSize: Estilo.global.fontSize.sm
+                            color: Estilo.global.textSecondary
+                            wrapMode: Text.WordWrap
+                        }
                     }
 
                     // --- Modo detalhado: uma linha por fração, com extras ---
@@ -439,7 +502,7 @@ Rectangle {
                     Text {
                         width: parent.width - 20
                         x: 20
-                        visible: root.detalhado && grupoItem.textoBorda !== ""
+                        visible: grupoItem.textoBorda !== ""
                         text: grupoItem.textoBorda
                         font.pixelSize: Estilo.global.fontSize.sm
                         color: Estilo.global.textSecondary
