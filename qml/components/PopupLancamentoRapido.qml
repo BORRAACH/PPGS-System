@@ -727,13 +727,23 @@ Popup {
         Keys.onReturnPressed: popupLancamento._acionarFoco()
         Keys.onEnterPressed: popupLancamento._acionarFoco()
         Keys.onEscapePressed: popupLancamento.voltar()
-        Keys.onPressed: function (evento) {
-            // Na etapa de várias escolhas, Enter marca/desmarca e é o Tab que
-            // conclui — senão não haveria como dizer "terminei de marcar".
-            if (popupLancamento.etapa === "adicionais" && evento.key === Qt.Key_Tab) {
-                popupLancamento._avancar();
-                evento.accepted = true;
+        // Na etapa de várias escolhas, Enter marca/desmarca e é o Tab que
+        // conclui — senão não haveria como dizer "terminei de marcar".
+        //
+        // Precisa ser onTabPressed, e não um `if (evento.key === Qt.Key_Tab)`
+        // dentro de Keys.onPressed: o Tab é consumido pela navegação de foco
+        // do Qt ANTES de chegar ao handler genérico, então aquele ramo nunca
+        // rodava — o popup simplesmente não avançava. Nas outras etapas o
+        // evento é devolvido (accepted = false) para o Tab seguir servindo de
+        // navegação normal.
+        Keys.onTabPressed: function (evento) {
+            if (popupLancamento.etapa !== "adicionais") {
+                evento.accepted = false;
+                return;
             }
+
+            popupLancamento._avancar();
+            evento.accepted = true;
         }
 
         Column {
@@ -917,6 +927,11 @@ Popup {
                     text: popupLancamento.primeiraEtapa ? "Voltar à busca" : "Voltar"
                     nomeIcone: "fa6s.arrow-left"
                     variante: "ghost"
+                    // Sem isto o Button do Controls 2 fica no caminho do Tab e
+                    // rouba o foco no clique — e aí as setas, o Enter e o
+                    // proprio Tab param de responder (mesmo motivo documentado
+                    // nos botoes de configuracoes/impressora/EstiloImpressora.qml).
+                    focusPolicy: Qt.NoFocus
                     onClicked: popupLancamento.voltar()
                 }
 
@@ -943,6 +958,7 @@ Popup {
                     visible: popupLancamento.etapa === "adicionais" || popupLancamento.etapa === "borda"
                     text: popupLancamento.etapa === "adicionais" ? "Continuar" : "Pular"
                     variante: "secundario"
+                    focusPolicy: Qt.NoFocus
                     onClicked: popupLancamento._avancar()
                 }
             }
