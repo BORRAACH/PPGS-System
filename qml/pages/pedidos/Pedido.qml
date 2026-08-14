@@ -23,21 +23,28 @@ Popup {
     // motivo de usarPromocoes: as demais categorias não declaram esta prop.
     property bool comandaDeMesa: false
 
-    // Cor de cada categoria. Fica numa função, e não numa role do ListModel,
-    // porque ListElement só aceita valores literais — uma referência a
-    // Estilo.* ali dentro não compila ("cannot use script for property value").
-    function corDaCategoria(chave) {
+    // Paleta de cada categoria (base/hover/pressed/border — ver
+    // Estilo.CategoryTone). Devolve o TOM INTEIRO, não só a cor base: as
+    // categorias não derivam todas os mesmos tons da base (bebida, açaí e
+    // lanche declaram hover/pressed próprios, bem mais separados do que a
+    // derivação automática daria), então recalcular Qt.lighter/Qt.darker no
+    // ponto de uso ignoraria a escolha feita no design system.
+    //
+    // Fica numa função, e não numa role do ListModel, porque ListElement só
+    // aceita valores literais — uma referência a Estilo.* ali dentro não
+    // compila ("cannot use script for property value").
+    function tomDaCategoria(chave) {
         switch (chave) {
         case "pizza":
-            return Estilo.category.pizza.base;
+            return Estilo.category.pizza;
         case "lanche":
-            return Estilo.category.lanche.base;
+            return Estilo.category.lanche;
         case "bebida":
-            return Estilo.category.bebida.base;
+            return Estilo.category.bebida;
         case "acai":
-            return Estilo.category.acai.base;
+            return Estilo.category.acai;
         default:
-            return Estilo.category.outros.base;
+            return Estilo.category.outros;
         }
     }
 
@@ -234,11 +241,11 @@ Popup {
 
                         background: Rectangle {
                             radius: Estilo.global.radius.lg
-                            readonly property color corCategoria: popupSelecaoPedido.corDaCategoria(model.categoria)
+                            readonly property var tomCategoria: popupSelecaoPedido.tomDaCategoria(model.categoria)
 
-                            color: btnCategoria.down ? Qt.darker(corCategoria, 1.2) : (btnCategoria.emFoco ? Qt.lighter(corCategoria, 1.1) : corCategoria)
+                            color: btnCategoria.down ? tomCategoria.pressed : (btnCategoria.emFoco ? tomCategoria.hover : tomCategoria.base)
                             border.width: btnCategoria.emFoco ? Estilo.global.borderWidth.focus : 0
-                            border.color: Qt.darker(corCategoria, 0.4)
+                            border.color: tomCategoria.border
 
                             Behavior on color {
                                 ColorAnimation {

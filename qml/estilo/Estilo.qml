@@ -668,6 +668,14 @@ QtObject {
         property color pressed: Qt.darker(base, 1.2)
         property color soft // fundo do item selecionado
         property color strong: pressed // texto de ênfase
+        // Contorno desenhado POR CIMA de um fundo que já é a cor da
+        // categoria. Deriva de `pressed`, não de `base`: precisa ficar mais
+        // escuro que o estado MAIS escuro do botão, senão um botão
+        // pressionado e focado ao mesmo tempo teria borda e fundo quase da
+        // mesma cor — ou seja, borda nenhuma. Descendo da base não dava essa
+        // garantia, porque bebida/açaí/lanche declaram um `pressed` próprio,
+        // bem mais escuro do que a derivação automática produziria.
+        property color border: Qt.darker(pressed, 1.35)
         readonly property color content: Colors.white
     }
 
