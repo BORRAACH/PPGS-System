@@ -696,7 +696,14 @@ class FechamentoController(QObject):
         dia exibido em Fechamento.qml é hoje."""
         resumo = self._calcular_resumo_dia(data_iso)
         fechamentoCache.salvar(data_iso, resumo)
-        rede.publicarEvento(_EVENTO_FECHAMENTO_ATUALIZADO, {"data": data_iso, "resumo": resumo})
+        # Só a data, sem os números: _ao_receber_fechamento_remoto DESCARTA o
+        # resumo recebido de propósito e recalcula o dia com as comandas da
+        # própria máquina, então mandá-lo era gastar banda com um valor que o
+        # outro lado nunca leu — mesmo raciocínio já escrito em
+        # _obter_fechamento_reconciliacao, que sempre mandou só a data.
+        # O resumo tem ~22 KB (a lista de produtos vendidos é a maior parte) e
+        # isto é publicado a cada baixa, extra e abertura da tela.
+        rede.publicarEvento(_EVENTO_FECHAMENTO_ATUALIZADO, {"data": data_iso})
         return resumo
 
     @pyqtSlot(str, result="QVariantMap")

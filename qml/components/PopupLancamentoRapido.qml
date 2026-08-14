@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import "../pages/pedidos/MontagemItem.js" as Montagem
 import "DestinoPedido.js" as Destino
+import "RoteiroLancamento.js" as Roteiro
 import estilo 1.0
 
 // Lançamento rápido de pedido a partir da busca do Ctrl+S: recebe o item que o
@@ -70,10 +71,6 @@ Popup {
     readonly property string etapa: indiceEtapa >= 0 && indiceEtapa < sequencia.length ? sequencia[indiceEtapa] : ""
     readonly property string chaveCategoria: itemBusca ? (itemBusca.chaveCategoria || "") : ""
 
-    // Categorias que se vendem sozinhas. As outras quatro (bordas e
-    // adicionais) entram pelo caminho invertido.
-    readonly property var _categoriasItem: ["pizzas", "lanches", "bebidas", "acaiTamanhos", "outros"]
-
     // Etapas em que dá pra seguir sem escolher nada: a borda é opcional (não
     // escolher é "Sem borda") e os adicionais também. Uma propriedade só,
     // consultada pelo botão do rodapé, pelo Tab e pela dica de teclado — as
@@ -116,59 +113,17 @@ Popup {
         return popupLancamento._cacheCategorias[chave];
     }
 
-    // Se vende sozinho (abre o fluxo direto). Borda e adicional não passam
-    // aqui — eles entram pelo invertido, ver _sequenciaDe.
-    function podeLancar(item) {
-        return !!item && popupLancamento._categoriasItem.indexOf(item.chaveCategoria || "") !== -1;
-    }
-
-    // Dá pra começar um lançamento a partir deste item, por qualquer um dos
-    // dois caminhos? É o que o Enter da busca consulta antes de abrir.
+    // O roteiro de etapas mora em RoteiroLancamento.js: o popup de busca
+    // precisa dele antes deste popup existir (ver o comentário no topo do .js).
     function podeIniciar(item) {
-        return !!item && popupLancamento._sequenciaDe(item.chaveCategoria || "").length > 0;
-    }
-
-    // Categoria do item BASE de um modificador: é ela que a etapa "base" lista.
-    function _categoriaBaseDe(chaveModificador) {
-        if (chaveModificador === "pizzaBordas" || chaveModificador === "pizzaAdicionais")
-            return "pizzas";
-        if (chaveModificador === "lanchesAdicionais")
-            return "lanches";
-        if (chaveModificador === "acaiAdicionais")
-            return "acaiTamanhos";
-        return "";
-    }
-
-    function _sequenciaDe(chave) {
-        switch (chave) {
-        case "pizzas":
-            return ["tamanho", "borda", "adicionais", "tipo"];
-        case "lanches":
-            return ["pao", "adicionais", "tipo"];
-        case "acaiTamanhos":
-            return ["adicionais", "tipo"];
-        case "bebidas":
-        case "outros":
-            return ["tipo"];
-        // Caminho invertido: o modificador já está escolhido e o que falta é o
-        // item em que ele vai. A etapa do próprio modificador some do roteiro.
-        case "pizzaBordas":
-            return ["base", "tamanho", "adicionais", "tipo"];
-        case "pizzaAdicionais":
-            return ["base", "tamanho", "borda", "tipo"];
-        case "lanchesAdicionais":
-            return ["base", "pao", "tipo"];
-        case "acaiAdicionais":
-            return ["base", "adicionais", "tipo"];
-        }
-        return [];
+        return Roteiro.podeLancar(item);
     }
 
     function abrirPara(item) {
         if (!item)
             return false;
 
-        var sequencia = popupLancamento._sequenciaDe(item.chaveCategoria || "");
+        var sequencia = Roteiro.sequenciaDe(item.chaveCategoria || "");
         if (sequencia.length === 0)
             return false;
 
@@ -184,12 +139,12 @@ Popup {
 
         // No caminho invertido o item base ainda não existe; no direto, é o
         // próprio item da busca.
-        if (popupLancamento.podeLancar(item)) {
+        if (Roteiro.vendeSozinho(item.chaveCategoria || "")) {
             popupLancamento.itemBase = item;
         } else {
             popupLancamento.itemBase = null;
             // O modificador buscado já entra como escolha feita.
-            var valorModificador = Montagem.parseValor(item.precos.length ? item.precos[0].bruto : "");
+            var valorModificador = Montagem.parseValor(item.precos.length ? item.precos[0].valor : "");
             if (item.chaveCategoria === "pizzaBordas")
                 popupLancamento.escolhas.borda = { "nome": item.nome, "valorNum": valorModificador };
             else
@@ -223,14 +178,14 @@ Popup {
             return popupLancamento._itensDe("pizzaAdicionais");
         }
         if (nome === "base")
-            return popupLancamento._itensDe(popupLancamento._categoriaBaseDe(popupLancamento.chaveCategoria));
+            return popupLancamento._itensDe(Roteiro.categoriaBaseDe(popupLancamento.chaveCategoria));
         return [1]; // tipo/mesa nunca são puladas
     }
 
     function _chaveDoBase() {
         if (popupLancamento.itemBase)
             return popupLancamento.itemBase.chaveCategoria;
-        return popupLancamento._categoriaBaseDe(popupLancamento.chaveCategoria);
+        return Roteiro.categoriaBaseDe(popupLancamento.chaveCategoria);
     }
 
     // PURA: não mexe em `escolhas`. É consultada também pelo binding de
@@ -310,9 +265,9 @@ Popup {
         var tabela = popupLancamento._tabelaDePrecos(item, tipo);
         for (var i = 0; i < tabela.length; i++) {
             if (tabela[i].chave === chaveCampo)
-                return Montagem.parseValor(tabela[i].bruto);
+                return Montagem.parseValor(tabela[i].valor);
         }
-        return tabela.length > 0 ? Montagem.parseValor(tabela[0].bruto) : 0;
+        return tabela.length > 0 ? Montagem.parseValor(tabela[0].valor) : 0;
     }
 
     // Bebida numa comanda de mesa usa "valorMesa" quando esse preço existe —
@@ -323,10 +278,10 @@ Popup {
         if (tipo === "Salão") {
             for (var i = 0; i < tabela.length; i++) {
                 if (tabela[i].chave === "valorMesa")
-                    return Montagem.parseValor(tabela[i].bruto);
+                    return Montagem.parseValor(tabela[i].valor);
             }
         }
-        return tabela.length > 0 ? Montagem.parseValor(tabela[0].bruto) : 0;
+        return tabela.length > 0 ? Montagem.parseValor(tabela[0].valor) : 0;
     }
 
     // Os preços do item base na ordem em que a etapa de tamanho/pão os lista.
@@ -507,7 +462,7 @@ Popup {
         } else if (nome === "borda") {
             popupLancamento.escolhas.borda = valor === null ? null : {
                 "nome": valor.nome,
-                "valorNum": Montagem.parseValor(valor.precos.length ? valor.precos[0].bruto : "")
+                "valorNum": Montagem.parseValor(valor.precos.length ? valor.precos[0].valor : "")
             };
         } else if (nome === "base") {
             popupLancamento.itemBase = valor;
@@ -539,7 +494,7 @@ Popup {
 
     // Adicionais é a única etapa de várias escolhas — alterna e não avança.
     function alternarAdicional(item) {
-        var valorNum = Montagem.parseValor(item.precos.length ? item.precos[0].bruto : "");
+        var valorNum = Montagem.parseValor(item.precos.length ? item.precos[0].valor : "");
         var lista = [];
         var achou = false;
         for (var i = 0; i < popupLancamento.escolhas.adicionais.length; i++) {
