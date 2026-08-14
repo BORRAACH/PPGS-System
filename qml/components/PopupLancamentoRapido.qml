@@ -227,23 +227,47 @@ Popup {
         return popupLancamento._categoriaBaseDe(popupLancamento.chaveCategoria);
     }
 
+    // PURA: não mexe em `escolhas`. É consultada também pelo binding de
+    // `primeiraEtapa`, e um efeito colateral dentro de binding roda em hora
+    // imprevisível.
     function _devePular(nome) {
         var opcoes = popupLancamento._opcoesDaEtapa(nome);
         if (opcoes.length === 0)
             return true;
         // Escolha única com uma opção só: decide sozinha e segue.
-        if ((nome === "tamanho" || nome === "pao") && opcoes.length === 1) {
+        return (nome === "tamanho" || nome === "pao") && opcoes.length === 1;
+    }
+
+    // A escolha que uma etapa pulada faz por conta própria — só na ida, que é
+    // quando ela é de fato tomada.
+    function _adotarEscolhaUnica(nome) {
+        if (nome !== "tamanho" && nome !== "pao")
+            return;
+
+        var opcoes = popupLancamento._opcoesDaEtapa(nome);
+        if (opcoes.length === 1) {
             popupLancamento.escolhas.chavePreco = opcoes[0].chave;
             popupLancamento.escolhas.rotuloPreco = opcoes[0].rotulo;
-            return true;
         }
-        return false;
+    }
+
+    // Não há etapa anterior visível — o "Voltar" daqui sai do fluxo e devolve
+    // à busca. Olha as anteriores uma a uma porque uma etapa pulada não conta
+    // como anterior: voltar para ela cairia numa tela sem escolha nenhuma.
+    readonly property bool primeiraEtapa: {
+        for (var i = indiceEtapa - 1; i >= 0; i--) {
+            if (!popupLancamento._devePular(sequencia[i]))
+                return false;
+        }
+        return true;
     }
 
     function _avancar() {
         var i = popupLancamento.indiceEtapa + 1;
-        while (i < popupLancamento.sequencia.length && popupLancamento._devePular(popupLancamento.sequencia[i]))
+        while (i < popupLancamento.sequencia.length && popupLancamento._devePular(popupLancamento.sequencia[i])) {
+            popupLancamento._adotarEscolhaUnica(popupLancamento.sequencia[i]);
             i += 1;
+        }
 
         if (i >= popupLancamento.sequencia.length) {
             popupLancamento._concluir();
@@ -465,11 +489,20 @@ Popup {
             // Salão precisa saber em qual mesa; as outras duas não têm o que
             // perguntar. A etapa entra aqui, fora da sequência, porque só
             // existe dependendo desta resposta.
-            if (valor === "Salão") {
-                popupLancamento.sequencia = popupLancamento.sequencia.concat(["mesa"]);
-                popupLancamento._avancar();
-                return;
-            }
+            //
+            // RECOMPÕE a cauda em vez de só acrescentar: com o botão Voltar dá
+            // pra passar por aqui mais de uma vez, e acrescentar cegamente
+            // deixava "mesa" pendurada num pedido de Balcão (o fluxo perguntava
+            // a mesa de um pedido que não é de mesa) ou duplicada ao reescolher
+            // Salão.
+            var etapas = popupLancamento.sequencia.slice();
+            if (etapas[etapas.length - 1] === "mesa")
+                etapas.pop();
+            if (valor === "Salão")
+                etapas.push("mesa");
+            // "tipo" não muda de posição, então `etapa` continua apontando pra
+            // ela enquanto isto é reatribuído.
+            popupLancamento.sequencia = etapas;
         } else if (nome === "mesa") {
             popupLancamento.escolhas.mesaId = valor;
         }
@@ -536,16 +569,29 @@ Popup {
                     return saida;
 
                 var precos = popupLancamento.itemBase.precos;
-                for (i = 0; i < precos.length; i++)
-                    saida.push({ "rotulo": precos[i].rotulo, "sublinha": precos[i].valor, "valor": precos[i], "marcado": false });
+                for (i = 0; i < precos.length; i++) {
+                    saida.push({
+                        "rotulo": precos[i].rotulo,
+                        "sublinha": precos[i].valor,
+                        "valor": precos[i],
+                        "marcado": precos[i].chave === popupLancamento.escolhas.chavePreco
+                    });
+                }
                 return saida;
             }
 
             if (nome === "borda") {
-                saida.push({ "rotulo": "Sem borda", "sublinha": "", "valor": null, "marcado": false });
+                var bordaAtual = popupLancamento.escolhas.borda;
+                saida.push({ "rotulo": "Sem borda", "sublinha": "", "valor": null, "marcado": bordaAtual === null });
                 var bordas = popupLancamento._itensDe("pizzaBordas");
-                for (i = 0; i < bordas.length; i++)
-                    saida.push({ "rotulo": bordas[i].nome, "sublinha": bordas[i].resumoPrecos, "valor": bordas[i], "marcado": false });
+                for (i = 0; i < bordas.length; i++) {
+                    saida.push({
+                        "rotulo": bordas[i].nome,
+                        "sublinha": bordas[i].resumoPrecos,
+                        "valor": bordas[i],
+                        "marcado": !!bordaAtual && bordaAtual.nome === bordas[i].nome
+                    });
+                }
                 return saida;
             }
 
@@ -558,8 +604,14 @@ Popup {
 
             if (nome === "base") {
                 var bases = popupLancamento._opcoesDaEtapa("base");
-                for (i = 0; i < bases.length; i++)
-                    saida.push({ "rotulo": bases[i].nome, "sublinha": bases[i].resumoPrecos, "valor": bases[i], "marcado": false });
+                for (i = 0; i < bases.length; i++) {
+                    saida.push({
+                        "rotulo": bases[i].nome,
+                        "sublinha": bases[i].resumoPrecos,
+                        "valor": bases[i],
+                        "marcado": !!popupLancamento.itemBase && popupLancamento.itemBase.nome === bases[i].nome
+                    });
+                }
                 return saida;
             }
 
@@ -573,16 +625,19 @@ Popup {
                         // de "isso vai criar um pedido novo?".
                         "sublinha": tipos[i] === tipoAtual ? "acrescenta ao pedido desta tela" : "",
                         "valor": tipos[i],
-                        "marcado": false
+                        "marcado": tipos[i] === popupLancamento.escolhas.tipo
                     });
                 }
                 return saida;
             }
 
             if (nome === "mesa") {
+                // "" também é o valor de "Nova mesa", então só marca quando o
+                // atendente já passou por esta etapa alguma vez.
+                var mesaEscolhida = popupLancamento.escolhas.tipo === "Salão" ? popupLancamento.escolhas.mesaId : null;
                 var atual = popupLancamento._telaAtual();
                 if (atual && atual.objectName === "telaSalao" && atual.mesaAtualId !== "")
-                    saida.push({ "rotulo": "Mesa aberta nesta tela", "sublinha": "", "valor": "__atual__", "marcado": false });
+                    saida.push({ "rotulo": "Mesa aberta nesta tela", "sublinha": "", "valor": "__atual__", "marcado": mesaEscolhida === "__atual__" });
 
                 saida.push({ "rotulo": "Nova mesa", "sublinha": "", "valor": "", "marcado": false });
                 var mesas = salaoController.listarMesasAbertas();
@@ -591,7 +646,7 @@ Popup {
                         "rotulo": "Mesa " + mesas[i].mesa + (mesas[i].cliente ? (" — " + mesas[i].cliente) : ""),
                         "sublinha": mesas[i].quantidadeItens + " item(ns)",
                         "valor": mesas[i].id,
-                        "marcado": false
+                        "marcado": mesaEscolhida === mesas[i].id
                     });
                 }
                 return saida;
@@ -790,10 +845,19 @@ Popup {
                         anchors.verticalCenter: parent.verticalCenter
                         spacing: Estilo.global.spacing.sm
 
+                        // Presente em todas as etapas: é o que dá sentido ao
+                        // botão Voltar. Sem indicar a escolha vigente, voltar
+                        // uma etapa mostrava a mesma lista de antes, sem pista
+                        // do que estava valendo — não dava pra saber o que se
+                        // estava desfazendo. Quadrado onde se marca mais de um
+                        // (adicionais), círculo onde a escolha é única.
                         Icone {
-                            visible: popupLancamento.etapa === "adicionais"
-                            nome: linhaEtapa.modelData.marcado ? "fa6s.square-check" : "fa6s.square"
-                            cor: linhaEtapa.modelData.marcado ? Estilo.action.confirm.base : Estilo.global.textSecondary
+                            readonly property bool _multipla: popupLancamento.etapa === "adicionais"
+
+                            nome: linhaEtapa.modelData.marcado
+                                ? (_multipla ? "fa6s.square-check" : "fa6s.circle-check")
+                                : (_multipla ? "fa6s.square" : "fa6s.circle")
+                            cor: linhaEtapa.modelData.marcado ? Estilo.action.confirm.base : Estilo.global.textMuted
                             tamanho: Estilo.global.fontSize.lg
                             anchors.verticalCenter: parent.verticalCenter
                         }
@@ -840,18 +904,39 @@ Popup {
                 width: parent.width
                 height: 52
 
-                Text {
+                // Presente em TODAS as etapas, inclusive na primeira — ali ele
+                // devolve à busca, que continua aberta atrás. Sem um botão à
+                // vista, desfazer uma escolha dependia de saber que Esc volta,
+                // e quem não sabe fica preso indo até o fim do fluxo.
+                Botao {
+                    id: btnVoltar
+
                     anchors.left: parent.left
                     anchors.leftMargin: Estilo.global.padding.xl
                     anchors.verticalCenter: parent.verticalCenter
+                    text: popupLancamento.primeiraEtapa ? "Voltar à busca" : "Voltar"
+                    nomeIcone: "fa6s.arrow-left"
+                    variante: "ghost"
+                    onClicked: popupLancamento.voltar()
+                }
+
+                Text {
+                    anchors.left: btnVoltar.right
+                    anchors.leftMargin: Estilo.global.spacing.md
+                    anchors.right: btnAvancar.visible ? btnAvancar.left : parent.right
+                    anchors.rightMargin: Estilo.global.spacing.md
+                    anchors.verticalCenter: parent.verticalCenter
                     text: popupLancamento.etapa === "adicionais"
-                        ? "Enter marca   ·   Tab continua   ·   Esc volta"
-                        : "↑ ↓ navegar   ·   Enter escolher   ·   Esc voltar"
+                        ? "Enter marca   ·   Tab continua"
+                        : "↑ ↓ navegar   ·   Enter escolher"
                     font.pixelSize: Estilo.global.fontSize.sm
                     color: Estilo.global.textSecondary
+                    elide: Text.ElideRight
                 }
 
                 Botao {
+                    id: btnAvancar
+
                     anchors.right: parent.right
                     anchors.rightMargin: Estilo.global.padding.xl
                     anchors.verticalCenter: parent.verticalCenter
