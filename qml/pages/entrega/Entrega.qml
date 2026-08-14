@@ -3,6 +3,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import "../pedidos"
 import "../../components"
+import "../../components/DestinoPedido.js" as Destino
 import estilo 1.0
 
 Page {
@@ -48,6 +49,16 @@ Page {
 
     function mostrarNotificacao(mensagem, sucesso) {
         filaNotificacoes.notificar(mensagem, sucesso);
+    }
+
+    // API do lançamento rápido pelo Ctrl+S — ver o comentário equivalente em
+    // balcao/Balcao.qml.
+    function acrescentarItens(itens) {
+        return Destino.acrescentarAoModelo(modeloPedidos, itens);
+    }
+
+    function temPedidoEmAndamento() {
+        return Destino.temPedidoEmAndamento(modeloPedidos);
     }
 
     // Conexão declarativa, não um .connect() solto em Component.onCompleted

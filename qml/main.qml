@@ -185,11 +185,31 @@ ApplicationWindow {
         // seguinte cairia no `open()` de novo em vez de fechar. O estilo hoje
         // é o Fusion (fixado em Config/preConfig.py), que não anima popup, mas
         // `visible` é verdade nos dois casos e não depende disso.
-        onActivated: popupBuscaCardapio.visible ? popupBuscaCardapio.close() : popupBuscaCardapio.open()
+        //
+        // A guarda do fluxo de lançamento não é preciosismo: com ele aberto
+        // (digamos, na etapa "borda"), um Ctrl+S batido por reflexo fecharia a
+        // BUSCA por baixo dele — e o onOpened da busca limpa o termo, então o
+        // fluxo ficaria órfão sobre uma tela que já se esqueceu do que estava
+        // fazendo.
+        onActivated: {
+            if (popupBuscaCardapio.fluxoAtivo)
+                return;
+
+            popupBuscaCardapio.visible ? popupBuscaCardapio.close() : popupBuscaCardapio.open();
+        }
     }
 
     PopupBuscaCardapio {
         id: popupBuscaCardapio
+
+        pilhaPrincipal: stackView
+
+        // A tela de destino é quem tem a fila de notificações; o lançamento
+        // acabou de trazer o atendente pra ela (ou já estava nela).
+        onLancamentoConcluido: function (mensagem, sucesso) {
+            if (stackView.currentItem && stackView.currentItem.mostrarNotificacao)
+                stackView.currentItem.mostrarNotificacao(mensagem, sucesso);
+        }
     }
 
     Rectangle {

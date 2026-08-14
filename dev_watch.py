@@ -51,6 +51,18 @@ ARQUIVOS_IGNORADOS = {
     # reiniciava sozinho, no meio do uso, sem ninguém ter tocado em código.
     os.path.join("Config", "impressora_fixada.json"),
 }
+# Pastas inteiras de dados que o app grava em tempo de execução. Diferente de
+# IGNORAR_DIRS, que casa por NOME de pasta em qualquer nível, aqui o casamento
+# é pelo início do caminho relativo — "cardapio" é um nome genérico demais
+# para ser ignorado em qualquer lugar do projeto.
+#
+# data/cardapio é editada pela própria tela de Cardápio (ver
+# services/cardapioService.salvar) e pela sincronização da malha. Sem isto,
+# cadastrar um item reiniciava o app no meio do cadastro — mesmo problema que
+# ARQUIVOS_IGNORADOS resolveu para as preferências de Config/.
+PREFIXOS_IGNORADOS = (
+    os.path.join("data", "cardapio"),
+)
 
 INTERVALO_POLL = 0.5  # segundos entre verificações
 
@@ -64,7 +76,10 @@ def _arquivos_observados():
             if os.path.splitext(nome)[1] not in EXTENSOES_OBSERVADAS:
                 continue
             caminho = os.path.join(raiz, nome)
-            if os.path.relpath(caminho, BASE_DIR) in ARQUIVOS_IGNORADOS:
+            relativo = os.path.relpath(caminho, BASE_DIR)
+            if relativo in ARQUIVOS_IGNORADOS:
+                continue
+            if relativo.startswith(PREFIXOS_IGNORADOS):
                 continue
             try:
                 estado[caminho] = os.path.getmtime(caminho)

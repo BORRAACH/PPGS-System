@@ -4,6 +4,7 @@ import QtQuick.Layouts
 import estilo 1.0
 import "../../../components"
 import "../../../components/Texto.js" as Texto
+import "../MontagemItem.js" as Montagem
 
 Page {
     id: telaLanches
@@ -925,27 +926,18 @@ Page {
                             // escolhido vai anexado ao nome do pedido (ex:
                             // "Hambúrguer ( frances )"), não na observação. O pão
                             // de hambúrguer é o padrão e não aparece no nome.
-                            var itens = selecionados.map(function(item) {
-                                var resumo = resumoPao(item.paoTipo);
-                                // "sabor" usa o nome BASE do lanche (sem o
-                                // sufixo do pão) porque é contra ele que
-                                // comandaTextoService._extras_adicionais casa o
-                                // adicional na hora de imprimir (ver
-                                // dividir_sabores, que trata um sufixo final
-                                // "(...)" como tamanho, não como parte do nome).
-                                var adicionais = (item.adicionais || []).map(function (a) {
-                                    return {
-                                        "sabor": item.nome,
-                                        "nome": a.nome,
-                                        "valor": "R$ " + a.valorNum.toFixed(2).replace(".", ",")
-                                    };
+                            // A montagem do nome/valor mora em ../MontagemItem.js
+                            // (ver o comentário equivalente em pizzas/Pizzas.qml).
+                            // A tradução do tipo de pão para o sufixo do nome
+                            // fica aqui porque a tabela `tiposPao` é local desta
+                            // tela.
+                            var itens = selecionados.map(function (item) {
+                                return Montagem.montarLanche({
+                                    "nome": item.nome,
+                                    "resumoPao": resumoPao(item.paoTipo),
+                                    "valorNum": item.valorNum,
+                                    "adicionais": item.adicionais || []
                                 });
-                                return {
-                                    "nome": resumo ? (item.nome + " ( " + resumo + " )") : item.nome,
-                                    "valor": "R$ " + valorFinalLanche(item).toFixed(2).replace(".", ","),
-                                    "observacao": "",
-                                    "adicionais": adicionais
-                                };
                             });
                             if (typeof onPedidoSelecionado === "function")
                                 onPedidoSelecionado(itens);

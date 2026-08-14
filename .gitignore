@@ -51,3 +51,9 @@ logs/
 # Referência estática de design systems importados via claude.ai/design —
 # material de consulta, não código-fonte do app.
 design/templates/
+
+# Dump de `lscpu` da máquina, tirado à mão pra conferir de quais instruções o
+# processador do balcão dá conta (ver a seção de restrição de hardware no
+# README do ppgs_server) — diagnóstico de uma máquina específica, não
+# código-fonte.
+cpu.txt

@@ -83,7 +83,15 @@ Column {
     // faz sentido (uma linha da tabela não tem posição própria no cupom).
     property string donoSelecionado: ""
     property string tipoComanda: "Entrega"
+    // [{ nome, documento }] — ver comandaEstiloService.DOCUMENTO_POR_TIPO.
     property var tiposComanda: []
+    // Papel impresso que está sendo editado: "pedido" (a comanda de venda,
+    // compartilhada por Balcão/Entrega/Mesa), "extra" (recibo de pagamento
+    // de diária) ou "fechamento" (cupom de fechamento de caixa). Decide
+    // quais campos entram no papel da prévia — trocar de documento troca a
+    // comanda inteira na tela, enquanto trocar de tipo DENTRO do mesmo
+    // documento só acende/apaga campos (a regra antiga, de campoNoTipo).
+    property string documentoAtual: "pedido"
 
     // Posição da linha destacada DENTRO do papel, para os controles
     // flutuantes (setas + "Estilo…") ficarem na altura dela. Escrita pela
@@ -120,6 +128,8 @@ Column {
     property var categoriasPorChave: ({})
     property var tiposPorChave: ({})
     property var rotulosPorChave: ({})
+    property var documentosPorChave: ({})
+    property var estilizavelPorChave: ({})
 
     spacing: 25
 
@@ -140,7 +150,20 @@ Column {
         "status": { "prefixo": "Status: ", "valor": "NP" },
         "taxa_entrega": { "prefixo": "Taxa de entrega: ", "valor": "R$ 5,00" },
         "valor_total": { "prefixo": "Valor do pedido: ", "valor": "R$ 45,00" },
-        "troco_a_dar": { "prefixo": "Troco a dar: ", "valor": "R$ 55,00" }
+        "troco_a_dar": { "prefixo": "Troco a dar: ", "valor": "R$ 55,00" },
+        // Recibo de pagamento de diária (ver
+        // fechamentoController._montar_recibo_extra).
+        "extra_titulo": { "prefixo": "", "valor": "PAGAMENTO DE DIÁRIA" },
+        "extra_funcionario": { "prefixo": "Funcionário: ", "valor": "Maria Souza" },
+        "extra_valor": { "prefixo": "Valor: ", "valor": "R$ 120,00" },
+        "extra_data": { "prefixo": "Data: ", "valor": "14/08/2026 22:40:00" },
+        // Cupom de fechamento de caixa (ver
+        // fechamentoController._montar_recibo_fechamento).
+        "fech_titulo": { "prefixo": "", "valor": "FECHAMENTO DE CAIXA" },
+        "fech_data": { "prefixo": "Data: ", "valor": "14/08/2026" },
+        "fech_bruto": { "prefixo": "Total bruto vendido: ", "valor": "R$ 1250,00" },
+        "fech_liquido": { "prefixo": "Total líquido (bruto - extras): ", "valor": "R$ 1130,00" },
+        "fech_lucro": { "prefixo": "", "valor": "LUCRO: R$ 430,00" }
     })
 
     // Emitido quando o estilo de UM campo muda, para só a prévia daquele campo
@@ -244,27 +267,26 @@ Column {
 
         var categorias = {};
         var tipos = {};
+        var documentos = {};
+        var estilizaveis = {};
         for (var j = 0; j < camposOrdenaveis.length; j++) {
             var ordenavel = camposOrdenaveis[j];
             rotulos[ordenavel.chave] = ordenavel.rotulo;
             categorias[ordenavel.chave] = ordenavel.categoria;
             tipos[ordenavel.chave] = ordenavel.tipos;
+            documentos[ordenavel.chave] = ordenavel.documento;
+            estilizaveis[ordenavel.chave] = ordenavel.estilizavel;
         }
         raiz.rotulosPorChave = rotulos;
         raiz.categoriasPorChave = categorias;
         raiz.tiposPorChave = tipos;
+        raiz.documentosPorChave = documentos;
+        raiz.estilizavelPorChave = estilizaveis;
 
-        // A ordem em si vem de config.ordem_secoes (lista de chaves), não da
-        // ordem devolvida por listarCamposOrdenaveis() — essa é só o
-        // catálogo.
-        var ordem = config.ordem_secoes || [];
-        modeloOrdemSecoes.clear();
-        for (var k = 0; k < ordem.length; k++) {
-            modeloOrdemSecoes.append({
-                "chave": ordem[k],
-                "rotulo": rotulos[ordem[k]] || ordem[k]
-            });
-        }
+        // Depois dos mapas acima (documentoDoTipo depende de tiposComanda) e
+        // antes de montar o modelo, que é filtrado por documento.
+        raiz.documentoAtual = raiz.documentoDoTipo(raiz.tipoComanda);
+        raiz.reconstruirModeloOrdem();
 
         raiz.espacamentoSecoes = config.espacamento_secoes !== undefined ? config.espacamento_secoes : 1;
         raiz.espacamentoCorte = config.espacamento_corte !== undefined ? config.espacamento_corte : 4;
@@ -280,9 +302,6 @@ Column {
 
         raiz.chaveSelecionada = "";
         raiz.donoSelecionado = "";
-        // Só depois do laço de append(): durante ele o count cresce aos
-        // poucos e o cálculo sairia sobre um modelo pela metade.
-        raiz.recalcularSeparadores();
 
         // A prévia inteira precisa se reler: acabou de chegar outra
         // configuração (abrir a tela, ou "Restaurar padrões").
@@ -295,6 +314,80 @@ Column {
 
     function categoriaDe(chave) {
         return raiz.categoriasPorChave[chave] || "";
+    }
+
+    function documentoDe(chave) {
+        return raiz.documentosPorChave[chave] || "pedido";
+    }
+
+    function documentoDoTipo(tipo) {
+        for (var i = 0; i < raiz.tiposComanda.length; i++) {
+            if (raiz.tiposComanda[i].nome === tipo)
+                return raiz.tiposComanda[i].documento;
+        }
+        return "pedido";
+    }
+
+    // Enche o modelo do papel com os campos do documento atual, na ordem em
+    // que aparecem na ordem GLOBAL (configAtual.ordem_secoes, que guarda os
+    // três papéis numa lista só). Os campos dos outros documentos ficam de
+    // fora da prévia — não são "campos apagados" como os que o tipo não
+    // imprime, são campos de outro papel, que nunca sairiam nesta comanda.
+    function reconstruirModeloOrdem() {
+        var ordem = raiz.configAtual.ordem_secoes || [];
+        modeloOrdemSecoes.clear();
+        for (var i = 0; i < ordem.length; i++) {
+            if (raiz.documentoDe(ordem[i]) !== raiz.documentoAtual)
+                continue;
+
+            modeloOrdemSecoes.append({
+                "chave": ordem[i],
+                "rotulo": raiz.rotuloDe(ordem[i])
+            });
+        }
+
+        // Só depois do laço de append(): durante ele o count cresce aos
+        // poucos e o cálculo sairia sobre um modelo pela metade.
+        raiz.recalcularSeparadores();
+    }
+
+    // Trocar de tipo dentro do mesmo documento (Balcão -> Entrega) não
+    // remonta nada: os campos são os mesmos, só mudam de opacidade. Trocar
+    // de documento troca o papel inteiro, e aí a seleção anterior deixa de
+    // existir na tela.
+    onTipoComandaChanged: {
+        var documento = raiz.documentoDoTipo(raiz.tipoComanda);
+        if (documento === raiz.documentoAtual)
+            return;
+
+        raiz.documentoAtual = documento;
+        raiz.chaveSelecionada = "";
+        raiz.donoSelecionado = "";
+        raiz.reconstruirModeloOrdem();
+    }
+
+    // Devolve à ordem global (configAtual.ordem_secoes) o que o modelo do
+    // papel diz agora. Reescreve NO LUGAR: cada posição que hoje é ocupada
+    // por uma chave deste documento recebe a próxima chave do modelo, e as
+    // dos outros documentos ficam onde estavam. Assim mover um campo do
+    // fechamento nunca embaralha a comanda de venda, mesmo que as chaves
+    // dos dois estejam intercaladas na lista (o que um JSON antigo, ou uma
+    // mesclagem de _mesclar_ordem, pode produzir).
+    function _reescreverOrdemGlobal() {
+        var visiveis = [];
+        for (var i = 0; i < modeloOrdemSecoes.count; i++)
+            visiveis.push(modeloOrdemSecoes.get(i).chave);
+
+        var completa = raiz.configAtual.ordem_secoes || [];
+        var nova = [];
+        var proxima = 0;
+        for (var j = 0; j < completa.length; j++) {
+            if (raiz.documentoDe(completa[j]) === raiz.documentoAtual)
+                nova.push(visiveis[proxima++]);
+            else
+                nova.push(completa[j]);
+        }
+        raiz.configAtual.ordem_secoes = nova;
     }
 
     // Espelha comandaEstiloService.linhas_separador_antes: quantas linhas de
@@ -424,10 +517,7 @@ Column {
 
         modeloOrdemSecoes.move(indice, novoIndice, 1);
 
-        var nova = [];
-        for (var i = 0; i < modeloOrdemSecoes.count; i++)
-            nova.push(modeloOrdemSecoes.get(i).chave);
-        raiz.configAtual.ordem_secoes = nova;
+        raiz._reescreverOrdemGlobal();
         raiz.marcarPendente();
         raiz.recalcularSeparadores();
     }
@@ -448,10 +538,19 @@ Column {
     }
 
     function podeEstilizar(chave) {
-        // "itens" e "divisao_conta" são âncoras de posição puras: existem no
-        // catálogo de ordenáveis, mas não em CAMPOS (não têm atributos de
-        // estilo próprios). O que tem estilo ali dentro são as sub-linhas.
-        return chave !== "" && chave !== "itens" && chave !== "divisao_conta";
+        // "itens", "divisao_conta" e os dois blocos do fechamento são âncoras
+        // de posição puras: existem no catálogo de ordenáveis, mas não em
+        // CAMPOS (não têm atributos de estilo próprios). O que tem estilo ali
+        // dentro são as sub-linhas. Quem é âncora vem do Python
+        // ("estilizavel", ver listarCamposOrdenaveis) em vez de uma lista
+        // repetida aqui — os campos estilizáveis que não são ordenáveis (os
+        // de dentro da tabela de itens) não aparecem nesse mapa, e por isso
+        // o padrão de um chave desconhecida é `true`.
+        if (chave === "")
+            return false;
+
+        var estilizavel = raiz.estilizavelPorChave[chave];
+        return estilizavel === undefined ? true : estilizavel;
     }
 
     function campoNoTipo(chave, tipo) {
@@ -471,8 +570,12 @@ Column {
     }
 
     function repetir(caractere) {
+        return raiz.repetirVezes(caractere, raiz.colunasPapel);
+    }
+
+    function repetirVezes(caractere, vezes) {
         var texto = "";
-        for (var i = 0; i < raiz.colunasPapel; i++)
+        for (var i = 0; i < vezes; i++)
             texto += caractere;
         return texto;
     }
@@ -506,6 +609,48 @@ Column {
                     { "t": "PG", "c": "status" },
                     { "t": "]", "c": "" }
                 ] }
+            ];
+        }
+
+        // Bloco "POR ORIGEM" do fechamento: um título mais um grupo por
+        // origem que teve venda no dia (aqui, um só de exemplo). Os dois
+        // espaços de recuo das formas de pagamento ficam FORA do segmento
+        // estilizado, igual ao f-string que os imprime.
+        if (chave === "fech_por_origem") {
+            return [
+                { "campoEstilo": "fech_origem_titulo", "segmentos": [{ "t": "POR ORIGEM", "c": "fech_origem_titulo" }] },
+                { "campoEstilo": "fech_origem_nome", "segmentos": [{ "t": "Balcão: R$ 620,00", "c": "fech_origem_nome" }] },
+                { "campoEstilo": "fech_origem_forma", "segmentos": [
+                    { "t": "  ", "c": "" },
+                    { "t": "Dinheiro: R$ 300,00", "c": "fech_origem_forma" }
+                ] },
+                { "campoEstilo": "fech_origem_forma", "segmentos": [
+                    { "t": "  ", "c": "" },
+                    { "t": "Pix: R$ 200,00", "c": "fech_origem_forma" }
+                ] },
+                { "campoEstilo": "fech_origem_forma", "segmentos": [
+                    { "t": "  ", "c": "" },
+                    { "t": "Cartão: R$ 120,00", "c": "fech_origem_forma" }
+                ] }
+            ];
+        }
+
+        if (chave === "fech_diarias") {
+            return [
+                { "campoEstilo": "fech_diarias_titulo", "segmentos": [{ "t": "PAGAMENTOS DE DIÁRIA", "c": "fech_diarias_titulo" }] },
+                { "campoEstilo": "fech_diarias_item", "segmentos": [{ "t": "Maria Souza - 14/08/2026 22:40 - R$ 120,00", "c": "fech_diarias_item" }] }
+            ];
+        }
+
+        // As duas primeiras linhas são o espaço em branco pra assinar (do
+        // próprio bloco, não espaçamento entre seções) e não têm estilo:
+        // clicar nelas seleciona o bloco inteiro.
+        if (chave === "extra_assinatura") {
+            return [
+                { "campoEstilo": "", "segmentos": [{ "t": "", "c": "" }] },
+                { "campoEstilo": "", "segmentos": [{ "t": "", "c": "" }] },
+                { "campoEstilo": "extra_assinatura", "segmentos": [{ "t": raiz.repetirVezes("_", 30), "c": "extra_assinatura" }] },
+                { "campoEstilo": "", "segmentos": [{ "t": "Assinatura", "c": "" }] }
             ];
         }
 
@@ -570,7 +715,8 @@ Column {
             spacing: Estilo.global.spacing.sm
             Icone { nome: "fa6s.receipt"; cor: raiz.corDestaque; tamanho: Estilo.global.fontSize.lg; anchors.verticalCenter: parent.verticalCenter }
             Text {
-                text: "MODELO DA COMANDA IMPRESSA"
+                text: raiz.documentoAtual === "extra" ? "MODELO DO RECIBO DE DIÁRIA"
+                    : (raiz.documentoAtual === "fechamento" ? "MODELO DO FECHAMENTO DE CAIXA" : "MODELO DA COMANDA IMPRESSA")
                 font.pixelSize: Estilo.global.fontSize.xl
                 font.bold: true
                 color: raiz.corDestaque
@@ -656,9 +802,11 @@ Column {
                 width: parent.width
                 spacing: Estilo.global.spacing.xxl
 
-                // Seletor de tipo de comanda: troca quais campos aparecem
-                // acesos, porque nenhuma comanda real usa os 16 ao mesmo
-                // tempo (Balcão não tem endereço, Mesa não tem telefone).
+                // Seletor de papel/tipo: para Balcão/Entrega/Mesa troca quais
+                // campos aparecem acesos, porque nenhuma comanda real usa os
+                // 16 ao mesmo tempo (Balcão não tem endereço, Mesa não tem
+                // telefone); para Extras e Fechamento troca o papel inteiro,
+                // que tem campos próprios (ver documentoAtual).
                 Row {
                     spacing: Estilo.global.spacing.xs
                     Layout.alignment: Qt.AlignVCenter
@@ -676,17 +824,17 @@ Column {
                         delegate: Button {
                             id: botaoTipo
 
-                            required property string modelData
+                            required property var modelData
 
-                            readonly property bool _ativo: raiz.tipoComanda === botaoTipo.modelData
+                            readonly property bool _ativo: raiz.tipoComanda === botaoTipo.modelData.nome
 
                             padding: Estilo.global.padding.sm
                             focusPolicy: Qt.NoFocus
                             anchors.verticalCenter: parent.verticalCenter
-                            onClicked: raiz.tipoComanda = botaoTipo.modelData
+                            onClicked: raiz.tipoComanda = botaoTipo.modelData.nome
 
                             contentItem: Text {
-                                text: botaoTipo.modelData
+                                text: botaoTipo.modelData.nome
                                 font.pixelSize: Estilo.global.fontSize.md
                                 font.family: Estilo.global.fontFamily.title
                                 color: botaoTipo._ativo ? Estilo.global.textOnAccent : Estilo.global.text

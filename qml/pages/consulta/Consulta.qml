@@ -3,8 +3,10 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import estilo 1.0
 import "../../components"
-import "../../components/Texto.js" as Texto
 import "../../components/EdicaoComanda.js" as EdicaoComanda
+// A normalização de texto (Texto.js) agora acontece dentro do índice de
+// busca, não mais aqui — ver BuscaComandas.js.
+import "BuscaComandas.js" as BuscaComandas
 
 Page {
     id: telaConsulta
@@ -24,6 +26,18 @@ Page {
     // Lista bruta (mais recente primeiro), como veio do controller — a busca
     // reordena a partir dela sem precisar reconsultar o disco a cada tecla.
     property var _todasComandas: []
+
+    // Índice de busca de _todasComandas: o texto de cada comanda já
+    // normalizado, mais duas listas ordenadas (por nome e por código) sobre as
+    // quais a barra de pesquisa faz busca binária. Ver BuscaComandas.js.
+    //
+    // null = ainda não montado. É PREGUIÇOSO de propósito: montá-lo custa uma
+    // normalização do cupom inteiro de cada comanda, e quem abre a Consulta só
+    // pra olhar as comandas do dia (o uso mais comum) nunca pesquisa nada —
+    // não faz sentido pagar isso no caminho de abertura da página, que esta
+    // tela já trata com cuidado (ver CargaDiferida abaixo). Volta a null
+    // sempre que a lista bruta muda.
+    property var _indiceBusca: null
     // Texto de busca atual: o campo de texto vive em ColunaEsquerda.qml, mas
     // o filtro precisa sobreviver a um "Atualizar" (que recarrega o disco).
     property string buscaAtual: ""
@@ -195,41 +209,12 @@ Page {
         return item.dataHora ? cliente + " - " + item.dataHora : cliente;
     }
 
-    // Quanto menor, mais "perto" da busca: substring encontrada pontua pela
-    // posição do match (aparecer logo no início vale mais que no meio).
-    // Sem substring, entra num "balde" de pontuação fixa (sem calcular
-    // distância de edição contra o conteúdo inteiro do cupom, que seria
-    // O(tamanho do texto x tamanho da busca) por comanda — caro demais para
-    // rodar a cada tecla numa lista que só cresce). indexOf sozinho é
-    // O(tamanho do texto), suficiente para ordenar por relevância.
-    function pontuarTexto(texto, busca) {
-        if (busca === "")
-            return 0;
-
-        var t = Texto.normalizar(texto);
-        var posicao = t.indexOf(busca);
-        return posicao !== -1 ? posicao : 100000;
-    }
-
-    // Combina o nome exibido (cliente + horário), o código da comanda e o
-    // conteúdo do cupom, com uma leve penalidade para matches que só
-    // aparecem no conteúdo — pesquisar pelo nome do cliente deve priorizar
-    // aquele cliente.
-    //
-    // O código entra sem penalidade nenhuma (é o campo mais específico que
-    // existe: quem digita "A291201" quer exatamente aquela comanda). Ele
-    // aparece no conteúdo do cupom também, mas só por lá herdaria a
-    // penalidade de 500 e afundaria abaixo de qualquer comanda cujo nome de
-    // cliente casasse por acaso — justo no caso em que a busca é mais
-    // precisa, que é conferir uma comanda entre duas máquinas.
-    function pontuarComanda(item, busca) {
-        if (busca === "")
-            return 0;
-
-        var pontoTitulo = telaConsulta.pontuarTexto(telaConsulta.tituloComanda(item), busca);
-        var pontoCodigo = item.codigo ? telaConsulta.pontuarTexto(item.codigo, busca) : 100000;
-        var pontoConteudo = telaConsulta.pontuarTexto(item.conteudo, busca) + 500;
-        return Math.min(pontoTitulo, pontoCodigo, pontoConteudo);
+    // Um item passa pelo seletor "Todas/Abertas/Fechadas"? Comanda aberta
+    // ainda não recebeu baixa e está fora do caixa do dia.
+    function _passaNoStatus(item) {
+        if (telaConsulta.filtroStatus === "todas")
+            return true;
+        return (item.fechada === true) === (telaConsulta.filtroStatus === "fechadas");
     }
 
     // Reordena _todasComandas pela proximidade com o texto pesquisado (sem
@@ -238,43 +223,32 @@ Page {
     // O filtro por status é a única coisa aqui que de fato ESCONDE comandas —
     // é uma escolha explícita do usuário no seletor, diferente da busca, que
     // só reordena.
+    //
+    // A ordenação em si é busca binária sobre um índice ordenado, montado uma
+    // vez por carregamento em vez de a cada tecla — ver BuscaComandas.js, que
+    // explica o que a binária resolve (prefixo do nome do cliente e do código,
+    // que é como se procura uma comanda na prática) e o que continua exigindo
+    // varredura (achar um pedaço no meio do cupom).
     function aplicarFiltro() {
-        var busca = Texto.normalizar(telaConsulta.buscaAtual.trim());
-        var lista = telaConsulta._todasComandas;
+        var busca = telaConsulta.buscaAtual.trim();
 
-        if (telaConsulta.filtroStatus !== "todas") {
-            var querFechadas = telaConsulta.filtroStatus === "fechadas";
-            lista = lista.filter(function (item) {
-                return (item.fechada === true) === querFechadas;
-            });
-        }
-
-        if (busca !== "") {
-            // Calcula a pontuação de cada comanda uma única vez — O(n) — em
-            // vez de deixar o comparador do sort recalculá-la a cada
-            // comparação, o que custaria O(n log n) avaliações de pontuação.
-            var comPontuacao = [];
-            for (var i = 0; i < lista.length; i++) {
-                comPontuacao.push({
-                    "item": lista[i],
-                    "pontuacao": telaConsulta.pontuarComanda(lista[i], busca)
-                });
-            }
-            comPontuacao.sort(function (a, b) {
-                return a.pontuacao - b.pontuacao;
-            });
-            lista = comPontuacao.map(function (par) {
-                return par.item;
-            });
-
-            // Busca mostra tudo achatado, sem agrupar por dia — encontrar a
-            // comanda certa não deveria exigir abrir a caixinha do dia
-            // certo primeiro.
-            telaConsulta._preencherModelo(lista, []);
+        if (busca === "") {
+            var lista = telaConsulta._todasComandas.filter(telaConsulta._passaNoStatus);
+            telaConsulta._agruparPorDia(lista);
             return;
         }
 
-        telaConsulta._agruparPorDia(lista);
+        if (telaConsulta._indiceBusca === null)
+            telaConsulta._indiceBusca = BuscaComandas.construirIndice(telaConsulta._todasComandas, function (item) {
+                return telaConsulta.tituloComanda(item);
+            });
+
+        var ordenadas = BuscaComandas.ordenar(telaConsulta._indiceBusca, telaConsulta._todasComandas, busca, telaConsulta._passaNoStatus);
+
+        // Busca mostra tudo achatado, sem agrupar por dia — encontrar a
+        // comanda certa não deveria exigir abrir a caixinha do dia certo
+        // primeiro.
+        telaConsulta._preencherModelo(ordenadas, []);
     }
 
     // Pede o recarregamento da lista sem fazê-lo agora: quem chama aqui é
@@ -298,6 +272,10 @@ Page {
 
     function _lerDoDisco() {
         telaConsulta._todasComandas = consultaController.listarComandas();
+        // A lista bruta mudou, então o índice de busca envelheceu junto. Volta
+        // a null em vez de ser remontado aqui: a remontagem é o passo caro, e
+        // este ponto é justamente o caminho de abertura da página.
+        telaConsulta._indiceBusca = null;
         telaConsulta.aplicarFiltro();
     }
 

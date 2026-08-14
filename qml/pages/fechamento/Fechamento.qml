@@ -272,6 +272,12 @@ Page {
     function fecharCaixa() {
         telaFechamento.resumoAtual = fechamentoController.calcularFechamento(telaFechamento.dataSelecionada);
         fechamentoController.imprimirFechamentoCaixa(telaFechamento.dataSelecionada);
+        // Publica o resumo do dia (vendas por origem, produtos vendidos) no
+        // servidor central. Fechar o mesmo caixa de novo reenvia tudo, e é o
+        // envio mais recente que vale lá (ver
+        // FechamentoController.enviarFechamentoServidor). O resultado chega
+        // depois, pelo Connections de pizzeriaServerController mais abaixo.
+        fechamentoController.enviarFechamentoServidor(telaFechamento.dataSelecionada);
         telaFechamento.mostrarNotificacao("Caixa de " + telaFechamento.formatarDataExibicao(telaFechamento.dataSelecionada) + " recalculado, salvo e enviado para impressão.", true);
     }
 
@@ -324,6 +330,19 @@ Page {
         function onContagemAtualizada(data) {
             if (data === telaFechamento.dataSelecionada)
                 telaFechamento.carregarDia(data);
+        }
+    }
+
+    // Resultado do envio do resumo do dia ao servidor central, disparado por
+    // fecharCaixa(). Só aparece na tela porque é a única pista que o dono tem
+    // de que a máquina Alpine não recebeu o fechamento — a impressão do cupom
+    // acontece de qualquer jeito, então sem este aviso a falha passaria
+    // despercebida.
+    Connections {
+        target: pizzeriaServerController
+
+        function onFechamentoEnviado(ok, mensagem) {
+            telaFechamento.mostrarNotificacao(mensagem, ok);
         }
     }
 

@@ -27,6 +27,9 @@ Page {
     // Categorias e seus campos, como descritos em services/cardapioService.py
     property var categorias: []
     property int indiceCategoria: 0
+    // Há edições nesta categoria que ainda não foram gravadas em disco nem
+    // publicadas na malha. Só aplicarAlteracoes() zera isto.
+    property bool alteracoesPendentes: false
     // Itens da categoria atual, no formato plano que o controller devolve
     // (ex: {"nome": "X-Egg", "valor.pao_baby": "16,00"}). É a lista já
     // gravada em disco: só é substituída depois de uma gravação bem-sucedida.
@@ -65,6 +68,14 @@ Page {
     // ao trocar de página, então é preciso pedir foco de novo para o atalho de
     // digitar direto na busca (Keys.onPressed abaixo) continuar funcionando.
     StackView.onActivated: forceActiveFocus()
+    // Redes de segurança para o fim da vida da tela. Fechar o app ou trocar de
+    // página não dá chance de perguntar nada, e perder o que foi cadastrado é
+    // pior que gravar — mesmo raciocínio de configuracoes/Configuracoes.qml.
+    // As duas são guardadas por `alteracoesPendentes` dentro de
+    // aplicarAlteracoes(): sem isso, toda saída da tela regravaria o arquivo e
+    // publicaria a categoria inteira na malha sem ninguém ter mexido em nada.
+    StackView.onDeactivated: aplicarAlteracoes()
+    Component.onDestruction: aplicarAlteracoes()
 
     function carregarCategorias() {
         categorias = cardapioController.listarCategorias();
@@ -72,6 +83,13 @@ Page {
     }
 
     function selecionarCategoria(indice) {
+        // Trocar de categoria troca a lista inteira, e o que estivesse
+        // pendente sumiria sem aviso. Aplicar antes é o mesmo raciocínio de
+        // sair da tela: perder o que foi digitado é pior que gravar. Se a
+        // gravação falhar, fica onde está, com o erro na tela.
+        if (!aplicarAlteracoes())
+            return;
+
         indiceCategoria = indice;
         campoBusca.text = "";
         carregarItens();
@@ -141,33 +159,49 @@ Page {
             lista.push(item);
         else
             lista[indice] = item;
-        gravar(lista, indice < 0 ? "Item adicionado ao cardápio!" : "Item atualizado!");
+        _editarLocal(lista, indice < 0 ? "Item adicionado — falta aplicar." : "Item atualizado — falta aplicar.");
     }
 
     function removerItem(indice) {
         var lista = itens.slice();
         lista.splice(indice, 1);
-        gravar(lista, "Item removido do cardápio!");
+        _editarLocal(lista, "Item removido — falta aplicar.");
+    }
+
+    // Mexe SÓ na lista em memória. O disco (e a malha) são tocados uma vez
+    // só, por aplicarAlteracoes(), pelo mesmo motivo da tela de estilo da
+    // comanda: gravar a cada clique fazia o app inteiro se reiniciar no meio
+    // do cadastro, porque o dev_watch observa .json (ver PREFIXOS_IGNORADOS
+    // em dev_watch.py, que também precisou ser corrigido) — e mesmo sem isso,
+    // cada clique publicava o cardápio inteiro na malha.
+    function _editarLocal(lista, mensagem) {
+        itens = lista;
+        alteracoesPendentes = true;
+        filtrar(campoBusca.text);
+        filaNotificacoes.notificar(mensagem, true);
     }
 
     // Grava a lista inteira da categoria. Em caso de erro (preço inválido,
-    // arquivo sem permissão de escrita...) o controller devolve a mensagem e
-    // nada muda na tela — o que está sendo exibido continua sendo o que está
-    // no disco.
-    function gravar(lista, mensagemSucesso) {
-        if (!categoriaAtual)
-            return;
+    // arquivo sem permissão de escrita...) o controller devolve a mensagem, a
+    // pendência CONTINUA e nada se perde — quem chama usa o retorno pra
+    // decidir se pode seguir (trocar de categoria, sair da tela).
+    function aplicarAlteracoes() {
+        if (!categoriaAtual || !alteracoesPendentes)
+            return true;
 
-        var erro = cardapioController.salvarItens(categoriaAtual.chave, lista);
+        var erro = cardapioController.salvarItens(categoriaAtual.chave, itens);
         if (erro) {
             filaNotificacoes.notificar(erro, false);
-            return;
+            return false;
         }
-        // Relê do disco em vez de assumir "lista": o controller normaliza os
+
+        alteracoesPendentes = false;
+        // Relê do disco em vez de assumir "itens": o controller normaliza os
         // preços ao gravar (ex: "24.9" vira "24,90"), e a tela deve mostrar o
         // que ficou gravado de verdade.
         carregarItens();
-        filaNotificacoes.notificar(mensagemSucesso, true);
+        filaNotificacoes.notificar("Alterações aplicadas ao cardápio!", true);
+        return true;
     }
 
     // Mesmo atalho das telas de pedido: digitar qualquer caractere
@@ -188,8 +222,17 @@ Page {
     // está aberta agora, não precisa recarregar — ela já vai vir certa da
     // próxima vez que for selecionada.
     function aoCardapioAlterado(chaveCategoria) {
-        if (telaCardapio.categoriaAtual && telaCardapio.categoriaAtual.chave === chaveCategoria)
-            carregarItens();
+        if (!telaCardapio.categoriaAtual || telaCardapio.categoriaAtual.chave !== chaveCategoria)
+            return;
+
+        // Recarregar por cima de uma edição não aplicada apagaria o que o dono
+        // está montando agora. O que veio da malha espera ele aplicar.
+        if (telaCardapio.alteracoesPendentes) {
+            filaNotificacoes.notificar("Esta categoria mudou em outra máquina — aplique suas alterações para ver o que chegou.", false);
+            return;
+        }
+
+        carregarItens();
     }
 
     // Conexão declarativa, não um .connect() solto em Component.onCompleted
@@ -540,42 +583,83 @@ Page {
             }
         }
 
-        // --- BOTÃO VOLTAR ---
-        Button {
-            id: btnVoltar
-
-            padding: Estilo.global.padding.md
+        // --- APLICAR / VOLTAR ---
+        RowLayout {
             Layout.alignment: Qt.AlignHCenter
-            Layout.preferredWidth: 200
-            onClicked: {
-                if (telaCardapio.StackView.view)
-                    telaCardapio.StackView.view.irParaInicio();
-            }
+            spacing: Estilo.global.spacing.lg
 
-            contentItem: Row {
-                spacing: Estilo.global.spacing.xs
-                anchors.centerIn: parent
+            Button {
+                id: btnAplicar
 
-                Icone {
-                    nome: "fa6s.arrow-left"
-                    cor: Estilo.global.textOnAccent
-                    tamanho: Estilo.global.fontSize.lg
-                    anchors.verticalCenter: parent.verticalCenter
+                padding: Estilo.global.padding.md
+                Layout.preferredWidth: 230
+                // Desabilitado quando não há nada a aplicar: é o que diferencia
+                // "já está tudo gravado" de "falta aplicar", sem precisar de um
+                // rótulo extra na tela (mesmo botão de Configuracoes.qml).
+                enabled: telaCardapio.alteracoesPendentes
+                onClicked: telaCardapio.aplicarAlteracoes()
+
+                contentItem: Row {
+                    spacing: Estilo.global.spacing.xs
+                    anchors.centerIn: parent
+
+                    Icone {
+                        nome: btnAplicar.enabled ? "fa6s.check" : "fa6s.circle-check"
+                        cor: Estilo.global.textOnAccent
+                        tamanho: Estilo.global.fontSize.lg
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
+
+                    Text {
+                        text: btnAplicar.enabled ? "Aplicar alterações" : "Tudo aplicado"
+                        font.family: Estilo.global.fontFamily.title
+                        color: Estilo.global.textOnAccent
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
                 }
 
-                Text {
-                    text: "Voltar para o Menu"
-                    font.family: Estilo.global.fontFamily.title
-                    color: Estilo.global.textOnAccent
-                    anchors.verticalCenter: parent.verticalCenter
+                background: Rectangle {
+                    radius: Estilo.global.radius.pill
+                    color: btnAplicar.down ? Estilo.action.confirm.pressed : (btnAplicar.hovered ? Estilo.action.confirm.hover : Estilo.action.confirm.base)
+                    opacity: btnAplicar.enabled ? 1 : Estilo.global.opacity.disabled
                 }
             }
 
-            background: Rectangle {
-                radius: Estilo.global.radius.pill
-                color: btnVoltar.down ? Estilo.action.danger.pressed : (btnVoltar.hovered ? Estilo.action.danger.hover : Estilo.action.danger.base)
-                border.color: Estilo.action.danger.pressed
-                border.width: Estilo.global.borderWidth.hairline
+            Button {
+                id: btnVoltar
+
+                padding: Estilo.global.padding.md
+                Layout.preferredWidth: 200
+                onClicked: {
+                    if (telaCardapio.StackView.view)
+                        telaCardapio.StackView.view.irParaInicio();
+                }
+
+                contentItem: Row {
+                    spacing: Estilo.global.spacing.xs
+                    anchors.centerIn: parent
+
+                    Icone {
+                        nome: "fa6s.arrow-left"
+                        cor: Estilo.global.textOnAccent
+                        tamanho: Estilo.global.fontSize.lg
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
+
+                    Text {
+                        text: "Voltar para o Menu"
+                        font.family: Estilo.global.fontFamily.title
+                        color: Estilo.global.textOnAccent
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
+                }
+
+                background: Rectangle {
+                    radius: Estilo.global.radius.pill
+                    color: btnVoltar.down ? Estilo.action.danger.pressed : (btnVoltar.hovered ? Estilo.action.danger.hover : Estilo.action.danger.base)
+                    border.color: Estilo.action.danger.pressed
+                    border.width: Estilo.global.borderWidth.hairline
+                }
             }
         }
     }

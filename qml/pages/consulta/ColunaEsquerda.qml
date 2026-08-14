@@ -84,9 +84,15 @@ Column {
 
         // Debounce: espera uma pequena pausa na digitação antes de reordenar
         // a lista, em vez de fazer isso a cada tecla. 200ms é imperceptível
-        // para quem digita, mas evita recalcular a pontuação de todas as
-        // comandas (e o sort) a cada letra numa lista que só cresce com o
-        // tempo.
+        // para quem digita.
+        //
+        // A busca em si ficou barata (busca binária sobre índice pronto, ver
+        // BuscaComandas.js), mas o que vem DEPOIS dela não: reordenar a lista
+        // significa esvaziar o ListModel e apender tudo de novo, e cada
+        // append cria um ItemComandaDelegate — a ListView de "hoje" tem a
+        // altura amarrada ao contentHeight e por isso não recicla delegate
+        // nenhum (ver _preencherModelo em Consulta.qml). É esse custo, e não
+        // mais o da pesquisa, que o debounce evita pagar por letra.
         Timer {
             id: debounceBusca
 
