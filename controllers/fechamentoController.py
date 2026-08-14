@@ -11,7 +11,8 @@ from services import comandaEstiloService as estilo
 from services import comandaParserService as parser
 from services import comandaTextoService as texto
 from services import formulaLucroService
-from services.rede import baixaComandas, contagemCaixa, extrasCaixa, fechamentoCache, rede, tombstones
+from services.pizzeriaServerService import pizzeria_server
+from services.rede import baixaComandas, contagemCaixa, extrasCaixa, fechamentoCache, rede, relogio, tombstones
 
 # Tipo de evento de gossip (ver services/rede/eventos.py:BarramentoEventos)
 # usado pra propagar o resumo de um dia recém-calculado pra malha inteira —
@@ -528,7 +529,22 @@ class FechamentoController(QObject):
         }
 
     @staticmethod
-    def _texto_de_busca(dados, tipo):
+    def _itens_da_comanda(conteudo):
+        """Os itens do pedido de volta a partir do cupom já lido (desfaz
+        comandaTextoService.formatar_tabela — ver
+        comandaParserService.reconstruir_itens). Lista vazia quando a comanda
+        não tem tabela de itens reconhecível.
+
+        Fica separado porque o mesmo parse serve a dois consumidores no
+        resumo do dia: o texto de busca da tela e a contagem de produtos
+        vendidos. Sem isso, cada comanda do dia seria varrida duas vezes."""
+        linhas_tabela = parser.linhas_tabela_itens((conteudo or "").split("\n"))
+        if linhas_tabela is None:
+            return []
+        return parser.reconstruir_itens(linhas_tabela)
+
+    @staticmethod
+    def _texto_de_busca(dados, tipo, itens):
         """Uma linha só, normalizada, com tudo por onde a comanda pode ser
         procurada na tela de Fechamento: modalidade, código, cliente, forma de
         pagamento, status, os itens pedidos e o valor.
@@ -545,7 +561,10 @@ class FechamentoController(QObject):
 
         O cupom inteiro NÃO entra: ele traz prefixos ("Cliente:", "Forma de
         pagamento:") e linhas de separador que casariam com quase qualquer
-        busca curta, enchendo o resultado de falso positivo."""
+        busca curta, enchendo o resultado de falso positivo.
+
+        `itens` vem pronto de _itens_da_comanda — quem chama já precisou
+        deles para contar os produtos vendidos do dia."""
         valor = dados.get("valor") or 0.0
         com_virgula = f"{valor:.2f}".replace(".", ",")
 
@@ -561,9 +580,7 @@ class FechamentoController(QObject):
             com_virgula.replace(",", ""),
         ]
 
-        conteudo = dados.get("conteudo") or ""
-        linhas_tabela = parser.linhas_tabela_itens(conteudo.split("\n"))
-        for item in parser.reconstruir_itens(linhas_tabela) if linhas_tabela is not None else []:
+        for item in itens:
             partes.append(item.get("pedido", ""))
             partes.append(item.get("observacao", ""))
             borda = item.get("borda")
@@ -583,6 +600,13 @@ class FechamentoController(QObject):
         por_tipo = {}
         total_aberto = 0.0
         quantidade_aberta = 0
+        # {nome do produto: [quantas vezes saiu, quanto somou]}. O nome é o
+        # texto do item como saiu na comanda (já em caixa alta, com o tamanho
+        # entre parênteses) — é a única identidade que um item tem depois de
+        # impresso, já que o cupom não guarda id de cardápio. Uma pizza meio a
+        # meio conta como UM produto ("SABOR A / SABOR B (GRANDE)"), que é o
+        # que ela é do ponto de vista da venda.
+        produtos = {}
 
         baixas = baixaComandas.carregar()
 
@@ -593,6 +617,7 @@ class FechamentoController(QObject):
 
             tipo = dados["tipo"]
             valor = dados["valor"]
+            itens = self._itens_da_comanda(dados.get("conteudo"))
 
             item = {
                 "arquivo": nome_arquivo,
@@ -608,7 +633,7 @@ class FechamentoController(QObject):
                 # cupom de cada comanda dentro do cache do dia e do payload
                 # que a malha sincroniza), e sem os itens não daria pra achar
                 # uma comanda pelo que foi pedido.
-                "busca": self._texto_de_busca(dados, tipo),
+                "busca": self._texto_de_busca(dados, tipo, itens),
                 # Ver comandaParserService.eh_suspeita — a tela marca com
                 # borda vermelha em vez de listar à parte (ver
                 # Fechamento.qml).
@@ -632,6 +657,17 @@ class FechamentoController(QObject):
             grupo["quantidade"] += 1
             grupo["comandas"].append(item)
 
+            # Só as comandas com baixa entram aqui, pelo mesmo motivo de
+            # total/porTipo logo acima: um pedido ainda não conferido não é
+            # venda do caixa deste dia.
+            for item_pedido in itens:
+                nome = (item_pedido.get("pedido") or "").strip()
+                if not nome:
+                    continue
+                contagem = produtos.setdefault(nome, [0, 0.0])
+                contagem[0] += 1
+                contagem[1] += texto.valor_para_float(item_pedido.get("valor"))
+
         extras = extrasCaixa.listar_do_dia(data_iso)
         total_extras = sum(item["valor"] for item in extras)
 
@@ -642,6 +678,13 @@ class FechamentoController(QObject):
             "porTipo": por_tipo,
             "abertas": {"quantidade": quantidade_aberta, "total": total_aberto},
             "extras": {"quantidade": len(extras), "total": total_extras, "itens": extras},
+            # Do mais vendido pro menos vendido, com desempate pelo nome —
+            # ordem estável, que é o que permite comparar dois resumos com
+            # `==` em _recalcular_e_cachear sem falso positivo de "mudou".
+            "produtos": [
+                {"nome": nome, "quantidade": contagem[0], "total": contagem[1]}
+                for nome, contagem in sorted(produtos.items(), key=lambda par: (-par[1][0], par[0]))
+            ],
         }
 
     @pyqtSlot(str, result="QVariantMap")
@@ -668,20 +711,26 @@ class FechamentoController(QObject):
             return self.calcularFechamento(data_iso)
 
         resumo_em_cache = fechamentoCache.carregar(data_iso)
-        if resumo_em_cache is not None and self._cache_tem_busca(resumo_em_cache):
+        if resumo_em_cache is not None and self._cache_atualizado(resumo_em_cache):
             return resumo_em_cache
 
         return self.calcularFechamento(data_iso)
 
     @staticmethod
-    def _cache_tem_busca(resumo):
-        """Se o resumo em cache foi gravado por uma versão que já montava o
-        campo "busca" de cada comanda (ver _texto_de_busca).
+    def _cache_atualizado(resumo):
+        """Se o resumo em cache foi gravado por uma versão do app que já
+        montava tudo que o resumo tem hoje: o campo "busca" de cada comanda
+        (ver _texto_de_busca) e a lista de produtos vendidos do dia (ver
+        _calcular_resumo_dia).
 
-        Sem esta checagem a busca da tela ficaria cega justamente nos dias
-        passados — que são os que sempre vêm do cache, e onde mais se procura
-        uma comanda. Recalcular o dia é O(k) nas comandas daquele dia e grava
-        o cache novo, então isso acontece uma vez por dia antigo visitado."""
+        Sem esta checagem, os dias passados — que são os que sempre vêm do
+        cache — ficariam com a busca cega e sem produtos justamente onde mais
+        se procura uma comanda e onde o envio ao pizzeria-server precisa dos
+        números. Recalcular o dia é O(k) nas comandas daquele dia e grava o
+        cache novo, então isso acontece uma vez por dia antigo visitado."""
+        if "produtos" not in resumo:
+            return False
+
         for grupo in (resumo.get("porTipo") or {}).values():
             for comanda in grupo.get("comandas") or []:
                 if "busca" not in comanda:
@@ -817,6 +866,65 @@ class FechamentoController(QObject):
         impressão do app."""
         resumo = self._calcular_resumo_dia(data_iso)
         rede.solicitar_impressao(self._montar_recibo_fechamento(data_iso, resumo))
+        return True
+
+    # ---------- Envio do resumo do dia ao servidor central ----------
+
+    def _montar_payload_servidor(self, data_iso, resumo):
+        """Traduz o resumo interno do dia no corpo que o pizzeria-server
+        espera em POST /fechamentos (ver models::Fechamento lá).
+
+        Os números são exatamente os mesmos que saem no cupom de fechamento
+        (ver _montar_recibo_fechamento) — o papel impresso e o que o servidor
+        guarda não podem contar histórias diferentes do mesmo dia."""
+        bruto = resumo.get("total", 0.0)
+        total_extras = (resumo.get("extras") or {}).get("total", 0.0)
+
+        origens = []
+        for tipo, info in (resumo.get("porTipo") or {}).items():
+            formas = self._somar_por_forma_pagamento(tipo, info.get("comandas", []))
+            origens.append({
+                "tipo": tipo,
+                "quantidade": info.get("quantidade", 0),
+                "total": info.get("total", 0.0),
+                "dinheiro": formas["dinheiro"],
+                "pix": formas["pix"],
+                "cartao": formas["cartao"],
+            })
+
+        return {
+            "data": data_iso,
+            # É este id que decide, no servidor, qual de dois fechamentos do
+            # mesmo dia predomina — um relógio lógico híbrido, não o relógio
+            # de parede: as máquinas da pizzaria não rodam NTP, e um envio
+            # vindo de um terminal adiantado não pode desfazer um fechamento
+            # que aconteceu depois (ver services/rede/relogio.py).
+            "id_evento": relogio.novo_id(),
+            "enviado_em": datetime.now().isoformat(timespec="seconds"),
+            "quantidade_vendas": resumo.get("quantidade", 0),
+            "total_vendas": bruto,
+            "total_extras": total_extras,
+            "total_liquido": bruto - total_extras,
+            "origens": origens,
+            "produtos": resumo.get("produtos") or [],
+        }
+
+    @pyqtSlot(str, result=bool)
+    @protegido(False)
+    def enviarFechamentoServidor(self, data_iso):
+        """Publica o resumo de `data_iso` no pizzeria-server. Chamado pelo
+        botão "Fechar Caixa" (ver Fechamento.qml), logo depois de
+        calcularFechamento — daí ler do cache que aquele acabou de gravar em
+        vez de varrer as comandas do dia uma terceira vez.
+
+        O resultado chega depois, assíncrono, por
+        pizzeriaServerController.fechamentoEnviado — igual a qualquer outra
+        chamada ao servidor central."""
+        resumo = fechamentoCache.carregar(data_iso)
+        if resumo is None or not self._cache_atualizado(resumo):
+            resumo = self._calcular_resumo_dia(data_iso)
+
+        pizzeria_server.enviarFechamento(self._montar_payload_servidor(data_iso, resumo))
         return True
 
     # ---------- Fechamento rápido (ver qml/pages/fechamento/PopupFechamentoRapido.qml) ----------

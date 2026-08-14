@@ -1,6 +1,7 @@
 """Cliente HTTP do pizzeria-server (backend Rust separado, rodando na
-máquina Alpine da pizzaria) — hoje só o autofill de endereço por telefone
-usado por Entrega.qml (ver buscarPorTelefone/salvarEndereco).
+máquina Alpine da pizzaria): o autofill de endereço por telefone usado por
+Entrega.qml (ver buscarPorTelefone/salvarEndereco) e o envio do resumo do
+dia quando o caixa é fechado (ver enviarFechamento).
 
 As chamadas usam QNetworkAccessManager, que já é assíncrono por natureza:
 get()/post() voltam na hora e o resultado chega depois pelo sinal
@@ -30,6 +31,15 @@ _CONTENT_TYPE_JSON = b"application/json"
 _INTERVALO_VERIFICACAO_CONEXAO_MS = 30000
 _TIMEOUT_CONEXAO_MS = 5000
 
+# Espera antes de reenviar um fechamento que não subiu (ver
+# _agendar_reenvio). Tem que ser confortavelmente maior que o intervalo
+# mínimo do rate limiter do pizzeria-server (RATE_LIMIT_MIN_INTERVAL, 200ms
+# por IP em src/main.rs): o gatilho natural do reenvio é a resposta da
+# verificação periódica de conexão, e disparar o POST ali na hora significaria
+# duas requisições do mesmo IP no mesmo milissegundo — o servidor recusaria a
+# segunda com 429 e a retentativa nunca sairia do lugar.
+_INTERVALO_REENVIO_FECHAMENTO_MS = 5000
+
 
 def _normalizar_telefone(telefone):
     return "".join(c for c in telefone if c.isdigit())
@@ -47,6 +57,9 @@ class PizzeriaServerService(QObject):
     # servidor central (~/Documents/Program/ppgs_server) rodando na máquina
     # Alpine da pizzaria.
     conexaoMudou = pyqtSignal(bool)
+    # (ok, mensagem) do envio do resumo do dia ao fechar o caixa — Fechamento
+    # .qml transforma isso na notificação da tela.
+    fechamentoEnviado = pyqtSignal(bool, str)
 
     def __init__(self):
         super().__init__()
@@ -54,6 +67,17 @@ class PizzeriaServerService(QObject):
         # None até a primeira resposta chegar — diferente de False, que já
         # afirmaria "desconectado" antes de qualquer tentativa real.
         self._conectado = None
+        # Resumos de fechamento que o servidor ainda não confirmou, por data —
+        # só o mais recente de cada dia, porque é ele que predomina lá (ver
+        # enviarFechamento). Fica só em memória de propósito: o caso que isto
+        # cobre é "a máquina Alpine estava fora do ar por alguns minutos", não
+        # "o balcão foi desligado" — nesse segundo caso o dono fecha o caixa
+        # de novo, que é o gesto que reenvia tudo mesmo.
+        self._fechamentos_pendentes = {}
+
+        self._timer_reenvio = QTimer(self)
+        self._timer_reenvio.setSingleShot(True)
+        self._timer_reenvio.timeout.connect(self._reenviar_fechamentos_pendentes)
 
         self._timer_conexao = QTimer(self)
         self._timer_conexao.timeout.connect(self.verificarConexao)
@@ -92,6 +116,13 @@ class PizzeriaServerService(QObject):
         # host inalcançável, timeout) nunca chegam a preencher este atributo.
         status = resposta.attribute(QNetworkRequest.Attribute.HttpStatusCodeAttribute)
         novo_estado = status is not None
+
+        # Antes do early-return de "nada mudou": o servidor pode ter voltado
+        # entre dois ticks sem que este balcão tenha notado a queda, e é a
+        # confirmação de que ele está de pé que dá a deixa pra reenviar o que
+        # ficou pendente.
+        if novo_estado and self._fechamentos_pendentes:
+            self._agendar_reenvio()
 
         if novo_estado == self._conectado:
             return
@@ -177,6 +208,81 @@ class PizzeriaServerService(QObject):
             return
 
         self.enderecoSalvo.emit(True, "Endereco salvo no servidor.")
+
+    # ---------- Resumo do dia, enviado ao fechar o caixa ----------
+
+    @pyqtSlot("QVariantMap")
+    @protegido(None)
+    def enviarFechamento(self, payload):
+        """Manda pro servidor central o resumo do dia montado por
+        FechamentoController._montar_payload_servidor (número de vendas,
+        totais por origem/forma de pagamento e produtos vendidos).
+
+        Reenviar o mesmo dia é normal e esperado — é o que acontece quando o
+        caixa é fechado mais de uma vez. Quem decide qual versão vale é o
+        servidor, comparando o "id_evento" (relógio lógico da malha, ver
+        services/rede/relogio.py): o maior ganha, então um envio que chega
+        fora de ordem não desfaz um fechamento posterior."""
+        data = payload.get("data") or ""
+        if not data:
+            self.fechamentoEnviado.emit(False, "Fechamento sem data — nada enviado ao servidor.")
+            return
+
+        # Guardado ANTES de tentar: se a tentativa falhar, o retry da
+        # verificação periódica de conexão já encontra o payload aqui. Como a
+        # chave é a data, um segundo fechamento do mesmo dia substitui o
+        # pendente do primeiro — mandar o antigo depois só desperdiçaria uma
+        # requisição que o servidor descartaria pelo id_evento.
+        self._fechamentos_pendentes[data] = payload
+        self._postar_fechamento(payload)
+
+    def _agendar_reenvio(self):
+        """Marca uma nova tentativa dos fechamentos pendentes. Não faz nada se
+        já houver uma marcada — o timer é único e de disparo único, então
+        várias chamadas seguidas (uma por tick de conexão, uma por falha)
+        continuam valendo uma tentativa só."""
+        if not self._timer_reenvio.isActive():
+            self._timer_reenvio.start(_INTERVALO_REENVIO_FECHAMENTO_MS)
+
+    def _reenviar_fechamentos_pendentes(self):
+        for payload in list(self._fechamentos_pendentes.values()):
+            self._postar_fechamento(payload)
+
+    def _postar_fechamento(self, payload):
+        url = QUrl(f"{PIZZERIA_SERVER_URL}/fechamentos")
+        requisicao = QNetworkRequest(url)
+        requisicao.setHeader(QNetworkRequest.KnownHeaders.ContentTypeHeader, _CONTENT_TYPE_JSON.decode())
+        requisicao.setTransferTimeout(_TIMEOUT_CONEXAO_MS)
+        corpo = json.dumps(payload).encode("utf-8")
+
+        resposta = self._gerenciador.post(requisicao, corpo)
+        resposta.finished.connect(functools.partial(self._tratar_envio_fechamento, resposta, payload))
+
+    def _tratar_envio_fechamento(self, resposta, payload):
+        resposta.deleteLater()
+        data = payload.get("data") or ""
+        status = resposta.attribute(QNetworkRequest.Attribute.HttpStatusCodeAttribute)
+
+        if resposta.error() != QNetworkReply.NetworkError.NoError or status != 200:
+            mensagem = resposta.errorString() if resposta.error() != QNetworkReply.NetworkError.NoError else f"HTTP {status}"
+            print(f"[pizzeriaServerService] Falha ao enviar fechamento de {data}: {mensagem}")
+            self._agendar_reenvio()
+            self.fechamentoEnviado.emit(
+                False,
+                "Não foi possível enviar o fechamento ao servidor central — será reenviado automaticamente.",
+            )
+            return
+
+        # Só sai da fila o payload que de fato foi confirmado: entre o post e
+        # esta resposta o caixa pode ter sido fechado de novo, e aí o pendente
+        # daquela data já é outro (mais novo), que ainda precisa subir.
+        if self._fechamentos_pendentes.get(data) is payload:
+            del self._fechamentos_pendentes[data]
+
+        # 200 com "aplicado": false significa que o servidor já tinha um
+        # fechamento mais recente deste dia (outra máquina fechou depois). Pra
+        # quem mandou, o resultado é o mesmo: o servidor está em dia.
+        self.fechamentoEnviado.emit(True, "Fechamento enviado ao servidor central.")
 
 
 # Singleton de módulo — mesmo padrão usado pelos demais services do projeto
