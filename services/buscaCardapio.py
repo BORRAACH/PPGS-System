@@ -105,19 +105,40 @@ def _carregar_promocoes():
 
 
 def _precos_do_item(categoria, item):
-    """Os preços de um item, já rotulados: [{"rotulo": "Broto", "valor": "R$ 34,90"}].
+    """Os preços de um item, já rotulados:
+    [{"rotulo": "Broto", "valor": "R$ 34,90", "chave": "valorBroto", "bruto": "34,90"}].
 
     O rótulo sai de "curto" na descrição do campo (ver cardapioService.
     CATEGORIAS) — é o mesmo texto que a tela de Cardápio usa no resumo da
     lista. Categorias de preço único têm "curto" vazio e caem em "Preço".
-    """
+
+    "chave" e "bruto" existem para o lançamento rápido de pedido (ver
+    qml/components/PopupLancamentoRapido.qml), que precisa saber QUAL campo de
+    preço o atendente escolheu e o número por trás dele:
+
+    - por "chave" e não por "rotulo" porque o rótulo é texto de exibição,
+      editável na tela de Cardápio; casar "Francês" com o pão `pao_frances`
+      quebraria em silêncio no dia em que alguém renomeasse o campo para
+      "Pão francês". A chave é estável.
+    - "bruto" ("34,90") evita ter que desfazer o "R$ " com regex do outro lado
+      só para somar borda e adicionais.
+
+    Um preço vazio continua não entrando na lista — é isso que faz uma pizza
+    sem `valorMini` chegar ao QML com dois tamanhos, e uma bebida sem preço de
+    mesa com um só, sem nenhum tratamento por categoria do lado de lá."""
     precos = []
     for campo in categoria["campos"]:
         if campo["tipo"] != cardapioService.PRECO:
             continue
-        valor = _formatar_preco(item.get(campo["chave"], ""))
+        bruto = item.get(campo["chave"], "")
+        valor = _formatar_preco(bruto)
         if valor:
-            precos.append({"rotulo": campo["curto"] or "Preço", "valor": valor})
+            precos.append({
+                "rotulo": campo["curto"] or "Preço",
+                "valor": valor,
+                "chave": campo["chave"],
+                "bruto": str(bruto).strip(),
+            })
     return precos
 
 
@@ -136,12 +157,19 @@ def _aplicar_promocao(categoria, item, precos, promocoes):
     for campo in categoria["campos"]:
         if campo["tipo"] != cardapioService.PRECO:
             continue
-        bruto = promo.get(campo["chave"])
         # A promoção pode trazer só alguns dos três tamanhos; os que ela não
         # cita continuam valendo pelo cardápio normal (mesma regra de Pizzas.qml).
-        valor = _formatar_preco(bruto if bruto is not None else item.get(campo["chave"], ""))
+        bruto = promo.get(campo["chave"])
+        if bruto is None:
+            bruto = item.get(campo["chave"], "")
+        valor = _formatar_preco(bruto)
         if valor:
-            promocionais.append({"rotulo": campo["curto"] or "Preço", "valor": valor})
+            promocionais.append({
+                "rotulo": campo["curto"] or "Preço",
+                "valor": valor,
+                "chave": campo["chave"],
+                "bruto": str(bruto).strip(),
+            })
 
     if promocionais == precos:
         return precos, []
@@ -191,6 +219,12 @@ def _montar_entradas():
             entradas.append({
                 "nome": nome,
                 "categoria": categoria["rotulo"],
+                # A chave estável da categoria, ao lado do rótulo de exibição:
+                # é ela que o lançamento rápido usa pra decidir o roteiro de
+                # perguntas (tamanho? pão? borda?) e pra saber que "Bacon" é um
+                # adicional, não um item que se vende sozinho. O rótulo não
+                # serve pra isso — é texto de tela.
+                "chaveCategoria": categoria["chave"],
                 "icone": categoria["icone"],
                 "cor": categoria["cor"],
                 "precos": precos,
@@ -282,6 +316,32 @@ def _faixa_por_prefixo(chaves, prefixo):
     limite = prefixo[:-1] + chr(ord(prefixo[-1]) + 1)
     fim = bisect.bisect_left(chaves, limite, lo=inicio)
     return inicio, fim
+
+
+def listar_da_categoria(chave_categoria, termo=""):
+    """Todos os itens de UMA categoria, em ordem alfabética, opcionalmente
+    filtrados por `termo` (no nome ou nos ingredientes).
+
+    Serve à etapa "escolha a pizza" do lançamento rápido, quando o atendente
+    entrou pelo caminho invertido — buscou "Borda Catupiry" e agora precisa
+    dizer em qual pizza ela vai (ver qml/components/PopupLancamentoRapido.qml).
+
+    Sai daqui, e não de cardapioService.carregar(), porque este índice já tem
+    a promoção do dia aplicada em `precos` e o preço de tabela em
+    `precosTabela` — ler o JSON cru devolveria sempre o preço de tabela, e a
+    pizza em promoção sairia mais cara pelo caminho rápido do que pelo normal.
+
+    Sem o teto de `buscar()`: aquele existe porque uma busca de termo vazio
+    casaria com o cardápio inteiro (~180 itens) numa lista só; aqui a
+    categoria já é o recorte, e as 74 pizzas são exatamente o que se quer
+    poder rolar."""
+    alvo = normalizar(termo)
+    return [
+        _sem_campos_internos(entrada)
+        for entrada in indice()
+        if entrada["chaveCategoria"] == chave_categoria
+        and (not alvo or alvo in entrada["_textoNormalizado"])
+    ]
 
 
 def buscar(termo, limite=_LIMITE_PADRAO):

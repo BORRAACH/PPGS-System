@@ -3,6 +3,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import "../pedidos"
 import "../../components"
+import "../../components/DestinoPedido.js" as Destino
 import estilo 1.0
 
 Page {
@@ -35,6 +36,21 @@ Page {
 
     function mostrarNotificacao(mensagem, sucesso) {
         filaNotificacoes.notificar(mensagem, sucesso);
+    }
+
+    // --- Lançamento rápido pelo Ctrl+S (ver components/PopupLancamentoRapido.qml) ---
+    // As duas funções abaixo são a API que o popup global usa nesta tela. Ficam
+    // aqui na raiz da Page, e não dentro do Component do StackView local, porque
+    // é modeloPedidos que elas mexem — que também mora aqui — e porque o popup
+    // precisa poder chamá-las mesmo que o formulário ainda não tenha sido
+    // instanciado.
+
+    function acrescentarItens(itens) {
+        return Destino.acrescentarAoModelo(modeloPedidos, itens);
+    }
+
+    function temPedidoEmAndamento() {
+        return Destino.temPedidoEmAndamento(modeloPedidos);
     }
 
     // O resultado de enviarPedido() só confirma que o .txt foi salvo — o

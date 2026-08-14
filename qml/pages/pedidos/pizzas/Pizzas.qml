@@ -4,6 +4,7 @@ import QtQuick.Layouts
 import estilo 1.0
 import "../../../components"
 import "../../../components/Texto.js" as Texto
+import "../MontagemItem.js" as Montagem
 
 Page {
     // 2. Atualiza os preços internos das pizzas já selecionadas para o novo tamanho
@@ -1179,29 +1180,12 @@ Page {
                             if (listaFinal.length === 0)
                                 return;
 
-                            var itens = listaFinal.map(function (pizza) {
-                                var nomesArray = pizza.sabores.map(function (item) {
-                                    return item.nome;
-                                });
-                                var borda = pizza.borda ? {
-                                    "nome": pizza.borda.nome,
-                                    "valor": "R$ " + pizza.borda.valorNum.toFixed(2).replace(".", ",")
-                                } : null;
-                                var adicionais = (pizza.adicionais || []).map(function (adicional) {
-                                    return {
-                                        "sabor": adicional.sabor,
-                                        "nome": adicional.nome,
-                                        "valor": "R$ " + adicional.valorNum.toFixed(2).replace(".", ",")
-                                    };
-                                });
-                                return {
-                                    "nome": nomesArray.join(" / ") + " (" + pizza.tamanho + ")",
-                                    "valor": "R$ " + valorFinalPizza(pizza).toFixed(2).replace(".", ","),
-                                    "observacao": "",
-                                    "borda": borda,
-                                    "adicionais": adicionais
-                                };
-                            });
+                            // A montagem do nome/valor mora em ../MontagemItem.js,
+                            // não aqui: é contrato com o Python (dividir_sabores
+                            // reparseia o " / " e o tamanho entre parênteses) e o
+                            // lançamento rápido do Ctrl+S monta o mesmo item por
+                            // outro caminho. Duas cópias divergiriam em silêncio.
+                            var itens = listaFinal.map(Montagem.montarPizza);
                             if (typeof onPedidoSelecionado === "function")
                                 onPedidoSelecionado(itens);
                             pilha.pop(null);

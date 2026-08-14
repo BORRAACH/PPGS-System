@@ -4,6 +4,7 @@ import QtQuick.Layouts
 import estilo 1.0
 import "../../../components"
 import "../../../components/Texto.js" as Texto
+import "../MontagemItem.js" as Montagem
 
 Page {
     id: telaAcai
@@ -1008,25 +1009,11 @@ Page {
                             if (listaFinal.length === 0)
                                 return ;
 
-                            var itens = listaFinal.map(function (copo) {
-                                var adicionaisFlat = [];
-                                var adicionais = copo.adicionais || [];
-                                for (var i = 0; i < adicionais.length; i++) {
-                                    for (var q = 0; q < adicionais[i].quantidade; q++) {
-                                        adicionaisFlat.push({
-                                            "sabor": "Açaí",
-                                            "nome": adicionais[i].nome,
-                                            "valor": "R$ " + adicionais[i].valorNum.toFixed(2).replace(".", ",")
-                                        });
-                                    }
-                                }
-                                return {
-                                    "nome": "Açaí (" + copo.tamanho + ")",
-                                    "valor": "R$ " + valorFinalCopo(copo).toFixed(2).replace(".", ","),
-                                    "observacao": "",
-                                    "adicionais": adicionaisFlat
-                                };
-                            });
+                            // A montagem do nome/valor mora em ../MontagemItem.js
+                            // (ver o comentário equivalente em pizzas/Pizzas.qml)
+                            // — inclusive o "achatamento" dos adicionais, que
+                            // viram uma linha por unidade de quantidade.
+                            var itens = listaFinal.map(Montagem.montarAcai);
                             if (typeof onPedidoSelecionado === "function")
                                 onPedidoSelecionado(itens);
                             pilha.pop(null);

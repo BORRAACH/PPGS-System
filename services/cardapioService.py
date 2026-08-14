@@ -682,6 +682,17 @@ class CardapioController(QObject):
 
         return buscaCardapio.buscar(termo)
 
+    @pyqtSlot(str, str, result="QVariantList")
+    @protegido([])
+    def listarDaCategoria(self, chave_categoria, termo):
+        """Os itens de uma categoria só, no mesmo formato de buscar() — com a
+        promoção do dia já aplicada. Usado pelo lançamento rápido quando o
+        atendente escolheu primeiro um adicional/borda e ainda precisa dizer a
+        qual pizza/lanche/açaí ele vai."""
+        from services import buscaCardapio
+
+        return buscaCardapio.listar_da_categoria(chave_categoria, termo)
+
     @pyqtSlot(result=int)
     @protegido(0)
     def totalItensCardapio(self):

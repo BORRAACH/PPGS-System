@@ -3,6 +3,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import "../pedidos"
 import "../../components"
+import "../../components/DestinoPedido.js" as Destino
 import estilo 1.0
 
 // Atendimento no salão (mesas) — diferente de Balcão/Entrega, uma comanda de
@@ -22,8 +23,55 @@ Page {
     property string mesaAtualId: ""
     property int indicePedidoAtual: -1
 
+    // --- Lançamento rápido pelo Ctrl+S (ver components/PopupLancamentoRapido.qml) ---
+    // Preenchidas pelo `replace()` que traz o atendente pra cá com um item já
+    // escolhido. "" em mesaInicialId significa mesa nova.
+    //
+    // Diferente de Balcao/Entrega, aqui os itens NÃO podem ser copiados no
+    // Component.onCompleted: o formulário do Salão carrega a mesa escolhida
+    // primeiro (carregarMesaNoFormulario substitui modeloPedidos inteiro), e
+    // um item acrescentado antes disso seria apagado por esse carregamento.
+    // Daí o gancho ser o StackView.onActivated, quando stackViewLocal.currentItem
+    // já existe — e a flag de uma vez só, pra voltar a esta tela pela barra
+    // lateral não relançar o item.
+    // Chama-se `itensLancamento`, e não `itensIniciais` como em
+    // Balcao/Entrega, porque a FORMA é outra: aqui os itens chegam como as
+    // páginas de categoria os produzem ({nome, valor, ...}), já que quem os
+    // insere é acrescentarItens(). Em Balcao/Entrega a propriedade é lida
+    // pelo Component.onCompleted de lá, que espera a chave "pedido". Dar o
+    // mesmo nome às duas convidaria a passar uma no lugar da outra — o que
+    // não dá erro nenhum, só linha de pedido em branco.
+    property string mesaInicialId: ""
+    property var itensLancamento: []
+    property bool _lancamentoPendente: false
+
     function mostrarNotificacao(mensagem, sucesso) {
         filaNotificacoes.notificar(mensagem, sucesso);
+    }
+
+    // API do lançamento rápido — ver o comentário equivalente em
+    // balcao/Balcao.qml.
+    function acrescentarItens(itens) {
+        return Destino.acrescentarAoModelo(modeloPedidos, itens);
+    }
+
+    function temPedidoEmAndamento() {
+        return Destino.temPedidoEmAndamento(modeloPedidos);
+    }
+
+    // Carrega a mesa pedida (ou limpa o formulário, se for mesa nova) e só
+    // então acrescenta os itens. Chamada tanto por este StackView.onActivated
+    // quanto direto pelo popup, quando o Salão já é a tela atual.
+    function aplicarLancamentoRapido(mesaId, itens) {
+        if (!stackViewLocal.currentItem)
+            return;
+
+        if (mesaId !== "" && mesaId !== telaSalao.mesaAtualId)
+            stackViewLocal.currentItem.carregarMesaNoFormulario(mesaId);
+        else if (mesaId === "")
+            stackViewLocal.currentItem.limparFormularioMesa();
+
+        telaSalao.acrescentarItens(itens);
     }
 
     function carregarMesasAbertas() {
@@ -79,7 +127,14 @@ Page {
         }
     }
 
-    Component.onCompleted: carga.agendar()
+    Component.onCompleted: {
+        carga.agendar();
+        // Só arma a flag: quem executa o lançamento é o StackView.onActivated
+        // abaixo, que roda depois e com o formulário já instanciado.
+        if (telaSalao.itensLancamento && telaSalao.itensLancamento.length > 0)
+            telaSalao._lancamentoPendente = true;
+    }
+
     StackView.onActivated: {
         carga.agendar();
         // Foco fica fora da tarefa diferida de propósito: faz parte de montar
@@ -87,6 +142,11 @@ Page {
         // teclas de quem já chega digitando o nome do cliente.
         if (stackViewLocal.currentItem)
             stackViewLocal.currentItem.inputNomeCliente.forceActiveFocus();
+
+        if (telaSalao._lancamentoPendente) {
+            telaSalao._lancamentoPendente = false;
+            telaSalao.aplicarLancamentoRapido(telaSalao.mesaInicialId, telaSalao.itensLancamento);
+        }
     }
 
     // --- MODELOS GLOBAIS DA TELA ---

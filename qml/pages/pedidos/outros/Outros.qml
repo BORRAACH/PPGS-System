@@ -4,6 +4,7 @@ import QtQuick.Layouts
 import estilo 1.0
 import "../../../components"
 import "../../../components/Texto.js" as Texto
+import "../MontagemItem.js" as Montagem
 
 Page {
     id: telaOutros
@@ -613,13 +614,11 @@ Page {
                             var itens = [];
                             for (var i = 0; i < selecionados.length; i++) {
                                 var item = selecionados[i];
-                                for (var q = 0; q < item.quantidade; q++) {
-                                    itens.push({
-                                        "nome": item.nome,
-                                        "valor": "R$ " + item.valorNum.toFixed(2).replace(".", ","),
-                                        "observacao": ""
-                                    });
-                                }
+                                // A montagem do nome/valor mora em
+                                // ../MontagemItem.js (ver o comentário
+                                // equivalente em pizzas/Pizzas.qml).
+                                for (var q = 0; q < item.quantidade; q++)
+                                    itens.push(Montagem.montarSimples(item));
                             }
                             if (typeof onPedidoSelecionado === "function")
                                 onPedidoSelecionado(itens);

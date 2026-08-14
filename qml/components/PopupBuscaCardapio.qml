@@ -38,6 +38,31 @@ Popup {
     readonly property alias termo: campoBusca.text
     readonly property int totalResultados: resultados.length
 
+    // O StackView de main.qml, repassado ao fluxo de lançamento — ver
+    // PopupLancamentoRapido.pilhaPrincipal.
+    property var pilhaPrincipal: null
+
+    // O item destacado dá pra virar pedido? Todo item do cardápio dá: os que
+    // se vendem sozinhos abrem o fluxo direto, e borda/adicional abrem o fluxo
+    // invertido (escolhe-se depois em qual pizza/lanche/açaí eles vão). A
+    // pergunta existe porque a resposta vem do roteiro de etapas, e uma
+    // categoria nova que ainda não tenha roteiro precisa nascer inerte em vez
+    // de nascer quebrada.
+    readonly property bool lancavel: popupLancamento.podeIniciar(itemSelecionado)
+
+    // Enquanto o fluxo de lançamento está aberto por cima, esta busca não pode
+    // se fechar por baixo dele — nem por clique fora (que cai sobre ela), nem
+    // por um Esc que escape, nem pelo próprio Ctrl+S (ver main.qml). Se
+    // fechasse, o onOpened seguinte limparia o termo e o fluxo ficaria órfão.
+    readonly property bool fluxoAtivo: popupLancamento.visible
+
+    function iniciarLancamento() {
+        if (!popupBusca.lancavel)
+            return;
+
+        popupLancamento.abrirPara(popupBusca.itemSelecionado);
+    }
+
     // Refaz a busca do zero. Chamada a cada tecla digitada e ao abrir: o
     // controller relê os arquivos só quando eles mudaram em disco (ver
     // services/buscaCardapio.py), então repetir a chamada é barato.
@@ -68,7 +93,7 @@ Popup {
     height: Math.min(Math.round(Responsivo.altura * 0.82), 620)
     padding: 0
     // Fechar por clique fora ou Esc; sem isso o único jeito seria o botão.
-    closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+    closePolicy: fluxoAtivo ? Popup.NoAutoClose : (Popup.CloseOnEscape | Popup.CloseOnPressOutside)
 
     onOpened: {
         campoBusca.text = "";
@@ -122,6 +147,11 @@ Popup {
                 // resultado e Shift+Tab pra corrigir o que digitou.
                 Keys.onDownPressed: popupBusca.mover(1)
                 Keys.onUpPressed: popupBusca.mover(-1)
+                // Enter leva o item destacado pro fluxo de lançamento. Os dois
+                // handlers porque o Enter do teclado numérico é uma tecla
+                // distinta (Qt.Key_Enter), e o balcão usa teclado cheio.
+                Keys.onReturnPressed: popupBusca.iniciarLancamento()
+                Keys.onEnterPressed: popupBusca.iniciarLancamento()
                 Keys.onPressed: function (evento) {
                     if (evento.key === Qt.Key_PageDown) {
                         popupBusca.mover(8);
@@ -266,9 +296,18 @@ Popup {
                         anchors.fill: parent
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
-                        // Só destaca: o foco continua no campo de busca, pra
-                        // o atendente seguir refinando o termo sem reclicar.
+                        // Um clique só destaca: o foco continua no campo de
+                        // busca, pra o atendente seguir refinando o termo sem
+                        // reclicar, e o painel ao lado mostra o preço — que é
+                        // pra que esta tela serviu desde sempre.
                         onClicked: popupBusca.indiceSelecionado = linhaResultado.index
+                        // Duplo clique lança: é o atalho de quem já sabe o que
+                        // quer, o mesmo gesto que a prévia da tela de estilo da
+                        // comanda usa pra abrir o popup de estilo direto.
+                        onDoubleClicked: {
+                            popupBusca.indiceSelecionado = linhaResultado.index;
+                            popupBusca.iniciarLancamento();
+                        }
                     }
                 }
 
@@ -425,15 +464,55 @@ Popup {
                     font.pixelSize: Estilo.global.fontSize.md
                     color: Estilo.global.textMuted
                 }
+
+                // O lançamento precisa de um botão à vista, não só do Enter:
+                // a lista responde ao clique destacando o item, e sem isto a
+                // única pista de que dá pra virar pedido era a linha de ajuda
+                // no rodapé — quem clica e não vê nada acontecer conclui que
+                // a tela não faz isso.
+                Botao {
+                    anchors.right: parent.right
+                    anchors.bottom: parent.bottom
+                    anchors.margins: Estilo.global.padding.lg
+                    visible: popupBusca.lancavel
+                    text: "Lançar pedido"
+                    nomeIcone: "fa6s.cart-plus"
+                    onClicked: popupBusca.iniciarLancamento()
+                }
             }
         }
 
         // --- RODAPÉ: ajuda de teclado ---
         Text {
             Layout.fillWidth: true
-            text: "↑ ↓ navegar   ·   Esc fechar   ·   Ctrl+S abre esta busca de qualquer tela"
+            text: popupBusca.lancavel
+                ? "↑ ↓ navegar   ·   Enter ou duplo clique lança o pedido   ·   Esc fechar"
+                : "↑ ↓ navegar   ·   Esc fechar   ·   Ctrl+S abre esta busca de qualquer tela"
             font.pixelSize: Estilo.global.fontSize.xs
             color: Estilo.global.textMuted
         }
     }
+
+    // Mora aqui dentro, e não em main.qml, para que `fluxoAtivo` seja uma
+    // ligação direta e o foco voltar sozinho para o campo de busca quando o
+    // fluxo é abortado (Esc na primeira etapa).
+    PopupLancamentoRapido {
+        id: popupLancamento
+
+        pilhaPrincipal: popupBusca.pilhaPrincipal
+
+        onClosed: campoBusca.forceActiveFocus()
+
+        // Item lançado: a busca também sai de cena — o atendente já está na
+        // tela de venda, e deixar a busca aberta por cima dela seria mais um
+        // Esc pra dar.
+        onConcluido: function (mensagem, sucesso) {
+            popupBusca.close();
+            popupBusca.lancamentoConcluido(mensagem, sucesso);
+        }
+    }
+
+    // Repassado a main.qml, que é quem sabe alcançar a tela atual pra mostrar
+    // a notificação.
+    signal lancamentoConcluido(string mensagem, bool sucesso)
 }
