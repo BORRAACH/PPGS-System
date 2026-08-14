@@ -74,6 +74,12 @@ Popup {
     // adicionais) entram pelo caminho invertido.
     readonly property var _categoriasItem: ["pizzas", "lanches", "bebidas", "acaiTamanhos", "outros"]
 
+    // Etapas em que dá pra seguir sem escolher nada: a borda é opcional (não
+    // escolher é "Sem borda") e os adicionais também. Uma propriedade só,
+    // consultada pelo botão do rodapé, pelo Tab e pela dica de teclado — as
+    // três precisam concordar, e antes cada uma repetia a condição.
+    readonly property bool podePular: etapa === "adicionais" || etapa === "borda"
+
     signal concluido(string mensagem, bool sucesso)
 
     modal: true
@@ -323,6 +329,27 @@ Popup {
         return tabela.length > 0 ? Montagem.parseValor(tabela[0].bruto) : 0;
     }
 
+    // Os preços do item base na ordem em que a etapa de tamanho/pão os lista.
+    //
+    // Pizza sai do MAIOR pro menor (Grande, Broto, Mini): a grande é a mais
+    // vendida, e deixá-la em primeiro poupa uma tecla no caminho comum. Os
+    // campos vêm de cardapioService.CATEGORIAS em ordem crescente de tamanho,
+    // então inverter é o que dá "maior primeiro" — e continua dando se um
+    // tamanho novo for acrescentado lá na posição certa.
+    //
+    // Os pães do lanche não têm ordem de grandeza (Hambúrguer/Francês/Baby),
+    // então ficam como estão. Cópia antes de inverter: `precos` vem do item
+    // guardado em cache, e reverse() mexe no array no lugar.
+    function _precosNaOrdemDaEtapa() {
+        if (!popupLancamento.itemBase)
+            return [];
+
+        var precos = popupLancamento.itemBase.precos.slice();
+        if (popupLancamento.itemBase.chaveCategoria === "pizzas")
+            precos.reverse();
+        return precos;
+    }
+
     function _resumoPao(chaveCampo) {
         if (chaveCampo === "valor.pao_frances")
             return "frances";
@@ -568,7 +595,7 @@ Popup {
                 if (!popupLancamento.itemBase)
                     return saida;
 
-                var precos = popupLancamento.itemBase.precos;
+                var precos = popupLancamento._precosNaOrdemDaEtapa();
                 for (i = 0; i < precos.length; i++) {
                     saida.push({
                         "rotulo": precos[i].rotulo,
@@ -747,17 +774,19 @@ Popup {
             popupLancamento.voltar();
             evento.accepted = true;
         }
-        // Na etapa de várias escolhas, Enter marca/desmarca e é o Tab que
-        // conclui — senão não haveria como dizer "terminei de marcar".
+        // Tab segue em frente nas etapas opcionais: nos adicionais o Enter
+        // marca/desmarca, então sem ele não haveria como dizer "terminei de
+        // marcar"; na borda ele é o mesmo que o botão "Pular", que fica do
+        // outro lado do rodapé.
         //
         // Precisa ser onTabPressed, e não um `if (evento.key === Qt.Key_Tab)`
         // dentro de Keys.onPressed: o Tab é consumido pela navegação de foco
         // do Qt ANTES de chegar ao handler genérico, então aquele ramo nunca
-        // rodava — o popup simplesmente não avançava. Nas outras etapas o
-        // evento é devolvido (accepted = false) para o Tab seguir servindo de
-        // navegação normal.
+        // rodava — o popup simplesmente não avançava. Nas etapas de escolha
+        // obrigatória o evento é devolvido (accepted = false) para o Tab
+        // seguir servindo de navegação normal.
         Keys.onTabPressed: function (evento) {
-            if (popupLancamento.etapa !== "adicionais") {
+            if (!popupLancamento.podePular) {
                 evento.accepted = false;
                 return;
             }
@@ -961,10 +990,15 @@ Popup {
                     anchors.right: btnAvancar.visible ? btnAvancar.left : parent.right
                     anchors.rightMargin: Estilo.global.spacing.md
                     anchors.verticalCenter: parent.verticalCenter
-                    text: (popupLancamento.etapa === "adicionais"
-                            ? "Enter marca   ·   Tab continua"
-                            : "↑ ↓ navegar   ·   Enter escolher")
-                        + "   ·   Alt+← volta"
+                    text: {
+                        var partes = popupLancamento.etapa === "adicionais"
+                            ? ["Enter marca", "Tab continua"]
+                            : ["↑ ↓ navegar", "Enter escolher"];
+                        if (popupLancamento.podePular && popupLancamento.etapa !== "adicionais")
+                            partes.push("Tab pula");
+                        partes.push("Alt+← volta");
+                        return partes.join("   ·   ");
+                    }
                     font.pixelSize: Estilo.global.fontSize.sm
                     color: Estilo.global.textSecondary
                     elide: Text.ElideRight
@@ -976,7 +1010,7 @@ Popup {
                     anchors.right: parent.right
                     anchors.rightMargin: Estilo.global.padding.xl
                     anchors.verticalCenter: parent.verticalCenter
-                    visible: popupLancamento.etapa === "adicionais" || popupLancamento.etapa === "borda"
+                    visible: popupLancamento.podePular
                     text: popupLancamento.etapa === "adicionais" ? "Continuar" : "Pular"
                     variante: "secundario"
                     focusPolicy: Qt.NoFocus
