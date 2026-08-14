@@ -5,8 +5,16 @@ campos aparecem na comanda impressa (ordem_secoes/CAMPOS_ORDENAVEIS) — tudo
 editável pela tela Configurações
 (qml/pages/configuracoes/impressora/EstiloImpressora.qml) e usado por
 balcaoController.py/entregaController.py/salaoController.py (montagem do
-texto, via comandaTextoService.montar_linhas_por_ordem) e printerService.py
-(espaçamento antes do corte automático).
+texto, via comandaTextoService.montar_linhas_por_ordem), por
+fechamentoController.py (recibo de diária e cupom de fechamento de caixa,
+pelo mesmo montar_linhas_por_ordem) e printerService.py (espaçamento antes
+do corte automático).
+
+São TRÊS papéis impressos, não um: a comanda de venda, o recibo de
+pagamento de diária e o cupom de fechamento de caixa (ver
+DOCUMENTO_POR_TIPO). Todos moram na mesma configuração e obedecem às mesmas
+regras de estilo/ordem/divisória — o que muda de um pro outro é só qual
+subconjunto de chaves tem conteúdo na hora de imprimir.
 
 Persistido em Config/estilo_impressao.json — fora do git (é preferência de
 cada máquina/impressora, não código-fonte), igual a Config/.versao (ver
@@ -92,6 +100,15 @@ FONTE_NORMAL_DESLIGA = _GS + "!" + "\x00"
 # pedidos de Entrega) — ficam na mesma lista/tela mesmo assim; não fazem
 # diferença nenhuma pro outro tipo, que nunca chama formatar_campo com esse
 # nome.
+#
+# Os campos com prefixo "extra_"/"fech_" pertencem aos outros dois papéis que
+# o app imprime além da comanda de venda — o recibo de pagamento de diária e
+# o cupom de fechamento de caixa (ver
+# controllers/fechamentoController._montar_recibo_extra/
+# _montar_recibo_fechamento). Ficam na MESMA lista, com as mesmas regras de
+# estilo/ordem/divisória, porque a tela de Configurações é uma só: o que
+# separa um papel do outro é o DOCUMENTO (ver DOCUMENTO_POR_CAMPO), não uma
+# segunda configuração paralela.
 CAMPOS = [
     "id_pedido",
     "cliente",
@@ -111,6 +128,23 @@ CAMPOS = [
     "taxa_entrega",
     "valor_total",
     "troco_a_dar",
+    # --- Recibo de pagamento de diária (Fechamento > Extras) ---
+    "extra_titulo",
+    "extra_funcionario",
+    "extra_valor",
+    "extra_data",
+    "extra_assinatura",
+    # --- Cupom de fechamento de caixa ---
+    "fech_titulo",
+    "fech_data",
+    "fech_bruto",
+    "fech_liquido",
+    "fech_origem_titulo",
+    "fech_origem_nome",
+    "fech_origem_forma",
+    "fech_diarias_titulo",
+    "fech_diarias_item",
+    "fech_lucro",
 ]
 ATRIBUTOS_BOOLEANOS = ["negrito", "sublinhado", "fundo_preto"]
 
@@ -137,6 +171,21 @@ RODULOS_CAMPOS = {
     "taxa_entrega": "Taxa de entrega",
     "valor_total": "Valor do pedido",
     "troco_a_dar": "Troco a dar",
+    "extra_titulo": "Título do recibo",
+    "extra_funcionario": "Funcionário",
+    "extra_valor": "Valor da diária",
+    "extra_data": "Data/hora do pagamento",
+    "extra_assinatura": "Linha de assinatura",
+    "fech_titulo": "Título do fechamento",
+    "fech_data": "Data do caixa",
+    "fech_bruto": "Total bruto vendido",
+    "fech_liquido": "Total líquido",
+    "fech_origem_titulo": "Título \"Por origem\"",
+    "fech_origem_nome": "Origem e seu total",
+    "fech_origem_forma": "Forma de pagamento da origem",
+    "fech_diarias_titulo": "Título \"Pagamentos de diária\"",
+    "fech_diarias_item": "Pagamento de diária (linha)",
+    "fech_lucro": "Lucro",
 }
 
 RODULOS_ATRIBUTOS = {
@@ -174,12 +223,35 @@ CAMPOS_ORDENAVEIS = [
     "valor_total",
     "troco_a_dar",
     "divisao_conta",
+    # --- Recibo de pagamento de diária ---
+    "extra_titulo",
+    "extra_funcionario",
+    "extra_valor",
+    "extra_data",
+    "extra_assinatura",
+    # --- Cupom de fechamento de caixa. "fech_por_origem" e "fech_diarias"
+    # são âncoras de posição (mesmo papel de "itens"): o bloco inteiro se
+    # move junto, e quem tem estilo próprio são as sub-linhas dele.
+    "fech_titulo",
+    "fech_data",
+    "fech_bruto",
+    "fech_liquido",
+    "fech_por_origem",
+    "fech_diarias",
+    "fech_lucro",
 ]
+
+# Chaves ordenáveis que NÃO têm estilo próprio — só posição. A tela de
+# Configurações lê isto (ver listarCamposOrdenaveis/"estilizavel") para
+# desabilitar o botão "Estilo…" nelas, em vez de repetir a lista no QML.
+CAMPOS_ANCORA = [chave for chave in CAMPOS_ORDENAVEIS if chave not in CAMPOS]
 
 RODULOS_CAMPOS_ORDENAVEIS = {
     **RODULOS_CAMPOS,
     "itens": "Tabela de itens do pedido",
     "divisao_conta": "Divisão da conta (Mesa)",
+    "fech_por_origem": "Bloco \"Por origem\"",
+    "fech_diarias": "Bloco \"Pagamentos de diária\"",
 }
 
 # Categoria de cada campo ordenável — usada só por
@@ -205,6 +277,23 @@ CATEGORIA_CAMPO = {
     "valor_total": "totais",
     "troco_a_dar": "totais",
     "divisao_conta": "divisao",
+    # As categorias dos outros dois papéis são próprias deles (prefixadas):
+    # como cada documento é impresso sozinho, nunca há um campo de pedido
+    # como "anterior" de um campo de fechamento — mas prefixar deixa
+    # explícito que a divisória entre "totais" e "fech_totais" nunca é
+    # avaliada, em vez de parecer coincidência.
+    "extra_titulo": "extra_cabecalho",
+    "extra_funcionario": "extra_corpo",
+    "extra_valor": "extra_corpo",
+    "extra_data": "extra_corpo",
+    "extra_assinatura": "extra_assinatura",
+    "fech_titulo": "fech_cabecalho",
+    "fech_data": "fech_cabecalho",
+    "fech_bruto": "fech_totais",
+    "fech_liquido": "fech_totais",
+    "fech_por_origem": "fech_origem",
+    "fech_diarias": "fech_diarias",
+    "fech_lucro": "fech_lucro",
 }
 
 # Quais tipos de comanda imprimem cada campo. Usado SÓ pela prévia da tela de
@@ -215,7 +304,33 @@ CATEGORIA_CAMPO = {
 # _montarCupomFinal). Um valor errado aqui só acende/apaga um campo na tela;
 # não muda nada do que sai impresso. Se um controller passar a imprimir um
 # campo novo, atualize aqui também — senão a prévia mente.
-TIPOS_COMANDA = ["Balcão", "Entrega", "Mesa"]
+TIPOS_COMANDA = ["Balcão", "Entrega", "Mesa", "Extras", "Fechamento"]
+
+# Os cinco tipos acima não são cinco papéis diferentes: Balcão/Entrega/Mesa
+# são três variações do MESMO papel (a comanda de venda, que muda só quais
+# campos têm conteúdo), enquanto Extras e Fechamento são papéis próprios,
+# impressos sozinhos e com campos que não aparecem em nenhum outro.
+#
+# É essa diferença que o DOCUMENTO captura: a tela de Configurações mostra
+# no papel só os campos do documento do tipo escolhido (trocar de Entrega
+# pra Fechamento troca a comanda inteira na prévia), e dentro de um mesmo
+# documento continua apagando os campos que aquele tipo não imprime (a
+# regra antiga, de TIPOS_POR_CAMPO). A configuração em disco continua sendo
+# UMA só: "campos"/"ordem_secoes"/"separadores_campo" guardam os três
+# documentos juntos, e cada um só enxerga as próprias chaves na hora de
+# imprimir (ver comandaTextoService.montar_linhas_por_ordem, que pula
+# qualquer chave sem conteúdo).
+DOCUMENTO_PEDIDO = "pedido"
+DOCUMENTO_EXTRA = "extra"
+DOCUMENTO_FECHAMENTO = "fechamento"
+
+DOCUMENTO_POR_TIPO = {
+    "Balcão": DOCUMENTO_PEDIDO,
+    "Entrega": DOCUMENTO_PEDIDO,
+    "Mesa": DOCUMENTO_PEDIDO,
+    "Extras": DOCUMENTO_EXTRA,
+    "Fechamento": DOCUMENTO_FECHAMENTO,
+}
 
 TIPOS_POR_CAMPO = {
     "id_pedido": ["Balcão", "Entrega", "Mesa"],
@@ -234,6 +349,27 @@ TIPOS_POR_CAMPO = {
     "valor_total": ["Balcão", "Entrega", "Mesa"],
     "troco_a_dar": ["Balcão", "Entrega"],
     "divisao_conta": ["Mesa"],
+    "extra_titulo": ["Extras"],
+    "extra_funcionario": ["Extras"],
+    "extra_valor": ["Extras"],
+    "extra_data": ["Extras"],
+    "extra_assinatura": ["Extras"],
+    "fech_titulo": ["Fechamento"],
+    "fech_data": ["Fechamento"],
+    "fech_bruto": ["Fechamento"],
+    "fech_liquido": ["Fechamento"],
+    "fech_por_origem": ["Fechamento"],
+    "fech_diarias": ["Fechamento"],
+    "fech_lucro": ["Fechamento"],
+}
+
+# Documento (papel impresso) a que cada chave ordenável pertence — deduzido
+# de TIPOS_POR_CAMPO em vez de escrito à mão, pra não haver uma terceira
+# lista pra manter em dia: o documento de um campo é o do primeiro tipo que
+# o imprime.
+DOCUMENTO_POR_CAMPO = {
+    campo: DOCUMENTO_POR_TIPO.get((tipos or [""])[0], DOCUMENTO_PEDIDO)
+    for campo, tipos in TIPOS_POR_CAMPO.items()
 }
 
 # Ordem padrão dos campos na comanda impressa — reproduz o layout visual de
@@ -256,6 +392,22 @@ _ORDEM_PADRAO = [
     "valor_total",
     "troco_a_dar",
     "divisao_conta",
+    # Cada documento é um bloco contíguo aqui só por legibilidade — o que
+    # importa de verdade é a ordem RELATIVA entre as chaves de um mesmo
+    # documento, já que na impressão as dos outros são puladas por não terem
+    # conteúdo (ver comandaTextoService.montar_linhas_por_ordem).
+    "extra_titulo",
+    "extra_funcionario",
+    "extra_valor",
+    "extra_data",
+    "extra_assinatura",
+    "fech_titulo",
+    "fech_data",
+    "fech_bruto",
+    "fech_liquido",
+    "fech_por_origem",
+    "fech_diarias",
+    "fech_lucro",
 ]
 
 
@@ -302,6 +454,13 @@ def _padrao():
     # cabeçalho por padrão (continua editável em Configurações, como todo
     # outro campo desta lista).
     config["campos"]["id_pedido"]["negrito"] = True
+    # Mesma ideia nos outros dois papéis: estes são os trechos que já saíam
+    # em negrito fixo antes de virarem campos configuráveis (ver
+    # fechamentoController._montar_recibo_extra/_montar_recibo_fechamento),
+    # então o padrão reproduz o cupom de antes.
+    for campo in ("extra_titulo", "fech_titulo", "fech_origem_titulo",
+                  "fech_origem_nome", "fech_diarias_titulo", "fech_lucro"):
+        config["campos"][campo]["negrito"] = True
     return config
 
 
@@ -645,11 +804,13 @@ class ComandaEstiloController(QObject):
     @protegido([])
     def listarCamposOrdenaveis(self):
         """Catálogo dos campos que têm posição própria na comanda. Devolve
-        também `categoria` e `tipos` para a prévia da tela de Configurações
-        conseguir desenhar os separadores (mesma regra de
-        comandaTextoService.montar_linhas_por_ordem) e apagar os campos que
-        o tipo de comanda escolhido não imprime — sem duplicar
-        CATEGORIA_CAMPO/TIPOS_POR_CAMPO no QML, que divergiriam na primeira
+        também `categoria`, `tipos`, `documento` e `estilizavel` para a
+        prévia da tela de Configurações conseguir desenhar os separadores
+        (mesma regra de comandaTextoService.montar_linhas_por_ordem), mostrar
+        só os campos do papel escolhido, apagar os campos que o tipo de
+        comanda escolhido não imprime e desabilitar "Estilo…" nas âncoras de
+        posição — sem duplicar CATEGORIA_CAMPO/TIPOS_POR_CAMPO/
+        DOCUMENTO_POR_CAMPO/CAMPOS_ANCORA no QML, que divergiriam na primeira
         vez que alguém acrescentasse um campo aqui."""
         return [
             {
@@ -657,6 +818,8 @@ class ComandaEstiloController(QObject):
                 "rotulo": RODULOS_CAMPOS_ORDENAVEIS[campo],
                 "categoria": CATEGORIA_CAMPO.get(campo, ""),
                 "tipos": TIPOS_POR_CAMPO.get(campo, list(TIPOS_COMANDA)),
+                "documento": DOCUMENTO_POR_CAMPO.get(campo, DOCUMENTO_PEDIDO),
+                "estilizavel": campo in CAMPOS,
             }
             for campo in CAMPOS_ORDENAVEIS
         ]
@@ -664,7 +827,13 @@ class ComandaEstiloController(QObject):
     @pyqtSlot(result="QVariantList")
     @protegido([])
     def listarTiposComanda(self):
-        return list(TIPOS_COMANDA)
+        """Cada tipo com o documento (papel impresso) a que pertence — ver
+        DOCUMENTO_POR_TIPO. Balcão/Entrega/Mesa compartilham "pedido"; Extras
+        e Fechamento têm cada um o seu."""
+        return [
+            {"nome": tipo, "documento": DOCUMENTO_POR_TIPO.get(tipo, DOCUMENTO_PEDIDO)}
+            for tipo in TIPOS_COMANDA
+        ]
 
     @pyqtSlot(result=int)
     def tamanhoFontePadrao(self):

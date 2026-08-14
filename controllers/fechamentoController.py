@@ -734,7 +734,14 @@ class FechamentoController(QObject):
         diária), o total de cada origem já dividido por forma de
         pagamento, os pagamentos de diária do dia e o Lucro (ver
         services/formulaLucroService.py, a mesma fórmula configurável que
-        Fechamento.qml mostra na tela)."""
+        Fechamento.qml mostra na tela).
+
+        Mesmo caminho de _montar_recibo_extra e das comandas de venda: cada
+        campo vira um renderizador já estilizado, e a ordem/divisórias saem
+        da configuração da tela (comandaTextoService.montar_linhas_por_ordem).
+        "fech_por_origem" e "fech_diarias" são blocos de várias linhas —
+        equivalentes à tabela de itens de uma comanda: posição única, estilo
+        por sub-linha."""
 
         def fmt(valor):
             return f"R$ {valor:.2f}".replace(".", ",")
@@ -752,20 +759,7 @@ class FechamentoController(QObject):
         total_contagem = contagem.get("cartao", 0) + contagem.get("dinheiro", 0) + contagem.get("pix", 0)
         lucro = formulaLucroService.calcular_lucro(bruto, total_contagem, total_extras)
 
-        linhas = [
-            f"{estilo.NEGRITO_LIGA}FECHAMENTO DE CAIXA{estilo.NEGRITO_DESLIGA}",
-            f"Data: {data_formatada}",
-            *estilo.linhas_espacamento_secoes(),
-            "-" * 40,
-            *estilo.linhas_espacamento_secoes(),
-            f"Total bruto vendido: {fmt(bruto)}",
-            f"Total líquido (bruto - extras): {fmt(liquido)}",
-            *estilo.linhas_espacamento_secoes(),
-            "-" * 40,
-            f"{estilo.NEGRITO_LIGA}POR ORIGEM{estilo.NEGRITO_DESLIGA}",
-            "-" * 40,
-        ]
-
+        linhas_origem = [estilo.formatar_campo("POR ORIGEM", "fech_origem_titulo")]
         por_tipo = resumo.get("porTipo") or {}
         algum_tipo = False
         for tipo in ("Balcão", "Entrega", "Mesa"):
@@ -774,31 +768,39 @@ class FechamentoController(QObject):
                 continue
             algum_tipo = True
             formas = self._somar_por_forma_pagamento(tipo, info.get("comandas", []))
-            linhas.extend(estilo.linhas_espacamento_secoes())
-            linhas.append(f"{estilo.NEGRITO_LIGA}{tipo}: {fmt(info.get('total', 0.0))}{estilo.NEGRITO_DESLIGA}")
-            linhas.append(f"  Dinheiro: {fmt(formas['dinheiro'])}")
-            linhas.append(f"  Pix: {fmt(formas['pix'])}")
-            linhas.append(f"  Cartão: {fmt(formas['cartao'])}")
+            linhas_origem.extend(estilo.linhas_espacamento_secoes())
+            linhas_origem.append(estilo.formatar_campo(f"{tipo}: {fmt(info.get('total', 0.0))}", "fech_origem_nome"))
+            for rotulo, chave_forma in (("Dinheiro", "dinheiro"), ("Pix", "pix"), ("Cartão", "cartao")):
+                linhas_origem.append(f"  {estilo.formatar_campo(f'{rotulo}: {fmt(formas[chave_forma])}', 'fech_origem_forma')}")
 
         if not algum_tipo:
-            linhas.extend(estilo.linhas_espacamento_secoes())
-            linhas.append("Nenhuma comanda lançada neste dia.")
+            linhas_origem.extend(estilo.linhas_espacamento_secoes())
+            # Sem origem nenhuma, a mensagem ocupa o lugar das linhas de
+            # origem — e por isso usa o estilo delas, em vez de pedir mais um
+            # campo configurável só pro caso vazio.
+            linhas_origem.append(estilo.formatar_campo("Nenhuma comanda lançada neste dia.", "fech_origem_nome"))
 
-        linhas.extend(estilo.linhas_espacamento_secoes())
-        linhas.append("-" * 40)
-        linhas.append(f"{estilo.NEGRITO_LIGA}PAGAMENTOS DE DIÁRIA{estilo.NEGRITO_DESLIGA}")
-        linhas.append("-" * 40)
+        linhas_diarias = [estilo.formatar_campo("PAGAMENTOS DE DIÁRIA", "fech_diarias_titulo")]
         if itens_extras:
             for item in itens_extras:
-                linhas.append(f"{item.get('funcionario', '')} - {item.get('dataHora', '')} - {fmt(item.get('valor', 0.0))}")
+                linhas_diarias.append(estilo.formatar_campo(
+                    f"{item.get('funcionario', '')} - {item.get('dataHora', '')} - {fmt(item.get('valor', 0.0))}",
+                    "fech_diarias_item",
+                ))
         else:
-            linhas.append("Nenhum pagamento de diária neste dia.")
+            linhas_diarias.append(estilo.formatar_campo("Nenhum pagamento de diária neste dia.", "fech_diarias_item"))
 
-        linhas.extend(estilo.linhas_espacamento_secoes())
-        linhas.append("-" * 40)
-        linhas.append(f"{estilo.NEGRITO_LIGA}LUCRO: {fmt(lucro)}{estilo.NEGRITO_DESLIGA}")
-        linhas.append("-" * 40)
+        renderizadores = {
+            "fech_titulo": [estilo.formatar_campo("FECHAMENTO DE CAIXA", "fech_titulo")],
+            "fech_data": [f"Data: {estilo.formatar_campo(data_formatada, 'fech_data')}"],
+            "fech_bruto": [f"Total bruto vendido: {estilo.formatar_campo(fmt(bruto), 'fech_bruto')}"],
+            "fech_liquido": [f"Total líquido (bruto - extras): {estilo.formatar_campo(fmt(liquido), 'fech_liquido')}"],
+            "fech_por_origem": linhas_origem,
+            "fech_diarias": linhas_diarias,
+            "fech_lucro": [estilo.formatar_campo(f"LUCRO: {fmt(lucro)}", "fech_lucro")],
+        }
 
+        linhas = texto.montar_linhas_por_ordem(estilo.ordem_secoes(), renderizadores)
         conteudo = "\n".join(linhas) + "\n"
         return conteudo.encode(parser.CODEPAGE_IMPRESSORA, errors="replace")
 
@@ -1070,25 +1072,30 @@ class FechamentoController(QObject):
 
     def _montar_recibo_extra(self, registro):
         """Monta o recibo de pagamento de diária em bytes ESC/POS, pronto
-        pra impressora — mesmo padrão de balcaoController._salvarComanda
-        (linhas montadas com comandaEstiloService, depois codificadas na
-        codepage da impressora). Termina com um espaço em branco e uma
-        linha para assinatura, que este tipo de recibo não tinha antes."""
-        linhas = [
-            f"{estilo.NEGRITO_LIGA}PAGAMENTO DE DIÁRIA{estilo.NEGRITO_DESLIGA}",
-            *estilo.linhas_espacamento_secoes(),
-            "-" * 40,
-            *estilo.linhas_espacamento_secoes(),
-            f"Funcionário: {registro.get('funcionario', '')}",
-            f"Valor: R$ {float(registro.get('valor', 0)):.2f}".replace(".", ","),
-            f"Data: {registro.get('dataHora', '')}",
-            *estilo.linhas_espacamento_secoes(),
-            "-" * 40,
-            "",
-            "",
-            "_" * 30,
-            "Assinatura",
-        ]
+        pra impressora — mesmo caminho de balcaoController._salvarComanda:
+        um renderizador por campo (cada um já passado por
+        estilo.formatar_campo) e a montagem final por
+        comandaTextoService.montar_linhas_por_ordem, que é quem decide a
+        ordem dos campos e onde entram as divisórias, tudo vindo da tela de
+        Configurações. Termina com um espaço em branco e uma linha para
+        assinatura.
+
+        Como a ordem é a mesma lista global (estilo.ordem_secoes()), as
+        chaves dos outros dois papéis simplesmente não aparecem em
+        `renderizadores` e são puladas."""
+        valor = f"R$ {float(registro.get('valor', 0)):.2f}".replace(".", ",")
+        renderizadores = {
+            "extra_titulo": [estilo.formatar_campo("PAGAMENTO DE DIÁRIA", "extra_titulo")],
+            "extra_funcionario": [f"Funcionário: {estilo.formatar_campo(registro.get('funcionario', ''), 'extra_funcionario')}"],
+            "extra_valor": [f"Valor: {estilo.formatar_campo(valor, 'extra_valor')}"],
+            "extra_data": [f"Data: {estilo.formatar_campo(registro.get('dataHora', ''), 'extra_data')}"],
+            # As duas linhas em branco são do próprio bloco (espaço pra
+            # assinar), não espaçamento entre seções — por isso continuam
+            # literais aqui em vez de virarem linhas_espacamento_secoes().
+            "extra_assinatura": ["", "", estilo.formatar_campo("_" * 30, "extra_assinatura"), "Assinatura"],
+        }
+
+        linhas = texto.montar_linhas_por_ordem(estilo.ordem_secoes(), renderizadores)
         conteudo = "\n".join(linhas) + "\n"
         return conteudo.encode(parser.CODEPAGE_IMPRESSORA, errors="replace")
 
