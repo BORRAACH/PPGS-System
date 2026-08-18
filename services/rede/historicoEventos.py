@@ -91,6 +91,18 @@ _EVENTOS = {
     "conflito_resolvido": (COMANDAS, "Divergência resolvida"),
 }
 
+# Eventos de escrituração que NÃO entram no histórico. A tela de Rede existe
+# pra responder "o que aconteceu na malha", e a retenção é limitada
+# (_MAXIMO_REGISTROS / _RETENCAO_DIAS): um evento que dispara uma vez por
+# comanda, sem dizer nada que o usuário queira saber, encurtaria pela metade a
+# janela de dias realmente visível em troca de ruído.
+#
+# "comanda_numerada" (ver RedeService.reservar_numero_comanda) é exatamente
+# isso: a reserva do número que vai sair impresso. O "pedido_novo" da MESMA
+# comanda, esse sim no histórico, já conta a história inteira — inclusive o
+# código, que está dentro do cupom.
+_SEM_HISTORICO = {"comanda_numerada"}
+
 # Como extrair, do payload de cada tipo, a linha curta que identifica o alvo do
 # evento. Sem isto o histórico diria só "Comanda lançada", sem dizer qual.
 _DETALHE = {
@@ -144,6 +156,9 @@ def registrar(id_evento, tipo_evento, payload=None, maquina=""):
     `maquina` só precisa ser passada quando não dá pra deduzir do id (que
     carrega o nome de quem o gerou)."""
     if not id_evento or not tipo_evento:
+        return False
+
+    if tipo_evento in _SEM_HISTORICO:
         return False
 
     dados = _carregar()

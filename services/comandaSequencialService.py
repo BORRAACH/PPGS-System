@@ -6,78 +6,39 @@ controller), é só um código fácil de ler/falar/anotar em papel.
 
 Cada caractere carrega uma informação (ver gerar_codigo_pedido): a máquina
 onde o pedido foi lançado, o dia e a hora, e por último a ordem de chegada
-do pedido NESTA MÁQUINA no dia — reiniciada a cada dia novo.
+do pedido NA MALHA no dia — reiniciada a cada dia novo.
 
 A letra da máquina vem da ordem de conexão ATUAL na malha local (ver
-RedeService.letraLocal em services/rede/redeService.py) — não mais da
-inicial do hostname: duas máquinas podiam ter hostname começando pela mesma
-letra, colidindo. Não é um identificador fixo por máquina: uma máquina que
+RedeService.letraLocal em services/rede/redeService.py) — não da inicial do
+hostname: duas máquinas podiam ter hostname começando pela mesma letra,
+colidindo. Não é um identificador fixo por máquina: uma máquina que
 desconecta e reconecta entra de novo no fim da fila (pega a próxima letra
 livre no momento), em vez de reter a posição de antes da queda. A leitura em
-si continua 100% local (nunca espera resposta de rede) — usa só o que
-RedeService já tem em memória sobre os peers conectados agora.
+si é 100% local (nunca espera resposta de rede) — usa só o que RedeService já
+tem em memória sobre os peers conectados agora.
 
-O NÚMERO do dia continua deliberadamente NÃO sincronizado pela rede nem
-coordenado entre máquinas: um contador realmente único pra loja inteira
-(contando junto pedidos de Balcão/Entrega/Salão não importa em qual
-máquina) exigiria uma máquina "líder" distribuindo cada número pela rede —
-e lançar uma comanda não pode ficar esperando isso responder (mesmo
-princípio de RedeService.solicitar_impressao ser assíncrono: uma operação
-local nunca deve travar por causa da rede). Como a letra da máquina já
-entra no código, dois pedidos nunca saem com o código idêntico mesmo que a
-"ordem do dia" numérica coincida.
+O NÚMERO do dia segue a linha de eventos da MALHA, não a ordem interna de
+cada máquina: uma comanda lançada em A sai 01, a próxima lançada em B sai 02,
+a seguinte sai 03, independente de onde foi lançada. Antes cada máquina
+contava sozinha num arquivo local, e numa noite normal todas elas imprimiam
+01, 02, 03 — o número dizia respeito ao terminal, não à loja.
 
-Persistido na pasta de cache do SO (QStandardPaths), mesmo lugar/motivo de
-services/rede/fechamentoCache.py — dado local e descartável (reinicia
-sozinho a cada dia), não configuração nem comanda de verdade."""
+Isso é feito SEM máquina líder e SEM esperar a rede, que continua sendo a
+regra inegociável aqui (mesmo princípio de RedeService.solicitar_impressao ser
+assíncrono: uma operação local nunca deve travar por causa da rede). O número
+sai de um registro compartilhado de reservas — services/rede/sequenciaComandas.py
+— que cada máquina lê e grava localmente e anuncia por gossip depois; o
+anúncio chega às outras em ~1 salto, muito antes de alguém conseguir digitar a
+comanda seguinte.
 
-import json
-import os
-from datetime import date
-
-from PyQt6.QtCore import QStandardPaths
+O que isso deliberadamente NÃO garante é unicidade absoluta do número: uma
+máquina particionada da malha (cabo caiu, acabou de abrir) numera a partir do
+que ela conhece e pode repetir um número que outra já usou — travar a venda
+até a rede responder seria pior. Como a letra da máquina entra no código, dois
+pedidos nunca saem com o código idêntico nem nesse caso. É a mesma garantia de
+antes; a diferença é que a repetição virou exceção em vez de regra."""
 
 from services.rede import rede
-
-
-def _caminho_arquivo():
-    base = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.CacheLocation)
-    return os.path.join(base, "sequencia_comandas.json")
-
-
-def _carregar():
-    caminho = _caminho_arquivo()
-    if not os.path.isfile(caminho):
-        return {}
-    try:
-        with open(caminho, "r", encoding="utf-8") as arquivo:
-            dados = json.load(arquivo)
-    except (OSError, json.JSONDecodeError) as erro:
-        print(f"[comandaSequencialService] Falha ao ler {caminho}: {erro} — reiniciando contagem do dia.")
-        return {}
-    return dados if isinstance(dados, dict) else {}
-
-
-def _salvar(dados):
-    caminho = _caminho_arquivo()
-    try:
-        os.makedirs(os.path.dirname(caminho), exist_ok=True)
-        with open(caminho, "w", encoding="utf-8") as arquivo:
-            json.dump(dados, arquivo)
-    except OSError as erro:
-        print(f"[comandaSequencialService] Falha ao gravar {caminho}: {erro}")
-
-
-def _proximo_numero_do_dia(data_referencia):
-    """Incrementa e devolve o número de sequência desta máquina para
-    `data_referencia` (um date) — reinicia em 1 sempre que o dia salvo por
-    último for diferente do de hoje (arquivo de uma linha só, não precisa
-    purgar histórico de dias antigos)."""
-    dados = _carregar()
-    data_iso = data_referencia.isoformat()
-    numero = dados.get("numero", 0) + 1 if dados.get("data") == data_iso else 1
-    _salvar({"data": data_iso, "numero": numero})
-    return numero
 
 
 def gerar_codigo_pedido(agora):
@@ -91,10 +52,17 @@ def gerar_codigo_pedido(agora):
       primeira máquina conectada agora, B para a segunda, etc.
     - 2 dígitos: dia do mês.
     - 2 dígitos: hora (24h).
-    - 2 dígitos: ordem de chegada do pedido nesta máquina hoje (01, 02...).
+    - 2 dígitos: ordem de chegada do pedido na malha hoje (01, 02...).
 
     Ex: "C291401" = 3ª máquina conectada na malha agora, dia 29, 14h, 1º
-    pedido lançado nesta máquina no dia."""
+    pedido lançado na malha inteira no dia.
+
+    Acima de 99 o número simplesmente cresce e o código passa a ter 8
+    caracteres ("A181599" é o 99º; o 100º é "A1815100"): nada que leia o
+    código assume largura fixa (ver comandaParserService.PADRAO_ID_PEDIDO), e
+    truncar de volta pra 01 faria dois pedidos do mesmo dia terem o mesmo
+    número. Passar de 99 num dia ficou plausível justamente porque agora a
+    contagem é da malha inteira, não de uma máquina só."""
     maquina = rede.letraLocal
-    numero = _proximo_numero_do_dia(agora.date())
+    numero = rede.reservar_numero_comanda(agora.date().isoformat())
     return f"{maquina}{agora.day:02d}{agora.hour:02d}{numero:02d}"

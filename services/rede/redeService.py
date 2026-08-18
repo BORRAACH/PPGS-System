@@ -1,4 +1,5 @@
 import base64
+import hashlib
 import json
 import os
 import platform
@@ -6,15 +7,20 @@ import random
 import threading
 import time
 import uuid
+from datetime import datetime
 
 from PyQt6.QtCore import QObject, QByteArray, QTimer, pyqtProperty, pyqtSignal, pyqtSlot
 from PyQt6.QtNetwork import QHostAddress, QTcpServer, QTcpSocket
 
 from Config.logConfig import protegido
 from services.printerService import PrinterService
-from services.rede import caminhos, historicoEventos, impressoraFixada, indicePedidos, relogio, tombstones
+from services.rede import caminhos, historicoEventos, impressoraFixada, indicePedidos, relogio, sequenciaComandas, tombstones
 from services.rede.descoberta import criar_descoberta
 from services.rede.eventos import BarramentoEventos
+
+# Tipo de evento de gossip que anuncia um número de comanda reservado (ver
+# reservar_numero_comanda e services/rede/sequenciaComandas.py).
+_EVENTO_COMANDA_NUMERADA = "comanda_numerada"
 
 _INTERVALO_CHECAGEM_IMPRESSORA_MS = 30000
 _TIMEOUT_IMPRESSAO_MS = 10000
@@ -179,6 +185,7 @@ class RedeService(QObject):
         self._eventos.registrar("pedido_novo", self._ao_receber_evento_pedido_novo)
         self._eventos.registrar("pedido_apagado", self._ao_receber_evento_pedido_apagado)
         self._eventos.registrar("impressora_fixada", self._ao_receber_evento_impressora_fixada)
+        self._eventos.registrar(_EVENTO_COMANDA_NUMERADA, self._ao_receber_evento_comanda_numerada)
 
         # Histórico da malha: eventos são imutáveis, então a reconciliação é a
         # união dos dois lados e não existe "apagar" (a retenção é local, ver
@@ -190,6 +197,25 @@ class RedeService(QObject):
             historicoEventos.obter,
             historicoEventos.aplicar,
         )
+
+        # Números de comanda já reservados (ver
+        # services/rede/sequenciaComandas.py). Conjunto que só cresce dentro
+        # de cada dia, então reconciliar é a união dos dois lados e não existe
+        # "apagar" — mesma forma do domínio "historico" acima.
+        self.registrarDominioSincronizado(
+            "sequencia",
+            self._resumo_sequencia,
+            self._obter_sequencia_reconciliacao,
+            self._aplicar_sequencia_reconciliacao,
+        )
+
+        # Republica as reservas de hoje quando um peer NOVO entra — fecha a
+        # janela do arranque, em que a anti-entropy ainda não rodou (ela só
+        # começa depois de um jitter de 0-10s, ver iniciar()) e uma máquina
+        # recém-aberta numeraria a partir do zero. Mesmo padrão e mesma
+        # justificativa de SalaoController._ao_peers_mudarem.
+        self._ultima_quantidade_peers = 0
+        self.peersMudaram.connect(self._ao_peers_mudarem_sequencia)
 
         self._impressoraLocalVerificada.connect(self._ao_verificar_impressora_local)
         self._imprimirRemotoConcluido.connect(self._ao_concluir_imprimir_remoto)
@@ -698,6 +724,41 @@ class RedeService(QObject):
         if nome:
             self.pedidoRemovidoRemoto.emit(nome, payload.get("idEvento", ""))
 
+    def _ao_receber_evento_comanda_numerada(self, payload):
+        """Aprende reservas de número feitas em outra máquina. É este caminho
+        — não a anti-entropy, que só roda a cada 2 min — que faz a próxima
+        comanda lançada AQUI continuar a sequência da malha em vez de repetir
+        o número que o peer acabou de usar.
+
+        O payload carrega um MAPA (`{"data", "reservas"}`), e não uma reserva
+        avulsa, pra este mesmo evento servir ao anúncio normal (mapa de um
+        elemento) e ao catch-up de _ao_peers_mudarem_sequencia (o dia inteiro
+        numa mensagem só, em vez de uma por número reservado)."""
+        payload = payload or {}
+        sequenciaComandas.mesclar_dia(payload.get("data", ""), payload.get("reservas") or {})
+
+    def _ao_peers_mudarem_sequencia(self, quantidade):
+        """Quando um peer NOVO entra na malha (a quantidade aumentou, não só
+        mudou), republica as reservas de número que esta máquina conhece de
+        hoje — pega carona no fan-out do próprio gossip pra o
+        recém-chegado ficar sabendo do estado atual sem esperar o primeiro
+        ciclo de anti-entropy. Sem isto, uma máquina aberta no começo do
+        expediente lançaria as primeiras comandas numerando a partir do 1,
+        repetindo o que as outras já imprimiram (ver
+        SalaoController._ao_peers_mudarem, mesmo padrão)."""
+        aumentou = quantidade > self._ultima_quantidade_peers
+        self._ultima_quantidade_peers = quantidade
+        if not aumentou:
+            return
+
+        # Só HOJE: o número reinicia a cada dia, então uma reserva de ontem
+        # não muda o próximo número de ninguém. A anti-entropy cobre os dias
+        # anteriores, que só interessam pra conferência.
+        hoje = datetime.now().strftime("%Y-%m-%d")
+        reservas = sequenciaComandas.dia(hoje)
+        if reservas:
+            self._eventos.publicar(_EVENTO_COMANDA_NUMERADA, {"data": hoje, "reservas": reservas})
+
     def publicarEvento(self, tipo_evento: str, payload: dict):
         """Anuncia `payload` (precisa ser serializável em JSON) pra malha
         inteira sob o tipo `tipo_evento`, pelo mesmo barramento de gossip
@@ -865,6 +926,40 @@ class RedeService(QObject):
 
         if itens:
             print(f"[RedeService] Reconciliação: {len(itens)} item(ns) de '{nome_dominio}' recebidos de um peer.")
+
+    # ---------- Anti-entropy do domínio "sequencia" ----------
+    # Muito mais simples que o domínio "pedidos" porque as reservas de número
+    # só crescem e nunca revertem (ver services/rede/sequenciaComandas.py):
+    # não há o que arbitrar, nenhuma reserva pode ser sobrescrita por outra e
+    # nada vira conflito manual. Sem "apagados" pelo mesmo motivo — a purga
+    # por idade é local e igual em toda máquina.
+    #
+    # A chave é o DIA e o payload é o mapa inteiro daquele dia (algumas
+    # centenas de pares no pior caso): mandar número a número faria o resumo
+    # crescer com o movimento do dia, sem nenhum ganho — quem está
+    # desatualizado num dia quase sempre está desatualizado em vários números
+    # dele.
+
+    def _resumo_sequencia(self):
+        """Anuncia um hash por dia, só dos dias dentro da janela de retenção.
+        A janela anunciada é a MESMA de sequenciaComandas.purgar_antigos de
+        propósito: anunciar um dia que a purga já apagou faria as máquinas
+        reintroduzi-lo uma na outra a cada ciclo, pra sempre (mesmo cuidado de
+        FechamentoController._resumo_baixas)."""
+        sequenciaComandas.purgar_antigos()
+
+        itens = {}
+        for data_iso, reservas in sequenciaComandas.dias_recentes().items():
+            serializado = json.dumps(reservas, sort_keys=True)
+            itens[data_iso] = hashlib.sha256(serializado.encode("utf-8")).hexdigest()[:16]
+        return {"itens": itens}
+
+    def _obter_sequencia_reconciliacao(self, data_iso):
+        reservas = sequenciaComandas.dia(data_iso)
+        return {"reservas": reservas} if reservas else None
+
+    def _aplicar_sequencia_reconciliacao(self, data_iso, payload):
+        sequenciaComandas.mesclar_dia(data_iso, (payload or {}).get("reservas") or {})
 
     # ---------- Impressora local e eleição da máquina que imprime ----------
 
@@ -1229,6 +1324,29 @@ class RedeService(QObject):
         })
 
     # ---------- Chamadas dos controllers (saída) ----------
+
+    def reservar_numero_comanda(self, data_iso: str) -> int:
+        """Reserva e devolve o próximo número de comanda de `data_iso` na
+        linha de eventos da malha — os dois últimos dígitos do código impresso
+        (ver services/comandaSequencialService.py).
+
+        Mesma forma de transmitir_pedido: um ponto só onde o fato nasce
+        localmente e é anunciado à malha logo em seguida. E, como ele, NUNCA
+        espera resposta de ninguém — a reserva é uma leitura e uma gravação em
+        disco local, e o anúncio é assíncrono. Lançar uma comanda não pode
+        travar porque a rede está fora.
+
+        A consequência aceita disso: uma máquina particionada numera a partir
+        do que ela conhece e pode repetir um número que outra já usou. A letra
+        da máquina (letraLocal) continua no código, então o código impresso
+        segue único mesmo aí — ver a docstring de
+        services/rede/sequenciaComandas.py."""
+        numero, id_evento = sequenciaComandas.reservar(data_iso)
+        self._eventos.publicar(
+            _EVENTO_COMANDA_NUMERADA,
+            {"data": data_iso, "reservas": {str(numero): id_evento}},
+        )
+        return numero
 
     def transmitir_pedido(self, nome_arquivo: str, conteudo_bytes: bytes):
         """Anuncia à malha uma comanda recém-criada NESTA máquina.
