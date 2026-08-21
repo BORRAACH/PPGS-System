@@ -163,7 +163,8 @@ Column {
         "fech_data": { "prefixo": "Data: ", "valor": "14/08/2026" },
         "fech_bruto": { "prefixo": "Total bruto vendido: ", "valor": "R$ 1250,00" },
         "fech_liquido": { "prefixo": "Total líquido (bruto - extras): ", "valor": "R$ 1130,00" },
-        "fech_lucro": { "prefixo": "", "valor": "LUCRO: R$ 430,00" }
+        "fech_lucro": { "prefixo": "", "valor": "SOBROU: R$ 430,00" },
+        "fech_lucro_real": { "prefixo": "", "valor": "LUCRO: R$ 1560,00" }
     })
 
     // Emitido quando o estilo de UM campo muda, para só a prévia daquele campo

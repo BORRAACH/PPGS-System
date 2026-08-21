@@ -106,27 +106,30 @@ Page {
         + (telaFechamento.contagemAtual.dinheiro || 0)
         + (telaFechamento.contagemAtual.pix || 0)
 
-    // Fórmula de como o Lucro é calculado (ver
-    // services/formulaLucroService.py e PopupFormulaLucro.qml) — não é por
-    // dia, é uma configuração única da malha inteira; carregada uma vez e
-    // atualizada sozinha quando muda (aqui ou em outra máquina).
-    property var formulaAtual: ({
-        "contagem": "somar",
-        "extras": "subtrair",
-        "bruto": "subtrair"
-    })
+    // Confere o caixa: o que foi contado à mão (Cartão+Dinheiro+Pix)
+    // comparado com o que as comandas do dia dizem que foi vendido.
+    // Positivo, sobrou dinheiro no caixa; negativo, faltou.
+    //
+    // É uma comparação literal entre os dois, sem passar pelas diárias: uma
+    // diária paga do caixa (ver totalExtras acima) tira dinheiro da gaveta
+    // sem tirar venda nenhuma do total, então aparece aqui como falta — que
+    // é justamente o que se quer enxergar ao conferir a gaveta.
+    //
+    // Cuidado ao ler o resultado: resumoAtual.total só conta comandas que
+    // receberam baixa (ver FechamentoController._calcular_resumo_dia), então
+    // comanda em aberto puxa isto pro lado de "sobrou" — o aviso de
+    // "N comandas em aberto · R$ X fora do caixa", lá no total do dia, é
+    // quem explica a diferença nesse caso.
+    readonly property real diferencaCaixa: telaFechamento.totalContagem - (telaFechamento.resumoAtual.total || 0)
+    // Empate conta como sobra: um caixa que bate exato não é falta.
+    readonly property bool caixaSobrou: telaFechamento.diferencaCaixa >= 0
 
-    function _multiplicadorSinal(sinal) {
-        if (sinal === "somar")
-            return 1;
-        if (sinal === "subtrair")
-            return -1;
-        return 0;
-    }
-
-    readonly property real lucro: telaFechamento.totalContagem * telaFechamento._multiplicadorSinal(telaFechamento.formulaAtual.contagem)
-        + telaFechamento.totalExtras * telaFechamento._multiplicadorSinal(telaFechamento.formulaAtual.extras)
-        + (telaFechamento.resumoAtual.total || 0) * telaFechamento._multiplicadorSinal(telaFechamento.formulaAtual.bruto)
+    // Lucro do dia: o que entrou na gaveta menos o que saiu dela em diária.
+    // Conta diferente da de cima e independente dela — aqui o bruto não
+    // entra, porque venda que ainda não virou dinheiro contado não é lucro
+    // nenhum; o bruto serve pra conferir a gaveta (diferencaCaixa), não pra
+    // dizer quanto sobrou no fim do dia.
+    readonly property real lucro: telaFechamento.totalContagem - telaFechamento.totalExtras
 
     readonly property var ordemTipos: ["Balcão", "Entrega", "Mesa"]
     readonly property var coresTipo: ({
@@ -261,14 +264,6 @@ Page {
         telaFechamento.mostrarNotificacao("Contagem de " + telaFechamento.formatarDataExibicao(telaFechamento.dataSelecionada) + " salva.", true);
     }
 
-    function _carregarFormula() {
-        telaFechamento.formulaAtual = formulaLucroController.obterConfiguracao();
-    }
-
-    function abrirFormulaLucro() {
-        popupFormulaLucro.abrirCom(telaFechamento.formulaAtual);
-    }
-
     function fecharCaixa() {
         telaFechamento.resumoAtual = fechamentoController.calcularFechamento(telaFechamento.dataSelecionada);
         fechamentoController.imprimirFechamentoCaixa(telaFechamento.dataSelecionada);
@@ -346,16 +341,6 @@ Page {
         }
     }
 
-    // formulaLucroController é global e a fórmula não é por dia — trocada
-    // em outra máquina, precisa recarregar aqui mesmo sem trocar de dia.
-    Connections {
-        target: formulaLucroController
-
-        function onFormulaAlterada() {
-            telaFechamento._carregarFormula();
-        }
-    }
-
     // A reimpressão pedida pelo popup é assíncrona e pode acontecer em outra
     // máquina da malha (ver rede.solicitar_impressao) — o resultado só chega
     // por aqui, do mesmo jeito que em Balcao.qml/Entrega.qml.
@@ -383,15 +368,14 @@ Page {
     }
 
     // obterFechamento/obterContagem varrem as comandas do dia no disco e
-    // remontam o resumo; obterConfiguracao lê a fórmula de lucro. Chamados
-    // direto de Component.onCompleted, seguravam a tela inteira antes do
-    // primeiro pixel — agora entram depois do primeiro quadro, com a página já
-    // desenhada (ver components/CargaDiferida.qml).
+    // remontam o resumo. Chamados direto de Component.onCompleted, seguravam
+    // a tela inteira antes do primeiro pixel — agora entram depois do
+    // primeiro quadro, com a página já desenhada (ver
+    // components/CargaDiferida.qml).
     CargaDiferida {
         id: carga
 
         tarefa: function() {
-            _carregarFormula();
             carregarDia(telaFechamento.dataSelecionada || hojeIso());
         }
     }
@@ -420,8 +404,8 @@ Page {
     }
 
     // Rola quando os painéis empilham e a página fica mais alta que a
-    // janela — sem isto, o bloco de Lucro (o último) ficava escondido atrás
-    // do botão "Voltar para o Menu", sem jeito de alcançá-lo.
+    // janela — sem isto, o bloco de sobra/falta (o último) ficava escondido
+    // atrás do botão "Voltar para o Menu", sem jeito de alcançá-lo.
     Flickable {
         id: rolagemFechamento
 
@@ -1133,47 +1117,16 @@ Page {
                     Layout.alignment: Qt.AlignTop
                     spacing: Estilo.global.spacing.md
 
-                    RowLayout {
+                    Row {
                         Layout.fillWidth: true
-
-                        Row {
-                            spacing: Estilo.global.spacing.xs
-                            Icone { nome: "fa6s.calculator"; cor: Estilo.screen.caixa.base; tamanho: 16; anchors.verticalCenter: parent.verticalCenter }
-                            Text {
-                                text: "Contagem de caixa"
-                                font.pixelSize: Estilo.global.fontSize.lg
-                                font.bold: true
-                                color: Estilo.screen.caixa.base
-                                anchors.verticalCenter: parent.verticalCenter
-                            }
-                        }
-
-                        Item { Layout.fillWidth: true }
-
-                        // Muda a lógica de como o Lucro abaixo é calculado (ver
-                        // PopupFormulaLucro.qml) — engrenagem, não um botão de
-                        // texto, porque é uma configuração da malha inteira, não
-                        // uma ação do dia visualizado.
-                        Button {
-                            id: btnFormulaLucro
-
-                            padding: 6
-                            focusPolicy: Qt.StrongFocus
-                            onClicked: telaFechamento.abrirFormulaLucro()
-
-                            contentItem: Icone {
-                                nome: "fa6s.gear"
-                                cor: Estilo.global.textSecondary
-                                tamanho: 14
-                                anchors.centerIn: parent
-                            }
-
-                            background: Rectangle {
-                                radius: Estilo.global.radius.pill
-                                color: btnFormulaLucro.down ? Estilo.action.ghost.pressed : (btnFormulaLucro.hovered ? Estilo.action.ghost.hover : Estilo.action.ghost.base)
-                                border.color: Estilo.global.border
-                                border.width: Estilo.global.borderWidth.hairline
-                            }
+                        spacing: Estilo.global.spacing.xs
+                        Icone { nome: "fa6s.calculator"; cor: Estilo.screen.caixa.base; tamanho: 16; anchors.verticalCenter: parent.verticalCenter }
+                        Text {
+                            text: "Contagem de caixa"
+                            font.pixelSize: Estilo.global.fontSize.lg
+                            font.bold: true
+                            color: Estilo.screen.caixa.base
+                            anchors.verticalCenter: parent.verticalCenter
                         }
                     }
 
@@ -1320,16 +1273,64 @@ Page {
                         }
                     }
 
-                    // --- LUCRO ---
+                    // --- SOBROU / FALTOU (ver diferencaCaixa) ---
                     Rectangle {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
                         radius: Estilo.global.radius.md
-                        color: telaFechamento.lucro >= 0 ? Estilo.status.success.background : Estilo.status.error.background
-                        border.color: telaFechamento.lucro >= 0 ? Estilo.status.success.border : Estilo.status.error.border
+                        color: telaFechamento.caixaSobrou ? Estilo.status.success.background : Estilo.status.error.background
+                        border.color: telaFechamento.caixaSobrou ? Estilo.status.success.border : Estilo.status.error.border
                         border.width: Estilo.global.borderWidth.hairline
 
                         ColumnLayout {
+                            anchors.centerIn: parent
+                            spacing: 4
+
+                            // O rótulo é colorido junto com o valor, ao
+                            // contrário dos outros cartões desta tela: aqui ele
+                            // não nomeia um campo fixo, é metade da resposta.
+                            Text {
+                                Layout.alignment: Qt.AlignHCenter
+                                text: telaFechamento.caixaSobrou ? "SOBROU" : "FALTOU"
+                                font.pixelSize: Estilo.global.fontSize.md
+                                font.bold: true
+                                color: telaFechamento.caixaSobrou ? Estilo.finance.positive : Estilo.finance.negative
+                            }
+
+                            // Sem sinal: quem diz a direção é o rótulo acima —
+                            // "FALTOU R$ -100,00" se leria como o contrário.
+                            Text {
+                                Layout.alignment: Qt.AlignHCenter
+                                text: "R$ " + Math.abs(telaFechamento.diferencaCaixa).toFixed(2).replace(".", ",")
+                                font.pixelSize: Estilo.global.fontSize.display
+                                font.bold: true
+                                color: telaFechamento.caixaSobrou ? Estilo.finance.positive : Estilo.finance.negative
+                            }
+                        }
+                    }
+
+                    // --- LUCRO (ver telaFechamento.lucro) ---
+                    //
+                    // Cartão neutro, ao contrário do de sobra/falta acima: o
+                    // verde/vermelho de lá é um veredito sobre a gaveta ("está
+                    // certa ou não"), e repetir a mesma moldura aqui faria dois
+                    // julgamentos onde só existe um. Aqui só o número muda de
+                    // cor, e só quando o dia de fato fecha no vermelho.
+                    //
+                    // Altura pelo conteúdo (implicitHeight, como o cartão da
+                    // contagem): quem estica pra ocupar a sobra da coluna
+                    // continua sendo um só, o de sobra/falta.
+                    Rectangle {
+                        Layout.fillWidth: true
+                        implicitHeight: colunaLucro.implicitHeight + 20
+                        radius: Estilo.global.radius.md
+                        color: Estilo.global.surface
+                        border.color: Estilo.global.borderCard
+                        border.width: Estilo.global.borderWidth.hairline
+
+                        ColumnLayout {
+                            id: colunaLucro
+
                             anchors.centerIn: parent
                             spacing: 4
 
@@ -1347,6 +1348,13 @@ Page {
                                 font.pixelSize: Estilo.global.fontSize.display
                                 font.bold: true
                                 color: telaFechamento.lucro >= 0 ? Estilo.finance.positive : Estilo.finance.negative
+                            }
+
+                            Text {
+                                Layout.alignment: Qt.AlignHCenter
+                                text: "contagem - diárias"
+                                font.pixelSize: Estilo.global.fontSize.sm
+                                color: Estilo.global.textSecondary
                             }
                         }
                     }
@@ -1404,12 +1412,6 @@ Page {
         objectName: "popupExtras"
 
         onConcluido: telaFechamento.carregarDia(telaFechamento.dataSelecionada)
-    }
-
-    PopupFormulaLucro {
-        id: popupFormulaLucro
-
-        onConcluido: telaFechamento._carregarFormula()
     }
 
     FilaNotificacoes {

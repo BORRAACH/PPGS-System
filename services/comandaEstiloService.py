@@ -145,6 +145,7 @@ CAMPOS = [
     "fech_diarias_titulo",
     "fech_diarias_item",
     "fech_lucro",
+    "fech_lucro_real",
 ]
 ATRIBUTOS_BOOLEANOS = ["negrito", "sublinhado", "fundo_preto"]
 
@@ -185,7 +186,12 @@ RODULOS_CAMPOS = {
     "fech_origem_forma": "Forma de pagamento da origem",
     "fech_diarias_titulo": "Título \"Pagamentos de diária\"",
     "fech_diarias_item": "Pagamento de diária (linha)",
-    "fech_lucro": "Lucro",
+    # "fech_lucro" é o nome histórico da chave: o campo já foi o Lucro e
+    # hoje imprime SOBROU/FALTOU. Renomeá-la sumiria com a seção no cupom de
+    # quem já tem um estilo_impressao.json salvo, então o Lucro de verdade
+    # (contagem menos diárias) entrou como uma chave nova ao lado.
+    "fech_lucro": "Sobra/falta do caixa",
+    "fech_lucro_real": "Lucro (contagem - diárias)",
 }
 
 RODULOS_ATRIBUTOS = {
@@ -239,6 +245,7 @@ CAMPOS_ORDENAVEIS = [
     "fech_por_origem",
     "fech_diarias",
     "fech_lucro",
+    "fech_lucro_real",
 ]
 
 # Chaves ordenáveis que NÃO têm estilo próprio — só posição. A tela de
@@ -294,6 +301,7 @@ CATEGORIA_CAMPO = {
     "fech_por_origem": "fech_origem",
     "fech_diarias": "fech_diarias",
     "fech_lucro": "fech_lucro",
+    "fech_lucro_real": "fech_lucro_real",
 }
 
 # Quais tipos de comanda imprimem cada campo. Usado SÓ pela prévia da tela de
@@ -361,6 +369,7 @@ TIPOS_POR_CAMPO = {
     "fech_por_origem": ["Fechamento"],
     "fech_diarias": ["Fechamento"],
     "fech_lucro": ["Fechamento"],
+    "fech_lucro_real": ["Fechamento"],
 }
 
 # Documento (papel impresso) a que cada chave ordenável pertence — deduzido
@@ -408,6 +417,7 @@ _ORDEM_PADRAO = [
     "fech_por_origem",
     "fech_diarias",
     "fech_lucro",
+    "fech_lucro_real",
 ]
 
 
@@ -459,7 +469,8 @@ def _padrao():
     # fechamentoController._montar_recibo_extra/_montar_recibo_fechamento),
     # então o padrão reproduz o cupom de antes.
     for campo in ("extra_titulo", "fech_titulo", "fech_origem_titulo",
-                  "fech_origem_nome", "fech_diarias_titulo", "fech_lucro"):
+                  "fech_origem_nome", "fech_diarias_titulo", "fech_lucro",
+                  "fech_lucro_real"):
         config["campos"][campo]["negrito"] = True
     return config
 

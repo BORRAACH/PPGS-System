@@ -82,7 +82,6 @@ _EVENTOS = {
     "extra_apagado": (CAIXA, "Extra apagado"),
     "contagem_caixa_atualizada": (CAIXA, "Contagem de caixa atualizada"),
     "estilo_impressao_alterado": (CONFIGURACOES, "Estilo da comanda alterado"),
-    "formula_lucro_alterada": (CONFIGURACOES, "Fórmula de lucro alterada"),
     "impressora_fixada": (CONFIGURACOES, "Impressora principal alterada"),
     # Publicados por este módulo, não pelo barramento (ver registrar_local).
     "maquina_conectada": (MAQUINAS, "Máquina entrou na rede"),
