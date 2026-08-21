@@ -10,7 +10,6 @@ from Config.logConfig import protegido
 from services import comandaEstiloService as estilo
 from services import comandaParserService as parser
 from services import comandaTextoService as texto
-from services import formulaLucroService
 from services.pizzeriaServerService import pizzeria_server
 from services.rede import baixaComandas, contagemCaixa, extrasCaixa, fechamentoCache, rede, relogio, tombstones
 
@@ -696,7 +695,14 @@ class FechamentoController(QObject):
         dia exibido em Fechamento.qml é hoje."""
         resumo = self._calcular_resumo_dia(data_iso)
         fechamentoCache.salvar(data_iso, resumo)
-        rede.publicarEvento(_EVENTO_FECHAMENTO_ATUALIZADO, {"data": data_iso, "resumo": resumo})
+        # Só a data, sem os números: _ao_receber_fechamento_remoto DESCARTA o
+        # resumo recebido de propósito e recalcula o dia com as comandas da
+        # própria máquina, então mandá-lo era gastar banda com um valor que o
+        # outro lado nunca leu — mesmo raciocínio já escrito em
+        # _obter_fechamento_reconciliacao, que sempre mandou só a data.
+        # O resumo tem ~22 KB (a lista de produtos vendidos é a maior parte) e
+        # isto é publicado a cada baixa, extra e abertura da tela.
+        rede.publicarEvento(_EVENTO_FECHAMENTO_ATUALIZADO, {"data": data_iso})
         return resumo
 
     @pyqtSlot(str, result="QVariantMap")
@@ -781,9 +787,10 @@ class FechamentoController(QObject):
         """Monta, em bytes ESC/POS, o cupom-resumo impresso ao clicar
         "Fechar Caixa": bruto, líquido (bruto menos os pagamentos de
         diária), o total de cada origem já dividido por forma de
-        pagamento, os pagamentos de diária do dia e o Lucro (ver
-        services/formulaLucroService.py, a mesma fórmula configurável que
-        Fechamento.qml mostra na tela).
+        pagamento, os pagamentos de diária do dia, a sobra/falta do caixa
+        (a contagem manual comparada com o bruto) e o lucro (a contagem
+        menos as diárias) — as mesmas duas contas que Fechamento.qml mostra
+        na tela, ver telaFechamento.diferencaCaixa e telaFechamento.lucro.
 
         Mesmo caminho de _montar_recibo_extra e das comandas de venda: cada
         campo vira um renderizador já estilizado, e a ordem/divisórias saem
@@ -806,7 +813,13 @@ class FechamentoController(QObject):
 
         contagem = contagemCaixa.obter_dia(data_iso) or {}
         total_contagem = contagem.get("cartao", 0) + contagem.get("dinheiro", 0) + contagem.get("pix", 0)
-        lucro = formulaLucroService.calcular_lucro(bruto, total_contagem, total_extras)
+        # Sobra (positivo) ou falta (negativo) do caixa. Comparação
+        # literal contagem x bruto, sem as diárias no meio — ver o
+        # comentário de diferencaCaixa em Fechamento.qml.
+        diferenca = total_contagem - bruto
+        # O lucro do dia é outra conta, e não passa pelo bruto: o que entrou
+        # na gaveta menos o que saiu dela em diária (ver telaFechamento.lucro).
+        lucro = total_contagem - total_extras
 
         linhas_origem = [estilo.formatar_campo("POR ORIGEM", "fech_origem_titulo")]
         por_tipo = resumo.get("porTipo") or {}
@@ -846,7 +859,15 @@ class FechamentoController(QObject):
             "fech_liquido": [f"Total líquido (bruto - extras): {estilo.formatar_campo(fmt(liquido), 'fech_liquido')}"],
             "fech_por_origem": linhas_origem,
             "fech_diarias": linhas_diarias,
-            "fech_lucro": [estilo.formatar_campo(f"LUCRO: {fmt(lucro)}", "fech_lucro")],
+            # A chave continua "fech_lucro" mesmo o campo tendo virado
+            # sobra/falta: é ela que está gravada no estilo e na ordem das
+            # seções de cada máquina (ver Config/estilo_impressao.json), e
+            # renomeá-la sumiria com a seção do cupom.
+            "fech_lucro": [estilo.formatar_campo(
+                f"{'SOBROU' if diferenca >= 0 else 'FALTOU'}: {fmt(abs(diferenca))}",
+                "fech_lucro",
+            )],
+            "fech_lucro_real": [estilo.formatar_campo(f"LUCRO: {fmt(lucro)}", "fech_lucro_real")],
         }
 
         linhas = texto.montar_linhas_por_ordem(estilo.ordem_secoes(), renderizadores)

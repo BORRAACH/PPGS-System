@@ -54,7 +54,6 @@ try:
     from services.iconProvider import IconProvider
     from services.comandaEstiloService import ComandaEstiloController
     from services.cardapioService import CardapioController
-    from services.formulaLucroService import FormulaLucroController
     from services.statusInicializacaoService import status
     from Config import diagnosticar_impressora, fontes
 except ImportError as erro:
@@ -213,8 +212,6 @@ if __name__ == "__main__":
     # só existe porque o QML não grava arquivo.
     cardapioController = CardapioController()
     engine.rootContext().setContextProperty("cardapioController", cardapioController)
-    formulaLucroController = FormulaLucroController()
-    engine.rootContext().setContextProperty("formulaLucroController", formulaLucroController)
 
     # Compartilha pedidos com outras instâncias deste app na mesma rede
     # local (ver architecture/EXPLAIN.md). Os sinais entram pelo

@@ -106,22 +106,23 @@ def _carregar_promocoes():
 
 def _precos_do_item(categoria, item):
     """Os preços de um item, já rotulados:
-    [{"rotulo": "Broto", "valor": "R$ 34,90", "chave": "valorBroto", "bruto": "34,90"}].
+    [{"rotulo": "Broto", "valor": "R$ 34,90", "chave": "valorBroto"}].
 
     O rótulo sai de "curto" na descrição do campo (ver cardapioService.
     CATEGORIAS) — é o mesmo texto que a tela de Cardápio usa no resumo da
     lista. Categorias de preço único têm "curto" vazio e caem em "Preço".
 
-    "chave" e "bruto" existem para o lançamento rápido de pedido (ver
+    "chave" existe para o lançamento rápido de pedido (ver
     qml/components/PopupLancamentoRapido.qml), que precisa saber QUAL campo de
-    preço o atendente escolheu e o número por trás dele:
+    preço o atendente escolheu. Vai por chave e não por rótulo porque o rótulo
+    é texto de exibição, editável na tela de Cardápio: casar "Francês" com o
+    pão `pao_frances` quebraria em silêncio no dia em que alguém renomeasse o
+    campo para "Pão francês". A chave é estável.
 
-    - por "chave" e não por "rotulo" porque o rótulo é texto de exibição,
-      editável na tela de Cardápio; casar "Francês" com o pão `pao_frances`
-      quebraria em silêncio no dia em que alguém renomeasse o campo para
-      "Pão francês". A chave é estável.
-    - "bruto" ("34,90") evita ter que desfazer o "R$ " com regex do outro lado
-      só para somar borda e adicionais.
+    O número puro NÃO viaja junto: quem precisa dele desfaz o "R$ " com
+    MontagemItem.parseValor, que já trata as duas formas. Mandar os dois
+    engordava em ~20% o payload da busca inteira, que atravessa a ponte pro
+    QML a cada tecla digitada — e a máquina do balcão tem 2 núcleos.
 
     Um preço vazio continua não entrando na lista — é isso que faz uma pizza
     sem `valorMini` chegar ao QML com dois tamanhos, e uma bebida sem preço de
@@ -137,7 +138,6 @@ def _precos_do_item(categoria, item):
                 "rotulo": campo["curto"] or "Preço",
                 "valor": valor,
                 "chave": campo["chave"],
-                "bruto": str(bruto).strip(),
             })
     return precos
 
@@ -168,7 +168,6 @@ def _aplicar_promocao(categoria, item, precos, promocoes):
                 "rotulo": campo["curto"] or "Preço",
                 "valor": valor,
                 "chave": campo["chave"],
-                "bruto": str(bruto).strip(),
             })
 
     if promocionais == precos:

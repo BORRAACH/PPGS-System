@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import estilo 1.0
+import "RoteiroLancamento.js" as Roteiro
 
 // Consulta rápida ao cardápio, aberta por Ctrl+S de QUALQUER tela (o atalho
 // mora em main.qml, junto com esta instância, porque só a janela raiz existe
@@ -48,19 +49,23 @@ Popup {
     // pergunta existe porque a resposta vem do roteiro de etapas, e uma
     // categoria nova que ainda não tenha roteiro precisa nascer inerte em vez
     // de nascer quebrada.
-    readonly property bool lancavel: popupLancamento.podeIniciar(itemSelecionado)
+    readonly property bool lancavel: Roteiro.podeLancar(itemSelecionado)
 
     // Enquanto o fluxo de lançamento está aberto por cima, esta busca não pode
     // se fechar por baixo dele — nem por clique fora (que cai sobre ela), nem
     // por um Esc que escape, nem pelo próprio Ctrl+S (ver main.qml). Se
     // fechasse, o onOpened seguinte limparia o termo e o fluxo ficaria órfão.
-    readonly property bool fluxoAtivo: popupLancamento.visible
+    readonly property bool fluxoAtivo: carregadorLancamento.item ? carregadorLancamento.item.visible : false
 
     function iniciarLancamento() {
         if (!popupBusca.lancavel)
             return;
 
-        popupLancamento.abrirPara(popupBusca.itemSelecionado);
+        // Constrói o fluxo na PRIMEIRA vez que alguém lança de fato. Ele são
+        // 83 QObjects e ~20 ms na abertura do app (medidos), gastos até aqui
+        // mesmo em quem só usa o Ctrl+S pra consultar preço.
+        carregadorLancamento.active = true;
+        carregadorLancamento.item.abrirPara(popupBusca.itemSelecionado);
     }
 
     // Refaz a busca do zero. Chamada a cada tecla digitada e ao abrir: o
@@ -496,19 +501,31 @@ Popup {
     // Mora aqui dentro, e não em main.qml, para que `fluxoAtivo` seja uma
     // ligação direta e o foco voltar sozinho para o campo de busca quando o
     // fluxo é abortado (Esc na primeira etapa).
-    PopupLancamentoRapido {
-        id: popupLancamento
+    //
+    // Dentro de um Loader inativo: o conteúdo de um Component só é
+    // instanciado quando `active` vira true (ver iniciarLancamento). Sem
+    // isso, abrir o app construía a máquina de etapas inteira — lista,
+    // rodapé e o diálogo de "pedido aberto" — para uma tela que na maioria
+    // das vezes nem é usada.
+    Loader {
+        id: carregadorLancamento
 
-        pilhaPrincipal: popupBusca.pilhaPrincipal
+        active: false
 
-        onClosed: campoBusca.forceActiveFocus()
+        sourceComponent: Component {
+            PopupLancamentoRapido {
+                pilhaPrincipal: popupBusca.pilhaPrincipal
 
-        // Item lançado: a busca também sai de cena — o atendente já está na
-        // tela de venda, e deixar a busca aberta por cima dela seria mais um
-        // Esc pra dar.
-        onConcluido: function (mensagem, sucesso) {
-            popupBusca.close();
-            popupBusca.lancamentoConcluido(mensagem, sucesso);
+                onClosed: campoBusca.forceActiveFocus()
+
+                // Item lançado: a busca também sai de cena — o atendente já
+                // está na tela de venda, e deixar a busca aberta por cima dela
+                // seria mais um Esc pra dar.
+                onConcluido: function (mensagem, sucesso) {
+                    popupBusca.close();
+                    popupBusca.lancamentoConcluido(mensagem, sucesso);
+                }
+            }
         }
     }
 
