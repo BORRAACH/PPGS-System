@@ -52,3 +52,10 @@ design/templates/
 # README do ppgs_server) — diagnóstico de uma máquina específica, não
 # código-fonte.
 cpu.txt
+
+# Chave da malha: o segredo que autentica as máquinas entre si e do qual
+# saem o token e a chave de dados do ppgs_server (ver
+# services/rede/seguranca.py). É por máquina e nunca deve ir pro repositório.
+Config/chave_malha.json
+# Qual máquina hospeda o ppgs_server — decisão local de cada instalação.
+Config/servidor_designado.json

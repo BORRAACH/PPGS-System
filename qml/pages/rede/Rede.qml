@@ -17,6 +17,11 @@ Page {
     // outra máquina conectada...") vazava para fora da coluna.
     readonly property real larguraUtil: width - Estilo.global.padding.xl * 2
     readonly property bool empilhado: larguraUtil < 760
+    // Mensagem de erro ao adotar um código de chave inválido.
+    property string erroChave: ""
+    // Deixa o card da chave visível mesmo depois de configurada, pra quem
+    // precisa consultar o código pra cadastrar mais uma máquina.
+    property bool mostrandoChave: false
 
     objectName: "telaRede"
 
@@ -102,10 +107,25 @@ Page {
     // é destruída, em vez de acumular uma conexão morta a cada vez que
     // esta tela é recriada (todo clique na barra lateral, ver
     // LateralBar.qml/Balcao.qml).
+    // Máquinas que podem hospedar o ppgs_server (esta + os peers conectados).
+    property var maquinasServidor: []
+    function carregarMaquinasServidor() {
+        maquinasServidor = redeController.maquinasDisponiveis();
+    }
+
     Connections {
         target: redeController
 
+        function onChaveMalhaMudou() {
+            carregarMaquinasServidor();
+        }
+
+        function onServidorDesignadoMudou() {
+            carregarMaquinasServidor();
+        }
+
         function onPeersMudaram() {
+            carregarMaquinasServidor();
             carregarPeers();
             carregarCandidatosImpressora();
             // Entrar/sair da malha é justamente um dos eventos do histórico
@@ -143,6 +163,7 @@ Page {
             carregarImpressora();
             carregarImpressoraPrincipal();
             carregarCandidatosImpressora();
+            carregarMaquinasServidor();
         }
     }
 
@@ -201,12 +222,26 @@ Page {
                 Layout.fillWidth: true
             }
 
+            // Com a chave já configurada, o card dela fica recolhido (é um
+            // segredo, não algo pra ficar exposto na tela o tempo todo).
+            // Este botão o traz de volta na hora de cadastrar mais uma
+            // máquina.
+            Botao {
+                visible: redeController.chaveConfigurada
+                text: telaRede.mostrandoChave ? "Ocultar chave" : "Ver chave da rede"
+                variante: "ghost"
+                nomeIcone: "fa6s.key"
+                tom: Estilo.screen.rede
+                onClicked: telaRede.mostrandoChave = !telaRede.mostrandoChave
+            }
+
             Button {
                 id: btnAtualizarRede
 
                 padding: 8
                 onClicked: {
                     telaRede.carregarPeers();
+                    telaRede.carregarMaquinasServidor();
                     telaRede.carregarImpressora();
                     // Força uma nova checagem da impressora desta máquina
                     // agora (em vez de esperar o próximo tique de 30s do
@@ -283,12 +318,167 @@ Page {
             }
         }
 
-        // --- SERVIDOR CENTRAL (ppgs_server, máquina Alpine) ---
-        // Diferente da malha local acima (P2P entre as máquinas do balcão),
-        // este é o backend HTTP separado que guarda endereços de entrega
-        // (ver services/pizzeriaServerService.py, usado por Entrega.qml) —
-        // reflete pizzeriaServerController.conectado, que o service mantém
-        // com um ping periódico de 30s.
+        // --- CHAVE DA MALHA ---
+        // A malha deixou de aceitar qualquer instância que apareça na rede
+        // local: agora as máquinas provam umas às outras que têm a mesma
+        // chave, e todo o tráfego entre elas é cifrado (ver
+        // services/rede/seguranca.py). Este card é o único lugar onde essa
+        // chave aparece — gere numa máquina e transcreva o código nas outras.
+        Rectangle {
+            Layout.fillWidth: true
+            visible: !redeController.chaveConfigurada || telaRede.mostrandoChave
+            implicitHeight: colunaChave.implicitHeight + 20
+            radius: Estilo.global.radius.md
+            color: redeController.chaveConfigurada ? Estilo.global.surface : Estilo.status.error.background
+            border.color: redeController.chaveConfigurada ? Estilo.global.borderCard : Estilo.status.error.border
+            border.width: Estilo.global.borderWidth.hairline
+
+            ColumnLayout {
+                id: colunaChave
+                anchors.fill: parent
+                anchors.margins: 10
+                spacing: Estilo.global.spacing.sm
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: Estilo.global.spacing.md
+
+                    Icone {
+                        nome: redeController.chaveConfigurada ? "fa6s.key" : "fa6s.triangle-exclamation"
+                        cor: redeController.chaveConfigurada ? Estilo.screen.rede.accent : Estilo.status.error.content
+                        tamanho: Estilo.global.fontSize.title
+                    }
+
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 2
+
+                        Text {
+                            text: redeController.chaveConfigurada ? "Chave da malha" : "Rede local desativada"
+                            font.bold: true
+                            font.pixelSize: Estilo.global.fontSize.lg
+                            color: redeController.chaveConfigurada ? Estilo.global.text : Estilo.status.error.content
+                        }
+
+                        Text {
+                            Layout.fillWidth: true
+                            text: redeController.chaveConfigurada
+                                  ? "Digite este código nas outras máquinas para que elas entrem nesta rede. Só quem tem a chave enxerga as comandas e o servidor."
+                                  : redeController.motivoMalhaParada
+                            font.pixelSize: Estilo.global.fontSize.xs
+                            color: Estilo.global.textSecondary
+                            wrapMode: Text.WordWrap
+                        }
+                    }
+                }
+
+                // Código legível, só quando já existe chave.
+                Rectangle {
+                    Layout.fillWidth: true
+                    visible: redeController.chaveConfigurada
+                    implicitHeight: 34
+                    radius: Estilo.global.radius.sm
+                    color: Estilo.global.inputBackground
+                    border.color: Estilo.global.border
+                    border.width: Estilo.global.borderWidth.hairline
+
+                    Text {
+                        anchors.fill: parent
+                        anchors.margins: 8
+                        text: redeController.codigoChaveMalha
+                        font.pixelSize: Estilo.global.fontSize.sm
+                        font.family: "monospace"
+                        color: Estilo.global.textInput
+                        elide: Text.ElideRight
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                }
+
+                // Primeira máquina: gera. Demais: colam o código gerado nela.
+                RowLayout {
+                    Layout.fillWidth: true
+                    visible: !redeController.chaveConfigurada
+                    spacing: Estilo.global.spacing.sm
+
+                    CampoTexto {
+                        id: campoChave
+                        Layout.fillWidth: true
+                        placeholderText: "Cole aqui o código da outra máquina"
+                        corDestaque: Estilo.screen.rede.accent
+                    }
+
+                    Botao {
+                        text: "Usar este código"
+                        variante: "primario"
+                        tom: Estilo.screen.rede
+                        enabled: campoChave.text.length > 0
+                        onClicked: {
+                            const erro = redeController.definirChaveMalha(campoChave.text);
+                            telaRede.erroChave = erro;
+                            if (!erro) {
+                                campoChave.text = "";
+                            }
+                        }
+                    }
+
+                    Botao {
+                        text: "Gerar chave nova"
+                        variante: "secundario"
+                        tom: Estilo.screen.rede
+                        onClicked: {
+                            redeController.gerarChaveMalha();
+                            telaRede.erroChave = "";
+                        }
+                    }
+                }
+
+                Text {
+                    Layout.fillWidth: true
+                    visible: telaRede.erroChave.length > 0
+                    text: telaRede.erroChave
+                    font.pixelSize: Estilo.global.fontSize.xs
+                    color: Estilo.status.error.content
+                    wrapMode: Text.WordWrap
+                }
+            }
+        }
+
+        // Aviso de máquina recusada: sem isto, uma chave digitada errado numa
+        // máquina é indistinguível de um cabo solto — as duas coisas apenas
+        // "não mostram a outra máquina".
+        Rectangle {
+            Layout.fillWidth: true
+            visible: redeController.peersRecusados.length > 0
+            implicitHeight: linhaRecusados.implicitHeight + 16
+            radius: Estilo.global.radius.md
+            color: Estilo.status.error.background
+            border.color: Estilo.status.error.border
+            border.width: Estilo.global.borderWidth.hairline
+
+            RowLayout {
+                id: linhaRecusados
+                anchors.fill: parent
+                anchors.margins: 8
+                spacing: Estilo.global.spacing.md
+
+                Icone { nome: "fa6s.ban"; cor: Estilo.status.error.content; tamanho: Estilo.global.fontSize.lg }
+
+                Text {
+                    Layout.fillWidth: true
+                    text: redeController.peersRecusados
+                    font.pixelSize: Estilo.global.fontSize.xs
+                    color: Estilo.status.error.content
+                    wrapMode: Text.WordWrap
+                }
+            }
+        }
+
+        // --- SERVIDOR CENTRAL (ppgs_server) ---
+        // O backend que guarda endereços de entrega (ver
+        // services/pizzeriaServerService.py, usado por Entrega.qml). Ele roda
+        // numa das máquinas da malha, escutando só em 127.0.0.1 — as outras
+        // chegam nele por dentro da própria malha, então não há endereço nem
+        // porta pra configurar aqui, só a máquina escolhida no card abaixo.
         Rectangle {
             Layout.fillWidth: true
             implicitHeight: linhaServidorCentral.implicitHeight + 20
@@ -320,7 +510,13 @@ Page {
                     }
 
                     Text {
-                        text: pizzeriaServerController.conectado ? ("Autofill de endereço disponível (" + pizzeriaServerController.urlServidor + ")") : ("Não foi possível falar com " + pizzeriaServerController.urlServidor + " — autofill de endereço na Entrega fica indisponível.")
+                        text: {
+                            if (pizzeriaServerController.conectado)
+                                return "Autofill de endereço disponível (rodando em " + pizzeriaServerController.maquinaServidor + ", pela malha)";
+                            if (!pizzeriaServerController.maquinaServidor)
+                                return "Nenhuma máquina foi escolhida para rodar o servidor — escolha uma abaixo.";
+                            return "Não foi possível falar com o servidor em '" + pizzeriaServerController.maquinaServidor + "' — autofill de endereço na Entrega fica indisponível.";
+                        }
                         font.pixelSize: Estilo.global.fontSize.xs
                         color: Estilo.global.textSecondary
                         wrapMode: Text.WordWrap
@@ -351,6 +547,253 @@ Page {
                     background: Rectangle {
                         radius: Estilo.global.radius.pill
                         color: parent.down ? Estilo.screen.rede.pressed : (parent.hovered ? Estilo.screen.rede.hover : Estilo.screen.rede.base)
+                    }
+                }
+            }
+        }
+
+        // --- ONDE O SERVIDOR RODA ---
+        // Escolher aqui é o que dispara todo o preparo na máquina escolhida
+        // (clone, toolchain, build, migration, start — ver
+        // services/servidor/servidorLocal.py), em segundo plano.
+        //
+        // Esta máquina aparece SEMPRE, mesmo sem nenhum peer conectado e
+        // mesmo com a malha fora do ar: é o caso da pizzaria que abriu com um
+        // computador só ligado, ou da primeira instalação. Sem isso haveria
+        // um impasse — não dá pra escolher uma máquina para o servidor
+        // enquanto não houver rede, e a rede não é necessária pra rodar o
+        // servidor localmente.
+        Rectangle {
+            Layout.fillWidth: true
+            implicitHeight: colunaServidor.implicitHeight + 20
+            radius: Estilo.global.radius.md
+            color: Estilo.global.surface
+            border.color: Estilo.global.borderCard
+            border.width: Estilo.global.borderWidth.hairline
+
+            ColumnLayout {
+                id: colunaServidor
+                anchors.fill: parent
+                anchors.margins: 10
+                spacing: Estilo.global.spacing.sm
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: Estilo.global.spacing.md
+
+                    Icone { nome: "fa6s.database"; cor: Estilo.screen.rede.accent; tamanho: Estilo.global.fontSize.title }
+
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 2
+
+                        Text {
+                            text: "Onde o servidor roda"
+                            font.bold: true
+                            font.pixelSize: Estilo.global.fontSize.lg
+                            color: Estilo.global.text
+                        }
+
+                        Text {
+                            Layout.fillWidth: true
+                            text: redeController.maquinaServidor
+                                  ? ("Guardando endereços e clientes em '" + redeController.maquinaServidor + "'.")
+                                  : "Nenhuma máquina escolhida — o autofill de endereço na Entrega fica indisponível até escolher uma."
+                            font.pixelSize: Estilo.global.fontSize.xs
+                            color: Estilo.global.textSecondary
+                            wrapMode: Text.WordWrap
+                        }
+                    }
+                }
+
+                // Sem chave da malha não há como cifrar o banco, então o
+                // servidor não sobe. Dizer isso aqui evita o "cliquei e não
+                // aconteceu nada" — a chave se resolve no card lá em cima.
+                Text {
+                    Layout.fillWidth: true
+                    visible: !redeController.chaveConfigurada
+                    text: "Crie a chave da malha acima antes de escolher a máquina: é dela que saem as chaves que protegem os dados dos clientes."
+                    font.pixelSize: Estilo.global.fontSize.xs
+                    color: Estilo.status.error.content
+                    wrapMode: Text.WordWrap
+                }
+
+                // Estado vazio explícito: só esta máquina na rede. O botão
+                // abaixo continua valendo — é justamente o caso que ele cobre.
+                Text {
+                    Layout.fillWidth: true
+                    visible: redeController.chaveConfigurada && telaRede.maquinasServidor.length <= 1
+                    text: "Nenhuma outra máquina está na rede agora. Você pode rodar o servidor nesta mesma máquina — as outras passam a usá-lo assim que entrarem na rede."
+                    font.pixelSize: Estilo.global.fontSize.xs
+                    color: Estilo.global.textSecondary
+                    wrapMode: Text.WordWrap
+                }
+
+                // Uma linha por máquina candidata (esta + peers conectados).
+                Repeater {
+                    model: telaRede.maquinasServidor
+
+                    Rectangle {
+                        required property var modelData
+
+                        Layout.fillWidth: true
+                        implicitHeight: linhaMaquina.implicitHeight + 16
+                        radius: Estilo.global.radius.sm
+                        color: modelData.hospeda ? Estilo.screen.rede.soft : Estilo.global.background
+                        border.color: modelData.hospeda ? Estilo.screen.rede.accent : Estilo.global.border
+                        border.width: Estilo.global.borderWidth.hairline
+
+                        RowLayout {
+                            id: linhaMaquina
+                            anchors.fill: parent
+                            anchors.margins: 8
+                            spacing: Estilo.global.spacing.md
+
+                            Icone {
+                                nome: modelData.hospeda ? "fa6s.server" : "fa6s.desktop"
+                                cor: modelData.hospeda ? Estilo.screen.rede.accent : Estilo.global.textSecondary
+                                tamanho: Estilo.global.fontSize.lg
+                            }
+
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                spacing: 2
+
+                                Text {
+                                    text: modelData.nome + (modelData.local ? " (esta máquina)" : "")
+                                    font.bold: modelData.hospeda
+                                    font.pixelSize: Estilo.global.fontSize.sm
+                                    color: Estilo.global.text
+                                }
+
+                                // Só a máquina que hospeda tem preparo pra
+                                // contar, e só ela sabe em que passo está —
+                                // as outras veem apenas o nome.
+                                Text {
+                                    Layout.fillWidth: true
+                                    visible: modelData.hospeda && modelData.local && servidorLocalController.etapa.length > 0
+                                    text: servidorLocalController.etapa + (servidorLocalController.detalhe ? " — " + servidorLocalController.detalhe : "")
+                                    font.pixelSize: Estilo.global.fontSize.xs
+                                    color: (servidorLocalController.estado === "falha"
+                                             || servidorLocalController.estado === "parado")
+                                           ? Estilo.status.error.content : Estilo.global.textSecondary
+                                    wrapMode: Text.WordWrap
+                                }
+                            }
+
+                            Rotulo {
+                                visible: modelData.hospeda
+                                texto: {
+                                    if (!modelData.local)
+                                        return "Servidor";
+                                    if (servidorLocalController.estado === "rodando")
+                                        return "No ar";
+                                    if (servidorLocalController.estado === "preparando")
+                                        return "Preparando";
+                                    if (servidorLocalController.estado === "aguardando_chave")
+                                        return "Falta a chave";
+                                    if (servidorLocalController.estado === "falha")
+                                        return "Falhou";
+                                    if (servidorLocalController.estado === "parado")
+                                        return "Parado";
+                                    return "Servidor";
+                                }
+                                tom: (servidorLocalController.estado === "falha"
+                                       || servidorLocalController.estado === "parado")
+                                     ? Estilo.status.error : Estilo.status.info
+                            }
+
+                            Botao {
+                                visible: !modelData.hospeda
+                                enabled: redeController.chaveConfigurada
+                                text: modelData.local ? "Rodar nesta máquina" : "Rodar aqui"
+                                variante: "primario"
+                                tom: Estilo.screen.rede
+                                onClicked: redeController.designarServidor(modelData.nome)
+                            }
+                        }
+                    }
+                }
+
+                // A deploy key é o único passo que uma pessoa precisa fazer à
+                // mão: o GitHub não tem como aceitar esta máquina antes de
+                // alguém cadastrar a chave pública dela.
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    visible: servidorLocalController.chavePublicaDeploy.length > 0
+                    spacing: Estilo.global.spacing.xs
+
+                    Text {
+                        Layout.fillWidth: true
+                        text: "Cadastre esta chave como deploy key (somente leitura) em github.com/BORRAACH/PPGS-Server → Settings → Deploy keys, e depois clique em \"Tentar de novo\":"
+                        font.pixelSize: Estilo.global.fontSize.xs
+                        color: Estilo.global.textSecondary
+                        wrapMode: Text.WordWrap
+                    }
+
+                    Rectangle {
+                        Layout.fillWidth: true
+                        implicitHeight: textoChaveDeploy.implicitHeight + 16
+                        radius: Estilo.global.radius.sm
+                        color: Estilo.global.inputBackground
+                        border.color: Estilo.global.border
+                        border.width: Estilo.global.borderWidth.hairline
+
+                        TextEdit {
+                            id: textoChaveDeploy
+                            anchors.fill: parent
+                            anchors.margins: 8
+                            text: servidorLocalController.chavePublicaDeploy
+                            // Só leitura, mas selecionável: é assim que a
+                            // chave sai daqui pro navegador.
+                            readOnly: true
+                            selectByMouse: true
+                            wrapMode: TextEdit.WrapAnywhere
+                            font.pixelSize: Estilo.global.fontSize.xs
+                            font.family: "monospace"
+                            color: Estilo.global.textInput
+                        }
+                    }
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    visible: redeController.servidorAqui
+                    spacing: Estilo.global.spacing.sm
+
+                    Item { Layout.fillWidth: true }
+
+                    // Enquanto prepara, a única ação útil é desistir: o
+                    // preparo pode levar de segundos a quase uma hora, e sem
+                    // saída o usuário só teria a opção de fechar o sistema.
+                    Botao {
+                        visible: servidorLocalController.estado === "preparando"
+                        text: "Cancelar"
+                        variante: "primario"
+                        nomeIcone: "fa6s.xmark"
+                        tom: Estilo.action.danger
+                        onClicked: servidorLocalController.cancelarPreparo()
+                    }
+
+                    // Parar um servidor no ar derruba o autofill de endereço
+                    // de TODAS as máquinas da malha, não só desta — por isso
+                    // passa por confirmação, diferente de cancelar um preparo.
+                    Botao {
+                        visible: servidorLocalController.estado === "rodando"
+                        text: "Parar"
+                        variante: "primario"
+                        nomeIcone: "fa6s.stop"
+                        tom: Estilo.action.danger
+                        onClicked: dialogoPararServidor.open()
+                    }
+
+                    Botao {
+                        visible: servidorLocalController.estado !== "preparando"
+                        text: servidorLocalController.estado === "rodando" ? "Tentar de novo" : "Iniciar servidor"
+                        variante: "secundario"
+                        nomeIcone: servidorLocalController.estado === "rodando" ? "fa6s.arrows-rotate" : "fa6s.play"
+                        tom: Estilo.screen.rede
+                        onClicked: servidorLocalController.refazerPreparo()
                     }
                 }
             }
@@ -794,6 +1237,34 @@ Page {
                         }
                     }
                 }
+            }
+        }
+    }
+
+    // Confirmação de parada do servidor. Dialogo.qml já centraliza na tela e
+    // escurece o fundo (ver qml/components/Dialogo.qml).
+    Dialogo {
+        id: dialogoPararServidor
+
+        titulo: "Parar o servidor?"
+        nomeIcone: "fa6s.triangle-exclamation"
+        corpo: "O cadastro de endereços fica indisponível em todas as máquinas enquanto o servidor estiver parado — o autofill da tela Entrega para de funcionar. Nenhum endereço é apagado, e você pode iniciar o servidor de novo a qualquer momento."
+
+        Botao {
+            text: "Continuar rodando"
+            variante: "secundario"
+            tom: Estilo.screen.rede
+            onClicked: dialogoPararServidor.close()
+        }
+
+        Botao {
+            text: "Parar servidor"
+            variante: "primario"
+            nomeIcone: "fa6s.stop"
+            tom: Estilo.action.danger
+            onClicked: {
+                servidorLocalController.pararServidor();
+                dialogoPararServidor.close();
             }
         }
     }

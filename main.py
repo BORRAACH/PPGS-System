@@ -51,6 +51,7 @@ try:
     from controllers.fechamentoController import FechamentoController
     from services.rede import rede
     from services.pizzeriaServerService import pizzeria_server
+    from services.servidor import servidor_local
     from services.iconProvider import IconProvider
     from services.comandaEstiloService import ComandaEstiloController
     from services.cardapioService import CardapioController
@@ -112,6 +113,19 @@ def _iniciar_rede():
     sinal `iniciada`."""
     status.iniciando("rede", "Iniciando rede local...")
     rede.iniciar()
+
+
+def _iniciar_servidor_local():
+    """Sobe o ppgs_server, mas só se ESTA máquina for a designada na tela Rede
+    (ver services/servidor/servidorLocal.py). Vem depois de _iniciar_rede
+    porque a designação é estado da malha; a decisão em si não espera a malha
+    subir — ela também está gravada em Config/servidor_designado.json, pra que
+    a primeira máquina do expediente suba o servidor sem depender de haver
+    mais alguém ligado.
+
+    Todo o trabalho pesado (clone, toolchain, compilação) acontece numa thread
+    de fundo em prioridade ociosa a partir daqui, com a janela já na tela."""
+    servidor_local.iniciar()
 
 
 def _mostrar_resultado_da_atualizacao():
@@ -222,6 +236,17 @@ if __name__ == "__main__":
     engine.rootContext().setContextProperty("redeController", rede)
     engine.rootContext().setContextProperty("statusController", status)
     engine.rootContext().setContextProperty("pizzeriaServerController", pizzeria_server)
+    engine.rootContext().setContextProperty("servidorLocalController", servidor_local)
+    # O estado de conexão é reconferido a cada 30s, o que é barato mas lento
+    # demais para o instante que mais importa: o servidor desta máquina acaba
+    # de subir e o caixa já está lançando o primeiro pedido do dia. Sem isto,
+    # a Entrega passaria até meio minuto achando que não há servidor — e é
+    # justamente `conectado` que decide se ela pergunta ou não sobre salvar o
+    # endereço do cliente.
+    servidor_local.estadoMudou.connect(pizzeria_server.verificarConexao)
+    # Sem isto o processo do servidor sobreviveria ao fechamento do sistema e
+    # a porta 8080 continuaria ocupada na abertura seguinte.
+    app.aboutToQuit.connect(servidor_local.encerrar)
 
     engine.addImportPath(qml_dir)
 
@@ -249,6 +274,7 @@ if __name__ == "__main__":
     # qualquer uma dessas tarefas começar.
     QTimer.singleShot(0, _mostrar_resultado_da_atualizacao)
     QTimer.singleShot(0, _iniciar_rede)
+    QTimer.singleShot(0, _iniciar_servidor_local)
 
     # Em thread porque é I/O bloqueante puro (PowerShell/CUPS) e não toca
     # objeto Qt nenhum.
