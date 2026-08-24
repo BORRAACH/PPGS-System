@@ -38,6 +38,43 @@ Page {
     // tela já trata com cuidado (ver CargaDiferida abaixo). Volta a null
     // sempre que a lista bruta muda.
     property var _indiceBusca: null
+    // As comandas que o índice acima cobre: só as dentro da janela de busca
+    // (ver janelaBuscaDias). Montada junto com o índice, pelo mesmo
+    // _prepararIndiceBusca, e zerada junto com ele.
+    //
+    // Ela existe como propriedade, e não como variável local da busca, porque
+    // é ela — e não _todasComandas — que a busca reordena e devolve: as
+    // posições do índice são posições NESTA lista.
+    property var _comandasBuscaveis: []
+
+    // Quanto tempo pra trás a barra de pesquisa alcança. Comanda mais antiga
+    // que isto continua na lista (na caixinha do dia dela, como sempre), mas
+    // fica fora do índice e fora do resultado de qualquer pesquisa.
+    //
+    // POR QUE EXISTE UM LIMITE. Sem ele, tudo que a busca faz cresce junto
+    // com o arquivo inteiro da pizzaria, que só aumenta e nunca diminui: o
+    // índice normaliza o cupom inteiro de cada comanda (alguns milhares de
+    // caracteres cada), a varredura por conteúdo passa por todas elas a cada
+    // pesquisa, e o resultado — que é a lista inteira, porque a busca reordena
+    // — vira um append por comanda no ListModel, criando um delegate para cada
+    // uma (ver _preencherModelo e ColunaEsquerda.qml). Depois de alguns anos
+    // de pedidos isso é lento por construção, e nenhuma estrutura de busca
+    // conserta a parte de "montar uma saída de n itens".
+    //
+    // Com a janela, todos esses custos passam a depender do movimento de UMA
+    // SEMANA, não do acervo: a pizzaria pode acumular comandas pra sempre que
+    // a pesquisa continua custando o mesmo. E uma semana é o alcance que a
+    // busca realmente serve — quem procura uma comanda pelo nome do cliente
+    // está atrás de um pedido recente (conferir, reimprimir, cobrar); pedido
+    // de meses atrás se procura pelo dia, na caixinha, que continua ali.
+    readonly property int janelaBuscaDias: 7
+    // "dd/mm/aaaa" do dia mais antigo que a busca alcança. Guardado num campo
+    // (e não recalculado em cada binding) porque ColunaEsquerda.qml o exibe
+    // ao usuário: é o texto que torna o limite explícito na tela. Recalculado
+    // a cada leitura do disco, então acompanha a virada da meia-noite num app
+    // que fica aberto a noite toda.
+    property string diaLimiteBusca: _diaLimiteBusca()
+
     // Texto de busca atual: o campo de texto vive em ColunaEsquerda.qml, mas
     // o filtro precisa sobreviver a um "Atualizar" (que recarrega o disco).
     property string buscaAtual: ""
@@ -88,12 +125,29 @@ Page {
         return espaco === -1 ? dataHora : dataHora.substring(0, espaco);
     }
 
-    function _hojeFormatado() {
-        var d = new Date();
+    // Date -> "dd/mm/aaaa", o mesmo formato que o cabeçalho do cupom usa (e
+    // que _chaveDia abaixo sabe ler).
+    function _formatarDia(d) {
         function doisDigitos(n) {
             return n < 10 ? "0" + n : String(n);
         }
         return doisDigitos(d.getDate()) + "/" + doisDigitos(d.getMonth() + 1) + "/" + d.getFullYear();
+    }
+
+    function _hojeFormatado() {
+        return telaConsulta._formatarDia(new Date());
+    }
+
+    // Dia mais antigo que a busca alcança: hoje menos a janela inteira, então
+    // uma comanda de exatamente uma semana atrás ainda é pesquisável.
+    //
+    // A conta sai do Date, e não de uma subtração na chave numérica de
+    // _chaveDia, porque só ele sabe atravessar virada de mês e de ano (dia 3
+    // de março menos 7 é 24 de fevereiro, e em ano bissexto é 25).
+    function _diaLimiteBusca() {
+        var d = new Date();
+        d.setDate(d.getDate() - telaConsulta.janelaBuscaDias);
+        return telaConsulta._formatarDia(d);
     }
 
     // "dd/mm/aaaa" -> número comparável, pra ordenar os dias anteriores do
@@ -217,18 +271,115 @@ Page {
         return (item.fechada === true) === (telaConsulta.filtroStatus === "fechadas");
     }
 
-    // Reordena _todasComandas pela proximidade com o texto pesquisado (sem
-    // esconder nenhuma comanda) e repopula o modelo exibido na lista.
+    // Os dias que a busca alcança, como um objeto usado de conjunto:
+    // {"24/08/2026": true, "23/08/2026": true, ...}, de hoje até o limite.
     //
-    // O filtro por status é a única coisa aqui que de fato ESCONDE comandas —
-    // é uma escolha explícita do usuário no seletor, diferente da busca, que
-    // só reordena.
+    // A janela é curta e fechada — são janelaBuscaDias + 1 datas, e todas
+    // conhecidas —, então "esta comanda é pesquisável?" vira uma consulta
+    // direta pela string do dia, sem partir a data em números uma vez por
+    // comanda. Isso importa porque esta é a única parte da preparação que
+    // ainda toca o acervo INTEIRO: num arquivo de dezenas de milhares de
+    // comandas ela é a diferença entre um engasgo perceptível e nenhum.
+    function _diasPesquisaveis() {
+        var dias = {};
+        var hoje = new Date();
+        for (var k = 0; k <= telaConsulta.janelaBuscaDias; k++) {
+            var d = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate() - k);
+            dias[telaConsulta._formatarDia(d)] = true;
+        }
+        return dias;
+    }
+
+    // A data tem a cara de "dd/mm/aaaa"? Só a forma, sem validar o valor — é
+    // o suficiente pra separar "data de um dia mais antigo" de "isto aqui não
+    // é data nenhuma", e custa três comparações de caractere em vez de um
+    // split com três conversões pra número.
+    function _pareceData(dia) {
+        return dia.length === 10 && dia.charCodeAt(2) === 47 && dia.charCodeAt(5) === 47;
+    }
+
+    // A comanda está dentro da janela pesquisável (ver janelaBuscaDias)?
+    // `dias` é o conjunto pronto de _diasPesquisaveis.
+    function _dentroDaJanelaBusca(item, dias) {
+        var dia = telaConsulta._diaDeDataHora(item.dataHora);
+        // Comanda sem data no cabeçalho fica pesquisável, pelo mesmo motivo
+        // que _agruparPorDia a joga em "hoje": não dá pra julgar a idade dela,
+        // e a pior das duas decisões possíveis é a que faz ela sumir da busca
+        // sem nem um dia no rótulo pra alguém procurar por ele.
+        if (dia === "")
+            return true;
+        if (dias[dia] === true)
+            return true;
+        // Data ilegível (arquivo corrompido) cai no mesmo caso do "sem data".
+        return !telaConsulta._pareceData(dia);
+    }
+
+    // Monta, de uma vez só, a janela pesquisável e o índice sobre ela.
+    //
+    // É PREGUIÇOSO de propósito (chamado só na primeira pesquisa depois de
+    // cada carregamento): quem abre a Consulta só pra olhar as comandas do dia
+    // — o uso mais comum — nunca paga por isto, e este é justamente o caminho
+    // de abertura da página, que a tela já trata com cuidado (ver
+    // CargaDiferida).
+    //
+    // A seleção da janela é uma passada linear sobre a lista bruta, e não uma
+    // busca binária, por dois motivos independentes — qualquer um deles já
+    // bastaria:
+    //
+    // 1. A lista bruta NÃO está ordenada por data. O controller a ordena por
+    //    "modificadoEm" (ver consultaController.listarComandas), e uma comanda
+    //    que chegou atrasada pela malha tem modificadoEm de agora com dataHora
+    //    de dias atrás — exatamente o caso que _chaveDia já existe pra tratar
+    //    na hora de agrupar. Binária sobre lista quase-ordenada não acha item:
+    //    acha item às vezes, que é pior.
+    // 2. Nem faria diferença. Uma binária pouparia comparações de dia, e a
+    //    comparação de dia aqui é uma consulta a um objeto (ver
+    //    _diasPesquisaveis) — o que a janela existe pra evitar não é isto, é a
+    //    normalização do cupom inteiro que construirIndice faz por comanda, e
+    //    essa a janela já impede de rodar nas comandas velhas.
+    //
+    // A busca binária de verdade está em BuscaComandas.js, sobre o índice que
+    // sai daqui — e é justamente por a janela existir que ela passa a operar
+    // sobre uma semana de comandas em vez de sobre o acervo inteiro.
+    function _prepararIndiceBusca() {
+        if (telaConsulta._indiceBusca !== null)
+            return;
+
+        var dias = telaConsulta._diasPesquisaveis();
+        var janela = [];
+        for (var i = 0; i < telaConsulta._todasComandas.length; i++) {
+            var item = telaConsulta._todasComandas[i];
+            if (telaConsulta._dentroDaJanelaBusca(item, dias))
+                janela.push(item);
+        }
+
+        telaConsulta._comandasBuscaveis = janela;
+        telaConsulta._indiceBusca = BuscaComandas.construirIndice(janela, function (item) {
+            return telaConsulta.tituloComanda(item);
+        });
+    }
+
+    // Reordena as comandas pesquisáveis pela proximidade com o texto digitado
+    // e repopula o modelo exibido na lista.
+    //
+    // DUAS COISAS ESCONDEM COMANDA AQUI, e as duas são explícitas na tela:
+    //
+    // - o filtro por status, escolha direta do usuário no seletor;
+    // - a janela de busca, que tira do resultado tudo que é mais velho que
+    //   janelaBuscaDias (o aviso em ColunaEsquerda.qml diz isso, com a data
+    //   limite escrita por extenso).
+    //
+    // A busca em si continua sem esconder nada: dentro da janela ela só
+    // reordena, e toda comanda da janela sai no resultado, casando ou não.
+    // Comanda mais velha que a janela não some do aplicativo — ela continua na
+    // caixinha do dia dela assim que o campo de pesquisa é limpo.
     //
     // A ordenação em si é busca binária sobre um índice ordenado, montado uma
     // vez por carregamento em vez de a cada tecla — ver BuscaComandas.js, que
     // explica o que a binária resolve (prefixo do nome do cliente e do código,
     // que é como se procura uma comanda na prática) e o que continua exigindo
-    // varredura (achar um pedaço no meio do cupom).
+    // varredura (achar um pedaço no meio do cupom) — varredura essa que agora
+    // é sobre a janela, não sobre o acervo.
     function aplicarFiltro() {
         var busca = telaConsulta.buscaAtual.trim();
 
@@ -238,12 +389,9 @@ Page {
             return;
         }
 
-        if (telaConsulta._indiceBusca === null)
-            telaConsulta._indiceBusca = BuscaComandas.construirIndice(telaConsulta._todasComandas, function (item) {
-                return telaConsulta.tituloComanda(item);
-            });
+        telaConsulta._prepararIndiceBusca();
 
-        var ordenadas = BuscaComandas.ordenar(telaConsulta._indiceBusca, telaConsulta._todasComandas, busca, telaConsulta._passaNoStatus);
+        var ordenadas = BuscaComandas.ordenar(telaConsulta._indiceBusca, telaConsulta._comandasBuscaveis, busca, telaConsulta._passaNoStatus);
 
         // Busca mostra tudo achatado, sem agrupar por dia — encontrar a
         // comanda certa não deveria exigir abrir a caixinha do dia certo
@@ -272,10 +420,16 @@ Page {
 
     function _lerDoDisco() {
         telaConsulta._todasComandas = consultaController.listarComandas();
-        // A lista bruta mudou, então o índice de busca envelheceu junto. Volta
-        // a null em vez de ser remontado aqui: a remontagem é o passo caro, e
-        // este ponto é justamente o caminho de abertura da página.
+        // A lista bruta mudou, então o índice de busca envelheceu junto — e
+        // com ele a janela pesquisável, que é recortada da lista bruta. Voltam
+        // a vazio em vez de serem remontados aqui: a remontagem é o passo
+        // caro, e este ponto é justamente o caminho de abertura da página.
         telaConsulta._indiceBusca = null;
+        telaConsulta._comandasBuscaveis = [];
+        // Refeito a cada leitura porque o app da pizzaria fica aberto a noite
+        // toda: sem isto, o limite continuaria valendo o de ontem depois da
+        // virada da meia-noite — e o aviso na tela estaria mentindo.
+        telaConsulta.diaLimiteBusca = telaConsulta._diaLimiteBusca();
         telaConsulta.aplicarFiltro();
     }
 
