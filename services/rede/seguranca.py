@@ -1,52 +1,54 @@
-"""Autenticação e criptografia da malha, e as chaves derivadas que o
-ppgs_server usa.
+"""Criptografia da malha, e as chaves derivadas que o ppgs_server usa.
 
-Até aqui entrar na malha era automático: bastava rodar este app na mesma
-rede local. Era uma decisão consciente (`architecture/EXPLAIN.md`, seção
-"Fora do escopo": *"Sem autenticação/senha para entrar na rede — qualquer
-instância deste app na mesma LAN entra automaticamente"*), e ela deixou de
-valer quando o ppgs_server passou a rodar numa das máquinas do balcão: a
-partir do momento em que o acesso ao banco de endereços e clientes é feito
-POR DENTRO da malha (ver `solicitar_servidor` em redeService.py), "quem está
-na malha" virou a fronteira de segurança do sistema inteiro. Sem
-autenticação aqui, "só máquinas da malha acessam o servidor" não significaria
-nada.
+Entrar na malha é automático: qualquer instância deste app na mesma rede local
+entra sozinha, sem senha nem configuração. É a decisão original do projeto
+(`architecture/EXPLAIN.md`, seção "Fora do escopo": *"Sem autenticação/senha
+para entrar na rede — qualquer instância deste app na mesma LAN entra
+automaticamente"*), e ela vale de novo depois de uma temporada exigindo uma
+chave transcrita entre as máquinas.
 
-O que este módulo garante, nesta ordem:
+O QUE ISTO CUSTA, dito com todas as letras: o ppgs_server escuta só em
+127.0.0.1 e é alcançado POR DENTRO da malha (ver `solicitar_servidor` em
+redeService.py), então "estar na malha" é o que separa alguém do banco de
+endereços e telefones dos clientes. Sem autenticação, qualquer máquina que
+alcance a rede local e rode este app chega lá. A aposta é a de sempre: a rede
+da pizzaria é um lugar fechado, e o custo de administrar segredo em máquinas
+que ninguém administra é maior que o risco. Ver `CHAVE_PADRAO` abaixo, que é
+onde essa aposta está escrita, e o caminho de volta caso ela deixe de valer.
 
-1. **Quem não tem a chave não entra.** O handshake termina num HMAC da
-   chave sobre o que foi trocado; sem a chave, ele não fecha e o socket cai
-   antes de qualquer mensagem de protocolo ser processada.
-2. **Quem escuta o fio não lê nada.** Depois do handshake tudo vai selado com
-   ChaCha20-Poly1305 — inclusive as comandas, que hoje trafegam em base64
-   legível.
-3. **Quem grava o tráfego hoje não o lê nem se roubar a chave amanhã.** O
-   segredo de sessão vem de um X25519 efêmero, jogado fora quando o socket
-   fecha (forward secrecy). A chave da malha só autentica esse acordo — ela
-   nunca é usada para cifrar diretamente.
+O que este módulo garante, então:
 
-O X25519 sozinho não bastaria (um atacante na rede faria o acordo com você
-sem problema nenhum: ninguém provou quem é), e a chave sozinha também não
-(sem efemeridade, vazar a chave abriria todo o tráfego passado). O HMAC sobre
-o transcrito é o que amarra os dois: ele cobre as duas chaves públicas, então
-um intermediário que troque uma delas não consegue produzir o HMAC certo.
+1. **Quem escuta o fio não lê nada.** Depois do handshake tudo vai selado com
+   ChaCha20-Poly1305 — inclusive as comandas, que antes trafegavam em base64
+   legível. Contra escuta passiva no wi-fi da pizzaria isso continua valendo
+   inteiro.
+2. **Quem grava o tráfego hoje não o lê amanhã.** O segredo de sessão vem de
+   um X25519 efêmero, jogado fora quando o socket fecha (forward secrecy).
+3. **Quem não roda este app não conversa.** O handshake fecha num HMAC sobre o
+   transcrito, então um programa qualquer que abra o socket é recusado antes
+   de qualquer mensagem de protocolo. É uma barreira contra acidente e
+   varredura, não contra alguém decidido: a chave que assina esse HMAC está no
+   código-fonte.
 
-A mesma chave da malha deriva, por HKDF com `info` diferentes, o token HTTP e
-a chave de dados do ppgs_server (ver `token_servidor` e `chave_dados`). É de
-propósito: são três segredos independentes — vazar um não dá os outros — mas
-só um precisa ser distribuído entre as máquinas, e é o único que o usuário
-vê e digita.
+O que NÃO está garantido é um atacante ativo: ele não precisa mais interceptar
+nada, porque pode entrar pela porta da frente. Antes, o HMAC sobre as duas
+chaves públicas impedia um intermediário de trocar uma delas; ele continua
+impedindo, mas o intermediário deixou de precisar disso.
+
+A mesma chave deriva, por HKDF com `info` diferentes, o token HTTP e as chaves
+de dados e de índice do ppgs_server (ver `token_servidor`, `chave_dados` e
+`chave_indice`). Continuam sendo derivações separadas — nenhuma delas dá as
+outras — e continuam nunca sendo gravadas em disco: o servidor as recebe por
+variável de ambiente, que é o que faz levar o `pizzeria.db` embora ainda não
+bastar para lê-lo.
 """
 
 import base64
 import hashlib
 import hmac
 import json
-import os
 import secrets
 import struct
-
-from services.rede import caminhos
 
 # Sem `cryptography` não há malha. É uma postura deliberada: cair para um
 # modo "sem criptografia" quando a biblioteca falta transformaria um problema
@@ -73,8 +75,6 @@ except ImportError as _erro:  # pragma: no cover - depende do ambiente
 # delas não sabe ler.
 VERSAO_PROTOCOLO = 1
 
-_ARQUIVO_CHAVE = "chave_malha.json"
-_TAMANHO_CHAVE = 32
 
 # Teto de um frame selado. A reconciliação (`reconciliar_dados`) pode mandar
 # um domínio inteiro de uma vez — o cardápio, o histórico — então o limite
@@ -98,84 +98,65 @@ class ErroSeguranca(Exception):
     resposta correta é desistir daquela conexão."""
 
 
-# ---------- Chave da malha (o único segredo que o usuário vê) ----------
+# ---------- Chave da malha (fixa, e de propósito não é segredo) ----------
+#
+# Entrar na malha voltou a ser automático: qualquer instância deste app na
+# mesma rede local entra sozinha, sem ninguém configurar nada. Foi assim até a
+# chave ser introduzida, e é assim de novo — a transcrição de um código entre
+# máquinas era fricção real numa pizzaria onde ninguém administra computador.
+#
+# A chave em si NÃO foi removida, porque ela sustenta três coisas que nada tem
+# a ver com barrar quem entra: o HMAC que fecha o handshake, o material do
+# HKDF que produz as chaves de sessão, e as chaves derivadas que o
+# ppgs_server exige (token, dados, índice). O que mudou é que ela deixou de
+# ser um segredo por instalação e passou a ser esta constante, igual em toda
+# máquina que rodar este código.
+#
+# SEJA HONESTO SOBRE O QUE ISTO VALE. Como o valor sai daqui, do código-fonte
+# aberto, ele não autentica ninguém: quem puser este app numa máquina na rede
+# da pizzaria entra na malha, e por dentro dela alcança o ppgs_server e o banco
+# de endereços e telefones dos clientes. O HMAC do handshake continua rodando,
+# mas prova apenas "este peer roda esta versão deste app", nunca "este peer é
+# autorizado".
+#
+# O que continua valendo, e não é pouco:
+#
+# - **Quem escuta o fio não lê nada.** O segredo de sessão vem de um X25519
+#   efêmero, então o tráfego segue cifrado com ChaCha20-Poly1305 e ninguém
+#   capturando o wi-fi lê comanda, endereço ou telefone. Contra escuta passiva
+#   a proteção é a mesma de antes; o que se perdeu foi a defesa contra um
+#   atacante ATIVO, que agora pode simplesmente entrar na malha pela porta da
+#   frente em vez de ter que interceptar alguma coisa.
+# - **Forward secrecy.** As chaves efêmeras são jogadas fora quando o socket
+#   fecha, então gravar o tráfego de hoje não ajuda ninguém amanhã.
+# - **O banco continua cifrado em repouso.** O ppgs_server segue cifrando
+#   endereços e nomes com uma chave que não fica ao lado do arquivo, então
+#   levar o `pizzeria.db` embora ainda não basta para lê-lo — só que a chave
+#   agora é derivável por quem tiver o código.
+#
+# Um dia em que a rede da pizzaria deixar de ser confiável, o caminho de volta
+# é reintroduzir a chave por instalação: só esta seção precisa mudar, porque
+# tudo abaixo dela já trabalha com "uma chave qualquer de 32 bytes".
+
+# Derivada de uma frase fixa em vez de ser um blob aleatório colado aqui: um
+# monte de hex neste arquivo pareceria um segredo que alguém esqueceu de tirar,
+# e mais cedo ou mais tarde seria tratado como tal. Assim fica evidente na
+# primeira leitura que não há segredo nenhum a proteger aqui.
+CHAVE_PADRAO = hashlib.sha256(b"PPGS-malha-aberta-v1").digest()
 
 
-def _caminho_chave() -> str:
-    return os.path.join(caminhos.raiz_projeto(), "Config", _ARQUIVO_CHAVE)
+def carregar_chave() -> bytes:
+    """A chave desta máquina — sempre a mesma, em toda máquina.
 
+    Continua sendo uma função (e não a constante usada direto) porque é o
+    ponto único por onde tudo passa: reintroduzir chave por instalação é
+    mexer só aqui. Um `Config/chave_malha.json` que tenha sobrado de antes é
+    ignorado de propósito — se ele ainda fosse lido, a máquina que o tem
+    ficaria isolada das que não têm, e o sintoma seria "a rede parou de
+    funcionar sozinha" depois de uma atualização.
+    """
+    return CHAVE_PADRAO
 
-def _formatar_codigo(chave: bytes) -> str:
-    """Base32 em grupos de 4, sem o padding "=" — é o formato que alguém
-    consegue ditar por telefone e digitar noutra máquina sem errar. Base32
-    (e não base64) porque não distingue maiúscula de minúscula e não tem os
-    pares visualmente ambíguos que atrapalham a transcrição à mão."""
-    texto = base64.b32encode(chave).decode("ascii").rstrip("=")
-    return "-".join(texto[i : i + 4] for i in range(0, len(texto), 4))
-
-
-def _interpretar_codigo(codigo: str) -> bytes:
-    """Aceita o código com ou sem hífens, em qualquer caixa e com espaços —
-    quem digita não deveria precisar acertar a formatação, só os caracteres."""
-    limpo = "".join(c for c in (codigo or "") if c.isalnum()).upper()
-    if not limpo:
-        raise ErroSeguranca("Código vazio.")
-    # base64.b32decode exige o padding que _formatar_codigo removeu.
-    faltando = (-len(limpo)) % 8
-    try:
-        chave = base64.b32decode(limpo + "=" * faltando)
-    except Exception as erro:
-        raise ErroSeguranca(f"Código inválido: {erro}") from erro
-    if len(chave) != _TAMANHO_CHAVE:
-        raise ErroSeguranca(f"Código com tamanho errado ({len(chave)} bytes, esperado {_TAMANHO_CHAVE}).")
-    return chave
-
-
-def carregar_chave() -> bytes | None:
-    """A chave desta máquina, ou None se ela ainda não foi configurada."""
-    dados = caminhos.carregar_json(_caminho_chave(), "chave da malha")
-    codigo = dados.get("chave") if isinstance(dados, dict) else None
-    if not codigo:
-        return None
-    try:
-        return _interpretar_codigo(codigo)
-    except ErroSeguranca as erro:
-        print(f"[seguranca] Config/{_ARQUIVO_CHAVE} está ilegível ({erro}) — tratando como sem chave.")
-        return None
-
-
-def salvar_chave(chave: bytes) -> None:
-    if len(chave) != _TAMANHO_CHAVE:
-        raise ErroSeguranca(f"Chave precisa ter {_TAMANHO_CHAVE} bytes.")
-    caminhos.salvar_json(_caminho_chave(), {"chave": _formatar_codigo(chave)}, "chave da malha")
-
-
-def gerar_chave() -> bytes:
-    """Cria e salva uma chave nova. Chamado na PRIMEIRA máquina; as outras
-    recebem o código dela por `definir_chave`."""
-    chave = secrets.token_bytes(_TAMANHO_CHAVE)
-    salvar_chave(chave)
-    print("[seguranca] Chave da malha gerada nesta máquina.")
-    return chave
-
-
-def definir_chave(codigo: str) -> bytes:
-    """Adota o código vindo de outra máquina. Levanta ErroSeguranca se ele
-    não for um código válido — quem chama mostra a mensagem na tela."""
-    chave = _interpretar_codigo(codigo)
-    salvar_chave(chave)
-    print("[seguranca] Chave da malha configurada a partir de um código informado.")
-    return chave
-
-
-def codigo_da_chave() -> str:
-    """O código para transcrever nas outras máquinas, ou "" se não há chave."""
-    chave = carregar_chave()
-    return _formatar_codigo(chave) if chave else ""
-
-
-def ha_chave() -> bool:
-    return carregar_chave() is not None
 
 
 # ---------- Segredos derivados (nunca distribuídos, sempre recalculados) ----------

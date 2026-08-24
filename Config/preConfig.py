@@ -50,12 +50,13 @@ _DEPENDENCIAS_PIP = [
     # broadcast UDP de reserva, então continua sendo melhor esforço como o
     # resto desta lista.
     ("zeroconf", ("zeroconf",), None),
-    # Autenticação e criptografia da malha (ver services/rede/seguranca.py) e
-    # as chaves derivadas que o ppgs_server usa. Diferente do resto desta
-    # lista, esta NÃO é melhor esforço: sem ela a malha simplesmente não sobe
-    # (RedeService._motivo_para_nao_iniciar), porque cair para um modo sem
-    # criptografia deixaria o banco de endereços e clientes aberto a quem
-    # chegasse na rede local — sem nada na tela denunciando isso.
+    # Criptografia da malha (ver services/rede/seguranca.py) e as chaves
+    # derivadas que o ppgs_server usa. Diferente do resto desta lista, esta
+    # NÃO é melhor esforço: sem ela a malha simplesmente não sobe
+    # (RedeService._motivo_para_nao_iniciar). Entrar na malha voltou a ser
+    # aberto, mas o tráfego dela segue cifrado, e cair para um modo em claro
+    # poria as comandas e os endereços dos clientes no ar pra quem estivesse
+    # ouvindo o wi-fi — sem nada na tela denunciando isso.
     ("cryptography", ("cryptography",), None),
 ]
 

@@ -53,9 +53,10 @@ design/templates/
 # código-fonte.
 cpu.txt
 
-# Chave da malha: o segredo que autentica as máquinas entre si e do qual
-# saem o token e a chave de dados do ppgs_server (ver
-# services/rede/seguranca.py). É por máquina e nunca deve ir pro repositório.
+# Chave da malha por instalação. Não é mais gerada nem lida — a chave virou
+# uma constante do código (ver seguranca.CHAVE_PADRAO) —, mas a linha fica:
+# máquinas que rodaram a versão anterior têm o arquivo sobrando, e ele não
+# deve ir pro repositório nem se a chave por instalação voltar um dia.
 Config/chave_malha.json
 # Qual máquina hospeda o ppgs_server — decisão local de cada instalação.
 Config/servidor_designado.json
