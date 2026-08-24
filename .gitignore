@@ -59,3 +59,7 @@ cpu.txt
 Config/chave_malha.json
 # Qual máquina hospeda o ppgs_server — decisão local de cada instalação.
 Config/servidor_designado.json
+
+# Cache do rope (motor de refatoracao usado por editores Python) — banco
+# local reconstruido sozinho, nao codigo-fonte.
+.ropeproject/
