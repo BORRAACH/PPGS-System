@@ -10,6 +10,10 @@ ApplicationWindow {
     // páginas). No Windows, a paleta padrão vem do tema do sistema: em
     // máquinas com tema escuro, "text" e "placeholderText" chegavam claros e
     // sumiam no fundo branco dos inputs.
+    // --- CONSULTA RÁPIDA AO CARDÁPIO (Ctrl+S) ---
+    // Vive na janela raiz pelo mesmo motivo da notificação de impressão
+    // abaixo: é global. Uma instância por página morreria na troca de tela, e
+    // o atalho só valeria nas páginas que lembrassem de declará-lo.
 
     id: root
 
@@ -151,17 +155,21 @@ ApplicationWindow {
     StatusInicio {
     }
 
-    // --- CONSULTA RÁPIDA AO CARDÁPIO (Ctrl+S) ---
-    // Vive na janela raiz pelo mesmo motivo da notificação de impressão
-    // abaixo: é global. Uma instância por página morreria na troca de tela, e
-    // o atalho só valeria nas páginas que lembrassem de declará-lo.
-    //
     // Qt.ApplicationShortcut, e não o contexto padrão (janela): sem isso o
     // atalho não dispara quando o foco está dentro de um popup modal — que é
     // exatamente onde o atendente está ao montar um pedido pelo popup de
     // seleção. Ctrl+S não conflita com nada: as telas de pedido usam Ctrl+A e
     // Ctrl+R, e o app não tem "salvar" por teclado.
     Shortcut {
+        // Alterna: com o popup aberto, o mesmo Ctrl+S fecha. Sem isto a
+        // segunda batida no atalho seria um no-op silencioso, e o atendente
+        // fica com a mão no teclado — Esc é outro alcance.
+        // `visible`, e não `opened`: `opened` só fica true quando a transição
+        // de entrada TERMINA, então num estilo com animação de popup a batida
+        // seguinte cairia no `open()` de novo em vez de fechar. O estilo hoje
+        // é o Fusion (fixado em Config/preConfig.py), que não anima popup, mas
+        // `visible` é verdade nos dois casos e não depende disso.
+
         sequence: "Ctrl+S"
         context: Qt.ApplicationShortcut
         // Uma ativação por batida, não uma por repetição do teclado. O padrão
@@ -176,16 +184,6 @@ ApplicationWindow {
         // porque a primeira abertura ainda lê os arquivos do cardápio e monta
         // o índice (ver services/buscaCardapio.py).
         autoRepeat: false
-        // Alterna: com o popup aberto, o mesmo Ctrl+S fecha. Sem isto a
-        // segunda batida no atalho seria um no-op silencioso, e o atendente
-        // fica com a mão no teclado — Esc é outro alcance.
-        //
-        // `visible`, e não `opened`: `opened` só fica true quando a transição
-        // de entrada TERMINA, então num estilo com animação de popup a batida
-        // seguinte cairia no `open()` de novo em vez de fechar. O estilo hoje
-        // é o Fusion (fixado em Config/preConfig.py), que não anima popup, mas
-        // `visible` é verdade nos dois casos e não depende disso.
-        //
         // A guarda do fluxo de lançamento não é preciosismo: com ele aberto
         // (digamos, na etapa "borda"), um Ctrl+S batido por reflexo fecharia a
         // BUSCA por baixo dele — e o onOpened da busca limpa o termo, então o
@@ -193,7 +191,7 @@ ApplicationWindow {
         // fazendo.
         onActivated: {
             if (popupBuscaCardapio.fluxoAtivo)
-                return;
+                return ;
 
             popupBuscaCardapio.visible ? popupBuscaCardapio.close() : popupBuscaCardapio.open();
         }
@@ -203,12 +201,12 @@ ApplicationWindow {
         id: popupBuscaCardapio
 
         pilhaPrincipal: stackView
-
         // A tela de destino é quem tem a fila de notificações; o lançamento
         // acabou de trazer o atendente pra ela (ou já estava nela).
-        onLancamentoConcluido: function (mensagem, sucesso) {
+        onLancamentoConcluido: function(mensagem, sucesso) {
             if (stackView.currentItem && stackView.currentItem.mostrarNotificacao)
                 stackView.currentItem.mostrarNotificacao(mensagem, sucesso);
+
         }
     }
 
