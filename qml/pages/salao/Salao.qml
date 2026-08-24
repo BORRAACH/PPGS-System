@@ -639,10 +639,21 @@ Page {
                                 Keys.onReturnPressed: clicked()
                                 onClicked: {
                                     var resultado = salvarMesaAtual();
-                                    if (resultado) {
-                                        telaSalao.carregarMesasAbertas();
-                                        telaSalao.mostrarNotificacao("Mesa salva com sucesso!", true);
-                                    }
+                                    if (!resultado)
+                                        return ;
+
+                                    telaSalao.carregarMesasAbertas();
+                                    telaSalao.mostrarNotificacao("Mesa salva com sucesso!", true);
+                                    // Pergunta pela via de produção só quando
+                                    // há de fato item novo pra fazer: salvar
+                                    // a mesa de novo só pra corrigir o nome
+                                    // do cliente, por exemplo, não tem o que
+                                    // mandar pro pizzaiolo (ver
+                                    // PopupComandaPizzaiolo.qml).
+                                    var pendentes = salaoController.itensPendentesCozinha(resultado.id);
+                                    if (pendentes.length > 0)
+                                        popupComandaPizzaiolo.abrirPara(resultado.id, inputMesa.value, inputNomeCliente.text, pendentes);
+
                                 }
 
                                 contentItem: Row {
@@ -881,6 +892,22 @@ Page {
                             }
                         }
                     }
+                }
+            }
+
+            // Pergunta, logo depois de lançar o pedido, se a via de produção
+            // (a comanda do pizzaiolo) deve ser impressa agora.
+            PopupComandaPizzaiolo {
+                id: popupComandaPizzaiolo
+
+                // Sucesso aqui é só "o pedido de impressão foi feito" — o
+                // resultado da impressão em si chega depois, pelo
+                // Connections de redeController lá em cima, que já notifica
+                // "Comanda impressa"/"Falha ao imprimir".
+                onSolicitado: function (sucesso) {
+                    if (!sucesso)
+                        telaSalao.mostrarNotificacao("Não foi possível montar a comanda do pizzaiolo.", false);
+
                 }
             }
 
