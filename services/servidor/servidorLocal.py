@@ -303,10 +303,14 @@ class ServidorLocalService(QObject):
 
     def _ambiente_do_servidor(self):
         """As três chaves saem da chave da malha, aqui, em memória. Nenhuma
-        delas encosta no disco."""
+        delas encosta no disco — é isso que faz levar o `pizzeria.db` embora
+        não bastar pra ler endereço de cliente nenhum.
+
+        A chave da malha hoje é uma constante do código (ver
+        seguranca.CHAVE_PADRAO), então isto nunca falha por falta dela e o
+        servidor sobe sem ninguém configurar nada. O que se perde junto está
+        escrito lá: quem tiver o código-fonte chega às mesmas três chaves."""
         chave = seguranca.carregar_chave()
-        if not chave:
-            raise seguranca.ErroSeguranca("Sem chave da malha — o servidor não pode subir.")
         return {
             **os.environ,
             "PIZZERIA_BIND": _ENDERECO,
@@ -550,11 +554,7 @@ class ServidorLocalService(QObject):
             responder(503, b"")
             return
 
-        try:
-            token = seguranca.token_servidor()
-        except seguranca.ErroSeguranca:
-            responder(503, b"")
-            return
+        token = seguranca.token_servidor()
 
         requisicao = QNetworkRequest(QUrl(f"{_BASE_URL}{caminho}"))
         requisicao.setRawHeader(b"Authorization", f"Bearer {token}".encode("ascii"))

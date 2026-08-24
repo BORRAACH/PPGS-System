@@ -17,11 +17,6 @@ Page {
     // outra máquina conectada...") vazava para fora da coluna.
     readonly property real larguraUtil: width - Estilo.global.padding.xl * 2
     readonly property bool empilhado: larguraUtil < 760
-    // Mensagem de erro ao adotar um código de chave inválido.
-    property string erroChave: ""
-    // Deixa o card da chave visível mesmo depois de configurada, pra quem
-    // precisa consultar o código pra cadastrar mais uma máquina.
-    property bool mostrandoChave: false
 
     objectName: "telaRede"
 
@@ -115,10 +110,6 @@ Page {
 
     Connections {
         target: redeController
-
-        function onChaveMalhaMudou() {
-            carregarMaquinasServidor();
-        }
 
         function onServidorDesignadoMudou() {
             carregarMaquinasServidor();
@@ -249,19 +240,6 @@ Page {
                     Layout.fillWidth: true
                 }
 
-                // Com a chave já configurada, o card dela fica recolhido (é um
-                // segredo, não algo pra ficar exposto na tela o tempo todo).
-                // Este botão o traz de volta na hora de cadastrar mais uma
-                // máquina.
-                Botao {
-                    visible: redeController.chaveConfigurada
-                    text: telaRede.mostrandoChave ? "Ocultar chave" : "Ver chave da rede"
-                    variante: "ghost"
-                    nomeIcone: "fa6s.key"
-                    tom: Estilo.screen.rede
-                    onClicked: telaRede.mostrandoChave = !telaRede.mostrandoChave
-                }
-
                 Button {
                     id: btnAtualizarRede
 
@@ -341,161 +319,6 @@ Page {
                             font.pixelSize: Estilo.global.fontSize.xs
                             color: Estilo.global.textSecondary
                         }
-                    }
-                }
-            }
-
-            // --- CHAVE DA MALHA ---
-            // A malha deixou de aceitar qualquer instância que apareça na rede
-            // local: agora as máquinas provam umas às outras que têm a mesma
-            // chave, e todo o tráfego entre elas é cifrado (ver
-            // services/rede/seguranca.py). Este card é o único lugar onde essa
-            // chave aparece — gere numa máquina e transcreva o código nas outras.
-            Rectangle {
-                Layout.fillWidth: true
-                visible: !redeController.chaveConfigurada || telaRede.mostrandoChave
-                implicitHeight: colunaChave.implicitHeight + 20
-                radius: Estilo.global.radius.md
-                color: redeController.chaveConfigurada ? Estilo.global.surface : Estilo.status.error.background
-                border.color: redeController.chaveConfigurada ? Estilo.global.borderCard : Estilo.status.error.border
-                border.width: Estilo.global.borderWidth.hairline
-
-                ColumnLayout {
-                    id: colunaChave
-                    anchors.fill: parent
-                    anchors.margins: 10
-                    spacing: Estilo.global.spacing.sm
-
-                    RowLayout {
-                        Layout.fillWidth: true
-                        spacing: Estilo.global.spacing.md
-
-                        Icone {
-                            nome: redeController.chaveConfigurada ? "fa6s.key" : "fa6s.triangle-exclamation"
-                            cor: redeController.chaveConfigurada ? Estilo.screen.rede.accent : Estilo.status.error.content
-                            tamanho: Estilo.global.fontSize.title
-                        }
-
-                        ColumnLayout {
-                            Layout.fillWidth: true
-                            spacing: 2
-
-                            Text {
-                                text: redeController.chaveConfigurada ? "Chave da malha" : "Rede local desativada"
-                                font.bold: true
-                                font.pixelSize: Estilo.global.fontSize.lg
-                                color: redeController.chaveConfigurada ? Estilo.global.text : Estilo.status.error.content
-                            }
-
-                            Text {
-                                Layout.fillWidth: true
-                                text: redeController.chaveConfigurada
-                                      ? "Digite este código nas outras máquinas para que elas entrem nesta rede. Só quem tem a chave enxerga as comandas e o servidor."
-                                      : redeController.motivoMalhaParada
-                                font.pixelSize: Estilo.global.fontSize.xs
-                                color: Estilo.global.textSecondary
-                                wrapMode: Text.WordWrap
-                            }
-                        }
-                    }
-
-                    // Código legível, só quando já existe chave.
-                    Rectangle {
-                        Layout.fillWidth: true
-                        visible: redeController.chaveConfigurada
-                        implicitHeight: 34
-                        radius: Estilo.global.radius.sm
-                        color: Estilo.global.inputBackground
-                        border.color: Estilo.global.border
-                        border.width: Estilo.global.borderWidth.hairline
-
-                        Text {
-                            anchors.fill: parent
-                            anchors.margins: 8
-                            text: redeController.codigoChaveMalha
-                            font.pixelSize: Estilo.global.fontSize.sm
-                            font.family: "monospace"
-                            color: Estilo.global.textInput
-                            elide: Text.ElideRight
-                            verticalAlignment: Text.AlignVCenter
-                        }
-                    }
-
-                    // Primeira máquina: gera. Demais: colam o código gerado nela.
-                    RowLayout {
-                        Layout.fillWidth: true
-                        visible: !redeController.chaveConfigurada
-                        spacing: Estilo.global.spacing.sm
-
-                        CampoTexto {
-                            id: campoChave
-                            Layout.fillWidth: true
-                            placeholderText: "Cole aqui o código da outra máquina"
-                            corDestaque: Estilo.screen.rede.accent
-                        }
-
-                        Botao {
-                            text: "Usar este código"
-                            variante: "primario"
-                            tom: Estilo.screen.rede
-                            enabled: campoChave.text.length > 0
-                            onClicked: {
-                                const erro = redeController.definirChaveMalha(campoChave.text);
-                                telaRede.erroChave = erro;
-                                if (!erro) {
-                                    campoChave.text = "";
-                                }
-                            }
-                        }
-
-                        Botao {
-                            text: "Gerar chave nova"
-                            variante: "secundario"
-                            tom: Estilo.screen.rede
-                            onClicked: {
-                                redeController.gerarChaveMalha();
-                                telaRede.erroChave = "";
-                            }
-                        }
-                    }
-
-                    Text {
-                        Layout.fillWidth: true
-                        visible: telaRede.erroChave.length > 0
-                        text: telaRede.erroChave
-                        font.pixelSize: Estilo.global.fontSize.xs
-                        color: Estilo.status.error.content
-                        wrapMode: Text.WordWrap
-                    }
-                }
-            }
-
-            // Aviso de máquina recusada: sem isto, uma chave digitada errado numa
-            // máquina é indistinguível de um cabo solto — as duas coisas apenas
-            // "não mostram a outra máquina".
-            Rectangle {
-                Layout.fillWidth: true
-                visible: redeController.peersRecusados.length > 0
-                implicitHeight: linhaRecusados.implicitHeight + 16
-                radius: Estilo.global.radius.md
-                color: Estilo.status.error.background
-                border.color: Estilo.status.error.border
-                border.width: Estilo.global.borderWidth.hairline
-
-                RowLayout {
-                    id: linhaRecusados
-                    anchors.fill: parent
-                    anchors.margins: 8
-                    spacing: Estilo.global.spacing.md
-
-                    Icone { nome: "fa6s.ban"; cor: Estilo.status.error.content; tamanho: Estilo.global.fontSize.lg }
-
-                    Text {
-                        Layout.fillWidth: true
-                        text: redeController.peersRecusados
-                        font.pixelSize: Estilo.global.fontSize.xs
-                        color: Estilo.status.error.content
-                        wrapMode: Text.WordWrap
                     }
                 }
             }
@@ -633,23 +456,11 @@ Page {
                         }
                     }
 
-                    // Sem chave da malha não há como cifrar o banco, então o
-                    // servidor não sobe. Dizer isso aqui evita o "cliquei e não
-                    // aconteceu nada" — a chave se resolve no card lá em cima.
-                    Text {
-                        Layout.fillWidth: true
-                        visible: !redeController.chaveConfigurada
-                        text: "Crie a chave da malha acima antes de escolher a máquina: é dela que saem as chaves que protegem os dados dos clientes."
-                        font.pixelSize: Estilo.global.fontSize.xs
-                        color: Estilo.status.error.content
-                        wrapMode: Text.WordWrap
-                    }
-
                     // Estado vazio explícito: só esta máquina na rede. O botão
                     // abaixo continua valendo — é justamente o caso que ele cobre.
                     Text {
                         Layout.fillWidth: true
-                        visible: redeController.chaveConfigurada && telaRede.maquinasServidor.length <= 1
+                        visible: telaRede.maquinasServidor.length <= 1
                         text: "Nenhuma outra máquina está na rede agora. Você pode rodar o servidor nesta mesma máquina — as outras passam a usá-lo assim que entrarem na rede."
                         font.pixelSize: Estilo.global.fontSize.xs
                         color: Estilo.global.textSecondary
@@ -732,7 +543,6 @@ Page {
 
                                 Botao {
                                     visible: !modelData.hospeda
-                                    enabled: redeController.chaveConfigurada
                                     text: modelData.local ? "Rodar nesta máquina" : "Rodar aqui"
                                     variante: "primario"
                                     tom: Estilo.screen.rede

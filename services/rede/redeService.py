@@ -121,9 +121,6 @@ class RedeService(QObject):
     # impressora dela) pode ter mudado — Rede.qml usa pra reconsultar
     # impressoraPrincipal() e atualizar o painel sozinho.
     impressoraPrincipalMudou = pyqtSignal()
-    # Chave da malha gerada/alterada nesta máquina — a tela Rede reage
-    # trocando o card de configuração pelo código a transcrever.
-    chaveMalhaMudou = pyqtSignal()
     # (id_req, status HTTP, corpo) — resposta de uma requisição encaminhada
     # ao ppgs_server. status 0 significa que ela não chegou a ser respondida
     # (sem hospedeira, timeout, socket caído).
@@ -172,16 +169,20 @@ class RedeService(QObject):
         # handshake, então nada que chegue antes disso é processado como
         # protocolo.
         self._sessoes = {}
-        # Peers que apareceram mas foram recusados por chave/versão —
-        # endereço -> motivo. Existe pra tela Rede poder dizer "1 máquina
-        # recusada: chave da malha diferente": sem isso, configurar a
-        # chave errada numa máquina é indistinguível de a rede estar
-        # fora do ar, que foi exatamente a confusão que este projeto já
-        # pagou caro uma vez (ver architecture/EXPLAIN.md, "Observabilidade").
+        # Peers que apareceram mas foram recusados no handshake — endereço ->
+        # motivo. Com a chave igual em toda máquina, o que sobra aqui é
+        # incompatibilidade de versão: uma máquina atualizada e outra não se
+        # recusam explicitamente em vez de travar num frame que a outra não
+        # sabe ler. Existe pra tela Rede poder dizer qual é o motivo — sem
+        # isso, "a outra máquina não aparece" é indistinguível de a rede estar
+        # fora do ar, que foi exatamente a confusão que este projeto já pagou
+        # caro uma vez (ver architecture/EXPLAIN.md, "Observabilidade").
         self._recusados = {}
-        # Chave da malha lida do disco uma vez. Trocá-la exige reiniciar o
-        # app de propósito: as sessões já abertas foram derivadas da
-        # anterior e não têm como ser renegociadas no lugar.
+        # A chave que assina o handshake e alimenta o HKDF. Hoje é uma
+        # constante igual em toda máquina (ver seguranca.CHAVE_PADRAO); segue
+        # guardada num campo porque é assim que ela chega em cada SessaoSegura,
+        # e porque é o ponto que volta a variar por instalação no dia em que a
+        # rede da pizzaria deixar de ser confiável.
         self._chave_malha = seguranca.carregar_chave()
         # Tudo que a descoberta já anunciou, conectado ou não — id da
         # instância -> {"enderecos": [str], "porta": int, "tentativas": int}.
@@ -344,12 +345,12 @@ class RedeService(QObject):
         if self._iniciado:
             return
 
-        # Antes de abrir qualquer porta: sem chave da malha não há malha.
-        # Subir "por enquanto sem criptografia" e endurecer depois seria o
+        # Antes de abrir qualquer porta: sem a biblioteca de criptografia não
+        # há malha. Subir "por enquanto em claro" e endurecer depois seria o
         # pior dos dois mundos — a rede pareceria funcionar, ninguém voltaria
-        # pra terminar, e o servidor de endereços estaria exposto a quem
-        # chegasse na LAN. O app continua inteiro: comandas são salvas e
-        # impressas localmente; só a sincronização entre máquinas espera.
+        # pra terminar, e as comandas e endereços dos clientes iriam pelo ar
+        # legíveis pra quem estivesse ouvindo. O app continua inteiro: comandas
+        # são salvas e impressas localmente; só a sincronização espera.
         motivo = self._motivo_para_nao_iniciar()
         if motivo:
             from services.statusInicializacaoService import status
@@ -397,71 +398,30 @@ class RedeService(QObject):
         )
 
     def _motivo_para_nao_iniciar(self) -> str:
-        """Texto pronto pra tela, ou "" se está tudo certo pra subir."""
+        """Texto pronto pra tela, ou "" se está tudo certo pra subir.
+
+        Sobrou um motivo só. A falta de chave não é mais um deles: ela agora é
+        uma constante do código (ver seguranca.CHAVE_PADRAO), então toda
+        máquina tem a mesma e a malha sobe sozinha, como era antes de a chave
+        por instalação existir."""
         if not seguranca.DISPONIVEL:
             return "Falta a biblioteca 'cryptography' — rede local desativada"
-        if not self._chave_malha:
-            return "Sem chave da malha — configure na tela Rede"
         return ""
 
-    @pyqtProperty(bool, notify=chaveMalhaMudou)
-    def chaveConfigurada(self) -> bool:
-        return bool(self._chave_malha)
-
-    @pyqtProperty(str, notify=chaveMalhaMudou)
-    def codigoChaveMalha(self) -> str:
-        """O código pra transcrever nas outras máquinas — "" se não há chave."""
-        return seguranca.codigo_da_chave()
-
-    @pyqtProperty(str, notify=chaveMalhaMudou)
+    @pyqtProperty(str, notify=peersMudaram)
     def motivoMalhaParada(self) -> str:
         return self._motivo_para_nao_iniciar() if not self._iniciado else ""
 
     @pyqtProperty(str, notify=peersMudaram)
     def peersRecusados(self) -> str:
         """Resumo dos peers que apareceram e foram recusados. A tela mostra
-        isto porque o sintoma de uma chave digitada errado — "a outra máquina
-        não aparece" — é idêntico ao de um cabo solto, e sem esta linha o
-        usuário não teria como distinguir os dois."""
+        isto porque o sintoma de um peer recusado — "a outra máquina não
+        aparece" — é idêntico ao de um cabo solto, e sem esta linha o usuário
+        não teria como distinguir os dois."""
         if not self._recusados:
             return ""
         motivos = set(self._recusados.values())
         return f"{len(self._recusados)} máquina(s) recusada(s): {'; '.join(sorted(motivos))}"
-
-    @pyqtSlot(result=str)
-    @protegido("")
-    def gerarChaveMalha(self) -> str:
-        """Cria a chave desta rede — usado na PRIMEIRA máquina. Devolve o
-        código a transcrever nas outras, ou "" se falhou."""
-        if self._chave_malha:
-            # Gerar por cima da chave existente separaria esta máquina das
-            # outras em silêncio. Quem quer mesmo trocar apaga o arquivo.
-            print("[RedeService] Já existe chave da malha — geração ignorada.")
-            return seguranca.codigo_da_chave()
-        self._chave_malha = seguranca.gerar_chave()
-        self.chaveMalhaMudou.emit()
-        self._iniciar_apos_chave()
-        return seguranca.codigo_da_chave()
-
-    @pyqtSlot(str, result=str)
-    @protegido("Não foi possível salvar a chave.")
-    def definirChaveMalha(self, codigo: str) -> str:
-        """Adota o código vindo de outra máquina. Devolve "" em caso de
-        sucesso, ou a mensagem de erro pra tela mostrar."""
-        try:
-            self._chave_malha = seguranca.definir_chave(codigo)
-        except seguranca.ErroSeguranca as erro:
-            return str(erro)
-        self.chaveMalhaMudou.emit()
-        self._iniciar_apos_chave()
-        return ""
-
-    def _iniciar_apos_chave(self):
-        """A malha pode ter ficado parada só por falta de chave; agora que ela
-        existe, sobe sem exigir que o usuário reinicie o app."""
-        self._recusados.clear()
-        if not self._iniciado:
-            self.iniciar()
 
     # ---------- Descoberta ----------
 
@@ -634,9 +594,9 @@ class RedeService(QObject):
             pass
 
     def _recusar_socket(self, socket: QTcpSocket, motivo: str, onde: str = ""):
-        """Fecha e registra. O registro é o ponto: uma máquina com a chave
-        errada precisa aparecer na tela como recusada, não simplesmente
-        sumir."""
+        """Fecha e registra. O registro é o ponto: uma máquina recusada (hoje,
+        na prática, uma rodando outra versão do protocolo) precisa aparecer na
+        tela como recusada, não simplesmente sumir."""
         try:
             onde = onde or socket.peerAddress().toString()
             if onde:
