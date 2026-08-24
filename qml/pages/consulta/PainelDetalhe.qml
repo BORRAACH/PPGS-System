@@ -26,12 +26,21 @@ Rectangle {
         // Durante o carregamento a lista ainda está se enchendo (ver
         // Consulta.qml _preencherModelo), então "nenhuma comanda encontrada"
         // seria uma conclusão tirada antes da hora — e das erradas.
+        //
+        // Com uma pesquisa ativa a lista vazia significa outra coisa: a busca
+        // só alcança a janela de dias (ver Consulta.qml janelaBuscaDias), então
+        // "nenhuma comanda em pedidos/" seria falso — o arquivo pode estar
+        // cheio de comandas antigas, todas fora do alcance. Dizer qual é o
+        // alcance é o que evita a pessoa concluir que a comanda foi apagada.
         text: {
-            if (painelDetalhe.pagina && painelDetalhe.pagina.carregando)
+            var pagina = painelDetalhe.pagina;
+            if (pagina && pagina.carregando)
                 return "Carregando comandas...";
-            return painelDetalhe.totalComandas === 0
-                ? "Nenhuma comanda encontrada em pedidos/"
-                : "← Selecione uma comanda para ver os detalhes";
+            if (painelDetalhe.totalComandas > 0)
+                return "← Selecione uma comanda para ver os detalhes";
+            if (pagina && pagina.buscaAtual.trim() !== "")
+                return "Nenhuma comanda de " + pagina.diaLimiteBusca + " para cá — a busca não alcança as mais antigas";
+            return "Nenhuma comanda encontrada em pedidos/";
         }
         color: Estilo.global.textMuted
         font.italic: true

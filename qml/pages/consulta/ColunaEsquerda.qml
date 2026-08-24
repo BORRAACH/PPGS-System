@@ -4,11 +4,11 @@ import QtQuick.Layouts
 import estilo 1.0
 import "../../components"
 
-// Coluna esquerda de Consulta.qml: contador de comandas, barra de busca,
-// botão de alternância do modo de edição rápida e a lista de comandas —
-// hoje exibida direto, dias anteriores aninhados numa caixinha por dia
-// (fechada por padrão, mesmo padrão de "Mapeamento por origem" em
-// Fechamento.qml).
+// Coluna esquerda de Consulta.qml: contador de comandas, barra de busca (com
+// o aviso do alcance dela), botão de alternância do modo de edição rápida e a
+// lista de comandas — hoje exibida direto, dias anteriores aninhados numa
+// caixinha por dia (fechada por padrão, mesmo padrão de "Mapeamento por
+// origem" em Fechamento.qml).
 Column {
     id: colunaEsquerda
 
@@ -58,7 +58,11 @@ Column {
 
             width: parent.width - btnModoEdicao.width - linhaBusca.spacing
             corDestaque: Estilo.screen.consulta.accent
-            placeholderText: "Pesquisar por cliente ou conteúdo..."
+            // O alcance entra no próprio placeholder, e não só no aviso
+            // abaixo: é o texto que está sob os olhos de quem vai digitar.
+            // Curto porque o campo é estreito — quais campos a busca olha é o
+            // aviso logo abaixo que diz, e ali cabe.
+            placeholderText: "Pesquisar nos últimos " + (colunaEsquerda.pagina ? colunaEsquerda.pagina.janelaBuscaDias : 7) + " dias..."
             // Só reordena/exibe depois que o usuário para de digitar (ver
             // debounceBusca abaixo) — reprocessar a lista inteira a cada
             // tecla é o que travava em CPUs fracas conforme a lista de
@@ -132,11 +136,50 @@ Column {
         }
     }
 
+    // --- ALCANCE DA BUSCA ---
+    // A pesquisa não varre o arquivo inteiro: ela só enxerga as comandas dos
+    // últimos janelaBuscaDias dias (ver Consulta.qml, que explica por quê —
+    // é o que mantém o custo de pesquisar preso ao movimento de uma semana
+    // em vez de crescer junto com o acervo).
+    //
+    // Este aviso fica sempre visível, não só durante uma pesquisa: um limite
+    // que só aparece depois que a pessoa já procurou e não achou é um limite
+    // que ela descobre concluindo que a comanda sumiu. E traz a data por
+    // extenso porque "últimos 7 dias" ainda deixa a pessoa contando nos dedos
+    // na frente do cliente esperando.
+    Row {
+        id: avisoJanela
+
+        width: parent.width
+        spacing: Estilo.global.spacing.xs
+
+        Icone {
+            nome: "fa6s.circle-info"
+            cor: Estilo.global.textMuted
+            tamanho: 12
+            y: 2
+        }
+
+        Text {
+            width: avisoJanela.width - 12 - avisoJanela.spacing
+            text: {
+                var pagina = colunaEsquerda.pagina;
+                if (!pagina)
+                    return "";
+                return "Busca por cliente, código ou conteúdo, de " + pagina.diaLimiteBusca
+                    + " para cá. Comandas mais antigas continuam na lista, agrupadas por dia.";
+            }
+            font.pixelSize: Estilo.global.fontSize.sm
+            color: Estilo.global.textMuted
+            wrapMode: Text.WordWrap
+        }
+    }
+
     // --- FILTRO POR STATUS ---
     // Aberta = ainda sem baixa, fora do caixa do dia; fechada = já conferida
-    // e contando no fechamento (ver services/rede/baixaComandas.py). É o
-    // único controle da tela que esconde comandas — a busca ao lado só
-    // reordena.
+    // e contando no fechamento (ver services/rede/baixaComandas.py). Junto com
+    // a janela de busca avisada acima, é o que esconde comanda nesta tela —
+    // dentro da janela a busca ao lado só reordena.
     Row {
         id: linhaFiltroStatus
 
@@ -195,7 +238,10 @@ Column {
         id: flickableComandas
 
         width: parent.width
-        height: parent.height - 30 - campoBusca.height - linhaFiltroStatus.height - 2 * colunaEsquerda.spacing
+        // O aviso da janela de busca entrou na conta junto com o espaçamento
+        // que ele traz: sem isso a lista passaria da borda inferior da coluna,
+        // e o que se perde no corte é o fim dos dias mais antigos.
+        height: parent.height - 30 - campoBusca.height - avisoJanela.height - linhaFiltroStatus.height - 3 * colunaEsquerda.spacing
         clip: true
         contentWidth: width
         contentHeight: colunaListas.implicitHeight

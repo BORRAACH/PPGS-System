@@ -31,13 +31,27 @@
 // agora a varredura é um indexOf sobre string já normalizada, não uma
 // normalização inteira.
 //
-// E POR QUE A VARREDURA NÃO SOME. A busca desta tela REORDENA, nunca esconde
-// (é uma decisão explícita, documentada em Consulta.qml:aplicarFiltro): o
-// resultado é sempre a lista inteira, reordenada. Uma saída de n itens custa
-// no mínimo O(n) pra ser montada, então nenhuma estrutura de busca deixaria
-// esta função sublinear. O que a binária economiza é o trabalho POR ITEM na
-// faixa que mais importa, e o que o índice economiza é a normalização
-// repetida — que era o custo real.
+// E POR QUE A VARREDURA NÃO SOME. Dentro do que lhe é dado, a busca desta
+// tela REORDENA, nunca esconde (é uma decisão explícita, documentada em
+// Consulta.qml:aplicarFiltro): o resultado é sempre a lista inteira que
+// entrou, reordenada. Uma saída de n itens custa no mínimo O(n) pra ser
+// montada, então nenhuma estrutura de busca deixaria esta função sublinear no
+// que recebe. O que a binária economiza é o trabalho POR ITEM na faixa que
+// mais importa, e o que o índice economiza é a normalização repetida — que
+// era o custo real.
+//
+// QUEM SEGURA O n, ENTÃO. Não é este arquivo: é quem monta o índice. Como o
+// O(n) da varredura e o O(n log n) do índice são pisos, a única forma de a
+// pesquisa não piorar pra sempre conforme a pizzaria acumula anos de pedidos
+// é o n não ser o acervo inteiro. Consulta.qml só entrega aqui as comandas
+// dos últimos dias (ver janelaBuscaDias/_prepararIndiceBusca lá), então
+// `comandas` abaixo é o movimento de uma semana, e não o histórico — o custo
+// de pesquisar passa a depender de quanto a pizzaria vende por semana, que é
+// estável, em vez de há quanto tempo ela existe, que não é.
+//
+// Este módulo não sabe nada de datas de propósito: ele ordena o que recebe.
+// Quem recorta a janela é a tela, que é quem tem como avisar o usuário — e o
+// aviso existe (ver ColunaEsquerda.qml).
 
 // Faixas de relevância, da melhor para a pior. A ordem dos valores é a ordem
 // em que as comandas aparecem na lista.
@@ -57,8 +71,12 @@ var _TOTAL_FAIXAS = 5;
 //
 // Custa O(n log n) e roda UMA vez por carregamento da lista, não por tecla.
 // Quem chama monta preguiçosamente, na primeira busca (ver
-// Consulta.qml:_indiceBusca): quem só abre a Consulta pra olhar as comandas
-// do dia nunca paga por isto.
+// Consulta.qml:_prepararIndiceBusca): quem só abre a Consulta pra olhar as
+// comandas do dia nunca paga por isto.
+//
+// `comandas` é a janela pesquisável, não o acervo — o laço abaixo normaliza o
+// cupom inteiro de cada item que recebe, e é por isso que a janela é recortada
+// ANTES desta chamada, e não filtrada depois.
 function construirIndice(comandas, titulo) {
     var entradas = new Array(comandas.length);
 
@@ -143,9 +161,14 @@ function _faixaPorPrefixo(ordenado, campo, prefixo) {
 // nenhuma. `aceita(item)` é o filtro de status da tela — o único que de fato
 // tira comanda da lista.
 //
-// O índice cobre TODAS as comandas, inclusive as que o filtro de status
-// esconde: reconstruí-lo a cada troca de "Todas/Abertas/Fechadas" custaria a
-// normalização inteira de novo, e descartar no fim custa uma comparação.
+// `comandas` tem que ser EXATAMENTE o array passado a construirIndice: as
+// posições guardadas no índice são posições nele. Na Consulta isso é
+// _comandasBuscaveis (a janela), não _todasComandas.
+//
+// O índice cobre todas as comandas da janela, inclusive as que o filtro de
+// status esconde: reconstruí-lo a cada troca de "Todas/Abertas/Fechadas"
+// custaria a normalização inteira de novo, e descartar no fim custa uma
+// comparação.
 function ordenar(indice, comandas, termo, aceita) {
     var alvo = Texto.normalizar(termo);
     var i;
