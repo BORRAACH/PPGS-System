@@ -1,35 +1,35 @@
-"""Cliente HTTP do pizzeria-server (backend Rust separado, rodando na
-máquina Alpine da pizzaria): o autofill de endereço por telefone usado por
-Entrega.qml (ver buscarPorTelefone/salvarEndereco) e o envio do resumo do
-dia quando o caixa é fechado (ver enviarFechamento).
+"""Cliente do pizzeria-server (backend Rust): o autofill de endereço por
+telefone usado por Entrega.qml (ver buscarPorTelefone/salvarEndereco) e o
+envio do resumo do dia quando o caixa é fechado (ver enviarFechamento).
 
-As chamadas usam QNetworkAccessManager, que já é assíncrono por natureza:
-get()/post() voltam na hora e o resultado chega depois pelo sinal
-`finished`, entregue de volta na thread principal pelo event loop do Qt —
-não precisa de threading.Thread aqui (diferente da consulta de impressora em
-balcaoController.py, que É bloqueante porque chama lpstat/PowerShell)."""
+O TRANSPORTE mudou; a interface para o QML, não. Antes, cada terminal fazia
+HTTP direto contra um IP fixo da LAN (`PIZZERIA_SERVER_URL`), e o servidor
+escutava em 0.0.0.0 sem exigir autenticação nenhuma — qualquer aparelho no
+wi-fi da pizzaria conseguia baixar a lista inteira de clientes.
 
-import functools
+Agora o servidor roda numa das máquinas do balcão, escutando só em 127.0.0.1,
+e as requisições vão pela malha (RedeService.solicitar_servidor), dentro da
+sessão já autenticada e cifrada entre as máquinas. Some o IP para configurar,
+some a porta exposta, e "quem pode falar com o servidor" passa a ser
+exatamente "quem tem a chave da malha".
+
+Continua tudo assíncrono, só que o resultado agora chega pelo sinal
+`respostaServidor` do RedeService em vez do `finished` do
+QNetworkAccessManager — daí o `_pendentes`, que casa cada id de requisição com
+o que fazer quando a resposta dela voltar."""
+
 import json
-import os
 
-from PyQt6.QtCore import QObject, QTimer, QUrl, pyqtProperty, pyqtSignal, pyqtSlot
-from PyQt6.QtNetwork import QNetworkAccessManager, QNetworkRequest, QNetworkReply
+from PyQt6.QtCore import QObject, QTimer, pyqtProperty, pyqtSignal, pyqtSlot
 
 from Config.logConfig import protegido
-
-# Ajustável sem mexer no código: aponta pra máquina Alpine real da pizzaria
-# via variável de ambiente; localhost:8080 é só o fallback de desenvolvimento.
-PIZZERIA_SERVER_URL = os.environ.get("PIZZERIA_SERVER_URL", "http://localhost:8080").rstrip("/")
-
-_CONTENT_TYPE_JSON = b"application/json"
+from services.rede.redeService import rede
 
 # Mesma ordem de grandeza da checagem de impressora da malha local (ver
 # _INTERVALO_CHECAGEM_IMPRESSORA_MS em services/rede/redeService.py) — dá pra
 # tela de Rede.qml notar uma queda do pizzeria-server sem exagerar no
 # tráfego numa rede que já tem o gossip da malha rodando.
 _INTERVALO_VERIFICACAO_CONEXAO_MS = 30000
-_TIMEOUT_CONEXAO_MS = 5000
 
 # Espera antes de reenviar um fechamento que não subiu (ver
 # _agendar_reenvio). Tem que ser confortavelmente maior que o intervalo
@@ -54,8 +54,7 @@ class PizzeriaServerService(QObject):
     enderecoSalvo = pyqtSignal(bool, str)
     # Emitido só quando o estado de fato muda (ver _tratar_verificacao_conexao)
     # — Rede.qml usa isso pra mostrar se este balcão está ou não enxergando o
-    # servidor central (~/Documents/Program/ppgs_server) rodando na máquina
-    # Alpine da pizzaria.
+    # ppgs_server rodando na máquina designada da malha.
     conexaoMudou = pyqtSignal(bool)
     # (ok, mensagem) do envio do resumo do dia ao fechar o caixa — Fechamento
     # .qml transforma isso na notificação da tela.
@@ -63,7 +62,15 @@ class PizzeriaServerService(QObject):
 
     def __init__(self):
         super().__init__()
-        self._gerenciador = QNetworkAccessManager(self)
+        # id da requisição -> função que trata a resposta. O RedeService
+        # devolve tudo por um sinal só (respostaServidor), então é aqui que
+        # cada resposta reencontra quem a pediu.
+        self._pendentes = {}
+        rede.respostaServidor.connect(self._ao_responder)
+        # A máquina que hospeda pode mudar em tempo de execução (a tela Rede
+        # permite trocar): quando isso acontece, o estado de conexão anterior
+        # não vale mais nada.
+        rede.servidorDesignadoMudou.connect(self.verificarConexao)
         # None até a primeira resposta chegar — diferente de False, que já
         # afirmaria "desconectado" antes de qualquer tentativa real.
         self._conectado = None
@@ -91,31 +98,48 @@ class PizzeriaServerService(QObject):
         # tem representação própria na tela.
         return bool(self._conectado)
 
-    @pyqtProperty(str, constant=True)
-    def urlServidor(self):
-        return PIZZERIA_SERVER_URL
+    @pyqtProperty(str, notify=conexaoMudou)
+    def maquinaServidor(self):
+        """Nome da máquina que hospeda o servidor — substitui a antiga
+        `urlServidor`. Não há mais URL para mostrar nem para configurar: o
+        endereço do servidor deixou de ser algo que alguém digita."""
+        return rede.maquinaServidor
+
+    # ---------- Transporte (tudo passa por aqui) ----------
+
+    def _pedir(self, metodo, caminho, corpo=b"", tratador=None):
+        """Manda uma requisição ao servidor pela malha e registra quem trata a
+        resposta. Nunca bloqueia."""
+        id_req = rede.solicitar_servidor(metodo, caminho, corpo)
+        self._pendentes[id_req] = tratador
+
+    def _ao_responder(self, id_req, status, corpo):
+        tratador = self._pendentes.pop(id_req, None)
+        if tratador is None:
+            return
+        # status 0 = a requisição não chegou a ser respondida (sem máquina
+        # hospedeira, timeout da malha, socket caído).
+        tratador(int(status), bytes(corpo))
 
     @pyqtSlot()
     @protegido(None)
     def verificarConexao(self):
-        """Dispara um GET leve na raiz do servidor só pra confirmar que ele
-        está de pé — a rota não existe (routes::despachar em ppgs_server cai
-        no 404 padrão), mas qualquer resposta HTTP já prova que a máquina
-        Alpine está acessível e o processo está escutando. Chamado pelo timer
-        periódico e pelo botão "Atualizar" de Rede.qml."""
-        url = QUrl(f"{PIZZERIA_SERVER_URL}/")
-        requisicao = QNetworkRequest(url)
-        requisicao.setTransferTimeout(_TIMEOUT_CONEXAO_MS)
-        resposta = self._gerenciador.get(requisicao)
-        resposta.finished.connect(functools.partial(self._tratar_verificacao_conexao, resposta))
+        """Confirma que o servidor está de pé. Vai pela mesma rota de tudo o
+        mais (malha → máquina hospedeira → 127.0.0.1), então ela testa o
+        caminho inteiro, e não só se a máquina responde ping. Chamado pelo
+        timer periódico e pelo botão "Testar agora" de Rede.qml."""
+        self._pedir("GET", "/enderecos", b"", self._tratar_verificacao_conexao)
 
-    def _tratar_verificacao_conexao(self, resposta):
-        resposta.deleteLater()
-        # Um status HTTP presente (mesmo 404/500) significa que a resposta
-        # chegou de volta — o servidor está de pé. Erros de rede (recusado,
-        # host inalcançável, timeout) nunca chegam a preencher este atributo.
-        status = resposta.attribute(QNetworkRequest.Attribute.HttpStatusCodeAttribute)
-        novo_estado = status is not None
+    def _tratar_verificacao_conexao(self, status, _corpo):
+        # Só 200 conta como conectado, e não "qualquer status != 0" como antes.
+        # A diferença importa muito: quando o servidor não está rodando, quem
+        # responde é o encaminhador da máquina hospedeira, com 503 — e tratar
+        # isso como sucesso fazia a tela anunciar "Servidor central conectado"
+        # exatamente enquanto o autofill não funcionava, que é a pior
+        # combinação possível (o usuário confia no que a tela diz e procura o
+        # problema em outro lugar). 401 e 429 também não são "conectado": em
+        # nenhum dos dois o endereço do cliente vai aparecer na Entrega.
+        novo_estado = status == 200
 
         # Antes do early-return de "nada mudou": o servidor pode ter voltado
         # entre dois ticks sem que este balcão tenha notado a queda, e é a
@@ -140,28 +164,21 @@ class PizzeriaServerService(QObject):
             self.enderecoNaoEncontrado.emit()
             return
 
-        url = QUrl(f"{PIZZERIA_SERVER_URL}/enderecos/telefone/{digitos}")
-        resposta = self._gerenciador.get(QNetworkRequest(url))
-        resposta.finished.connect(functools.partial(self._tratar_busca, resposta))
+        self._pedir("GET", f"/enderecos/telefone/{digitos}", b"", self._tratar_busca)
 
-    def _tratar_busca(self, resposta):
-        resposta.deleteLater()
-        status = resposta.attribute(QNetworkRequest.Attribute.HttpStatusCodeAttribute)
-        corpo = bytes(resposta.readAll()).decode("utf-8", errors="replace")
-
-        if resposta.error() != QNetworkReply.NetworkError.NoError and status != 404:
-            print(f"[pizzeriaServerService] Falha ao consultar endereco: {resposta.errorString()}")
-            self.enderecoNaoEncontrado.emit()
-            return
-
+    def _tratar_busca(self, status, corpo):
         if status != 200:
+            # 404 (não cadastrado) e falha de transporte levam ao mesmo lugar
+            # do ponto de vista da tela: não há endereço pra preencher.
+            if status not in (0, 404):
+                print(f"[pizzeriaServerService] Falha ao consultar endereco: HTTP {status}")
             self.enderecoNaoEncontrado.emit()
             return
 
         try:
-            dados = json.loads(corpo)
+            dados = json.loads(corpo.decode("utf-8", errors="replace"))
         except json.JSONDecodeError:
-            print(f"[pizzeriaServerService] Resposta invalida do servidor: {corpo!r}")
+            print(f"[pizzeriaServerService] Resposta invalida do servidor: {corpo[:120]!r}")
             self.enderecoNaoEncontrado.emit()
             return
 
@@ -189,21 +206,11 @@ class PizzeriaServerService(QObject):
             "nome": dados.get("cliente") or None,
         }
 
-        url = QUrl(f"{PIZZERIA_SERVER_URL}/enderecos")
-        requisicao = QNetworkRequest(url)
-        requisicao.setHeader(QNetworkRequest.KnownHeaders.ContentTypeHeader, _CONTENT_TYPE_JSON.decode())
-        corpo = json.dumps(payload).encode("utf-8")
+        self._pedir("POST", "/enderecos", json.dumps(payload).encode("utf-8"), self._tratar_salvamento)
 
-        resposta = self._gerenciador.post(requisicao, corpo)
-        resposta.finished.connect(functools.partial(self._tratar_salvamento, resposta))
-
-    def _tratar_salvamento(self, resposta):
-        resposta.deleteLater()
-        status = resposta.attribute(QNetworkRequest.Attribute.HttpStatusCodeAttribute)
-
-        if resposta.error() != QNetworkReply.NetworkError.NoError or status != 201:
-            mensagem = resposta.errorString() if resposta.error() != QNetworkReply.NetworkError.NoError else f"HTTP {status}"
-            print(f"[pizzeriaServerService] Falha ao salvar endereco: {mensagem}")
+    def _tratar_salvamento(self, status, _corpo):
+        if status != 201:
+            print(f"[pizzeriaServerService] Falha ao salvar endereco: HTTP {status}")
             self.enderecoSalvo.emit(False, "Nao foi possivel salvar o endereco no servidor.")
             return
 
@@ -249,23 +256,18 @@ class PizzeriaServerService(QObject):
             self._postar_fechamento(payload)
 
     def _postar_fechamento(self, payload):
-        url = QUrl(f"{PIZZERIA_SERVER_URL}/fechamentos")
-        requisicao = QNetworkRequest(url)
-        requisicao.setHeader(QNetworkRequest.KnownHeaders.ContentTypeHeader, _CONTENT_TYPE_JSON.decode())
-        requisicao.setTransferTimeout(_TIMEOUT_CONEXAO_MS)
-        corpo = json.dumps(payload).encode("utf-8")
+        self._pedir(
+            "POST",
+            "/fechamentos",
+            json.dumps(payload).encode("utf-8"),
+            lambda status, corpo: self._tratar_envio_fechamento(status, payload),
+        )
 
-        resposta = self._gerenciador.post(requisicao, corpo)
-        resposta.finished.connect(functools.partial(self._tratar_envio_fechamento, resposta, payload))
-
-    def _tratar_envio_fechamento(self, resposta, payload):
-        resposta.deleteLater()
+    def _tratar_envio_fechamento(self, status, payload):
         data = payload.get("data") or ""
-        status = resposta.attribute(QNetworkRequest.Attribute.HttpStatusCodeAttribute)
 
-        if resposta.error() != QNetworkReply.NetworkError.NoError or status != 200:
-            mensagem = resposta.errorString() if resposta.error() != QNetworkReply.NetworkError.NoError else f"HTTP {status}"
-            print(f"[pizzeriaServerService] Falha ao enviar fechamento de {data}: {mensagem}")
+        if status != 200:
+            print(f"[pizzeriaServerService] Falha ao enviar fechamento de {data}: HTTP {status}")
             self._agendar_reenvio()
             self.fechamentoEnviado.emit(
                 False,

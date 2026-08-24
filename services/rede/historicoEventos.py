@@ -86,6 +86,8 @@ _EVENTOS = {
     # Publicados por este módulo, não pelo barramento (ver registrar_local).
     "maquina_conectada": (MAQUINAS, "Máquina entrou na rede"),
     "maquina_desconectada": (MAQUINAS, "Máquina saiu da rede"),
+    "maquina_recusada": (MAQUINAS, "Máquina recusada na rede"),
+    "servidor_designado": (MAQUINAS, "Servidor central mudou de máquina"),
     "conflito_detectado": (COMANDAS, "Divergência detectada entre máquinas"),
     "conflito_resolvido": (COMANDAS, "Divergência resolvida"),
 }
@@ -118,6 +120,10 @@ _DETALHE = {
     "impressora_fixada": lambda p: p.get("nomeMaquina", "") or "automática",
     "maquina_conectada": lambda p: p.get("nome", ""),
     "maquina_desconectada": lambda p: p.get("nome", ""),
+    # O endereço, e não um nome: uma máquina recusada nunca chegou a
+    # dizer como se chama — o handshake morre antes do "identificar".
+    "maquina_recusada": lambda p: f"{p.get('endereco', '?')} — {p.get('motivo', '')}".strip(" —"),
+    "servidor_designado": lambda p: p.get("nome", ""),
     "conflito_detectado": lambda p: p.get("arquivo", ""),
     "conflito_resolvido": lambda p: p.get("arquivo", ""),
 }

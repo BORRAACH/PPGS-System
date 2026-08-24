@@ -7,7 +7,6 @@ Rectangle {
     id: sideBar
 
     property StackView stackView: null
-
     // Largura do ícone (22) mais o respiro dos dois lados. Em tela estreita a
     // barra afina em vez de sumir: navegar entre telas é a única coisa que
     // precisa estar sempre ao alcance, e cada pixel devolvido aqui vira
@@ -132,26 +131,27 @@ Rectangle {
                         // erro de navegação no meio do atendimento.
                         implicitHeight: Math.max(Responsivo.alvoToque, 24 + Estilo.global.padding.md * 2)
                         onClicked: {
+                            // replace(null, ...) troca a pilha INTEIRA
+                            // pela página nova — não push(), que só
+                            // empilha por cima sem nunca destruir nada.
+                            // Navegação aqui é sempre entre telas
+                            // irmãs (Início, Balcão, Entrega, Salão...),
+                            // nunca um "entrar mais fundo" que precise
+                            // voltar depois, então Início não é mais um
+                            // caso especial (pop(null)) — é só mais um
+                            // destino, como qualquer outro (ver
+                            // qml/pages/inicio/Inicio.qml). Com push(),
+                            // um dia inteiro clicando entre telas sem
+                            // nunca "voltar" acumulava uma instância
+                            // nova a cada clique, cada uma com seu
+                            // próprio ListModel/Timer/conexões, sem
+                            // nunca liberar memória — exatamente o tipo
+                            // de vazamento que trava máquinas fracas ao
+                            // longo do expediente.
+
                             if (sideBar.stackView && sideBar.stackView.currentItem && sideBar.stackView.currentItem.objectName !== nomeTela)
-                                // replace(null, ...) troca a pilha INTEIRA
-                                // pela página nova — não push(), que só
-                                // empilha por cima sem nunca destruir nada.
-                                // Navegação aqui é sempre entre telas
-                                // irmãs (Início, Balcão, Entrega, Salão...),
-                                // nunca um "entrar mais fundo" que precise
-                                // voltar depois, então Início não é mais um
-                                // caso especial (pop(null)) — é só mais um
-                                // destino, como qualquer outro (ver
-                                // qml/pages/inicio/Inicio.qml). Com push(),
-                                // um dia inteiro clicando entre telas sem
-                                // nunca "voltar" acumulava uma instância
-                                // nova a cada clique, cada uma com seu
-                                // próprio ListModel/Timer/conexões, sem
-                                // nunca liberar memória — exatamente o tipo
-                                // de vazamento que trava máquinas fracas ao
-                                // longo do expediente.
                                 sideBar.stackView.replace(null, pagina, {
-                                }, StackView.Immediate);
+                            }, StackView.Immediate);
 
                         }
 
@@ -207,7 +207,7 @@ Rectangle {
 
             Layout.fillWidth: true
             implicitHeight: colFooter.implicitHeight + Estilo.global.padding.xs * 2
-            color: Qt.lighter(sideBar.color, 108)
+            color: Qt.lighter(sideBar.color, 1)
             radius: Estilo.global.radius.pill
 
             // Telas de manutenção do sistema (o que se mexe de vez em quando),
@@ -254,11 +254,12 @@ Rectangle {
                         // erro de navegação no meio do atendimento.
                         implicitHeight: Math.max(Responsivo.alvoToque, 24 + Estilo.global.padding.md * 2)
                         onClicked: {
+                            // Ver o mesmo comentário no Repeater de
+                            // modeloNavegacao acima.
+
                             if (sideBar.stackView && sideBar.stackView.currentItem && sideBar.stackView.currentItem.objectName !== nomeTela)
-                                // Ver o mesmo comentário no Repeater de
-                                // modeloNavegacao acima.
                                 sideBar.stackView.replace(null, pagina, {
-                                }, StackView.Immediate);
+                            }, StackView.Immediate);
 
                         }
 

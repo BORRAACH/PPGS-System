@@ -50,6 +50,16 @@ ARQUIVOS_IGNORADOS = {
     # um peer entra na rede anunciando uma fixação — ou seja, o app se
     # reiniciava sozinho, no meio do uso, sem ninguém ter tocado em código.
     os.path.join("Config", "impressora_fixada.json"),
+    # Qual máquina hospeda o ppgs_server (ver services/rede/servidorDesignado.py).
+    # É gravado ao clicar "Rodar nesta máquina"/"Iniciar servidor" na tela Rede
+    # — e também sozinho, quando outra máquina da malha anuncia a escolha dela.
+    # Sem esta linha, mandar o servidor subir reiniciava o app inteiro no mesmo
+    # instante, e o preparo que acabara de começar era morto junto.
+    os.path.join("Config", "servidor_designado.json"),
+    # Chave da malha (ver services/rede/seguranca.py). Gravada uma vez, ao
+    # gerar ou colar o código na tela Rede — que é justamente o momento em que
+    # um reinício apagaria a tela e deixaria o usuário sem saber se funcionou.
+    os.path.join("Config", "chave_malha.json"),
 }
 # Pastas inteiras de dados que o app grava em tempo de execução. Diferente de
 # IGNORAR_DIRS, que casa por NOME de pasta em qualquer nível, aqui o casamento

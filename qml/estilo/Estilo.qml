@@ -36,6 +36,18 @@ QtObject {
     // diferentes). Este grupo é o esquema único.
     // =========================================================================
     // CATEGORY — categorias do cardápio
+    // ===== Famílias tipográficas =====
+    // O par vem inteiro da paleta (ver design/Paleta Forno.html,
+    // "--font-heading" e "--font-body"): Caprasimo nos títulos, Figtree no
+    // corpo. Os dois arquivos vêm embarcados em qml/estilo/fontes/ e não
+    // instalados no sistema: o app roda em máquinas que ninguém administra, e
+    // uma fonte "que precisa ser instalada antes" acaba não existindo em
+    // metade delas.
+    // ===== Pesos =====
+    // Só existem os quatro pesos que a Figtree embarca (ver Config/fontes.py);
+    // pedir Font.Black aqui devolveria o Bold mesmo, então não há token para
+    // ele. A Caprasimo tem só o 400 e ignora este eixo — título não muda de
+    // peso, muda de família.
 
     id: root
 
@@ -131,7 +143,7 @@ QtObject {
         readonly property color shadow: Colors.shadow
         // sombra projetada de cartão
         // Moldura da janela e barra lateral: o mesmo tom em volta de tudo.
-        readonly property color chrome: Qt.darker(background, 1.8)
+        readonly property color chrome: Qt.darker(Colors.areia300, 1.2)
         // ===== Bordas =====
         readonly property color border: Colors.taupe400
         // input em repouso
@@ -263,14 +275,6 @@ QtObject {
         readonly property int display: Math.round(32 * scale) // números grandes de fechamento
     }
 
-    // ===== Famílias tipográficas =====
-    // O par vem inteiro da paleta (ver design/Paleta Forno.html,
-    // "--font-heading" e "--font-body"): Caprasimo nos títulos, Figtree no
-    // corpo. Os dois arquivos vêm embarcados em qml/estilo/fontes/ e não
-    // instalados no sistema: o app roda em máquinas que ninguém administra, e
-    // uma fonte "que precisa ser instalada antes" acaba não existindo em
-    // metade delas.
-    //
     // A divisão de trabalho entre as duas é o motivo de elas serem carregadas
     // de formas diferentes. Caprasimo é display: um só peso (400), desenhada
     // para chamar atenção em tamanho grande, e usada de propósito só em
@@ -284,13 +288,13 @@ QtObject {
         // font.family devolve string vazia — que no Qt significa "a fonte
         // padrão", exatamente o comportamento anterior. Nenhum título fica
         // sem texto por causa disto.
-        //
+
         // .ttf, e não .woff2: o Qt no Windows (motor DirectWrite) não lê
         // WOFF2 — só o do Linux lia, e por acaso, porque lá quem decodifica é
         // o FreeType. Ver Config/fontes.py para a história completa.
-        readonly property FontLoader carregadorTitulo: FontLoader {
+        readonly property FontLoader
+        carregadorTitulo: FontLoader {
             source: Qt.resolvedUrl("fontes/Caprasimo-Regular.ttf")
-
             // Sem este aviso a falha é invisível no log: o título simplesmente
             // sai na fonte do corpo e ninguém liga uma coisa à outra. Foi
             // assim que a Caprasimo ficou sumida nas máquinas Windows sem
@@ -298,6 +302,7 @@ QtObject {
             onStatusChanged: {
                 if (status === FontLoader.Error)
                     console.warn("[fontes] Falha ao carregar a fonte de título (" + source + ") — os títulos vão sair na fonte do corpo.");
+
             }
         }
 
@@ -310,12 +315,6 @@ QtObject {
         readonly property string body: ""
     }
 
-    // ===== Pesos =====
-    // Só existem os quatro pesos que a Figtree embarca (ver Config/fontes.py);
-    // pedir Font.Black aqui devolveria o Bold mesmo, então não há token para
-    // ele. A Caprasimo tem só o 400 e ignora este eixo — título não muda de
-    // peso, muda de família.
-    //
     // Enquanto a migração dos ~300 `font.bold: true` espalhados pelo app não
     // acontece, eles seguem funcionando: `bold` é o 700, o mesmo que `strong`.
     component FontWeightScale: QtObject {
@@ -386,18 +385,24 @@ QtObject {
     // cor, só o alcance. Antes de existir, cada tela que precisava de sombra
     // (Inicio.qml) repetia esses números soltos em cada botão.
     component ElevationScale: QtObject {
-        readonly property NivelElevacao sm: NivelElevacao {
+        readonly property NivelElevacao
+        sm: NivelElevacao {
             blur: 0.4
             deslocamento: 1
         }
-        readonly property NivelElevacao md: NivelElevacao {
+
+        readonly property NivelElevacao
+        md: NivelElevacao {
             blur: 0.6
             deslocamento: 2
         }
-        readonly property NivelElevacao lg: NivelElevacao {
+
+        readonly property NivelElevacao
+        lg: NivelElevacao {
             blur: 0.8
             deslocamento: 4
         }
+
     }
 
     // =========================================================================

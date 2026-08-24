@@ -271,12 +271,127 @@ class ConsultaController(QObject):
         quando = tombstones.carregar("pedidos").get(nome_arquivo, "")
         self._aplicar_exclusao(nome_arquivo, quando, ja_registrado=True)
 
+    # ---------- Listagem para a tela de Consulta ----------
+    #
+    # A tela abre mostrando só os últimos dias e deixa os anteriores como
+    # caixinhas fechadas, que só leem o disco quando alguém as abre (ver
+    # qml/pages/consulta/Consulta.qml, janelaCargaDias). Daí os três métodos
+    # abaixo em vez de um `listarComandas()` só:
+    #
+    #   listarComandasRecentes  — o que a tela mostra de cara;
+    #   listarDiasAnteriores    — só o rótulo e a contagem de cada dia velho;
+    #   listarComandasDoDia     — o conteúdo de um dia, pedido no clique.
+    #
+    # O que torna isso possível é a data estar no NOME do arquivo
+    # ("entrega_20260731_220856_28213d.txt", ver
+    # comandaParserService.data_arquivo_aaaammdd): dá pra separar os dias, e
+    # contar quantas comandas cada um tem, sem abrir arquivo nenhum. Só
+    # `_montar_comandas` abre — e é ela que custa, porque por comanda são uma
+    # leitura de disco, uma decodificação do cupom inteiro e meia dúzia de
+    # regex sobre ele. Antes, abrir a Consulta pagava isso pelo acervo
+    # INTEIRO, que só cresce e nunca diminui; agora paga por dois dias.
+
+    def _limite_aaaammdd(self, dias):
+        """A data mais antiga (como "AAAAMMDD") que ainda conta como recente.
+
+        Mesma convenção da janela de busca em Consulta.qml: `dias` é quantos
+        dias PARA TRÁS a janela alcança, então hoje mais eles — com dias=2,
+        hoje, ontem e anteontem."""
+        return (datetime.now() - timedelta(days=max(0, int(dias)))).strftime("%Y%m%d")
+
+    def _dia_formatado(self, aaaammdd):
+        """"20260731" -> "31/07/2026", o mesmo formato do cabeçalho do cupom
+        (e o que Consulta.qml usa como chave de agrupamento)."""
+        return f"{aaaammdd[6:8]}/{aaaammdd[4:6]}/{aaaammdd[0:4]}"
+
+    def _eh_recente(self, nome_arquivo, limite):
+        """Comanda sem data no nome (arquivo de origem desconhecida) conta
+        como recente de propósito: não dá pra julgar a idade dela, e a pior
+        das duas decisões é a que a esconde dentro de uma caixinha de dia que
+        ninguém sabe qual é. Mesmo critério que a tela já aplica à comanda sem
+        "Data:" no cabeçalho, jogando-a em "hoje"."""
+        data = parser.data_arquivo_aaaammdd(nome_arquivo)
+        return data is None or data >= limite
+
+    @pyqtSlot(int, result="QVariantList")
+    @protegido([])
+    def listarComandasRecentes(self, dias):
+        """As comandas dos últimos `dias` dias, mais recentes primeiro.
+
+        É o que a Consulta carrega ao abrir, e também a janela que a barra de
+        pesquisa alcança (com um `dias` maior, e só na primeira tecla
+        digitada — ver Consulta.qml, _prepararIndiceBusca)."""
+        limite = self._limite_aaaammdd(dias)
+        return self._montar_comandas(
+            [nome for nome in self._nomes_comandas_locais() if self._eh_recente(nome, limite)]
+        )
+
+    @pyqtSlot(int, result="QVariantList")
+    @protegido([])
+    def listarDiasAnteriores(self, dias):
+        """Os dias mais antigos que a janela de `dias`, do mais recente pro
+        mais antigo: [{"dia": "31/07/2026", "chave": "20260731",
+        "quantidade": 12, "fechadas": 9}].
+
+        Não abre comanda nenhuma — a data sai do nome do arquivo e as baixas
+        de uma leitura só do mapa de fechadas. É o que deixa a tela desenhar a
+        caixinha de cada dia (com a contagem certa, inclusive sob o filtro
+        Abertas/Fechadas) sem pagar pelo conteúdo de nenhum deles."""
+        limite = self._limite_aaaammdd(dias)
+        baixas = baixaComandas.carregar()
+
+        dias_antigos = {}
+        for nome_arquivo in self._nomes_comandas_locais():
+            if self._eh_recente(nome_arquivo, limite):
+                continue
+            data = parser.data_arquivo_aaaammdd(nome_arquivo)
+            contagem = dias_antigos.setdefault(data, {"quantidade": 0, "fechadas": 0})
+            contagem["quantidade"] += 1
+            if nome_arquivo in baixas:
+                contagem["fechadas"] += 1
+
+        return [
+            {
+                "dia": self._dia_formatado(data),
+                "chave": data,
+                "quantidade": contagem["quantidade"],
+                "fechadas": contagem["fechadas"],
+            }
+            for data, contagem in sorted(dias_antigos.items(), reverse=True)
+        ]
+
+    @pyqtSlot(str, result="QVariantList")
+    @protegido([])
+    def listarComandasDoDia(self, chave):
+        """As comandas de UM dia ("AAAAMMDD", a `chave` que
+        listarDiasAnteriores devolveu). Chamado quando a caixinha do dia é
+        aberta na tela, e não antes."""
+        return self._montar_comandas(
+            [
+                nome
+                for nome in self._nomes_comandas_locais()
+                if parser.data_arquivo_aaaammdd(nome) == chave
+            ]
+        )
+
     @pyqtSlot(result="QVariantList")
     @protegido([])
     def listarComandas(self):
-        """Lê todos os .txt salvos em pedidos/ e retorna seus dados já
-        prontos para exibição (sem os códigos de controle da impressora),
-        mais recentes primeiro."""
+        """Todas as comandas de pedidos/, sem janela nenhuma.
+
+        A tela NÃO usa mais este caminho (ver listarComandasRecentes) — ele
+        ficou para quem precisa mesmo do acervo inteiro e não tem interface
+        pra travar, como docker/apagar_pedido_teste.py."""
+        return self._montar_comandas(self._nomes_comandas_locais())
+
+    def _montar_comandas(self, nomes):
+        """Lê os arquivos de `nomes` e devolve seus dados já prontos para
+        exibição (sem os códigos de controle da impressora), mais recentes
+        primeiro.
+
+        Único lugar que abre comanda para a tela de Consulta, e o passo caro
+        das três listagens acima — quem chama decide QUAIS arquivos valem o
+        custo."""
         os.makedirs(self.pasta_pedidos, exist_ok=True)
 
         # Uma leitura só do índice de eventos pra lista inteira — sem isto,
@@ -293,10 +408,7 @@ class ConsultaController(QObject):
             baixas = baixaComandas.carregar()
 
             comandas = []
-            for nome_arquivo in os.listdir(self.pasta_pedidos):
-                if not nome_arquivo.endswith(".txt"):
-                    continue
-
+            for nome_arquivo in nomes:
                 caminho = os.path.join(self.pasta_pedidos, nome_arquivo)
                 try:
                     with open(caminho, "rb") as arquivo:
@@ -312,6 +424,7 @@ class ConsultaController(QObject):
                 codigo = parser.codigo_comanda(nome_arquivo, conteudo)
                 conflito = conflitos.get(nome_arquivo) or {}
                 cliente = parser.extrair_campo(parser.PADRAO_CLIENTE, conteudo)
+                data_arquivo = parser.data_arquivo_aaaammdd(nome_arquivo)
 
                 comandas.append({
                     "arquivo": nome_arquivo,
@@ -319,6 +432,13 @@ class ConsultaController(QObject):
                     "conteudo": conteudo,
                     "cliente": cliente,
                     "dataHora": parser.extrair_campo(parser.PADRAO_DATA, conteudo),
+                    # O dia pelo NOME do arquivo ("" quando ele não segue o
+                    # padrão). É por ele que a tela agrupa, e não pelo "Data:"
+                    # do cupom, pra que o dia de uma comanda já carregada seja
+                    # sempre o mesmo que listarDiasAnteriores contaria pra ela
+                    # — senão um cupom com data divergente do nome abriria uma
+                    # caixinha duplicada, uma vinda de cada lado.
+                    "dia": self._dia_formatado(data_arquivo) if data_arquivo else "",
                     "modificadoEm": modificado_em,
                     "codigo": codigo,
                     # Aberta (ainda não conferida, fora do caixa) x fechada (com

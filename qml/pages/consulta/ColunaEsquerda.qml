@@ -20,11 +20,17 @@ Column {
     // Total exibido (hoje + todos os dias anteriores agrupados), não só o
     // que está com a caixinha aberta — usado por PainelDetalhe.qml pra
     // decidir a mensagem de "nenhuma comanda encontrada".
+    //
+    // Soma "quantidade", e não "comandas.length": o dia que ainda não foi
+    // aberto não tem lista nenhuma em memória (ver Consulta.qml,
+    // janelaCargaDias), só a contagem que veio do nome dos arquivos. Contar
+    // pelo array daria zero para todos eles, e o contador do topo passaria a
+    // dizer que a pizzaria tem meia dúzia de comandas no acervo inteiro.
     readonly property int totalComandas: {
         var total = listaHoje.count;
         var grupos = colunaEsquerda.pagina ? colunaEsquerda.pagina.gruposAnteriores : [];
         for (var i = 0; i < grupos.length; i++)
-            total += grupos[i].comandas.length;
+            total += grupos[i].quantidade;
         return total;
     }
     // Exposto para Consulta.qml poder focar a busca e já entrar com o
@@ -343,6 +349,11 @@ Column {
                         id: modeloDia
                     }
 
+                    // Já preenchido? Um bool próprio, e não "modeloDia.count > 0": um dia
+                    // pode legitimamente não ter nenhuma comanda a mostrar, e pela
+                    // contagem ele seria relido do disco a cada abrir e fechar.
+                    property bool preenchido: false
+
                     // Preenchido só quando a caixinha é aberta pela primeira
                     // vez, e não na criação do delegate: fechada, ela mostra
                     // apenas o dia e a contagem (que saem do próprio
@@ -350,11 +361,23 @@ Column {
                     // no carregamento da página o custo de todas as comandas
                     // de todos os dias anteriores — a maioria das quais
                     // ninguém vai abrir.
+                    //
+                    // Para os dias fora da janela de carga ("carregado: false")
+                    // a economia não é só de delegates: as comandas deles nem
+                    // foram lidas do disco ainda, e é ESTE clique que as lê
+                    // (ver Consulta.qml, carregarDia). É o que faz abrir a
+                    // Consulta custar dois dias de leitura em vez do acervo
+                    // inteiro.
                     function _garantirPreenchido() {
-                        if (modeloDia.count > 0)
+                        if (blocoDia.preenchido)
                             return;
-                        for (var i = 0; i < blocoDia.modelData.comandas.length; i++)
-                            modeloDia.append(blocoDia.modelData.comandas[i]);
+                        blocoDia.preenchido = true;
+
+                        var comandas = blocoDia.modelData.carregado
+                            ? blocoDia.modelData.comandas
+                            : (colunaEsquerda.pagina ? colunaEsquerda.pagina.carregarDia(blocoDia.modelData.chave) : []);
+                        for (var i = 0; i < comandas.length; i++)
+                            modeloDia.append(comandas[i]);
                     }
 
                     onExpandidoChanged: {
@@ -403,7 +426,7 @@ Column {
                             Item { Layout.fillWidth: true }
 
                             Text {
-                                text: blocoDia.modelData.comandas.length + (blocoDia.modelData.comandas.length === 1 ? " comanda" : " comandas")
+                                text: blocoDia.modelData.quantidade + (blocoDia.modelData.quantidade === 1 ? " comanda" : " comandas")
                                 font.pixelSize: Estilo.global.fontSize.sm
                                 color: Estilo.global.textSecondary
                             }

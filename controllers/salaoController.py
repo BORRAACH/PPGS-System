@@ -1,6 +1,7 @@
 import json
 import os
 import uuid
+from collections import Counter
 from datetime import datetime
 
 from PyQt6.QtCore import QObject, pyqtSignal, pyqtSlot
@@ -20,9 +21,114 @@ from services.rede import relogio, rede, tombstones
 _EVENTO_MESA_ATUALIZADA = "mesa_atualizada"
 _EVENTO_MESA_FECHADA = "mesa_fechada"
 
+# Marca impressa no topo da comanda de produção (a via que vai pro
+# pizzaiolo, ver imprimirComandaCozinha) — em negrito direto, e não como um
+# "campo" configurável em EstiloImpressora.qml, pelo mesmo motivo da marca de
+# comanda de teste em balcaoController: é um aviso fixo pra quem tira o papel
+# da impressora saber que aquilo não é o cupom do cliente.
+_MARCA_COMANDA_COZINHA = f"{estilo.NEGRITO_LIGA}*** COMANDA COZINHA ***{estilo.NEGRITO_DESLIGA}"
+
 
 def _valor_total_itens(itens):
     return sum(texto.valor_para_float(item.get("valor", "")) for item in itens)
+
+
+def _itens_reais(itens):
+    """Só os itens de verdade da mesa. O formulário do Salão sempre tem ao
+    menos uma linha (em branco enquanto ninguém escolheu nada) e ela é salva
+    junto com as outras — contá-la como item faria a comanda do pizzaiolo sair
+    com uma linha vazia, ou até sair sozinha numa mesa ainda sem nada."""
+    return [item for item in (itens or []) if (item.get("pedido") or "").strip()]
+
+
+def _chave_item(item):
+    """Identidade de um item para efeito de "já foi pra cozinha ou não".
+
+    Duas pizzas iguais pedidas na mesma mesa têm a MESMA chave de propósito —
+    a comparação de itens pendentes é feita por multiconjunto (ver
+    _itens_pendentes_cozinha), então a segunda continua sendo uma pendência
+    própria. Serializado com sort_keys pra a ordem das chaves do dict (que
+    varia entre o que veio da QML e o que foi relido do JSON) não fazer dois
+    itens idênticos parecerem diferentes."""
+    return json.dumps(
+        {
+            "pedido": item.get("pedido", ""),
+            "observacao": item.get("observacao", ""),
+            "valor": item.get("valor", ""),
+            "borda": item.get("borda") or None,
+            "adicionais": item.get("adicionais") or [],
+        },
+        sort_keys=True,
+        ensure_ascii=False,
+        default=str,
+    )
+
+
+def _itens_pendentes_cozinha(mesa):
+    """Itens da mesa que ainda não foram impressos para o pizzaiolo.
+
+    Uma comanda de mesa é incrementada várias vezes ao longo da visita, e a
+    cada lançamento o formulário devolve a lista INTEIRA de itens. Reimprimir
+    tudo faria o pizzaiolo produzir de novo o que já saiu — daí a comparação
+    com o que já foi impresso (gravado em "itensImpressosCozinha" pela
+    própria impressão), como multiconjunto: três refrigerantes iguais já
+    impressos abatem exatamente três dos que estão na mesa agora, e o quarto
+    continua pendente."""
+    restantes = Counter(_chave_item(item) for item in _itens_reais(mesa.get("itensImpressosCozinha")))
+
+    pendentes = []
+    for item in _itens_reais(mesa.get("itens")):
+        chave = _chave_item(item)
+        if restantes.get(chave):
+            restantes[chave] -= 1
+            continue
+        pendentes.append(item)
+    return pendentes
+
+
+def _item_sem_precos(item):
+    """Cópia do item com os preços de borda e adicionais zerados.
+
+    O valor do item em si não precisa de tratamento (_linhas_itens_producao
+    ignora a coluna de valor), mas os de borda/adicional vêm embutidos NO
+    TEXTO montado por comandaTextoService ("* CATUPIRY (R$ 8,00)") — o único
+    jeito de tirá-los é não mandar o preço pra lá."""
+    borda = item.get("borda")
+    adicionais = item.get("adicionais") or []
+    return {
+        "pedido": item.get("pedido", ""),
+        "observacao": item.get("observacao", ""),
+        "valor": "",
+        "borda": {**borda, "valor": ""} if isinstance(borda, dict) else borda,
+        "adicionais": [{**a, "valor": ""} if isinstance(a, dict) else a for a in adicionais],
+    }
+
+
+def _linhas_itens_producao(grupos):
+    """Tabela de itens da comanda do pizzaiolo — mesma montagem de grupos de
+    comandaTextoService (pizza meio a meio vira uma linha por sabor, com os
+    adicionais de cada fração logo abaixo, e borda/observação ao final do
+    grupo), só que sem a coluna de valor.
+
+    Não dá pra usar texto.formatar_tabela() aqui: ela sempre escreve
+    "pedido | valor", e passar os itens com valor vazio deixaria um "|" solto
+    no fim de cada linha do papel."""
+    linhas = []
+    for indice, grupo in enumerate(grupos):
+        if indice > 0:
+            linhas.append("")
+
+        for coluna_pedido, _valor, extras in grupo["linhas"]:
+            linhas.append(estilo.formatar_campo(coluna_pedido, "pedido"))
+            for extra in extras:
+                linhas.append(f"  {estilo.formatar_campo(extra, 'adicional_item')}")
+
+        if grupo["borda"]:
+            linhas.append(f"  {estilo.formatar_campo(grupo['borda'], 'borda_item')}")
+        if grupo["observacao"]:
+            linhas.append(f"  {estilo.formatar_campo(grupo['observacao'], 'observacao_item')}")
+
+    return linhas
 
 
 class SalaoController(QObject):
@@ -174,6 +280,11 @@ class SalaoController(QObject):
             "mesa": numero_mesa,
             "cliente": dados.get("cliente", ""),
             "itens": dados.get("itens", []),
+            # Preservado do arquivo anterior, igual a "criadaEm": salvar a
+            # mesa de novo (mais uma rodada de pedidos) não pode fazer o que
+            # já foi pro pizzaiolo virar pendência outra vez (ver
+            # _itens_pendentes_cozinha).
+            "itensImpressosCozinha": mesa_existente.get("itensImpressosCozinha", []),
             "criadaEm": mesa_existente.get("criadaEm", agora),
             "atualizadaEm": agora,
             # Critério de desempate real entre máquinas (ver
@@ -208,6 +319,92 @@ class SalaoController(QObject):
         tombstones.registrar("mesas", mesa_id)
         rede.publicarEvento(_EVENTO_MESA_FECHADA, {"id": mesa_id})
         return True
+
+    @pyqtSlot(str, result="QVariantList")
+    @protegido([])
+    def itensPendentesCozinha(self, mesa_id):
+        """Itens da mesa que ainda não foram impressos para o pizzaiolo — o
+        que Salao.qml mostra no popup depois de lançar o pedido (e o que
+        decide se vale a pena abrir o popup: lista vazia = nada novo pra
+        produzir, nem pergunta)."""
+        mesa = self._ler_mesa_arquivo(self._caminho_mesa(mesa_id))
+        if mesa is None:
+            return []
+
+        return _itens_pendentes_cozinha(mesa)
+
+    @pyqtSlot(str, result=bool)
+    @pyqtSlot(str, int, result=bool)
+    @protegido(False)
+    def imprimirComandaCozinha(self, mesa_id, copias=1):
+        """Imprime a via de produção (a que vai pro pizzaiolo) com os itens
+        ainda não impressos desta mesa, e marca todos os itens atuais como já
+        impressos.
+
+        Ao contrário do cupom final de fecharMesa, esta comanda NÃO é gravada
+        em pedidos/ nem propagada como pedido pela malha: não é um documento
+        de venda (não tem valores, não deve aparecer na Consulta), é só papel
+        pra cozinha. O que É propagado é a mesa atualizada, pra outra máquina
+        da malha não oferecer de novo a impressão dos mesmos itens.
+
+        A marcação acontece mesmo que a impressão falhe depois — igual a
+        fecharMesa, o resultado da impressão é assíncrono (chega por
+        rede.impressaoResultado) e não dá pra esperar por ele aqui. Numa falha
+        de impressora, o caminho é reimprimir pela Consulta/impressora, não
+        salvar a mesa de novo."""
+        mesa = self._ler_mesa_arquivo(self._caminho_mesa(mesa_id))
+        if mesa is None:
+            return False
+
+        pendentes = _itens_pendentes_cozinha(mesa)
+        if not pendentes:
+            return False
+
+        conteudo_bytes = self._montarComandaCozinha(mesa, pendentes)
+
+        mesa["itensImpressosCozinha"] = _itens_reais(mesa.get("itens"))
+        mesa["atualizadaEm"] = datetime.now().isoformat()
+        mesa["idEvento"] = relogio.novo_id()
+        if self._gravar_mesa_arquivo(mesa):
+            rede.publicarEvento(_EVENTO_MESA_ATUALIZADA, mesa)
+
+        for _ in range(max(1, copias)):
+            rede.solicitar_impressao(conteudo_bytes)
+
+        return True
+
+    def _montarComandaCozinha(self, mesa, itens):
+        """Via de produção: mesa, cliente, hora e os itens — sem valor
+        nenhum, nem por item nem total. Quem está no forno precisa saber o
+        que fazer, e preço só polui (e faria o papel ser confundido com o
+        cupom do cliente).
+
+        Layout fixo, sem passar por comandaEstiloService.ordem_secoes(): a
+        ordem configurável em Configurações descreve a comanda de VENDA (tem
+        forma de pagamento, troco, total...), campos que não existem aqui. O
+        estilo por campo (negrito/tamanho de pedido, borda, adicional) é
+        respeitado normalmente, esse sim se aplica igual."""
+        agora = datetime.now()
+        grupos = texto.montar_grupos([_item_sem_precos(item) for item in itens])
+
+        linhas = [_MARCA_COMANDA_COZINHA]
+        linhas.extend(estilo.linhas_espacamento_secoes())
+        linhas.append(f"Mesa: {estilo.formatar_campo(str(mesa.get('mesa', '')), 'mesa')}")
+
+        cliente = (mesa.get("cliente") or "").strip()
+        if cliente:
+            linhas.append(f"Cliente: {estilo.formatar_campo(cliente, 'cliente')}")
+
+        linhas.append(f"Data: {estilo.formatar_campo(agora.strftime('%d/%m/%Y %H:%M:%S'), 'data')}")
+        linhas.extend(estilo.linhas_espacamento_secoes())
+        linhas.append(texto.MARCADOR_ITENS)
+        linhas.extend(estilo.linhas_espacamento_secoes())
+        linhas.extend(_linhas_itens_producao(grupos))
+        linhas.extend(estilo.linhas_espacamento_secoes())
+        linhas.append(texto.MARCADOR_ITENS)
+
+        conteudo = "\n".join(linhas) + "\n"
+        return conteudo.encode(texto.CODEPAGE_IMPRESSORA, errors="replace")
 
     @pyqtSlot(str, "QVariantList", result=bool)
     @pyqtSlot(str, "QVariantList", int, result=bool)

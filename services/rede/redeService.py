@@ -14,16 +14,32 @@ from PyQt6.QtNetwork import QHostAddress, QTcpServer, QTcpSocket
 
 from Config.logConfig import protegido
 from services.printerService import PrinterService
-from services.rede import caminhos, historicoEventos, impressoraFixada, indicePedidos, relogio, sequenciaComandas, tombstones
+from services.rede import caminhos, historicoEventos, impressoraFixada, indicePedidos, relogio, seguranca, sequenciaComandas, servidorDesignado, tombstones
 from services.rede.descoberta import criar_descoberta
 from services.rede.eventos import BarramentoEventos
 
 # Tipo de evento de gossip que anuncia um número de comanda reservado (ver
 # reservar_numero_comanda e services/rede/sequenciaComandas.py).
 _EVENTO_COMANDA_NUMERADA = "comanda_numerada"
+# Anuncia à malha qual máquina passa a hospedar o ppgs_server (ver
+# designarServidor/services/rede/servidorDesignado.py).
+_EVENTO_SERVIDOR_DESIGNADO = "servidor_designado"
 
 _INTERVALO_CHECAGEM_IMPRESSORA_MS = 30000
 _TIMEOUT_IMPRESSAO_MS = 10000
+# Quanto se espera um socket fechar o handshake da malha (ver
+# services/rede/seguranca.py) antes de desistir dele. Cobre dois casos
+# reais e indistinguíveis do lado de cá: uma máquina ainda rodando a
+# versão antiga do sistema (que nunca vai mandar o frame 'ola'), e um
+# scanner de portas que abre a conexão e fica calado. Sem isto, os dois
+# deixariam um socket e uma sessão vivos para sempre.
+_TIMEOUT_HANDSHAKE_MS = 8000
+# Teto de espera de uma requisição HTTP encaminhada pela malha até o
+# ppgs_server da máquina hospedeira (ver solicitar_servidor). Mais folgado
+# que os 5s que o cliente HTTP usava contra a LAN: agora há dois saltos
+# (malha até a hospedeira, e loopback dela até o servidor), e a hospedeira
+# é uma máquina de balcão que pode estar imprimindo no mesmo instante.
+_TIMEOUT_SERVIDOR_MS = 12000
 # De quanto em quanto tempo se tenta reconectar a um peer que a descoberta
 # já anunciou mas com quem não há conexão aberta agora (ver
 # _tentar_reconectar). Sem isto, uma única tentativa de conexão que falhe
@@ -105,6 +121,19 @@ class RedeService(QObject):
     # impressora dela) pode ter mudado — Rede.qml usa pra reconsultar
     # impressoraPrincipal() e atualizar o painel sozinho.
     impressoraPrincipalMudou = pyqtSignal()
+    # Chave da malha gerada/alterada nesta máquina — a tela Rede reage
+    # trocando o card de configuração pelo código a transcrever.
+    chaveMalhaMudou = pyqtSignal()
+    # (id_req, status HTTP, corpo) — resposta de uma requisição encaminhada
+    # ao ppgs_server. status 0 significa que ela não chegou a ser respondida
+    # (sem hospedeira, timeout, socket caído).
+    respostaServidor = pyqtSignal(str, int, QByteArray)
+    # A máquina que hospeda o ppgs_server mudou (ou o preparo dela mudou de
+    # estado) — a tela Rede e o cliente HTTP reagem a isto.
+    servidorDesignadoMudou = pyqtSignal()
+    # Uso interno: uma requisição encaminhada terminou nesta máquina e
+    # precisa voltar pro socket de origem a partir da thread dele.
+    _servidorRespostaLocal = pyqtSignal(str, str, int, QByteArray)
     # Uso interno: repassa o resultado da checagem da impressora local (rodada
     # numa thread, porque PrinterService.localizar_impressora() executa
     # lpstat/PowerShell) de volta pra thread principal — mesmo padrão de
@@ -137,7 +166,23 @@ class RedeService(QObject):
         self._nome_local = platform.node() or "Máquina desconhecida"
         self._peers = {}  # id da instância -> QTcpSocket
         self._info_peers = {}  # id da instância -> {"nome", "endereco", "conectadoEm", "temImpressora", "infoImpressora"}
-        self._buffers = {}  # QTcpSocket -> bytearray (linhas JSON incompletas)
+        self._buffers = {}  # QTcpSocket -> bytearray (frames incompletos)
+        # Criptografia por socket: QTcpSocket -> seguranca.SessaoSegura.
+        # Um socket só entra em _peers depois que a sessão dele fecha o
+        # handshake, então nada que chegue antes disso é processado como
+        # protocolo.
+        self._sessoes = {}
+        # Peers que apareceram mas foram recusados por chave/versão —
+        # endereço -> motivo. Existe pra tela Rede poder dizer "1 máquina
+        # recusada: chave da malha diferente": sem isso, configurar a
+        # chave errada numa máquina é indistinguível de a rede estar
+        # fora do ar, que foi exatamente a confusão que este projeto já
+        # pagou caro uma vez (ver architecture/EXPLAIN.md, "Observabilidade").
+        self._recusados = {}
+        # Chave da malha lida do disco uma vez. Trocá-la exige reiniciar o
+        # app de propósito: as sessões já abertas foram derivadas da
+        # anterior e não têm como ser renegociadas no lugar.
+        self._chave_malha = seguranca.carregar_chave()
         # Tudo que a descoberta já anunciou, conectado ou não — id da
         # instância -> {"enderecos": [str], "porta": int, "tentativas": int}.
         # É o que permite reconectar sem depender de o zeroconf reemitir o
@@ -167,6 +212,19 @@ class RedeService(QObject):
         # propagado/atualizado depois via gossip (evento "impressora_fixada").
         self._nome_maquina_fixada = impressoraFixada.carregar_nome_fixado()
         self._jobs_impressao = {}  # job_id -> {"timer": QTimer, "concluido": bool}
+        # Requisições HTTP encaminhadas pela malha, esperando resposta —
+        # id_req -> {"timer": QTimer, "concluido": bool}. Mesmo desenho dos
+        # jobs de impressão acima.
+        self._jobs_servidor = {}
+        # Máquina que hospeda o ppgs_server, por nome, e o idEvento da
+        # decisão (ver services/rede/servidorDesignado.py). Lido do disco
+        # aqui pra uma máquina que liga sozinha já saber que é ela;
+        # atualizado depois por gossip.
+        self._nome_servidor, self._id_evento_servidor = servidorDesignado.carregar()
+        # Preenchido pelo ServidorLocalService desta máquina quando ela é a
+        # hospedeira — encaminhar requisições exige o token, e só ele sabe
+        # se o processo já subiu.
+        self._encaminhar_para_servidor_local = None
 
         # Domínios de estado inscritos na camada de anti-entropy periódica
         # (ver registrarDominioSincronizado) — nome -> {"resumo", "obter",
@@ -186,6 +244,8 @@ class RedeService(QObject):
         self._eventos.registrar("pedido_apagado", self._ao_receber_evento_pedido_apagado)
         self._eventos.registrar("impressora_fixada", self._ao_receber_evento_impressora_fixada)
         self._eventos.registrar(_EVENTO_COMANDA_NUMERADA, self._ao_receber_evento_comanda_numerada)
+        self._eventos.registrar(_EVENTO_SERVIDOR_DESIGNADO, self._ao_receber_evento_servidor_designado)
+        self._servidorRespostaLocal.connect(self._responder_servidor_ao_peer)
 
         # Histórico da malha: eventos são imutáveis, então a reconciliação é a
         # união dos dois lados e não existe "apagar" (a retenção é local, ver
@@ -283,6 +343,21 @@ class RedeService(QObject):
         chamado depois que QGuiApplication já existe."""
         if self._iniciado:
             return
+
+        # Antes de abrir qualquer porta: sem chave da malha não há malha.
+        # Subir "por enquanto sem criptografia" e endurecer depois seria o
+        # pior dos dois mundos — a rede pareceria funcionar, ninguém voltaria
+        # pra terminar, e o servidor de endereços estaria exposto a quem
+        # chegasse na LAN. O app continua inteiro: comandas são salvas e
+        # impressas localmente; só a sincronização entre máquinas espera.
+        motivo = self._motivo_para_nao_iniciar()
+        if motivo:
+            from services.statusInicializacaoService import status
+
+            print(f"[RedeService] Malha não iniciada: {motivo}")
+            status.falhou("rede", motivo)
+            return
+
         self._iniciado = True
 
         self._tcp_server.newConnection.connect(self._ao_conectar_entrada)
@@ -320,6 +395,73 @@ class RedeService(QObject):
             random.randint(0, 10000),
             lambda: self._timer_reconciliacao.start(_INTERVALO_RECONCILIACAO_MS),
         )
+
+    def _motivo_para_nao_iniciar(self) -> str:
+        """Texto pronto pra tela, ou "" se está tudo certo pra subir."""
+        if not seguranca.DISPONIVEL:
+            return "Falta a biblioteca 'cryptography' — rede local desativada"
+        if not self._chave_malha:
+            return "Sem chave da malha — configure na tela Rede"
+        return ""
+
+    @pyqtProperty(bool, notify=chaveMalhaMudou)
+    def chaveConfigurada(self) -> bool:
+        return bool(self._chave_malha)
+
+    @pyqtProperty(str, notify=chaveMalhaMudou)
+    def codigoChaveMalha(self) -> str:
+        """O código pra transcrever nas outras máquinas — "" se não há chave."""
+        return seguranca.codigo_da_chave()
+
+    @pyqtProperty(str, notify=chaveMalhaMudou)
+    def motivoMalhaParada(self) -> str:
+        return self._motivo_para_nao_iniciar() if not self._iniciado else ""
+
+    @pyqtProperty(str, notify=peersMudaram)
+    def peersRecusados(self) -> str:
+        """Resumo dos peers que apareceram e foram recusados. A tela mostra
+        isto porque o sintoma de uma chave digitada errado — "a outra máquina
+        não aparece" — é idêntico ao de um cabo solto, e sem esta linha o
+        usuário não teria como distinguir os dois."""
+        if not self._recusados:
+            return ""
+        motivos = set(self._recusados.values())
+        return f"{len(self._recusados)} máquina(s) recusada(s): {'; '.join(sorted(motivos))}"
+
+    @pyqtSlot(result=str)
+    @protegido("")
+    def gerarChaveMalha(self) -> str:
+        """Cria a chave desta rede — usado na PRIMEIRA máquina. Devolve o
+        código a transcrever nas outras, ou "" se falhou."""
+        if self._chave_malha:
+            # Gerar por cima da chave existente separaria esta máquina das
+            # outras em silêncio. Quem quer mesmo trocar apaga o arquivo.
+            print("[RedeService] Já existe chave da malha — geração ignorada.")
+            return seguranca.codigo_da_chave()
+        self._chave_malha = seguranca.gerar_chave()
+        self.chaveMalhaMudou.emit()
+        self._iniciar_apos_chave()
+        return seguranca.codigo_da_chave()
+
+    @pyqtSlot(str, result=str)
+    @protegido("Não foi possível salvar a chave.")
+    def definirChaveMalha(self, codigo: str) -> str:
+        """Adota o código vindo de outra máquina. Devolve "" em caso de
+        sucesso, ou a mensagem de erro pra tela mostrar."""
+        try:
+            self._chave_malha = seguranca.definir_chave(codigo)
+        except seguranca.ErroSeguranca as erro:
+            return str(erro)
+        self.chaveMalhaMudou.emit()
+        self._iniciar_apos_chave()
+        return ""
+
+    def _iniciar_apos_chave(self):
+        """A malha pode ter ficado parada só por falta de chave; agora que ela
+        existe, sobe sem exigir que o usuário reinicie o app."""
+        self._recusados.clear()
+        if not self._iniciado:
+            self.iniciar()
 
     # ---------- Descoberta ----------
 
@@ -451,13 +593,61 @@ class RedeService(QObject):
         socket.readyRead.connect(lambda: self._ao_ler(socket))
         socket.disconnected.connect(lambda: self._ao_desconectar(socket))
         socket.errorOccurred.connect(lambda erro: self._ao_falhar_socket(socket, erro, destino, id_remoto))
-        # Handshake: cada lado se identifica (id + nome da máquina + se tem
-        # impressora agora) assim que a conexão abre. Montada sob demanda (em
-        # vez de um dict fixo) porque _tem_impressora pode só ficar
-        # conhecido depois que o socket já foi preparado.
-        socket.connected.connect(lambda: self._enviar(socket, self._mensagem_identificar()))
+
+        try:
+            self._sessoes[socket] = seguranca.SessaoSegura(self._chave_malha, self._id)
+        except seguranca.ErroSeguranca as erro:
+            print(f"[RedeService] Não foi possível abrir sessão segura: {erro}")
+            socket.close()
+            return
+
+        # Duas etapas agora, onde antes havia uma: primeiro o handshake de
+        # criptografia (frame 'ola', em claro — ele carrega só chave pública
+        # e nonce, nada sigiloso), e só quando ele fecha é que o
+        # 'identificar' sai, já selado. É o que garante que nenhum peer sem a
+        # chave chegue a ver quem somos, que impressora temos ou qualquer
+        # comanda.
+        socket.connected.connect(lambda: self._abrir_handshake(socket))
         if socket.state() == QTcpSocket.SocketState.ConnectedState:
-            self._enviar(socket, self._mensagem_identificar())
+            self._abrir_handshake(socket)
+
+        # Um socket que abre e nunca fecha o handshake (versão antiga do
+        # sistema do outro lado, ou alguém varrendo portas) seria um vazamento
+        # permanente sem este corte.
+        QTimer.singleShot(_TIMEOUT_HANDSHAKE_MS, lambda: self._cortar_handshake_pendente(socket, destino))
+
+    def _abrir_handshake(self, socket: QTcpSocket):
+        sessao = self._sessoes.get(socket)
+        if sessao is None:
+            return
+        socket.write(sessao.frame_inicial())
+
+    def _cortar_handshake_pendente(self, socket: QTcpSocket, destino: str):
+        try:
+            sessao = self._sessoes.get(socket)
+            if sessao is None or sessao.pronta:
+                return
+            onde = destino or socket.peerAddress().toString()
+            print(f"[RedeService] Handshake da malha não fechou em {_TIMEOUT_HANDSHAKE_MS // 1000}s com {onde} — pode ser uma máquina com a versão antiga do sistema.")
+            self._recusar_socket(socket, "handshake não concluído", onde)
+        except RuntimeError:
+            pass
+
+    def _recusar_socket(self, socket: QTcpSocket, motivo: str, onde: str = ""):
+        """Fecha e registra. O registro é o ponto: uma máquina com a chave
+        errada precisa aparecer na tela como recusada, não simplesmente
+        sumir."""
+        try:
+            onde = onde or socket.peerAddress().toString()
+            if onde:
+                self._recusados[onde] = motivo
+            self._sessoes.pop(socket, None)
+            self._buffers.pop(socket, None)
+            socket.close()
+            socket.deleteLater()
+            self.peersMudaram.emit(len(self._peers))
+        except RuntimeError:
+            pass
 
     def _ao_falhar_socket(self, socket: QTcpSocket, erro, destino: str, id_remoto: str):
         """Um socket que nunca chegou a conectar não emite `disconnected`,
@@ -480,6 +670,7 @@ class RedeService(QObject):
             if not ja_conectado and destino and primeira_falha:
                 print(f"[RedeService] Não foi possível conectar em {destino}: {socket.errorString()} ({erro.name if hasattr(erro, 'name') else erro}).")
             self._buffers.pop(socket, None)
+            self._sessoes.pop(socket, None)
             socket.close()
             socket.deleteLater()
         except RuntimeError:
@@ -494,6 +685,7 @@ class RedeService(QObject):
         # nesse ponto não há mais nada útil a fazer, então só ignora.
         try:
             self._buffers.pop(socket, None)
+            self._sessoes.pop(socket, None)
             id_removido = None
             for id_peer, sock in list(self._peers.items()):
                 if sock is socket:
@@ -517,27 +709,86 @@ class RedeService(QObject):
                 return id_peer
         return None
 
-    # ---------- Protocolo (JSON delimitado por "\n") ----------
+    # ---------- Protocolo (JSON selado, em frames com prefixo de tamanho) ----------
+    #
+    # Era JSON delimitado por "\n". Um frame selado é binário e pode conter
+    # 0x0A em qualquer posição, então a delimitação passou a ser o prefixo de
+    # 4 bytes de seguranca.enquadrar/desenquadrar. O formato das mensagens em
+    # si não mudou — quem lê _processar_mensagem continua vendo os mesmos
+    # dicts de sempre.
 
     def _enviar(self, socket: QTcpSocket, mensagem: dict):
         if socket.state() != QTcpSocket.SocketState.ConnectedState:
             return
-        socket.write(json.dumps(mensagem).encode("utf-8") + b"\n")
+        sessao = self._sessoes.get(socket)
+        if sessao is None or not sessao.pronta:
+            # Não há fila de espera de propósito: tudo que este serviço manda
+            # ou é resposta a algo que chegou pela sessão (logo, ela já está
+            # pronta), ou é um broadcast que percorre self._peers — e um
+            # socket só entra ali depois do handshake.
+            return
+        try:
+            socket.write(sessao.selar(json.dumps(mensagem).encode("utf-8")))
+        except seguranca.ErroSeguranca as erro:
+            print(f"[RedeService] Falha ao selar mensagem: {erro}")
+            socket.close()
 
     def _ao_ler(self, socket: QTcpSocket):
         buffer = self._buffers.setdefault(socket, bytearray())
         buffer.extend(bytes(socket.readAll()))
 
-        while b"\n" in buffer:
-            linha, _, resto = buffer.partition(b"\n")
-            del buffer[: len(linha) + 1]
-            if not linha.strip():
+        sessao = self._sessoes.get(socket)
+        if sessao is None:
+            return
+
+        try:
+            frames = seguranca.desenquadrar(buffer)
+        except seguranca.ErroSeguranca as erro:
+            print(f"[RedeService] Enquadramento inválido: {erro}")
+            self._recusar_socket(socket, "enquadramento inválido")
+            return
+
+        for frame in frames:
+            if not sessao.pronta:
+                if not self._avancar_handshake(socket, sessao, frame):
+                    return
                 continue
             try:
-                mensagem = json.loads(linha.decode("utf-8"))
+                mensagem = json.loads(sessao.abrir(frame).decode("utf-8"))
+            except seguranca.ErroSeguranca as erro:
+                print(f"[RedeService] Frame não autenticou: {erro}")
+                self._recusar_socket(socket, "frame não autenticado")
+                return
             except (ValueError, UnicodeDecodeError):
+                # Frame autenticou (veio mesmo de quem tem a chave) mas o
+                # conteúdo não é JSON — versão futura mandando algo que esta
+                # não entende. Ignorar um e seguir é melhor que derrubar a
+                # conexão inteira.
                 continue
             self._processar_mensagem(socket, mensagem)
+
+    def _avancar_handshake(self, socket: QTcpSocket, sessao, frame: bytes) -> bool:
+        """Devolve False quando o socket foi recusado e não se deve continuar
+        lendo os frames restantes dele."""
+        try:
+            respostas = sessao.receber(frame)
+        except seguranca.ErroSeguranca as erro:
+            onde = socket.peerAddress().toString()
+            print(f"[RedeService] Handshake recusado com {onde}: {erro}")
+            historicoEventos.registrar_local("maquina_recusada", {"motivo": str(erro), "endereco": onde})
+            self._recusar_socket(socket, str(erro), onde)
+            return False
+
+        for resposta in respostas or []:
+            socket.write(resposta)
+
+        if sessao.pronta:
+            # A partir daqui o fio está cifrado e autenticado nos dois
+            # sentidos — só agora o 'identificar' (nome da máquina,
+            # impressora, fixação) pode sair.
+            self._recusados.pop(socket.peerAddress().toString(), None)
+            self._enviar(socket, self._mensagem_identificar())
+        return True
 
     def _processar_mensagem(self, socket: QTcpSocket, mensagem: dict):
         tipo = mensagem.get("tipo")
@@ -641,6 +892,49 @@ class RedeService(QObject):
                 self._info_peers[id_remoto]["temImpressora"] = bool(mensagem.get("temImpressora"))
                 self._info_peers[id_remoto]["infoImpressora"] = mensagem.get("infoImpressora")
                 self._recalcular_maquina_impressora()
+
+        elif tipo == "servidor_requisicao":
+            # Esta máquina hospeda o ppgs_server e um peer quer falar com ele.
+            # O peer já provou ter a chave da malha (senão esta mensagem nem
+            # teria sido aberta), que é justamente a condição de acesso.
+            id_req = mensagem.get("id_req", "")
+            if not id_req:
+                return
+            id_remetente = self._id_do_socket(socket)
+            if id_remetente is None:
+                return
+            try:
+                corpo = base64.b64decode(mensagem.get("corpo_b64") or "")
+            except ValueError:
+                return
+            self._encaminhar_local(
+                id_req,
+                mensagem.get("metodo", "GET"),
+                mensagem.get("caminho", "/"),
+                corpo,
+                # A resposta pode chegar de outra thread (o cliente HTTP do
+                # encaminhador é assíncrono), e escrever num QTcpSocket só é
+                # seguro na thread que o criou — daí o sinal, entregue pelo
+                # Qt na thread principal. Mesmo motivo de
+                # _imprimirRemotoConcluido logo abaixo.
+                lambda status, dados, _id=id_req, _rem=id_remetente: self._servidorRespostaLocal.emit(
+                    _rem, _id, status, QByteArray(dados)
+                ),
+            )
+
+        elif tipo == "servidor_resposta":
+            id_req = mensagem.get("id_req", "")
+            job = self._jobs_servidor.pop(id_req, None)
+            if job is None or job["concluido"]:
+                return
+            job["concluido"] = True
+            job["timer"].stop()
+            job["timer"].deleteLater()
+            try:
+                corpo = base64.b64decode(mensagem.get("corpo_b64") or "")
+            except ValueError:
+                corpo = b""
+            self.respostaServidor.emit(id_req, int(mensagem.get("status") or 0), QByteArray(corpo))
 
         elif tipo == "imprimir":
             job_id = mensagem.get("job_id", "")
@@ -1371,6 +1665,164 @@ class RedeService(QObject):
         exclusão com o MESMO lugar na linha do tempo, e consigam responder
         "esta comanda foi criada antes ou depois de ter sido apagada?"."""
         self._eventos.publicar("pedido_apagado", {"arquivo": nome_arquivo, "idEvento": id_evento})
+
+    # ---------- ppgs_server encaminhado pela malha ----------
+    #
+    # O servidor deixou de escutar na LAN: ele só aceita conexões em
+    # 127.0.0.1, na máquina que o hospeda. As outras chegam nele por aqui,
+    # dentro da sessão já autenticada e cifrada da malha. Isso troca uma
+    # regra que se pode contornar ("confie em quem está nesta faixa de IP")
+    # por uma que não se contorna: sem a chave da malha não há sessão, e sem
+    # sessão não há como sequer falar com a porta — ela não existe fora da
+    # máquina hospedeira.
+
+    @pyqtProperty(str, notify=servidorDesignadoMudou)
+    def maquinaServidor(self) -> str:
+        """Nome da máquina que hospeda o ppgs_server, ou "" se nenhuma foi
+        escolhida ainda."""
+        return self._nome_servidor
+
+    @pyqtProperty(bool, notify=servidorDesignadoMudou)
+    def servidorAqui(self) -> bool:
+        return bool(self._nome_servidor) and self._nome_servidor == self._nome_local
+
+    @pyqtSlot(result="QVariantList")
+    @protegido([])
+    def maquinasDisponiveis(self) -> list:
+        """Máquinas que podem hospedar o servidor: esta e os peers conectados.
+        Alimenta a lista de escolha em Rede.qml."""
+        maquinas = [{
+            "nome": self._nome_local,
+            "local": True,
+            "hospeda": self.servidorAqui,
+        }]
+        vistos = {self._nome_local}
+        for info in self._info_peers.values():
+            nome = info.get("nome") or ""
+            if not nome or nome in vistos:
+                continue
+            vistos.add(nome)
+            maquinas.append({"nome": nome, "local": False, "hospeda": nome == self._nome_servidor})
+        return maquinas
+
+    @pyqtSlot(str)
+    @protegido(None)
+    def designarServidor(self, nome_maquina: str):
+        """Escolhe (nesta máquina e em toda a malha) quem hospeda o servidor.
+        Chamado pelo botão "Rodar aqui" de Rede.qml."""
+        if not nome_maquina:
+            return
+        id_evento = relogio.novo_id()
+        self._aplicar_designacao(nome_maquina, id_evento)
+        self._eventos.publicar(_EVENTO_SERVIDOR_DESIGNADO, {"nome": nome_maquina, "idEvento": id_evento})
+        historicoEventos.registrar_local("servidor_designado", {"nome": nome_maquina})
+
+    def _ao_receber_evento_servidor_designado(self, payload: dict, _socket=None):
+        self._aplicar_designacao(payload.get("nome") or "", payload.get("idEvento") or "")
+
+    def _aplicar_designacao(self, nome: str, id_evento: str):
+        """Última decisão vence, pelo relógio lógico. Comparar (e não apenas
+        aceitar) importa: sem isso, uma designação antiga que chega atrasada
+        pela reconciliação desfaria uma troca recente, e o servidor ficaria
+        pingando entre duas máquinas — exatamente o ping-pong que o cache de
+        fechamento já sofreu uma vez (ver architecture/EXPLAIN.md)."""
+        if not nome:
+            return
+        if self._id_evento_servidor and relogio.mais_novo(self._id_evento_servidor, id_evento) == self._id_evento_servidor:
+            return
+        if nome == self._nome_servidor and id_evento == self._id_evento_servidor:
+            return
+        self._nome_servidor = nome
+        self._id_evento_servidor = id_evento
+        servidorDesignado.salvar(nome, id_evento)
+        print(f"[RedeService] ppgs_server designado para a máquina '{nome}'.")
+        self.servidorDesignadoMudou.emit()
+
+    def registrar_encaminhador_local(self, funcao):
+        """Ligado pelo ServidorLocalService desta máquina. `funcao(metodo,
+        caminho, corpo, responder)` fala com o ppgs_server em 127.0.0.1 e
+        chama `responder(status, corpo)` quando a resposta chegar.
+
+        A inversão existe pra manter a fronteira que este módulo já respeita
+        em todo o resto: RedeService cuida de sockets e protocolo, e não sabe
+        o que é um token HTTP nem se o processo do servidor está de pé."""
+        self._encaminhar_para_servidor_local = funcao
+
+    def solicitar_servidor(self, metodo: str, caminho: str, corpo: bytes = b"") -> str:
+        """Manda uma requisição ao ppgs_server, onde quer que ele esteja, e
+        devolve o id pra casar com a resposta que virá pelo sinal
+        respostaServidor. Nunca bloqueia."""
+        id_req = uuid.uuid4().hex
+
+        if not self._nome_servidor:
+            QTimer.singleShot(0, lambda: self.respostaServidor.emit(id_req, 0, QByteArray(b"")))
+            return id_req
+
+        if self.servidorAqui:
+            # Atalho: sem volta pela malha quando o servidor é local.
+            self._encaminhar_local(id_req, metodo, caminho, corpo,
+                                   lambda status, dados: self.respostaServidor.emit(id_req, status, QByteArray(dados)))
+            return id_req
+
+        socket_destino = self._socket_da_maquina(self._nome_servidor)
+        if socket_destino is None:
+            QTimer.singleShot(0, lambda: self.respostaServidor.emit(id_req, 0, QByteArray(b"")))
+            return id_req
+
+        self._enviar(socket_destino, {
+            "tipo": "servidor_requisicao",
+            "id_req": id_req,
+            "metodo": metodo,
+            "caminho": caminho,
+            "corpo_b64": base64.b64encode(corpo or b"").decode("ascii"),
+        })
+
+        timer = QTimer(self)
+        timer.setSingleShot(True)
+        timer.timeout.connect(lambda: self._finalizar_job_servidor(id_req))
+        self._jobs_servidor[id_req] = {"timer": timer, "concluido": False}
+        timer.start(_TIMEOUT_SERVIDOR_MS)
+        return id_req
+
+    def _socket_da_maquina(self, nome: str):
+        for id_peer, info in self._info_peers.items():
+            if info.get("nome") == nome:
+                return self._peers.get(id_peer)
+        return None
+
+    def _encaminhar_local(self, id_req: str, metodo: str, caminho: str, corpo: bytes, responder):
+        """Entrega ao ppgs_server desta máquina. `responder(status, bytes)`."""
+        encaminhar = self._encaminhar_para_servidor_local
+        if encaminhar is None:
+            # Esta máquina é a designada, mas o processo do servidor ainda
+            # não subiu (preparo em andamento, ou falhou). 503 e não 0: a
+            # diferença importa pro cliente, que trata 0 como "não achei a
+            # máquina" e 503 como "achei, mas ela não está pronta".
+            responder(503, b"")
+            return
+        encaminhar(metodo, caminho, corpo, responder)
+
+    def _responder_servidor_ao_peer(self, id_remetente: str, id_req: str, status: int, corpo: QByteArray):
+        """Devolve ao peer o que o ppgs_server local respondeu. Procura o
+        socket pelo id do peer (e não guarda o socket) porque a conexão pode
+        ter caído enquanto a requisição rodava — mesmo cuidado de
+        _imprimirRemotoConcluido."""
+        socket = self._peers.get(id_remetente)
+        if socket is None:
+            return
+        self._enviar(socket, {
+            "tipo": "servidor_resposta",
+            "id_req": id_req,
+            "status": int(status),
+            "corpo_b64": base64.b64encode(bytes(corpo)).decode("ascii"),
+        })
+
+    def _finalizar_job_servidor(self, id_req: str):
+        job = self._jobs_servidor.pop(id_req, None)
+        if job is None or job["concluido"]:
+            return
+        job["timer"].deleteLater()
+        self.respostaServidor.emit(id_req, 0, QByteArray(b""))
 
     def solicitar_impressao(self, conteudo_bytes: bytes):
         """Pede a impressão da comanda na máquina eleita da malha (ver

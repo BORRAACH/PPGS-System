@@ -49,7 +49,17 @@ def _raiz_projeto():
     return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
-def _rodar_git(*args):
+def rodar_git(*args, cwd=None, timeout=None, env_extra=None):
+    """Roda um comando git e devolve a saída, ou None se ele falhou.
+
+    Público (e com `cwd`/`env_extra`) porque
+    services/servidor/servidorLocal.py clona e atualiza o repositório do
+    ppgs_server com exatamente os mesmos cuidados desta função — os três
+    detalhes abaixo (BatchMode, encoding explícito e timeout) já custaram
+    incidentes reais em produção, e reimplementá-los noutro arquivo seria
+    convidar os mesmos incidentes de volta. `env_extra` existe pro
+    servidorLocal poder apontar o GIT_SSH_COMMAND pra deploy key dele sem
+    mexer no ambiente do processo inteiro."""
     # Sem isso, um "git fetch" contra um remoto SSH sem a chave já
     # destravada no agente trava esperando a senha da chave (via askpass) —
     # e como main.py roda essa checagem toda vez que abre (inclusive a cada
@@ -62,12 +72,13 @@ def _rodar_git(*args):
         **os.environ,
         "GIT_TERMINAL_PROMPT": "0",
         "GIT_SSH_COMMAND": os.environ.get("GIT_SSH_COMMAND", "ssh") + " -o BatchMode=yes -o ConnectTimeout=10",
+        **(env_extra or {}),
     }
 
     try:
         resultado = subprocess.run(
             ["git", *args],
-            cwd=_raiz_projeto(),
+            cwd=cwd or _raiz_projeto(),
             capture_output=True,
             text=True,
             # Sem isto, text=True decodifica com o encoding do LOCALE — no
@@ -87,7 +98,7 @@ def _rodar_git(*args):
             # arquivo do repositório deixe de ser UTF-8 válido um dia.
             encoding="utf-8",
             errors="replace",
-            timeout=_TIMEOUT_GIT,
+            timeout=timeout or _TIMEOUT_GIT,
             env=env,
         )
     except (FileNotFoundError, subprocess.TimeoutExpired) as erro:
@@ -103,6 +114,10 @@ def _rodar_git(*args):
     # como saída vazia mantém o contrato de "None só quando o comando
     # falhou" — um AttributeError aqui abortaria a atualização inteira.
     return (resultado.stdout or "").strip()
+
+
+# Nome interno original, mantido pras chamadas já existentes neste arquivo.
+_rodar_git = rodar_git
 
 
 def _eh_repositorio_git():

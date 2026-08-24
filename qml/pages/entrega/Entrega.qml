@@ -425,10 +425,18 @@ Page {
             // PopupSalvarEndereco e o onRespondido dele, mais abaixo). Sem
             // telefone/endereço suficiente não faz sentido perguntar — segue
             // direto.
+            //
+            // Com o servidor fora do ar também não se pergunta: a única coisa
+            // que a resposta comanda é uma gravação no servidor, então a
+            // pergunta seria sobre algo que não pode acontecer. Pior, ela
+            // cobra uma decisão no meio do fechamento de um pedido e depois
+            // falha em silêncio — o caixa clicaria "Salvar" achando que
+            // guardou o endereço do cliente. Sem servidor, o pedido segue
+            // direto para impressão/lançamento, que é o que importa.
             function confirmarSalvarEnderecoEProsseguir(acao, dadosPedido) {
                 var temTelefone = dadosPedido.telefone.replace(/\D/g, "").length >= 10;
                 var temEndereco = dadosPedido.endereco.trim() !== "" || dadosPedido.numero !== "" || dadosPedido.bairro.trim() !== "";
-                if (temTelefone && temEndereco) {
+                if (pizzeriaServerController.conectado && temTelefone && temEndereco) {
                     popupSalvarEndereco.abrirPara(acao, dadosPedido, telaEntrega.enderecoEncontradoNoServidor);
                     return ;
                 }
@@ -1116,8 +1124,14 @@ Page {
                 id: popupSalvarEndereco
 
                 onRespondido: function(salvar) {
-                    if (salvar)
+                    // Reconferido aqui, e não só na hora de abrir: o popup
+                    // fica na tela esperando uma decisão, e o servidor pode
+                    // cair nesse intervalo (a máquina que o hospeda é um
+                    // balcão como qualquer outro, e pode ser desligada).
+                    if (salvar && pizzeriaServerController.conectado)
                         pizzeriaServerController.salvarEndereco(dados);
+                    else if (salvar)
+                        telaEntrega.mostrarNotificacao("Servidor central fora do ar — o endereço não foi salvo.", false);
 
                     if (acaoPendente === "imprimir")
                         prosseguirImprimir(dados);

@@ -82,7 +82,7 @@
     "valorMesa": "14,00"
   },
   {
-    "nome": "Coca-Cola 350ml",
+    "nome": "Coca-Cola LATA",
     "valor": "6,00"
   },
   {
@@ -102,7 +102,7 @@
     "valor": "8,00"
   },
   {
-    "nome": "Skol 350ml",
+    "nome": "Skol LATA",
     "valor": "6,00"
   },
   {
@@ -127,12 +127,12 @@
     "valorMesa": "12,00"
   },
   {
-    "nome": "Guaraná 1 Litro",
-    "valor": "6,00"
+    "nome": "Guaraná ANTARTICA  1 Litro",
+    "valor": "8,00"
   },
   {
     "nome": "Guaraná Antarctica 1L",
-    "valor": "10,00",
+    "valor": "8,00",
     "valorMesa": "12,00"
   },
   {
@@ -146,7 +146,7 @@
     "valorMesa": "10,00"
   },
   {
-    "nome": "Coca-Cola 600ml Original",
+    "nome": "Coca-Cola 600ml",
     "valor": "8,00"
   },
   {
