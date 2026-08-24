@@ -34,5 +34,9 @@
   {
     "nome": "Borda Recheada",
     "valor": "10,00"
+  },
+  {
+    "nome": "carne",
+    "valor": "3,00"
   }
 ]
