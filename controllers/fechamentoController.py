@@ -11,7 +11,8 @@ from services import comandaEstiloService as estilo
 from services import comandaParserService as parser
 from services import comandaTextoService as texto
 from services.pizzeriaServerService import pizzeria_server
-from services.rede import baixaComandas, contagemCaixa, extrasCaixa, fechamentoCache, rede, relogio, tombstones
+from services.rede import (baixaComandas, contagemCaixa, despesasCaixa, edicoesCaixa, extrasCaixa,
+                           fechamentoCache, rede, relogio, tombstones)
 
 # Tipo de evento de gossip (ver services/rede/eventos.py:BarramentoEventos)
 # usado pra propagar o resumo de um dia recém-calculado pra malha inteira —
@@ -44,6 +45,24 @@ _EVENTO_EXTRA_LANCADO = "extra_lancado"
 # sozinha.
 _EVENTO_EXTRA_APAGADO = "extra_apagado"
 
+# Despesas do dia (ver services/rede/despesasCaixa.py). Eventos próprios,
+# e não um campo "tipo" dentro dos de extras, pelo mesmo motivo que os
+# dois módulos são separados: as duas coisas entram na conta do dia em
+# sentidos opostos.
+_EVENTO_DESPESA_LANCADA = "despesa_lancada"
+_EVENTO_DESPESA_APAGADA = "despesa_apagada"
+
+# Alteração feita numa comanda que JÁ tinha baixa (ver
+# services/rede/edicoesCaixa.py). Mesmo raciocínio de _EVENTO_COMANDA_BAIXADA:
+# o payload é o fato em si (quem, o quê, quanto mudou), porque a outra máquina
+# não tem como deduzir sozinha que houve correção — ela vê a comanda nova
+# chegar e a antiga sumir, o que é indistinguível de um lançamento comum
+# seguido de uma exclusão.
+#
+# Não há evento de "edição apagada": o domínio é append-only, uma alteração
+# registrada nunca é desfeita.
+_EVENTO_EDICAO_CAIXA = "edicao_caixa"
+
 # Contagem manual de Cartão/Dinheiro/Pix, usada pra calcular o "Lucro" (ver
 # services/rede/contagemCaixa.py). Ao contrário dos dois eventos acima, uma
 # gravação de contagem SOBRESCREVE a anterior do mesmo dia — o payload
@@ -51,6 +70,37 @@ _EVENTO_EXTRA_APAGADO = "extra_apagado"
 # services/rede/contagemCaixa.py:aplicar_remoto), mesmo desenho de
 # services/cardapioService.py.
 _EVENTO_CONTAGEM_ATUALIZADA = "contagem_caixa_atualizada"
+
+
+# Largura do papel, em colunas. É a mesma que comandaTextoService assume nas
+# divisórias ("-" * 40) e no marcador de itens — está aqui como constante
+# porque o recibo de diária precisa DELA para alinhar valor à direita, e um
+# 40 solto no meio da montagem não diria de onde veio.
+_COLUNAS_PAPEL = 40
+
+# Como o valor da diária é discriminado no recibo de pagamento (ver
+# _montar_recibo_extra). Rótulo e alíquota vieram do dono, e são exatamente o
+# que sai impresso.
+#
+# ATENÇÃO ao somar: estas cinco alíquotas dão 1,0001, não 1. A coluna fecha um
+# centavo ACIMA do "TOTAL A RECEBER" a cada R$ 100 de diária (R$ 100,00 vira
+# 8,00 + 7,67 + 2,56 + 7,67 + 74,11 = R$ 100,01). O total impresso é sempre o
+# valor lançado, nunca a soma das partes — então o recibo nunca cobra a mais do
+# que foi pago; o que não bate é a conferência da coluna. Para fechar exato,
+# a alíquota do salário líquido teria de ser 0,741, ou a linha teria de ser
+# calculada como o resto (valor menos as outras quatro).
+_DISCRIMINACAO_DIARIA = (
+    ("FGTS", 0.08),
+    ("FÉRIAS", 0.0767),
+    ("1/3 SOBRE AS FÉRIAS", 0.0256),
+    ("13º SALÁRIO", 0.0767),
+    ("SALÁRIO LÍQUIDO", 0.7411),
+)
+
+# Quem paga, na linha "RECEBI DE". Constante, e não configurável, porque não
+# existe cadastro de estabelecimento em lugar nenhum do app — quando existir, é
+# daqui que ele passa a ser lido, e este é o único ponto a mexer.
+_NOME_EMPRESA = "Grande Sabor"
 
 
 def _hoje_iso():
@@ -94,6 +144,14 @@ class FechamentoController(QObject):
     # como reagir (ver PopupExtras.qml/concluido), mesmo raciocínio de
     # baixasAtualizadas/darBaixa.
     extrasAtualizados = pyqtSignal()
+    despesasAtualizadas = pyqtSignal()
+
+    # Emitido quando uma alteração numa comanda já fechada é aprendida de
+    # OUTRA máquina (ver services/rede/edicoesCaixa.py). Mesmo raciocínio de
+    # extrasAtualizados: uma alteração feita NESTA máquina não passa por aqui
+    # — quem chamou registrarEdicaoCaixa/registrarExclusaoCaixa já sabe o que
+    # acabou de acontecer.
+    edicoesAtualizadas = pyqtSignal()
 
     # Emitido quando a contagem de Cartão/Dinheiro/Pix de um dia muda em
     # OUTRA máquina e é aprendida aqui — mesmo raciocínio de
@@ -110,6 +168,9 @@ class FechamentoController(QObject):
         rede.registrarEvento(_EVENTO_COMANDA_BAIXADA, self._ao_receber_baixa_remota)
         rede.registrarEvento(_EVENTO_EXTRA_LANCADO, self._ao_receber_extra_remoto)
         rede.registrarEvento(_EVENTO_EXTRA_APAGADO, self._ao_receber_extra_apagado_remoto)
+        rede.registrarEvento(_EVENTO_DESPESA_LANCADA, self._ao_receber_despesa_remota)
+        rede.registrarEvento(_EVENTO_DESPESA_APAGADA, self._ao_receber_despesa_apagada_remota)
+        rede.registrarEvento(_EVENTO_EDICAO_CAIXA, self._ao_receber_edicao_remota)
         rede.registrarEvento(_EVENTO_CONTAGEM_ATUALIZADA, self._ao_receber_contagem_remota)
         rede.registrarDominioSincronizado(
             "fechamento",
@@ -131,6 +192,19 @@ class FechamentoController(QObject):
             self._obter_extra_reconciliacao,
             self._aplicar_extra_reconciliacao,
             self._apagar_extra_reconciliacao,
+        )
+        rede.registrarDominioSincronizado(
+            despesasCaixa.DOMINIO,
+            self._resumo_despesas,
+            self._obter_despesa_reconciliacao,
+            self._aplicar_despesa_reconciliacao,
+            self._apagar_despesa_reconciliacao,
+        )
+        rede.registrarDominioSincronizado(
+            edicoesCaixa.DOMINIO,
+            self._resumo_edicoes,
+            self._obter_edicao_reconciliacao,
+            self._aplicar_edicao_reconciliacao,
         )
         rede.registrarDominioSincronizado(
             "contagem",
@@ -369,6 +443,138 @@ class FechamentoController(QObject):
         if data_iso:
             self._recalcular_e_cachear(data_iso)
         self.extrasAtualizados.emit()
+
+    # ---------- Anti-entropy do domínio "despesas" ----------
+    # Decalque exato do bloco de "extras" acima, com o mesmo contrato de dois
+    # ids (identidade imutável + revisão de conteúdo) e a mesma janela de
+    # reconciliação. O que muda entre os dois é só o SENTIDO com que o valor
+    # entra na conta do dia — ver _calcular_resumo_dia e o topo de
+    # services/rede/despesasCaixa.py.
+
+    def _resumo_despesas(self):
+        limite = (datetime.now() - timedelta(days=_JANELA_RECONCILIACAO_FECHAMENTO_DIAS)).strftime("%Y-%m-%d")
+        itens = {}
+        for id_evento, registro in despesasCaixa.carregar().items():
+            if registro.get("dataIso", "") < limite:
+                continue
+            itens[id_evento] = registro.get("idEventoRevisao", id_evento)
+        return {"itens": itens, "apagados": tombstones.carregar(despesasCaixa.DOMINIO)}
+
+    def _obter_despesa_reconciliacao(self, id_evento):
+        registro = despesasCaixa.carregar().get(id_evento)
+        if not registro:
+            return None
+        return dict(registro, id=id_evento)
+
+    def _aplicar_despesa_reconciliacao(self, id_evento, payload):
+        self._registrar_despesa_aprendida(id_evento, payload or {})
+
+    def _apagar_despesa_reconciliacao(self, id_evento):
+        # tombstones.mesclar já gravou o tombstone antes de chamar aqui.
+        quando = tombstones.carregar(despesasCaixa.DOMINIO).get(id_evento, "")
+        self._aplicar_exclusao_despesa(id_evento, quando)
+
+    def _ao_receber_despesa_remota(self, payload):
+        payload = payload or {}
+        id_evento = payload.get("id")
+        if id_evento:
+            self._registrar_despesa_aprendida(id_evento, payload)
+
+    def _ao_receber_despesa_apagada_remota(self, payload):
+        payload = payload or {}
+        id_evento = payload.get("id")
+        if id_evento:
+            self._aplicar_exclusao_despesa(id_evento, payload.get("quando", ""))
+
+    def _aplicar_exclusao_despesa(self, id_evento, quando):
+        registro = despesasCaixa.carregar().get(id_evento)
+        data_iso = registro.get("dataIso", "") if registro else ""
+
+        despesasCaixa.apagar(id_evento, quando=quando or None)
+
+        if data_iso:
+            self._recalcular_e_cachear(data_iso)
+        self.despesasAtualizadas.emit()
+
+    def _registrar_despesa_aprendida(self, id_evento, payload):
+        """Mesma lógica de _registrar_extra_aprendido: grava um lançamento
+        novo OU aplica uma edição, conforme o id já seja conhecido aqui, e
+        nunca ressuscita o que já foi apagado."""
+        if id_evento in tombstones.carregar(despesasCaixa.DOMINIO):
+            return
+
+        data_iso = payload.get("dataIso")
+        mudou = False
+
+        if id_evento in despesasCaixa.carregar():
+            mudou = despesasCaixa.aplicar_edicao_remota(
+                id_evento,
+                payload.get("nome", ""),
+                payload.get("valor", 0),
+                payload.get("idEventoRevisao", ""),
+            )
+        else:
+            despesasCaixa.registrar(
+                data_iso or "",
+                payload.get("nome", ""),
+                payload.get("valor", 0),
+                payload.get("dataHora", ""),
+                quando=id_evento,
+            )
+            mudou = True
+
+        if not mudou:
+            return
+
+        if data_iso:
+            self._recalcular_e_cachear(data_iso)
+        self.despesasAtualizadas.emit()
+
+    # ---------- Anti-entropy do domínio "edicoes" (alterações no caixa fechado) ----------
+    # O mais simples dos domínios daqui, e de propósito: uma alteração já
+    # feita é um fato imutável, então não há revisão de conteúdo (a versão é
+    # o próprio id), não há tombstone e não há comparador próprio —
+    # reconciliar é a união dos dois lados, mesmo contrato de
+    # services/rede/historicoEventos.py.
+
+    def _resumo_edicoes(self):
+        """Anuncia as alterações recentes, na mesma janela dos outros
+        domínios do caixa: uma correção num dia mais velho que isso não muda
+        mais nenhum cupom que alguém vá reimprimir. O registro em si NÃO é
+        purgado do disco por causa disso — sair da janela é parar de ser
+        anunciado, não deixar de existir."""
+        limite = (datetime.now() - timedelta(days=_JANELA_RECONCILIACAO_FECHAMENTO_DIAS)).strftime("%Y-%m-%d")
+        return edicoesCaixa.resumo(limite)
+
+    def _obter_edicao_reconciliacao(self, id_evento):
+        return edicoesCaixa.obter(id_evento)
+
+    def _aplicar_edicao_reconciliacao(self, id_evento, payload):
+        self._registrar_edicao_aprendida(id_evento, payload or {})
+
+    def _ao_receber_edicao_remota(self, payload):
+        """Reação ao gossip "edicao_caixa" — o caminho rápido, pra uma
+        correção feita em outra máquina aparecer no cupom daqui na hora, sem
+        esperar o próximo ciclo de reconciliação."""
+        payload = payload or {}
+        id_evento = payload.get("id")
+        if id_evento:
+            self._registrar_edicao_aprendida(id_evento, payload)
+
+    def _registrar_edicao_aprendida(self, id_evento, payload):
+        """Grava uma alteração aprendida de fora, venha ela do gossip ou da
+        reconciliação — os dois caminhos desembocam aqui. Idempotente pelo id
+        (ver edicoesCaixa.aplicar): a mesma novidade chega pelos dois, e
+        reaplicar só faria a tela piscar à toa.
+
+        Não chama _recalcular_e_cachear, ao contrário dos extras: a alteração
+        em si não muda nenhum número do dia — quem muda é a comanda nova e a
+        baixa dela, que viajam pelos próprios domínios ("pedidos"/"baixas") e
+        já disparam o recálculo por lá."""
+        if not edicoesCaixa.aplicar(id_evento, payload):
+            return
+
+        self.edicoesAtualizadas.emit()
 
     # ---------- Anti-entropy do domínio "contagem" (Cartão/Dinheiro/Pix) ----------
     # Ao contrário de "baixas"/"extras" (que só crescem), aqui um mesmo dia
@@ -670,6 +876,9 @@ class FechamentoController(QObject):
         extras = extrasCaixa.listar_do_dia(data_iso)
         total_extras = sum(item["valor"] for item in extras)
 
+        despesas = despesasCaixa.listar_do_dia(data_iso)
+        total_despesas = sum(item["valor"] for item in despesas)
+
         return {
             "data": data_iso,
             "total": total,
@@ -677,6 +886,13 @@ class FechamentoController(QObject):
             "porTipo": por_tipo,
             "abertas": {"quantidade": quantidade_aberta, "total": total_aberto},
             "extras": {"quantidade": len(extras), "total": total_extras, "itens": extras},
+            # Despesas do dia. Entram na conta pelo lado OPOSTO ao dos
+            # extras: a tela soma este total à contagem de
+            # Cartão/Dinheiro/Pix, para a gaveta parar de acusar falta por
+            # dinheiro que se sabe onde foi parar (ver Fechamento.qml,
+            # totalContagem). A chave não existe em resumos gravados em
+            # cache antes disto, e a tela trata a ausência.
+            "despesas": {"quantidade": len(despesas), "total": total_despesas, "itens": despesas},
             # Do mais vendido pro menos vendido, com desempate pelo nome —
             # ordem estável, que é o que permite comparar dois resumos com
             # `==` em _recalcular_e_cachear sem falso positivo de "mudou".
@@ -783,6 +999,80 @@ class FechamentoController(QObject):
                 somas[chave] += item.get("valor", 0.0)
         return somas
 
+    @staticmethod
+    def _linhas_alteracoes_do_dia(data_iso, fmt):
+        """Bloco "ALTERAÇÕES APÓS A BAIXA" do cupom: uma entrada por comanda
+        já fechada que foi corrigida ou apagada depois, dizendo quem mexeu,
+        quando, e o que o caixa daquele dia ganhou ou perdeu com isso (ver
+        services/rede/edicoesCaixa.py).
+
+        POR QUE ISTO SAI NO PAPEL. O total do dia já mudava sozinho quando
+        alguém corrigia uma comanda fechada — dois cupons do mesmo dia
+        traziam números diferentes sem nada explicando a diferença. A trilha
+        existia só na tela de Rede (historicoEventos), que tem retenção de
+        uma semana e não acompanha o papel que o dono guarda.
+
+        Lido direto de edicoesCaixa, e NÃO do resumo do dia: o resumo é
+        cacheado e sincronizado (services/rede/fechamentoCache.py), e um
+        cupom reimpresso a partir de um cache gravado antes desta seção
+        existir viria sem as alterações — justamente o cupom em que elas mais
+        importam. Mesmo motivo de a contagem manual ser lida direto logo
+        acima.
+
+        O bloco sai mesmo sem nenhuma alteração, dizendo isso com todas as
+        letras: num documento de caixa, "ninguém mexeu" é uma informação, e
+        uma seção ausente seria indistinguível de uma versão antiga do app.
+        """
+        rotulos = {
+            edicoesCaixa.ACAO_EDITADA: "Corrigida",
+            edicoesCaixa.ACAO_EXCLUIDA: "Apagada",
+        }
+
+        linhas = [estilo.formatar_campo("ALTERAÇÕES APÓS A BAIXA", "fech_edicoes_titulo")]
+
+        alteracoes = edicoesCaixa.listar_do_dia(data_iso)
+        if not alteracoes:
+            linhas.extend(estilo.linhas_espacamento_secoes())
+            # Sem alteração nenhuma, a mensagem ocupa o lugar das linhas de
+            # alteração e usa o estilo delas — mesma escolha do caso vazio de
+            # "POR ORIGEM", em vez de pedir mais um campo configurável.
+            linhas.append(estilo.formatar_campo("Nenhuma alteração após a baixa.", "fech_edicoes_item"))
+            return linhas
+
+        for item in alteracoes:
+            acao = item.get("acao", "")
+            identificacao = " - ".join(
+                parte for parte in (
+                    rotulos.get(acao, acao or "Alterada"),
+                    item.get("codigo", ""),
+                    item.get("cliente", ""),
+                ) if parte
+            )
+
+            # Sem ninguém cadastrado o guarda libera e devolve nome vazio (ver
+            # UsuariosController.validarCodigo). A linha continua saindo: o
+            # que interessa a quem confere é que o caixa foi mexido, e "não
+            # identificado" já diz que o cadastro estava vazio na hora.
+            usuario = item.get("usuario", "") or "não identificado"
+
+            antes = fmt(item.get("valorAntes", 0.0))
+            if acao == edicoesCaixa.ACAO_EXCLUIDA:
+                transicao = f"{antes} -> comanda apagada"
+            elif item.get("noCaixa"):
+                transicao = f"{antes} -> {fmt(item.get('valorDepois', 0.0))}"
+            else:
+                transicao = f"{antes} -> {fmt(item.get('valorDepois', 0.0))} (fora do caixa)"
+
+            linhas.extend(estilo.linhas_espacamento_secoes())
+            linhas.append(estilo.formatar_campo(identificacao, "fech_edicoes_item"))
+            # Os dois espaços de recuo ficam FORA do trecho estilizado, igual
+            # às formas de pagamento do bloco "POR ORIGEM".
+            autoria = f"{usuario} - {item.get('dataHora', '')}".strip(" -")
+            linhas.append(f"  {estilo.formatar_campo(autoria, 'fech_edicoes_autor')}")
+            linhas.append(f"  {estilo.formatar_campo(transicao, 'fech_edicoes_autor')}")
+
+        return linhas
+
     def _montar_recibo_fechamento(self, data_iso, resumo):
         """Monta, em bytes ESC/POS, o cupom-resumo impresso ao clicar
         "Fechar Caixa": bruto, líquido (bruto menos os pagamentos de
@@ -792,12 +1082,16 @@ class FechamentoController(QObject):
         menos as diárias) — as mesmas duas contas que Fechamento.qml mostra
         na tela, ver telaFechamento.diferencaCaixa e telaFechamento.lucro.
 
+        Sai também o bloco "ALTERAÇÕES APÓS A BAIXA" — as comandas já
+        fechadas que alguém corrigiu ou apagou depois, com o nome de quem
+        fez (ver _linhas_alteracoes_do_dia).
+
         Mesmo caminho de _montar_recibo_extra e das comandas de venda: cada
         campo vira um renderizador já estilizado, e a ordem/divisórias saem
         da configuração da tela (comandaTextoService.montar_linhas_por_ordem).
-        "fech_por_origem" e "fech_diarias" são blocos de várias linhas —
-        equivalentes à tabela de itens de uma comanda: posição única, estilo
-        por sub-linha."""
+        "fech_por_origem", "fech_diarias" e "fech_edicoes" são blocos de
+        várias linhas — equivalentes à tabela de itens de uma comanda:
+        posição única, estilo por sub-linha."""
 
         def fmt(valor):
             return f"R$ {valor:.2f}".replace(".", ",")
@@ -811,15 +1105,32 @@ class FechamentoController(QObject):
         itens_extras = extras_info.get("itens", [])
         liquido = bruto - total_extras
 
+        despesas_info = resumo.get("despesas") or {"total": 0.0, "itens": []}
+        total_despesas = despesas_info.get("total", 0.0)
+
         contagem = contagemCaixa.obter_dia(data_iso) or {}
-        total_contagem = contagem.get("cartao", 0) + contagem.get("dinheiro", 0) + contagem.get("pix", 0)
+        # Diárias e despesas entram na contagem somadas ao DINHEIRO, como na
+        # tela: as duas saem em cédula da gaveta, e sem somá-las de volta esse
+        # dinheiro apareceria como falta (ver dinheiroComSaidas em
+        # Fechamento.qml). O papel e a tela precisam dar o mesmo número — é o
+        # pior tipo de divergência, porque o dono confere um contra o outro.
+        saidas_em_dinheiro = total_extras + total_despesas
+        total_contagem = (
+            contagem.get("cartao", 0)
+            + contagem.get("dinheiro", 0)
+            + saidas_em_dinheiro
+            + contagem.get("pix", 0)
+        )
         # Sobra (positivo) ou falta (negativo) do caixa. Comparação
         # literal contagem x bruto, sem as diárias no meio — ver o
         # comentário de diferencaCaixa em Fechamento.qml.
         diferenca = total_contagem - bruto
-        # O lucro do dia é outra conta, e não passa pelo bruto: o que entrou
-        # na gaveta menos o que saiu dela em diária (ver telaFechamento.lucro).
-        lucro = total_contagem - total_extras
+        # O lucro do dia é outra conta, e não passa pelo bruto: o que entrou na
+        # gaveta menos o que saiu dela em diária e em despesa. Como as saídas
+        # entram em total_contagem logo acima, elas se anulam aqui e o lucro é
+        # o dinheiro que sobrou de fato — ver o comentário de telaFechamento.lucro,
+        # que explica o desconto em dobro que isto corrigiu.
+        lucro = total_contagem - total_extras - total_despesas
 
         linhas_origem = [estilo.formatar_campo("POR ORIGEM", "fech_origem_titulo")]
         por_tipo = resumo.get("porTipo") or {}
@@ -852,6 +1163,8 @@ class FechamentoController(QObject):
         else:
             linhas_diarias.append(estilo.formatar_campo("Nenhum pagamento de diária neste dia.", "fech_diarias_item"))
 
+        linhas_edicoes = self._linhas_alteracoes_do_dia(data_iso, fmt)
+
         renderizadores = {
             "fech_titulo": [estilo.formatar_campo("FECHAMENTO DE CAIXA", "fech_titulo")],
             "fech_data": [f"Data: {estilo.formatar_campo(data_formatada, 'fech_data')}"],
@@ -859,6 +1172,7 @@ class FechamentoController(QObject):
             "fech_liquido": [f"Total líquido (bruto - extras): {estilo.formatar_campo(fmt(liquido), 'fech_liquido')}"],
             "fech_por_origem": linhas_origem,
             "fech_diarias": linhas_diarias,
+            "fech_edicoes": linhas_edicoes,
             # A chave continua "fech_lucro" mesmo o campo tendo virado
             # sobra/falta: é ela que está gravada no estilo e na ordem das
             # seções de cada máquina (ver Config/estilo_impressao.json), e
@@ -1088,6 +1402,128 @@ class FechamentoController(QObject):
         self.baixasAtualizadas.emit()
         return True
 
+    # ---------- Alterações em comanda já fechada (ver services/rede/edicoesCaixa.py) ----------
+    # Os dois slots abaixo são chamados pela QML no MOMENTO em que a
+    # alteração acontece de verdade, e não quando ela é pedida: a edição
+    # registra ao SALVAR o formulário (Balcao.qml/Entrega.qml), não ao abrir
+    # — quem abre a correção e desiste no meio não alterou caixa nenhum, e um
+    # registro ali viraria uma linha no cupom acusando uma mudança que nunca
+    # houve.
+    #
+    # Nos dois casos o usuário vem de quem chamou (é ele que tem o nome
+    # devolvido por PopupAutorizacao), mas QUEM DECIDE SE HÁ O QUE REGISTRAR
+    # é este controller, olhando se a comanda tinha baixa. Deixar essa
+    # decisão na QML significaria repetir a mesma pergunta em três telas, e
+    # bastaria uma esquecer para a alteração sumir do cupom em silêncio.
+
+    def _instantaneo_da_comanda(self, nome_arquivo):
+        """(codigo, cliente, valor) da comanda, lidos do .txt enquanto ele
+        ainda existe. Tudo vazio/zero quando o arquivo não pôde ser lido — o
+        registro da alteração vale mesmo assim: perder o valor antigo é ruim,
+        perder a linha inteira é pior."""
+        dados = self._ler_comanda(os.path.basename(nome_arquivo))
+        if dados is None:
+            return "", "", 0.0
+        return dados.get("codigo", ""), dados.get("cliente", ""), dados.get("valor", 0.0)
+
+    @pyqtSlot(str, str, str, bool, result=bool)
+    @protegido(False)
+    def registrarEdicaoCaixa(self, arquivo_original, arquivo_novo, usuario, manteve_baixa):
+        """Anota que uma comanda JÁ FECHADA foi corrigida, para a linha sair
+        no cupom de fechamento daquele dia (ver _montar_recibo_fechamento).
+
+        Chamado por Balcao.qml/Entrega.qml logo depois de a comanda nova ser
+        gravada e ANTES de a antiga ser apagada — é a única janela em que os
+        dois valores existem em disco ao mesmo tempo, e é a diferença entre
+        eles que interessa a quem confere o caixa.
+
+        Devolve False, sem registrar nada, quando a comanda editada não tinha
+        baixa: aí não houve alteração de caixa nenhuma, só uma correção comum
+        de uma venda ainda não conferida (o caminho da Consulta)."""
+        arquivo_original = os.path.basename(arquivo_original or "")
+        arquivo_novo = os.path.basename(arquivo_novo or "")
+        if not arquivo_original or not baixaComandas.esta_fechada(arquivo_original):
+            return False
+
+        codigo, cliente, valor_antes = self._instantaneo_da_comanda(arquivo_original)
+        _codigo_novo, _cliente_novo, valor_depois = self._instantaneo_da_comanda(arquivo_novo)
+
+        return self._registrar_alteracao_caixa(
+            arquivo_original,
+            edicoesCaixa.ACAO_EDITADA,
+            usuario,
+            codigo,
+            cliente,
+            valor_antes,
+            valor_depois,
+            # Uma correção que NÃO devolve a baixa tira a venda do caixa (ver
+            # qml/pages/fechamento/PopupManterBaixa.qml): o dia perde o valor
+            # inteiro, e o cupom precisa dizer isso — senão a linha mostraria
+            # uma troca de valores enquanto o total do dia caiu tudo.
+            no_caixa=bool(manteve_baixa),
+            arquivo_novo=arquivo_novo,
+        )
+
+    @pyqtSlot(str, str, result=bool)
+    @protegido(False)
+    def registrarExclusaoCaixa(self, arquivo, usuario):
+        """Anota que uma comanda JÁ FECHADA foi apagada de vez. Chamado por
+        PopupConfirmarExclusao.qml ANTES de apagar, enquanto ainda dá para ler
+        do .txt o valor que o caixa do dia vai perder.
+
+        Fica no mesmo domínio da edição, e não num separado, porque para quem
+        confere o caixa as duas são a mesma pergunta — "o que mexeram aqui
+        depois de eu ter fechado?". Devolve False quando a comanda não tinha
+        baixa (o caso normal da Consulta, que nem oferece a lixeira para
+        comanda fechada)."""
+        arquivo = os.path.basename(arquivo or "")
+        if not arquivo or not baixaComandas.esta_fechada(arquivo):
+            return False
+
+        codigo, cliente, valor_antes = self._instantaneo_da_comanda(arquivo)
+        return self._registrar_alteracao_caixa(
+            arquivo,
+            edicoesCaixa.ACAO_EXCLUIDA,
+            usuario,
+            codigo,
+            cliente,
+            valor_antes,
+            0.0,
+        )
+
+    def _registrar_alteracao_caixa(self, arquivo, acao, usuario, codigo, cliente,
+                                   valor_antes, valor_depois, no_caixa=False,
+                                   arquivo_novo=""):
+        """Grava e anuncia à malha — o que edição e exclusão têm em comum.
+
+        O registro inteiro viaja no gossip (e não só o id, como faz
+        _EVENTO_FECHAMENTO_ATUALIZADO): a outra máquina não tem como
+        reconstruir sozinha nem o valor de antes (o .txt já não existe mais lá
+        nem aqui) nem quem autorizou."""
+        data_iso = self._data_iso_da_comanda(arquivo)
+        if not data_iso:
+            return False
+
+        data_hora = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+        id_evento = edicoesCaixa.registrar(
+            data_iso,
+            acao,
+            usuario or "",
+            data_hora,
+            codigo=codigo,
+            cliente=cliente,
+            valor_antes=valor_antes,
+            valor_depois=valor_depois,
+            no_caixa=no_caixa,
+            arquivo=arquivo,
+            arquivo_novo=arquivo_novo,
+        )
+
+        registro = edicoesCaixa.obter(id_evento)
+        if registro:
+            rede.publicarEvento(_EVENTO_EDICAO_CAIXA, registro)
+        return True
+
     # ---------- Extras (pagamento de diária a funcionário, ver qml/pages/fechamento/PopupExtras.qml) ----------
 
     @pyqtSlot(str, str, str, result="QVariantMap")
@@ -1199,35 +1635,223 @@ class FechamentoController(QObject):
         self.extrasAtualizados.emit()
         return True
 
-    def _montar_recibo_extra(self, registro):
-        """Monta o recibo de pagamento de diária em bytes ESC/POS, pronto
-        pra impressora — mesmo caminho de balcaoController._salvarComanda:
-        um renderizador por campo (cada um já passado por
-        estilo.formatar_campo) e a montagem final por
-        comandaTextoService.montar_linhas_por_ordem, que é quem decide a
-        ordem dos campos e onde entram as divisórias, tudo vindo da tela de
-        Configurações. Termina com um espaço em branco e uma linha para
-        assinatura.
+    @staticmethod
+    def _linha_pontilhada(rotulo, valor, campo):
+        """"FGTS.................... R$ 8,00" ocupando a linha inteira, com o
+        valor encostado na margem direita e pontos preenchendo o meio.
 
-        Como a ordem é a mesma lista global (estilo.ordem_secoes()), as
-        chaves dos outros dois papéis simplesmente não aparecem em
-        `renderizadores` e são puladas."""
-        valor = f"R$ {float(registro.get('valor', 0)):.2f}".replace(".", ",")
+        Os pontos são contados sobre o TEXTO PURO, e o estilo é aplicado só
+        depois: os bytes de controle ESC/POS são invisíveis no papel mas
+        contariam como largura aqui, e a coluna sairia torta — mesmo cuidado
+        já documentado em comandaTextoService.formatar_tabela.
+
+        Rótulo comprido demais para a linha ainda sai inteiro, com um ponto
+        só de separação: cortar o nome da verba seria pior do que quebrar o
+        alinhamento de uma linha."""
+        pontos = max(1, _COLUNAS_PAPEL - len(rotulo) - len(valor) - 1)
+        return estilo.formatar_campo(f"{rotulo}{'.' * pontos} {valor}", campo)
+
+    @staticmethod
+    def _hora_e_data(data_hora):
+        """("23:26", "01/06/2026") a partir do "dd/mm/aaaa HH:MM:SS" gravado
+        no lançamento (ver registrarExtraDiaria). Um registro com formato
+        inesperado — gravado por uma versão futura, ou editado à mão — devolve
+        o texto todo como data e hora vazia, em vez de derrubar a impressão do
+        recibo por causa de um split."""
+        partes = str(data_hora or "").split()
+        if len(partes) < 2:
+            return "", str(data_hora or "")
+        return partes[1][:5], partes[0]
+
+    def _montar_recibo_extra(self, registro):
+        """Monta o recibo de pagamento de diária em bytes ESC/POS, pronto pra
+        impressora, no formato de quitação que o funcionário assina:
+
+            RECIBO DE PAGAMENTO
+            FUNCIONÁRIO EXTRA
+            23:26                         01/06/2026
+            ----------------------------------------
+            RECEBI DE Grande Sabor
+            A QUANTIA DE R$ 100,00
+            SENDO
+            FGTS............................ R$ 8,00
+            ...
+            TOTAL A RECEBER............... R$ 100,00
+            DANDO TOTAL QUITAÇÃO A EMPRESA,
+            ...
+            Maria Souza
+            ______________________________
+            (assinatura)
+
+        O valor é discriminado nas verbas de _DISCRIMINACAO_DIARIA — ver a
+        observação sobre a soma lá, que vale para todo recibo impresso aqui.
+
+        Mesmo caminho de _montar_recibo_fechamento e das comandas de venda: um
+        renderizador por campo (cada um já passado por estilo.formatar_campo) e
+        a montagem final por comandaTextoService.montar_linhas_por_ordem, que
+        decide ordem e divisórias a partir da tela de Configurações. Como a
+        ordem é a mesma lista global (estilo.ordem_secoes()), as chaves dos
+        outros dois papéis não aparecem em `renderizadores` e são puladas.
+
+        "extra_discriminacao" é um bloco de várias linhas, âncora de posição
+        igual a "fech_por_origem": ele se move inteiro, e o estilo é por
+        sub-linha."""
+
+        def fmt(numero):
+            return f"R$ {numero:.2f}".replace(".", ",")
+
+        valor = float(registro.get("valor", 0) or 0)
+        nome = registro.get("funcionario", "")
+        hora, data = self._hora_e_data(registro.get("dataHora", ""))
+
+        # Hora à esquerda, data à direita, na mesma linha. Pelo menos um
+        # espaço entre as duas mesmo se a linha estourar a largura, para elas
+        # nunca saírem grudadas uma na outra.
+        espacos = max(1, _COLUNAS_PAPEL - len(hora) - len(data))
+        linha_hora_data = estilo.formatar_campo(f"{hora}{' ' * espacos}{data}", "extra_hora_data")
+
+        linhas_discriminacao = [estilo.formatar_campo("SENDO", "extra_discriminacao_item")]
+        for rotulo, aliquota in _DISCRIMINACAO_DIARIA:
+            linhas_discriminacao.append(
+                self._linha_pontilhada(rotulo, fmt(valor * aliquota), "extra_discriminacao_item")
+            )
+        # O total é o valor LANÇADO, não a soma das linhas acima — ver
+        # _DISCRIMINACAO_DIARIA. O recibo quita o que o funcionário recebeu na
+        # mão, e é esse número que precisa bater com o caixa do dia.
+        linhas_discriminacao.append(
+            self._linha_pontilhada("TOTAL A RECEBER", fmt(valor), "extra_discriminacao_total")
+        )
+
         renderizadores = {
-            "extra_titulo": [estilo.formatar_campo("PAGAMENTO DE DIÁRIA", "extra_titulo")],
-            "extra_funcionario": [f"Funcionário: {estilo.formatar_campo(registro.get('funcionario', ''), 'extra_funcionario')}"],
-            "extra_valor": [f"Valor: {estilo.formatar_campo(valor, 'extra_valor')}"],
-            "extra_data": [f"Data: {estilo.formatar_campo(registro.get('dataHora', ''), 'extra_data')}"],
+            "extra_titulo": [estilo.formatar_campo("RECIBO DE PAGAMENTO", "extra_titulo")],
+            "extra_subtitulo": [estilo.formatar_campo("FUNCIONÁRIO EXTRA", "extra_subtitulo")],
+            "extra_hora_data": [linha_hora_data],
+            "extra_recebi": [f"RECEBI DE {estilo.formatar_campo(_NOME_EMPRESA, 'extra_recebi')}"],
+            "extra_valor": [f"A QUANTIA DE {estilo.formatar_campo(fmt(valor), 'extra_valor')}"],
+            "extra_discriminacao": linhas_discriminacao,
+            "extra_quitacao": [
+                estilo.formatar_campo(linha, "extra_quitacao")
+                for linha in (
+                    "DANDO TOTAL QUITAÇÃO A EMPRESA,",
+                    "SOBRE OS VALORES ACIMA",
+                    "DISCRIMINADOS",
+                    "DO MAIS NADA A RECLAMAR",
+                )
+            ],
+            # O nome sai sozinho, sem rótulo, logo acima da linha de
+            # assinatura: é o nome de quem assina, e não um campo de
+            # cabeçalho — daí ele e o bloco de assinatura ficarem na mesma
+            # categoria, sem divisória entre os dois (ver CATEGORIA_CAMPO).
+            "extra_assina_nome": [estilo.formatar_campo(nome, "extra_assina_nome")],
             # As duas linhas em branco são do próprio bloco (espaço pra
             # assinar), não espaçamento entre seções — por isso continuam
             # literais aqui em vez de virarem linhas_espacamento_secoes().
-            "extra_assinatura": ["", "", estilo.formatar_campo("_" * 30, "extra_assinatura"), "Assinatura"],
+            "extra_assinatura": ["", "", estilo.formatar_campo("_" * 30, "extra_assinatura"), "(assinatura)"],
         }
 
         linhas = texto.montar_linhas_por_ordem(estilo.ordem_secoes(), renderizadores)
         conteudo = "\n".join(linhas) + "\n"
         return conteudo.encode(parser.CODEPAGE_IMPRESSORA, errors="replace")
 
+
+    # ---------- Despesas do dia ----------
+    # Espelham os três slots de extras acima. Estão separados, e não
+    # parametrizados por um "tipo", pelo motivo documentado no topo de
+    # services/rede/despesasCaixa.py.
+
+    @pyqtSlot(str, str, str, result="QVariantMap")
+    @protegido({})
+    def registrarDespesa(self, data_iso, nome, valor_texto):
+        """Lança uma despesa no dia `data_iso` e devolve o registro gravado
+        (com "id"), ou {} se o nome vier vazio ou o valor não for
+        positivo."""
+        nome = (nome or "").strip()
+        valor = texto.valor_para_float(valor_texto)
+        if not nome or valor <= 0:
+            return {}
+
+        agora = datetime.now()
+        data_hora = agora.strftime("%d/%m/%Y %H:%M:%S")
+        id_evento = despesasCaixa.registrar(data_iso, nome, valor, data_hora)
+
+        rede.publicarEvento(_EVENTO_DESPESA_LANCADA, {
+            "id": id_evento,
+            "dataIso": data_iso,
+            "nome": nome,
+            "valor": valor,
+            "dataHora": data_hora,
+            "idEventoRevisao": id_evento,
+        })
+
+        # calcularFechamento (e não _recalcular_e_cachear): a mudança nasceu
+        # aqui, então a malha inteira precisa saber que este dia mudou —
+        # mesma assimetria de registrarExtraDiaria.
+        self.calcularFechamento(data_iso)
+        self.despesasAtualizadas.emit()
+
+        return {
+            "id": id_evento,
+            "dataIso": data_iso,
+            "nome": nome,
+            "valor": valor,
+            "dataHora": data_hora,
+        }
+
+    @pyqtSlot(str, str, str, result="QVariantMap")
+    @protegido({})
+    def editarDespesa(self, id_evento, nome, valor_texto):
+        """Corrige nome/valor de uma despesa já lançada — mesmo id, mesma
+        dataHora original."""
+        nome = (nome or "").strip()
+        valor = texto.valor_para_float(valor_texto)
+        if not nome or valor <= 0:
+            return {}
+
+        registro = despesasCaixa.carregar().get(id_evento)
+        if registro is None:
+            return {}
+
+        id_revisao = despesasCaixa.editar(id_evento, nome, valor)
+        if id_revisao is None:
+            return {}
+
+        data_iso = registro.get("dataIso", "")
+        rede.publicarEvento(_EVENTO_DESPESA_LANCADA, {
+            "id": id_evento,
+            "dataIso": data_iso,
+            "nome": nome,
+            "valor": valor,
+            "dataHora": registro.get("dataHora", ""),
+            "idEventoRevisao": id_revisao,
+        })
+
+        if data_iso:
+            self.calcularFechamento(data_iso)
+        self.despesasAtualizadas.emit()
+
+        return {
+            "id": id_evento,
+            "dataIso": data_iso,
+            "nome": nome,
+            "valor": valor,
+            "dataHora": registro.get("dataHora", ""),
+        }
+
+    @pyqtSlot(str, result=bool)
+    @protegido(False)
+    def excluirDespesa(self, id_evento):
+        registro = despesasCaixa.carregar().get(id_evento)
+        if registro is None:
+            return False
+
+        data_iso = registro.get("dataIso", "")
+        quando = despesasCaixa.apagar(id_evento)
+        rede.publicarEvento(_EVENTO_DESPESA_APAGADA, {"id": id_evento, "quando": quando})
+
+        if data_iso:
+            self.calcularFechamento(data_iso)
+        self.despesasAtualizadas.emit()
+        return True
     @pyqtSlot("QVariantMap", result=bool)
     @protegido(False)
     def imprimirReciboExtra(self, registro):

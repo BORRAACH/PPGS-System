@@ -3,6 +3,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import "../pedidos"
 import "../../components"
+import "../../components/Texto.js" as Texto
 import "../../components/DestinoPedido.js" as Destino
 import estilo 1.0
 
@@ -504,6 +505,16 @@ Page {
                                     color: Estilo.global.textInput
                                     placeholderTextColor: Estilo.global.textPlaceholder
                                     placeholderText: "NOME DO CLIENTE (opcional)"
+                                    // "Maria Alice" mesmo digitando tudo minusculo: capitaliza a
+                                    // primeira letra e cada uma logo depois de um espaco, sem tirar o
+                                    // cursor do lugar (ver components/Texto.js).
+                                    //
+                                    // Em onTextChanged, e nao em onEditingFinished: o nome ja sai
+                                    // formatado enquanto se digita, e o que vem preenchido ao editar
+                                    // uma comanda antiga tambem entra na regra. O campo passa a ter uma
+                                    // invariante simples — o que esta nele esta sempre capitalizado —,
+                                    // que e o que faz a comanda impressa nunca discordar da tela.
+                                    onTextChanged: Texto.capitalizarCampo(inputNomeCliente)
                                     width: Math.round((conteudoSalao.larguraCampos - Estilo.global.spacing.xxl) * 0.7)
                                     topPadding: 10
                                     bottomPadding: 10

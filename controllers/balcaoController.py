@@ -57,6 +57,7 @@ class BalcaoController(QObject):
 
         teste = bool(dados.get("teste", False))
         cliente = "Teste" if teste else dados.get("cliente", "")
+        usuario = "" if teste else str(dados.get("usuario", "") or "").strip()
         itens = dados.get("itens", [])
         forma_pagamento = dados.get("formaPagamento", "")
         troco = dados.get("troco", "")
@@ -93,6 +94,11 @@ class BalcaoController(QObject):
             "id_pedido": None if teste else [f"ID: {estilo.formatar_campo(codigo_pedido, 'id_pedido')}"],
             "cliente": [f"Cliente: {estilo.formatar_campo(cliente, 'cliente')}"],
             "data": [f"Data: {estilo.formatar_campo(agora.strftime('%d/%m/%Y %H:%M:%S'), 'data')}"],
+            # Quem autorizou o lançamento (ver components/PopupAutorizacao.qml).
+            # None quando vem vazio — comanda de teste, ou ninguém cadastrado
+            # ainda —, e montar_linhas_por_ordem pula a chave sem conteúdo, de
+            # modo que a comanda sai exatamente como saía antes.
+            "usuario": [f"Usuário: {estilo.formatar_campo(usuario, 'usuario')}"] if usuario else None,
             "itens": texto.formatar_tabela(grupos),
             "forma_pagamento": [f"Forma de pagamento: {estilo.formatar_campo(forma_pagamento, 'forma_pagamento')}"] if forma_pagamento else None,
             "troco_para": [f"Troco para: {estilo.formatar_campo(troco, 'troco_para')}"] if dinheiro_com_troco else None,

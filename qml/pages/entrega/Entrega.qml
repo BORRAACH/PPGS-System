@@ -3,6 +3,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import "../pedidos"
 import "../../components"
+import "../../components/Texto.js" as Texto
 import "../../components/DestinoPedido.js" as Destino
 import estilo 1.0
 
@@ -379,27 +380,60 @@ Page {
             // foi checada (e, se vazia, o popup de comanda de teste já
             // respondeu) — chamadas tanto direto pelos botões quanto pelo
             // handler de popupComandaTeste.respondido.
-            // Devolve pra comanda recém-gravada a baixa que a comanda editada
-            // tinha. Chamada ANTES de limparFormularioPedido(), que zera
-            // manterBaixaAoSalvar junto com arquivoOriginal.
+            // Fecha a correção de uma comanda que veio do Fechamento: devolve
+            // pra comanda recém-gravada a baixa que a comanda editada tinha e
+            // deixa registrada, no caixa daquele dia, a alteração e quem a
+            // fez. Chamada ANTES de limparFormularioPedido(), que zera
+            // manterBaixaAoSalvar junto com arquivoOriginal — e que também
+            // apaga a comanda antiga, o que precisa acontecer DEPOIS: o valor
+            // que o caixa tinha antes só existe enquanto aquele .txt existe.
             //
             // O nome do arquivo novo vem do controller (ultimoArquivoSalvo) e
             // não daqui: editar gera um .txt com carimbo e sufixo aleatório
             // novos, que a QML não tem como saber. darBaixa cuida do resto —
             // registra, propaga pra malha e recalcula o caixa do dia.
-            function transferirBaixa() {
-                if (!telaEntrega.manterBaixaAoSalvar)
+            //
+            // O usuário é o mesmo que já sai impresso na comanda: quem liberou
+            // ESTA gravação (ver prosseguirImprimir), e não quem abriu a fila
+            // lá no Fechamento — a correção é assinada por quem a salvou.
+            //
+            // Chamada em toda edição, e não só quando manterBaixaAoSalvar:
+            // quem decide se houve alteração de caixa a registrar é o
+            // controller, olhando se a comanda editada tinha baixa (ver
+            // FechamentoController.registrarEdicaoCaixa). Uma correção que
+            // NÃO devolve a baixa também mexe no caixa — tira a venda dele.
+            function concluirEdicao(usuario) {
+                if (telaEntrega.arquivoOriginal === "")
                     return;
 
                 var novoArquivo = entregaController.ultimoArquivoSalvo();
-                if (novoArquivo !== "")
+                fechamentoController.registrarEdicaoCaixa(telaEntrega.arquivoOriginal, novoArquivo, usuario, telaEntrega.manterBaixaAoSalvar);
+
+                if (telaEntrega.manterBaixaAoSalvar && novoArquivo !== "")
                     fechamentoController.darBaixa(novoArquivo);
             }
 
+            // O código do usuário é pedido aqui, e não no onClicked do botão,
+            // porque este é o ponto por onde passam os DOIS caminhos até a
+            // impressão: o clique direto e a confirmação de comanda de teste
+            // (ver PopupComandaTeste). Guardar só o botão deixaria o segundo
+            // aberto.
+            //
+            // O nome de quem autorizou entra em dadosPedido e sai impresso na
+            // comanda (ver o campo "usuario" em services/comandaEstiloService.py
+            // e entregaController.py). Sem ninguém cadastrado o guarda
+            // libera e devolve nome vazio — a linha some do cupom.
             function prosseguirImprimir(dadosPedido) {
+                popupAutorizacao.solicitar("Imprimir comanda (Entrega)", dadosPedido.cliente || "sem cliente", function (usuario) {
+                    dadosPedido.usuario = usuario.nome || "";
+                    _imprimirAutorizado(dadosPedido);
+                });
+            }
+
+            function _imprimirAutorizado(dadosPedido) {
                 var sucesso = entregaController.enviarPedido(dadosPedido, spinnerCopias.value);
                 if (sucesso) {
-                    transferirBaixa();
+                    concluirEdicao(dadosPedido.usuario);
                     limparFormularioPedido();
                     telaEntrega.mostrarNotificacao(dadosPedido.teste ? "Comanda de teste impressa." : "Pedido salvo com sucesso!", true);
                 } else {
@@ -408,9 +442,16 @@ Page {
             }
 
             function prosseguirLancar(dadosPedido) {
+                popupAutorizacao.solicitar("Lançar comanda (Entrega)", dadosPedido.cliente || "sem cliente", function (usuario) {
+                    dadosPedido.usuario = usuario.nome || "";
+                    _lancarAutorizado(dadosPedido);
+                });
+            }
+
+            function _lancarAutorizado(dadosPedido) {
                 var sucesso = entregaController.lancarPedido(dadosPedido);
                 if (sucesso) {
-                    transferirBaixa();
+                    concluirEdicao(dadosPedido.usuario);
                     limparFormularioPedido();
                     telaEntrega.mostrarNotificacao(dadosPedido.teste ? "Comanda de teste registrada (não aparece na Consulta)." : "Comanda lançada com sucesso!", true);
                 } else {
@@ -622,6 +663,16 @@ Page {
                                 color: Estilo.global.textInput
                                 placeholderTextColor: Estilo.global.textPlaceholder
                                 placeholderText: "NOME DO CLIENTE"
+                                // "Maria Alice" mesmo digitando tudo minusculo: capitaliza a
+                                // primeira letra e cada uma logo depois de um espaco, sem tirar o
+                                // cursor do lugar (ver components/Texto.js).
+                                //
+                                // Em onTextChanged, e nao em onEditingFinished: o nome ja sai
+                                // formatado enquanto se digita, e o que vem preenchido ao editar
+                                // uma comanda antiga tambem entra na regra. O campo passa a ter uma
+                                // invariante simples — o que esta nele esta sempre capitalizado —,
+                                // que e o que faz a comanda impressa nunca discordar da tela.
+                                onTextChanged: Texto.capitalizarCampo(inputNomeCliente)
                                 width: (conteudoEntrega.larguraCampos - Estilo.global.spacing.md) - Math.round((conteudoEntrega.larguraCampos - Estilo.global.spacing.md) * 0.46)
                                 topPadding: 10
                                 bottomPadding: 10
@@ -664,6 +715,11 @@ Page {
                                 color: Estilo.global.textInput
                                 placeholderTextColor: Estilo.global.textPlaceholder
                                 placeholderText: "ENDEREÇO"
+                                // Mesma capitalizacao do nome do cliente logo acima.
+                                // Vale tambem para o endereco que chega preenchido do servidor
+                                // (ver onEnderecoEncontrado): a rua cadastrada em minusculo por
+                                // outra maquina sai formatada aqui do mesmo jeito.
+                                onTextChanged: Texto.capitalizarCampo(inputEndereco)
                                 width: Math.round((conteudoEntrega.larguraCampos - Estilo.global.spacing.md) * 0.78)
                                 topPadding: 10
                                 bottomPadding: 10
@@ -744,6 +800,8 @@ Page {
                             color: Estilo.global.textInput
                             placeholderTextColor: Estilo.global.textPlaceholder
                             placeholderText: "BAIRRO"
+                            // Mesma capitalizacao do nome do cliente logo acima.
+                            onTextChanged: Texto.capitalizarCampo(inputBairro)
                             width: conteudoEntrega.larguraCampos
                             topPadding: 10
                             bottomPadding: 10
@@ -781,6 +839,10 @@ Page {
                             color: Estilo.global.textInput
                             placeholderTextColor: Estilo.global.textPlaceholder
                             placeholderText: "OBSERVAÇÃO"
+                            // So a primeira letra, ao contrario do nome/endereco acima:
+                            // observacao e frase, nao nome proprio (ver capitalizarFrase em
+                            // components/Texto.js).
+                            onTextChanged: Texto.capitalizarCampoFrase(inputObservacao)
                             width: conteudoEntrega.larguraCampos
                             topPadding: 10
                             bottomPadding: 10
@@ -1102,6 +1164,11 @@ Page {
             // Só abre quando comandaVazia() barra o clique em Imprimir/Lançar
             // (ver os dois onClicked acima) — nunca some sem resposta: ou o
             // usuário escolhe teste/normal, ou fecha sem prosseguir.
+            // Guarda de Imprimir/Lançar (ver prosseguirImprimir).
+            PopupAutorizacao {
+                id: popupAutorizacao
+            }
+
             PopupComandaTeste {
                 id: popupComandaTeste
 

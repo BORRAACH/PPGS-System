@@ -144,6 +144,12 @@ Column {
         "endereco": { "prefixo": "Endereço: ", "valor": "Rua Exemplo, 123" },
         "bairro": { "prefixo": "Bairro: ", "valor": "Centro" },
         "data": { "prefixo": "Data: ", "valor": "25/07/2026 20:15:00" },
+        // Faltava aqui, e era só por isso que o campo não tinha como ser
+        // editado: sem exemplo, linhasDoCampo devolve lista vazia, o campo não
+        // desenha linha nenhuma no papel da prévia — e a prévia é a ÚNICA porta
+        // de entrada para o popup de estilo. Ele já estava em CAMPOS e em
+        // CAMPOS_ORDENAVEIS o tempo todo, e já saía impresso na comanda.
+        "usuario": { "prefixo": "Usuário: ", "valor": "Ana Paula" },
         "observacao_entrega": { "prefixo": "Observação: ", "valor": "INTERFONE QUEBRADO" },
         "forma_pagamento": { "prefixo": "Forma de pagamento: ", "valor": "Dinheiro" },
         "troco_para": { "prefixo": "Troco para: ", "valor": "R$ 100,00" },
@@ -153,10 +159,15 @@ Column {
         "troco_a_dar": { "prefixo": "Troco a dar: ", "valor": "R$ 55,00" },
         // Recibo de pagamento de diária (ver
         // fechamentoController._montar_recibo_extra).
-        "extra_titulo": { "prefixo": "", "valor": "PAGAMENTO DE DIÁRIA" },
-        "extra_funcionario": { "prefixo": "Funcionário: ", "valor": "Maria Souza" },
-        "extra_valor": { "prefixo": "Valor: ", "valor": "R$ 120,00" },
-        "extra_data": { "prefixo": "Data: ", "valor": "14/08/2026 22:40:00" },
+        "extra_titulo": { "prefixo": "", "valor": "RECIBO DE PAGAMENTO" },
+        "extra_subtitulo": { "prefixo": "", "valor": "FUNCIONÁRIO EXTRA" },
+        // Hora à esquerda e data à direita da MESMA linha, como no papel —
+        // o espaçamento aqui é ilustrativo, quem alinha de verdade é o
+        // controller, contra a largura do papel.
+        "extra_hora_data": { "prefixo": "", "valor": "22:40                    14/08/2026" },
+        "extra_recebi": { "prefixo": "RECEBI DE ", "valor": "Grande Sabor" },
+        "extra_valor": { "prefixo": "A QUANTIA DE ", "valor": "R$ 120,00" },
+        "extra_assina_nome": { "prefixo": "", "valor": "Maria Souza" },
         // Cupom de fechamento de caixa (ver
         // fechamentoController._montar_recibo_fechamento).
         "fech_titulo": { "prefixo": "", "valor": "FECHAMENTO DE CAIXA" },
@@ -581,6 +592,9 @@ Column {
         return texto;
     }
 
+    // Um segmento pode trazer "clique" para ser selecionável sozinho, em vez
+    // de devolver o clique para a sub-linha que o contém — é o que permite
+    // estilizar o tamanho da pizza, que divide a linha com o nome do item.
     // Cada linha do papel é uma lista de segmentos {t: texto, c: campo de
     // estilo ou ""}. Um campo comum vira uma linha só, com o prefixo sem
     // estilo e o valor estilizado; a tabela de itens e a divisão da conta
@@ -590,7 +604,22 @@ Column {
     function linhasDoCampo(chave) {
         if (chave === "itens") {
             return [
-                { "campoEstilo": "pedido", "segmentos": [{ "t": "- PIZZA G. CALABRESA (GRANDE) | R$ 45,00", "c": "pedido" }] },
+                // O tamanho sai colado no nome do item, na mesma linha (ver
+                // comandaTextoService.formatar_coluna_pedido), entao ele e um
+                // SEGMENTO e nao uma sub-linha propria. "clique" e o que o
+                // torna alcancavel: sem ele o clique cairia na sub-linha
+                // inteira e selecionaria "pedido", e nao haveria como abrir o
+                // estilo do tamanho por lugar nenhum.
+                //
+                // BROTO, e nao GRANDE: o grande nao sai escrito no papel (ver
+                // comandaTextoService.TAMANHO_OMITIDO), e uma previa com
+                // "(GRANDE)" mostraria um campo que a comanda de verdade nunca
+                // imprime.
+                { "campoEstilo": "pedido", "segmentos": [
+                    { "t": "- PIZZA CALABRESA ", "c": "pedido" },
+                    { "t": "(BROTO)", "c": "pedido_tamanho", "clique": "pedido_tamanho" },
+                    { "t": " | R$ 45,00", "c": "pedido" }
+                ] },
                 { "campoEstilo": "adicional_item", "segmentos": [{ "t": "  + BACON (R$ 5,00)", "c": "adicional_item" }] },
                 { "campoEstilo": "borda_item", "segmentos": [{ "t": "  * BORDA CATUPIRY (R$ 8,00)", "c": "borda_item" }] },
                 { "campoEstilo": "observacao_item", "segmentos": [{ "t": "  SEM CEBOLA", "c": "observacao_item" }] }
@@ -643,6 +672,54 @@ Column {
             ];
         }
 
+        // Bloco "ALTERAÇÕES APÓS A BAIXA": uma comanda já fechada que foi
+        // corrigida ou apagada depois, e quem fez (ver
+        // FechamentoController._linhas_alteracoes_do_dia). Como no bloco de
+        // origens, os dois espaços de recuo ficam FORA do segmento estilizado.
+        if (chave === "fech_edicoes") {
+            return [
+                { "campoEstilo": "fech_edicoes_titulo", "segmentos": [{ "t": "ALTERAÇÕES APÓS A BAIXA", "c": "fech_edicoes_titulo" }] },
+                { "campoEstilo": "fech_edicoes_item", "segmentos": [{ "t": "Corrigida - A3F2 - João da Silva", "c": "fech_edicoes_item" }] },
+                { "campoEstilo": "fech_edicoes_autor", "segmentos": [
+                    { "t": "  ", "c": "" },
+                    { "t": "Maria Souza - 14/08/2026 22:51:04", "c": "fech_edicoes_autor" }
+                ] },
+                { "campoEstilo": "fech_edicoes_autor", "segmentos": [
+                    { "t": "  ", "c": "" },
+                    { "t": "R$ 45,00 -> R$ 52,00", "c": "fech_edicoes_autor" }
+                ] }
+            ];
+        }
+
+        // Bloco "SENDO" do recibo de diária: o valor discriminado nas verbas
+        // de _DISCRIMINACAO_DIARIA, com o total por último num estilo próprio
+        // (ver fechamentoController._montar_recibo_extra). Os pontos são
+        // ilustrativos — quem os conta de verdade é o controller, contra a
+        // largura do papel.
+        if (chave === "extra_discriminacao") {
+            return [
+                { "campoEstilo": "extra_discriminacao_item", "segmentos": [{ "t": "SENDO", "c": "extra_discriminacao_item" }] },
+                { "campoEstilo": "extra_discriminacao_item", "segmentos": [{ "t": "FGTS........................... R$ 9,60", "c": "extra_discriminacao_item" }] },
+                { "campoEstilo": "extra_discriminacao_item", "segmentos": [{ "t": "FÉRIAS......................... R$ 9,20", "c": "extra_discriminacao_item" }] },
+                { "campoEstilo": "extra_discriminacao_item", "segmentos": [{ "t": "1/3 SOBRE AS FÉRIAS............ R$ 3,07", "c": "extra_discriminacao_item" }] },
+                { "campoEstilo": "extra_discriminacao_item", "segmentos": [{ "t": "13º SALÁRIO.................... R$ 9,20", "c": "extra_discriminacao_item" }] },
+                { "campoEstilo": "extra_discriminacao_item", "segmentos": [{ "t": "SALÁRIO LÍQUIDO............... R$ 88,93", "c": "extra_discriminacao_item" }] },
+                { "campoEstilo": "extra_discriminacao_total", "segmentos": [{ "t": "TOTAL A RECEBER.............. R$ 120,00", "c": "extra_discriminacao_total" }] }
+            ];
+        }
+
+        // As quatro linhas da quitação compartilham um estilo só — é um
+        // parágrafo, não quatro campos, e quebrá-lo em quatro chaves daria ao
+        // dono quatro botões de estilo para manter iguais entre si.
+        if (chave === "extra_quitacao") {
+            return [
+                { "campoEstilo": "extra_quitacao", "segmentos": [{ "t": "DANDO TOTAL QUITAÇÃO A EMPRESA,", "c": "extra_quitacao" }] },
+                { "campoEstilo": "extra_quitacao", "segmentos": [{ "t": "SOBRE OS VALORES ACIMA", "c": "extra_quitacao" }] },
+                { "campoEstilo": "extra_quitacao", "segmentos": [{ "t": "DISCRIMINADOS", "c": "extra_quitacao" }] },
+                { "campoEstilo": "extra_quitacao", "segmentos": [{ "t": "DO MAIS NADA A RECLAMAR", "c": "extra_quitacao" }] }
+            ];
+        }
+
         // As duas primeiras linhas são o espaço em branco pra assinar (do
         // próprio bloco, não espaçamento entre seções) e não têm estilo:
         // clicar nelas seleciona o bloco inteiro.
@@ -651,7 +728,7 @@ Column {
                 { "campoEstilo": "", "segmentos": [{ "t": "", "c": "" }] },
                 { "campoEstilo": "", "segmentos": [{ "t": "", "c": "" }] },
                 { "campoEstilo": "extra_assinatura", "segmentos": [{ "t": raiz.repetirVezes("_", 30), "c": "extra_assinatura" }] },
-                { "campoEstilo": "", "segmentos": [{ "t": "Assinatura", "c": "" }] }
+                { "campoEstilo": "", "segmentos": [{ "t": "(assinatura)", "c": "" }] }
             ];
         }
 
@@ -706,6 +783,17 @@ Column {
         font.pixelSize: raiz.tamanhoBasePapel
         text: raiz.repetir("0")
     }
+
+    // Largura de uma linha de 40 colunas na fonte base — o PISO da largura do
+    // papel, nunca o teto.
+    //
+    // É constante de propósito: depende só da métrica da fonte, e de nada que
+    // esteja dentro do papel. É isso que permite as larguras subirem do
+    // conteúdo para o papel (linha -> coluna -> papel) sem laço de binding;
+    // antes elas desciam do papel para as linhas, e por isso um campo com
+    // fonte ampliada não tinha como alargar o papel — só era cortado pelo
+    // clip.
+    readonly property real larguraLinhaBase: Math.ceil(metricaPapel.width) + 10
 
     // --- CABEÇALHO DA SEÇÃO + RESTAURAR PADRÕES ---
     RowLayout {
@@ -902,9 +990,21 @@ Column {
                     Rectangle {
                         id: papel
 
+                        // Nomeado pelo mesmo motivo dos popups das outras telas:
+                        // deixa a largura do papel medível de fora, que é a única
+                        // forma de testar que ele acompanha o conteúdo.
+                        objectName: "papelPrevia"
+
                         anchors.left: parent.left
                         anchors.top: parent.top
-                        width: Math.ceil(metricaPapel.width) + 30
+                        // Acompanha a linha mais larga do cupom, com o piso de
+                        // 40 colunas: um campo em fonte 4x é 4x mais largo que
+                        // o papel de base, e antes disso ele simplesmente
+                        // sumia atrás do clip. A conta bate com a de antes
+                        // quando nada está ampliado (larguraLinhaBase + 20 =
+                        // 40 colunas + 30), então o papel só cresce quando
+                        // precisa.
+                        width: Math.max(raiz.larguraLinhaBase, colunaPapel.implicitWidth) + 20
                         height: colunaPapel.implicitHeight + 24
                         radius: Estilo.global.radius.xs
                         color: Estilo.printer.paper
@@ -917,10 +1017,16 @@ Column {
                         Column {
                             id: colunaPapel
 
+                            objectName: "colunaPapelPrevia"
+
                             anchors.top: parent.top
                             anchors.horizontalCenter: parent.horizontalCenter
                             anchors.topMargin: 12
-                            width: parent.width - 20
+                            // Sem "width: parent.width - 20": a largura sobe
+                            // daqui para o papel, não desce dele para cá (ver
+                            // larguraLinhaBase). Como Column, a implicitWidth
+                            // já é a do filho mais largo.
+                            width: Math.max(raiz.larguraLinhaBase, implicitWidth)
                             // Zero de propósito: o espaçamento entre seções da
                             // comanda é dado por linhas em branco de verdade (as
                             // mesmas que o Python emite), não por spacing do
@@ -962,14 +1068,15 @@ Column {
                                     readonly property var _separador: raiz.separadores[linhaOrdem.index] || ({ "tipo": "", "linhas": 0 })
                                     readonly property bool _noTipo: raiz.campoNoTipo(linhaOrdem.chave, raiz.tipoComanda)
 
-                                    width: colunaPapel.width
+                                    // Idem: Column, largura do filho mais largo.
+                                    width: Math.max(raiz.larguraLinhaBase, implicitWidth)
                                     spacing: 0
                                     // Campo que este tipo de comanda não imprime:
                                     // continua visível e movível, só apagado.
                                     opacity: linhaOrdem._noTipo ? 1 : Estilo.global.opacity.muted
 
                                     SeparadorPapel {
-                                        largura: linhaOrdem.width
+                                        largura: raiz.larguraLinhaBase
                                         separador: linhaOrdem._separador.tipo
                                         repeticoes: linhaOrdem._separador.linhas
                                         linhasEmBranco: raiz.espacamentoSecoes
@@ -1004,8 +1111,20 @@ Column {
                                             // bloco vence.
                                             readonly property bool _ancora: subLinha.modelData.campoEstilo !== "" || subLinha.index === 0
 
-                                            width: linhaOrdem.width
+                                            // A largura vem do CONTEÚDO, com o piso
+                                            // de 40 colunas — é daqui que a largura do
+                                            // papel sobe.
+                                            width: Math.max(raiz.larguraLinhaBase, conteudoSubLinha.implicitWidth)
                                             height: Math.max(metricaPapel.height, conteudoSubLinha.implicitHeight)
+
+                                            // A faixa de destaque/clique cobre o papel
+                                            // inteiro, e não só esta linha: com uma
+                                            // linha ampliada esticando o papel, as
+                                            // curtas ficariam com um realce mais estreito
+                                            // que as vizinhas. Ler colunaPapel.width aqui
+                                            // não fecha laço — subLinha é Item, e a
+                                            // implicitWidth de um Item não vem dos filhos.
+                                            readonly property real _larguraFaixa: Math.max(subLinha.width, colunaPapel.width)
 
                                             Binding {
                                                 when: subLinha._selecionada && subLinha._ancora
@@ -1024,9 +1143,10 @@ Column {
                                             }
 
                                             Rectangle {
-                                                anchors.fill: parent
-                                                anchors.leftMargin: -6
-                                                anchors.rightMargin: -6
+                                                x: -6
+                                                width: subLinha._larguraFaixa + 12
+                                                anchors.top: parent.top
+                                                anchors.bottom: parent.bottom
                                                 radius: Estilo.global.radius.xs
                                                 color: subLinha._selecionada ? Estilo.screen.config.softStrong : (areaSubLinha.containsMouse ? Estilo.screen.config.soft : "transparent")
                                             }
@@ -1048,6 +1168,15 @@ Column {
                                                 anchors.left: parent.left
                                                 anchors.verticalCenter: parent.verticalCenter
                                                 spacing: 0
+                                                // Acima de areaSubLinha, que é
+                                                // declarada depois e cobre a linha
+                                                // toda: sem isto, o MouseArea de um
+                                                // segmento com "clique" ficaria
+                                                // embaixo dela e nunca receberia o
+                                                // clique. O resto da linha continua
+                                                // caindo na areaSubLinha — um Row sem
+                                                // MouseArea não intercepta nada.
+                                                z: 1
 
                                                 Repeater {
                                                     model: subLinha.modelData.segmentos
@@ -1081,6 +1210,28 @@ Column {
                                                             texto: segmento.modelData.t
                                                             tamanhoBase: raiz.tamanhoBasePapel
                                                         }
+
+                                                        // Só existe no segmento que
+                                                        // pede seleção própria (ver
+                                                        // "clique" em linhasDoCampo).
+                                                        // Nos demais nem é criado, e o
+                                                        // clique segue para a
+                                                        // areaSubLinha por baixo.
+                                                        MouseArea {
+                                                            readonly property string _campo: segmento.modelData.clique || ""
+
+                                                            anchors.fill: parent
+                                                            enabled: _campo !== ""
+                                                            visible: enabled
+                                                            hoverEnabled: true
+                                                            cursorShape: Qt.PointingHandCursor
+                                                            onClicked: raiz.selecionar(_campo, linhaOrdem.chave)
+                                                            onDoubleClicked: {
+                                                                raiz.selecionar(_campo, linhaOrdem.chave);
+                                                                if (raiz.podeEstilizar(_campo))
+                                                                    popupEstiloCampo.abrirPara(_campo, raiz.rotuloDe(_campo));
+                                                            }
+                                                        }
                                                     }
                                                 }
                                             }
@@ -1088,9 +1239,10 @@ Column {
                                             MouseArea {
                                                 id: areaSubLinha
 
-                                                anchors.fill: parent
-                                                anchors.leftMargin: -6
-                                                anchors.rightMargin: -6
+                                                x: -6
+                                                width: subLinha._larguraFaixa + 12
+                                                anchors.top: parent.top
+                                                anchors.bottom: parent.bottom
                                                 hoverEnabled: true
                                                 cursorShape: Qt.PointingHandCursor
                                                 onClicked: raiz.selecionar(subLinha._campoClique, linhaOrdem.chave)
@@ -1111,7 +1263,7 @@ Column {
                             // o ÚLTIMO campo da ordem — o único separador que não
                             // vem "antes de alguém" (ver ultimaChaveOrdem).
                             SeparadorPapel {
-                                largura: colunaPapel.width
+                                largura: raiz.larguraLinhaBase
                                 separador: raiz.ultimaChaveOrdem === "itens" ? "=" : ""
                                 linhasEmBranco: raiz.espacamentoSecoes
                                 alturaLinha: metricaPapel.height

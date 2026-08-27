@@ -3,6 +3,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import estilo 1.0
 import "../../components"
+import "../../components/Texto.js" as Texto
 
 // Popup de fechamento de conta de uma mesa (Salao.qml) — calcula a divisão
 // entre as pessoas (igual ou avulsa, cada uma com sua forma de pagamento e
@@ -45,6 +46,11 @@ Popup {
     }
 
     signal concluido(bool sucesso)
+
+    // Guarda do botão "Confirmar e Imprimir" (ver o onClicked lá embaixo).
+    PopupAutorizacao {
+        id: popupAutorizacao
+    }
 
     function abrirPara(idMesa, total, itens) {
         mesaId = idMesa;
@@ -369,7 +375,19 @@ Popup {
                             fontMetricsNome.advanceWidth(text) + leftPadding + rightPadding + 20
                         )
                         text: model.nome
-                        onEditingFinished: model.nome = text
+                        // Mesma capitalizacao dos campos de nome de cliente
+                        // (ver components/Texto.js), mas aplicada AO GRAVAR no
+                        // model, e nao a cada tecla como la.
+                        //
+                        // O motivo e este campo ser delegate: o texto dele
+                        // vem de "text: model.nome", e o que sai impresso na
+                        // divisao da conta e o model. Atribuir "text" direto
+                        // quebraria esse binding e deixaria duas fontes para o
+                        // mesmo dado; escrevendo no model, o binding traz o
+                        // texto capitalizado de volta sozinho e continua
+                        // inteiro. Como ja havia uma gravacao no model aqui,
+                        // capitalizar nela nao acrescenta caminho nenhum.
+                        onEditingFinished: model.nome = Texto.capitalizarNomes(text)
                         placeholderText: "Nome"
                         topPadding: 10
                         bottomPadding: 10
@@ -652,9 +670,19 @@ Popup {
                             "status": item.status
                         });
                     }
-                    var sucesso = salaoController.fecharMesa(popupFecharConta.mesaId, divisoes, spinnerCopiasFechamento.value);
-                    popupFecharConta.close();
-                    popupFecharConta.concluido(sucesso);
+                    // Fechar a conta imprime o cupom final, tira a mesa do
+                    // salão e lança a comanda no caixa do dia — pede o código
+                    // de quem está fechando, e o nome sai impresso no cupom
+                    // (campo "usuario", ver services/comandaEstiloService.py).
+                    //
+                    // As divisões são capturadas ANTES de abrir o guarda: o
+                    // popup espera a digitação do código, e a lista é montada
+                    // a partir do que está na tela agora.
+                    popupAutorizacao.solicitar("Fechar conta da mesa", "Mesa " + popupFecharConta.mesaId, function (usuario) {
+                        var sucesso = salaoController.fecharMesa(popupFecharConta.mesaId, divisoes, spinnerCopiasFechamento.value, usuario.nome || "");
+                        popupFecharConta.close();
+                        popupFecharConta.concluido(sucesso);
+                    });
                 }
 
                 contentItem: Row {

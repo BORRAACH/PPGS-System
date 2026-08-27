@@ -20,6 +20,15 @@ Popup {
         open();
     }
 
+    // Apagar comanda é destrutivo e não tem desfazer — pede o código de quem
+    // está mandando apagar (ver components/PopupAutorizacao.qml). Fica aqui, e
+    // não em quem abre este popup, porque esta é uma instância compartilhada
+    // pela Consulta e pelo fechamento rápido: guardar no ponto único fecha os
+    // dois caminhos de uma vez, e não dá para esquecer um deles depois.
+    PopupAutorizacao {
+        id: popupAutorizacao
+    }
+
     modal: true
     focus: true
     closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
@@ -90,9 +99,30 @@ Popup {
 
                 padding: Estilo.global.padding.md
                 onClicked: {
-                    consultaController.apagarComanda(popupConfirmarExclusao.arquivoAlvo);
-                    popupConfirmarExclusao.close();
-                    popupConfirmarExclusao.comandaApagada();
+                    // O alvo é copiado ANTES de pedir a autorização: o guarda
+                    // espera a pessoa digitar o código, e neste meio-tempo
+                    // outro item da lista pode reabrir este mesmo popup (ele é
+                    // uma instância só, compartilhada por todas as linhas) e
+                    // trocar arquivoAlvo debaixo da continuação — apagando a
+                    // comanda errada.
+                    var arquivo = popupConfirmarExclusao.arquivoAlvo;
+                    popupAutorizacao.solicitar("Apagar comanda", arquivo, function (usuario) {
+                        // Apagar uma comanda que JÁ tinha baixa derruba o total
+                        // de um caixa que alguém já conferiu — o registro sai no
+                        // cupom de fechamento daquele dia, com o nome de quem
+                        // mandou apagar (ver
+                        // FechamentoController.registrarExclusaoCaixa). Vem
+                        // ANTES de apagarComanda porque o valor que o dia vai
+                        // perder só pode ser lido enquanto o .txt existe.
+                        //
+                        // Chamado dos dois caminhos deste popup, não só do
+                        // fechamento rápido: o controller ignora sozinho a
+                        // comanda sem baixa, que é o caso normal da Consulta.
+                        fechamentoController.registrarExclusaoCaixa(arquivo, usuario.nome || "");
+                        consultaController.apagarComanda(arquivo);
+                        popupConfirmarExclusao.close();
+                        popupConfirmarExclusao.comandaApagada();
+                    });
                 }
 
                 contentItem: Row {

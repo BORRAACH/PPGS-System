@@ -49,6 +49,7 @@ try:
     from controllers.salaoController import SalaoController
     from controllers.consultaController import ConsultaController
     from controllers.fechamentoController import FechamentoController
+    from controllers.usuariosController import UsuariosController
     from services.rede import rede
     from services.pizzeriaServerService import pizzeria_server
     from services.servidor import servidor_local
@@ -221,6 +222,11 @@ if __name__ == "__main__":
     engine.rootContext().setContextProperty("fechamentoController", fechamentoController)
     comandaEstiloController = ComandaEstiloController()
     engine.rootContext().setContextProperty("comandaEstiloController", comandaEstiloController)
+    # Cadastro de quem pode autorizar edição/exclusão de comanda, e o guarda
+    # que confere o código (ver controllers/usuariosController.py). Controller
+    # próprio porque Consulta e Fechamento consomem os dois lados disto.
+    usuariosController = UsuariosController()
+    engine.rootContext().setContextProperty("usuariosController", usuariosController)
     # Edição de data/cardapio/*.json pela tela Cardápio — as telas de pedido
     # continuam lendo esses arquivos direto por XMLHttpRequest; o controller
     # só existe porque o QML não grava arquivo.

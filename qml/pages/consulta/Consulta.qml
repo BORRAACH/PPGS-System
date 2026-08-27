@@ -495,7 +495,12 @@ Page {
     // O mapeamento dos campos está em components/EdicaoComanda.js, que o
     // popup de fechamento rápido também usa.
     function editarComanda(nomeArquivo) {
-        EdicaoComanda.abrir(telaConsulta.StackView.view, nomeArquivo);
+        // Editar é apagar a comanda antiga e gravar uma nova (ver
+        // components/EdicaoComanda.js), então é tão destrutivo quanto a
+        // lixeira ao lado — e pede o mesmo código.
+        popupAutorizacao.solicitar("Editar comanda", nomeArquivo, function () {
+            EdicaoComanda.abrir(telaConsulta.StackView.view, nomeArquivo);
+        });
     }
 
     // Permite digitar direto na tela para pesquisar, sem precisar clicar
@@ -585,6 +590,12 @@ Page {
         id: popupConfirmarExclusao
 
         onComandaApagada: telaConsulta.carregarComandas()
+    }
+
+    // Guarda do lápis. A lixeira tem o dela dentro do próprio
+    // PopupConfirmarExclusao, que é compartilhado com o Fechamento.
+    PopupAutorizacao {
+        id: popupAutorizacao
     }
 
     ColumnLayout {

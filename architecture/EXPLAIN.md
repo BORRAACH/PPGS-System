@@ -293,6 +293,15 @@ denunciado o defeito 1) e o que cada ciclo de anti-entropy pediu/aplicou.
 
 - Sem autenticação/senha para entrar na rede — qualquer instância deste app
   na mesma LAN entra automaticamente, conforme pedido pelo usuário.
+- O código de usuário de dois dígitos (ver `services/rede/usuarios.py`) **não**
+  contradiz o item acima, e não deve ser lido como se contradissesse. Ele é
+  atribuição — responder "quem editou esta comanda?" — e um obstáculo
+  deliberado antes de editar/apagar comanda. Não é autenticação: dois dígitos
+  são cem combinações, o cadastro trafega e é guardado em claro, e uma máquina
+  hostil na LAN continua sendo peer pleno, capaz de ler o cadastro e publicar
+  um usuário forjado. Fechar isso de verdade exigiria primeiro trocar a
+  `CHAVE_PADRAO` de `services/rede/seguranca.py` por uma chave por instalação
+  — o caminho de volta que aquele módulo já documenta.
 - Sem migração do formato de arquivo (`.txt` com códigos ESC/POS) para
   JSON/SQLite — a réplica é feita nos bytes crus do arquivo, mantendo o
   formato atual intacto. (A impressão em si passou a ser roteada pela rede —

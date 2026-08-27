@@ -22,8 +22,8 @@ import "../consulta"
 // - abrirParaFechadas(iso) — o mesmo, mas a FILA das comandas que JÁ
 //   receberam baixa (ver FechamentoController.listarComandasFechadas).
 //   Simétrico ao anterior, pro botão "Editar caixa": toda comanda da fila já
-//   chega com fechada=true, então "Baixa" fica oculto e "Editar" já passa
-//   pelo painel de manter/reconferir a baixa (ver editarAtual()).
+//   chega com fechada=true, então "Baixa" fica oculto e "Editar" abre o popup
+//   de manter/reconferir a baixa (PopupManterBaixa.qml, ver editarAtual()).
 // - abrirComanda(arquivo, iso) — UMA comanda específica, clicada na lista do
 //   dia em Fechamento.qml. Aqui entram também as que já receberam baixa, que
 //   por definição não aparecem na fila de abertas — e são justamente elas
@@ -31,6 +31,10 @@ import "../consulta"
 //   como suspeita depois de baixada).
 Popup {
     id: popupFechamentoRapido
+
+    // Nomeado como os outros popups desta tela — deixa a fila alcançável de
+    // fora para inspeção e teste.
+    objectName: "popupFechamentoRapido"
 
     // Comandas em exibição, como vieram do controller. São recarregadas
     // inteiras a cada abertura, e não mantidas entre elas: outra máquina da
@@ -56,11 +60,24 @@ Popup {
     // Emitido quando alguma baixa foi dada — a página recarrega o dia.
     signal concluido
 
+    // Verdadeira quando quem abriu esta fila já pediu o código do usuário na
+    // porta — hoje só o botão "Editar caixa" de Fechamento.qml faz isso (ver
+    // abrirEditarCaixa). Nesse caso o "Editar" de cada comanda não pergunta de
+    // novo: seria o mesmo código, digitado três vezes para corrigir três
+    // comandas da mesma fila.
+    //
+    // Nos outros dois caminhos até aqui — "Fechamento rápido" e o clique numa
+    // comanda da lista do dia — não houve porta nenhuma antes, então continua
+    // valendo pedir por comanda. É por isso que isto é uma propriedade e não
+    // uma decisão fixa: o guarda pertence à ENTRADA do fluxo, e as três
+    // entradas são diferentes.
+    property bool jaAutorizado: false
+
     function abrirPara(iso) {
         popupFechamentoRapido.dataIso = iso;
         popupFechamentoRapido.comandas = fechamentoController.listarComandasAbertas(iso);
         popupFechamentoRapido.indice = 0;
-        popupFechamentoRapido.escolhendoBaixa = false;
+        popupFechamentoRapido.jaAutorizado = false;
         if (popupFechamentoRapido.comandas.length === 0)
             return false;
 
@@ -72,7 +89,8 @@ Popup {
         popupFechamentoRapido.dataIso = iso;
         popupFechamentoRapido.comandas = fechamentoController.listarComandasFechadas(iso);
         popupFechamentoRapido.indice = 0;
-        popupFechamentoRapido.escolhendoBaixa = false;
+        // Só o botão "Editar caixa" chama isto, e ele já pediu o código.
+        popupFechamentoRapido.jaAutorizado = true;
         if (popupFechamentoRapido.comandas.length === 0)
             return false;
 
@@ -88,7 +106,7 @@ Popup {
         popupFechamentoRapido.dataIso = iso;
         popupFechamentoRapido.comandas = [dados];
         popupFechamentoRapido.indice = 0;
-        popupFechamentoRapido.escolhendoBaixa = false;
+        popupFechamentoRapido.jaAutorizado = false;
         open();
         return true;
     }
@@ -119,23 +137,42 @@ Popup {
             popupFechamentoRapido.close();
     }
 
-    // A comanda já foi conferida e o atendente pediu pra corrigi-la: antes de
-    // abrir o formulário é preciso saber o que fazer com a baixa, porque a
-    // comanda corrigida é um arquivo NOVO e nasceria fora do caixa do dia.
-    property bool escolhendoBaixa: false
-
     function editarAtual() {
         var comanda = popupFechamentoRapido.comandaAtual;
         if (!comanda)
             return;
 
-        // Comanda ainda em aberto não tem baixa pra decidir — segue direto.
+        // Editar é apagar a comanda antiga e gravar uma nova (ver
+        // components/EdicaoComanda.js): destrutivo, esteja a comanda conferida
+        // ou ainda aberta. Por isso o código vale para os dois casos — um
+        // botão "Editar" que às vezes pede e às vezes não seria impossível de
+        // prever no balcão.
+        //
+        // A exceção é a fila que já entrou autorizada na porta (ver
+        // jaAutorizado, lá em cima): aí o código já foi dado uma vez e vale
+        // para esta fila inteira.
+        if (popupFechamentoRapido.jaAutorizado) {
+            popupFechamentoRapido._seguirParaEdicao(comanda);
+            return;
+        }
+
+        var rotulo = comanda.fechada ? "Editar comanda fechada" : "Editar comanda";
+        popupAutorizacao.solicitar(rotulo, comanda.arquivo, function () {
+            popupFechamentoRapido._seguirParaEdicao(comanda);
+        });
+    }
+
+    // O que acontece depois de a edição estar liberada, venha a liberação da
+    // porta ou do código pedido agora.
+    function _seguirParaEdicao(comanda) {
+        // Comanda ainda em aberto não tem baixa pra decidir — segue direto
+        // pro formulário.
         if (!comanda.fechada) {
             popupFechamentoRapido._abrirEdicao(false);
             return;
         }
 
-        popupFechamentoRapido.escolhendoBaixa = true;
+        popupManterBaixa.open();
     }
 
     function _abrirEdicao(manterBaixa) {
@@ -147,7 +184,6 @@ Popup {
         // Fechamento (é o mesmo caminho que a Consulta usa — ver
         // components/EdicaoComanda.js), e deixar o popup aberto por baixo
         // faria ele reaparecer sobre o formulário de Balcão/Entrega.
-        popupFechamentoRapido.escolhendoBaixa = false;
         popupFechamentoRapido.close();
         EdicaoComanda.abrir(popupFechamentoRapido.pilhaPrincipal, comanda.arquivo, manterBaixa);
     }
@@ -191,6 +227,22 @@ Popup {
         id: popupConfirmarExclusao
 
         onComandaApagada: popupFechamentoRapido._aoApagarAtual()
+    }
+
+    // Guarda da edição de comanda fechada (ver editarAtual). A exclusão daqui
+    // já é guardada dentro do próprio PopupConfirmarExclusao acima.
+    PopupAutorizacao {
+        id: popupAutorizacao
+    }
+
+    // O que fazer com a conferência ao corrigir uma comanda já baixada —
+    // aberto por editarAtual() depois que o código do usuário passa.
+    PopupManterBaixa {
+        id: popupManterBaixa
+
+        onEscolhido: function (manterBaixa) {
+            popupFechamentoRapido._abrirEdicao(manterBaixa);
+        }
     }
 
     // Preenche o ListModel que alimenta o ResumoComanda a partir da comanda
@@ -588,112 +640,6 @@ Popup {
                     font.pixelSize: Estilo.global.fontSize.md
                     color: Estilo.printer.ink
                     wrapMode: Text.NoWrap
-                }
-            }
-        }
-
-        // --- ESCOLHA DA BAIXA AO CORRIGIR UMA COMANDA JÁ CONFERIDA ---
-        // Corrigir é apagar e gravar de novo, e a comanda nova nasce sem
-        // baixa (ver services/rede/baixaComandas.py) — ou seja, some do caixa
-        // do dia até alguém reconferir. Isso é o certo quando a baixa foi
-        // dada por engano, e é justamente o errado quando a correção é só um
-        // valor digitado torto. Como as duas intenções são indistinguíveis
-        // daqui, quem decide é quem está corrigindo.
-        //
-        // Faixa dentro do próprio popup, e não um popup em cima do popup:
-        // são duas escolhas curtas, e empilhar modal sobre modal só
-        // acrescentaria uma camada pra fechar.
-        Rectangle {
-            Layout.fillWidth: true
-            visible: popupFechamentoRapido.escolhendoBaixa
-            implicitHeight: colunaEscolhaBaixa.implicitHeight + Estilo.global.padding.xl * 2
-            radius: Estilo.global.radius.lg
-            color: Estilo.status.warning.background
-            border.color: Estilo.status.warning.border
-            border.width: Estilo.global.borderWidth.hairline
-
-            Column {
-                id: colunaEscolhaBaixa
-
-                anchors.left: parent.left
-                anchors.right: parent.right
-                anchors.verticalCenter: parent.verticalCenter
-                anchors.leftMargin: Estilo.global.padding.xl
-                anchors.rightMargin: Estilo.global.padding.xl
-                spacing: Estilo.global.spacing.md
-
-                Text {
-                    width: parent.width
-                    text: "Esta comanda já foi conferida e conta no caixa do dia. A comanda corrigida é gravada como uma comanda nova — o que fazer com a conferência?"
-                    font.pixelSize: Estilo.global.fontSize.md
-                    color: Estilo.status.warning.content
-                    wrapMode: Text.WordWrap
-                }
-
-                Row {
-                    spacing: Estilo.global.spacing.lg
-
-                    Button {
-                        id: btnManterConferida
-
-                        padding: 8
-                        onClicked: popupFechamentoRapido._abrirEdicao(true)
-
-                        contentItem: Text {
-                            text: "Manter conferida"
-                            font.family: Estilo.global.fontFamily.title
-                            color: Estilo.global.textOnAccent
-                            horizontalAlignment: Text.AlignHCenter
-                            verticalAlignment: Text.AlignVCenter
-                        }
-
-                        background: Rectangle {
-                            radius: Estilo.global.radius.pill
-                            color: btnManterConferida.down ? Estilo.action.confirm.pressed : (btnManterConferida.hovered ? Estilo.action.confirm.hover : Estilo.action.confirm.base)
-                        }
-                    }
-
-                    Button {
-                        id: btnReconferirDepois
-
-                        padding: 8
-                        onClicked: popupFechamentoRapido._abrirEdicao(false)
-
-                        contentItem: Text {
-                            text: "Reconferir depois"
-                            font.family: Estilo.global.fontFamily.title
-                            color: Estilo.status.warning.content
-                            horizontalAlignment: Text.AlignHCenter
-                            verticalAlignment: Text.AlignVCenter
-                        }
-
-                        background: Rectangle {
-                            radius: Estilo.global.radius.pill
-                            color: btnReconferirDepois.down ? Estilo.status.warning.border : (btnReconferirDepois.hovered ? Estilo.status.warning.background : "transparent")
-                            border.color: Estilo.status.warning.border
-                            border.width: Estilo.global.borderWidth.hairline
-                        }
-                    }
-
-                    Button {
-                        id: btnCancelarEscolha
-
-                        padding: 8
-                        onClicked: popupFechamentoRapido.escolhendoBaixa = false
-
-                        contentItem: Text {
-                            text: "Cancelar"
-                            font.family: Estilo.global.fontFamily.title
-                            color: Estilo.global.textSecondary
-                            horizontalAlignment: Text.AlignHCenter
-                            verticalAlignment: Text.AlignVCenter
-                        }
-
-                        background: Rectangle {
-                            radius: Estilo.global.radius.pill
-                            color: btnCancelarEscolha.hovered ? Estilo.action.ghost.hover : Estilo.action.ghost.base
-                        }
-                    }
                 }
             }
         }
