@@ -302,6 +302,13 @@ denunciado o defeito 1) e o que cada ciclo de anti-entropy pediu/aplicou.
   um usuário forjado. Fechar isso de verdade exigiria primeiro trocar a
   `CHAVE_PADRAO` de `services/rede/seguranca.py` por uma chave por instalação
   — o caminho de volta que aquele módulo já documenta.
+- O guarda do código só entra em cena depois que existe **senha do dono** na
+  máquina (ver `UsuariosController.guardaAtivo` e `services/rede/senhaDono.py`).
+  Sem senha, a casa ainda não decidiu usar a tranca — e a máquina que só
+  aprendeu o CADASTRO pela malha passaria a exigir um código que ninguém
+  daquele balcão tem, ficando sem imprimir e sem lançar comanda, com o
+  conserto do outro lado da mesma tranca. Escolher a senha (tela de Usuários,
+  pedida na primeira visita) é o que liga tudo, para a malha inteira.
 - Sem migração do formato de arquivo (`.txt` com códigos ESC/POS) para
   JSON/SQLite — a réplica é feita nos bytes crus do arquivo, mantendo o
   formato atual intacto. (A impressão em si passou a ser roteada pela rede —

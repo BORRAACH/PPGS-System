@@ -75,7 +75,20 @@ Column {
     // Guardada por CHAVE, nunca por índice: com índice o destaque ficaria
     // preso à posição, e mover um campo faria a seleção "saltar" pro campo
     // que desceu no lugar dele.
+    // A chave PRINCIPAL da seleção — a âncora. É ela que as setas movem, que
+    // posiciona os controles flutuantes e que o Shift+clique usa como ponto de
+    // partida do intervalo. "" quando não há nada selecionado.
     property string chaveSelecionada: ""
+
+    // TODAS as chaves selecionadas, incluindo a principal. Uma lista, e não só
+    // a principal, porque estilizar quinze campos um a um era o trabalho que
+    // esta tela dava: agora dá para pegar várias linhas e ligar o negrito de
+    // todas de uma vez.
+    //
+    // Guardadas por chave como a principal, e pelo mesmo motivo: com índice a
+    // seleção ficaria presa à posição, e mover um campo faria o destaque
+    // saltar para o campo que desceu no lugar dele.
+    property var chavesSelecionadas: []
     // Linha ordenável que CONTÉM o que está selecionado — as setas mexem
     // sempre nela. Coincide com chaveSelecionada na maioria dos campos, mas
     // difere nas sub-linhas da tabela de itens: selecionar "Nome do pedido"
@@ -312,8 +325,7 @@ Column {
             excecoes[chaveExcecao] = lidas[chaveExcecao];
         raiz.separadoresPorCampo = excecoes;
 
-        raiz.chaveSelecionada = "";
-        raiz.donoSelecionado = "";
+        raiz.limparSelecao();
 
         // A prévia inteira precisa se reler: acabou de chegar outra
         // configuração (abrir a tela, ou "Restaurar padrões").
@@ -373,8 +385,7 @@ Column {
             return;
 
         raiz.documentoAtual = documento;
-        raiz.chaveSelecionada = "";
-        raiz.donoSelecionado = "";
+        raiz.limparSelecao();
         raiz.reconstruirModeloOrdem();
     }
 
@@ -534,6 +545,51 @@ Column {
         raiz.recalcularSeparadores();
     }
 
+    // --- ARRASTAR PARA REORDENAR ---
+    // Índice do campo que está sendo arrastado agora, ou -1. Fica na raiz
+    // porque o delegate arrastado é destruído e recriado a cada passo (o
+    // Repeater refaz a lista ao mover no ListModel), e um estado guardado nele
+    // sumiria no meio do arrasto.
+    property int indiceArrastado: -1
+
+    // Qual campo ocupa a posição `y` (em coordenadas de colunaPapel), ou -1
+    // fora da coluna.
+    //
+    // Percorre os filhos em vez de dividir a altura total pelo número de
+    // linhas: os campos têm alturas DIFERENTES (um bloco como a tabela de
+    // itens vale por várias linhas, e um campo com fonte 4x é quatro vezes
+    // mais alto), então qualquer conta baseada em altura média erraria o alvo
+    // justo nos casos em que se costuma arrastar.
+    function indiceNaPosicao(y) {
+        for (var i = 0; i < colunaPapel.children.length; i++) {
+            var filho = colunaPapel.children[i];
+            if (!filho || filho.chave === undefined || !filho.visible)
+                continue;
+            if (y >= filho.y && y <= filho.y + filho.height)
+                return filho.index;
+        }
+        return -1;
+    }
+
+    // Leva o campo arrastado UM passo na direção do destino, e devolve o novo
+    // índice dele.
+    //
+    // Um passo por vez, e não um salto direto para o destino: mover no
+    // ListModel dispara a Transition de `move` da coluna, e vários saltos
+    // seguidos deixavam a animação correndo atrás do cursor. Como isto é
+    // chamado a cada movimento do mouse, um passo por evento acompanha o
+    // arrasto sem acumular animação pendente.
+    function arrastarPara(destino) {
+        var origem = raiz.indiceArrastado;
+        if (origem < 0 || destino < 0 || destino === origem)
+            return origem;
+
+        var passo = destino > origem ? 1 : -1;
+        raiz.moverCampoOrdem(origem, passo);
+        raiz.indiceArrastado = origem + passo;
+        return raiz.indiceArrastado;
+    }
+
     function moverSelecionado(delta) {
         if (raiz.donoSelecionado === "")
             return;
@@ -543,10 +599,165 @@ Column {
             raiz.moverCampoOrdem(indice, delta);
     }
 
-    function selecionar(chave, dono) {
+    function estaSelecionada(chave) {
+        return chave !== "" && raiz.chavesSelecionadas.indexOf(chave) >= 0;
+    }
+
+    function limparSelecao() {
+        raiz.chaveSelecionada = "";
+        raiz.donoSelecionado = "";
+        raiz.chavesSelecionadas = [];
+    }
+
+    // As chaves estilizáveis na ordem em que aparecem no papel — é essa ordem,
+    // e não a da lista de campos, que o Shift+clique precisa: quem arrasta o
+    // mouse por cinco linhas espera pegar as cinco que viu, não as que estão
+    // entre elas num catálogo interno.
+    //
+    // Montada na hora, a cada intervalo pedido, em vez de mantida em cache: a
+    // ordem muda a cada campo movido, e um cache aqui seria mais uma coisa
+    // para lembrar de invalidar.
+    function chavesVisiveis() {
+        var vistas = {};
+        var lista = [];
+        for (var i = 0; i < modeloOrdemSecoes.count; i++) {
+            var linhas = raiz.linhasDoCampo(modeloOrdemSecoes.get(i).chave);
+            for (var j = 0; j < linhas.length; j++) {
+                var chave = linhas[j].campoEstilo;
+                if (chave === "" || vistas[chave])
+                    continue;
+                vistas[chave] = true;
+                lista.push(chave);
+            }
+        }
+        return lista;
+    }
+
+    // Só o que dá para estilizar de fato — a seleção pode incluir âncoras de
+    // posição (a tabela de itens, os blocos do fechamento), que têm lugar no
+    // papel mas nenhum atributo próprio. Passar uma âncora ao popup faria ele
+    // gravar um estilo em uma chave que nada lê.
+    function chavesEstilizaveisSelecionadas() {
+        var lista = [];
+        for (var i = 0; i < raiz.chavesSelecionadas.length; i++) {
+            if (raiz.podeEstilizar(raiz.chavesSelecionadas[i]))
+                lista.push(raiz.chavesSelecionadas[i]);
+        }
+        return lista;
+    }
+
+    // `modificadores` vem do clique (mouse.modifiers):
+    //   sem nada  — troca a seleção por esta linha, o comportamento de sempre
+    //   Ctrl      — junta/tira esta linha, para escolher campos espalhados
+    //   Shift     — pega o intervalo da âncora até aqui, para uma sequência
+    function selecionar(chave, dono, modificadores) {
+        modificadores = modificadores || 0;
+
+        if (modificadores & Qt.ShiftModifier)
+            raiz._selecionarIntervalo(chave);
+        else if (modificadores & Qt.ControlModifier)
+            raiz._alternarSelecao(chave, dono);
+        else
+            raiz._selecionarSozinha(chave, dono);
+
+        cartaoComanda.forceActiveFocus(Qt.MouseFocusReason);
+    }
+
+    function _selecionarSozinha(chave, dono) {
         raiz.chaveSelecionada = chave;
         raiz.donoSelecionado = dono;
-        cartaoComanda.forceActiveFocus(Qt.MouseFocusReason);
+        raiz.chavesSelecionadas = chave === "" ? [] : [chave];
+    }
+
+    function _alternarSelecao(chave, dono) {
+        if (chave === "")
+            return;
+
+        var lista = raiz.chavesSelecionadas.slice();
+        var posicao = lista.indexOf(chave);
+
+        if (posicao < 0) {
+            lista.push(chave);
+            // A recém-chegada vira a âncora: é a linha em que a pessoa está
+            // olhando, e é dela que um Shift+clique seguinte deve partir.
+            raiz.chaveSelecionada = chave;
+            raiz.donoSelecionado = dono;
+        } else {
+            lista.splice(posicao, 1);
+            // Tirando a âncora, a âncora passa a ser a última que sobrou —
+            // deixar `chaveSelecionada` apontando para fora da seleção
+            // esconderia os controles flutuantes sem motivo aparente.
+            if (chave === raiz.chaveSelecionada) {
+                raiz.chaveSelecionada = lista.length > 0 ? lista[lista.length - 1] : "";
+                raiz.donoSelecionado = raiz.chaveSelecionada === "" ? "" : raiz.donoDaChave(raiz.chaveSelecionada);
+            }
+        }
+
+        raiz.chavesSelecionadas = lista;
+    }
+
+    function _selecionarIntervalo(chave) {
+        if (chave === "")
+            return;
+
+        // Sem âncora ainda, Shift+clique é um clique comum — não há de onde
+        // partir o intervalo.
+        if (raiz.chaveSelecionada === "") {
+            raiz._selecionarSozinha(chave, raiz.donoDaChave(chave));
+            return;
+        }
+
+        var visiveis = raiz.chavesVisiveis();
+        var inicio = visiveis.indexOf(raiz.chaveSelecionada);
+        var fim = visiveis.indexOf(chave);
+        if (inicio < 0 || fim < 0) {
+            raiz._selecionarSozinha(chave, raiz.donoDaChave(chave));
+            return;
+        }
+
+        if (inicio > fim) {
+            var troca = inicio;
+            inicio = fim;
+            fim = troca;
+        }
+
+        // A âncora NÃO muda: assim dá para esticar e encolher o mesmo
+        // intervalo com Shift+clique sucessivos, em vez de cada clique virar
+        // um começo novo.
+        raiz.chavesSelecionadas = visiveis.slice(inicio, fim + 1);
+    }
+
+    // Qual linha ordenável CONTÉM esta chave — o "dono", que é quem as setas
+    // movem. Reconstruído a partir da ordem porque _alternarSelecao e
+    // _selecionarIntervalo precisam dele para chaves que não vieram de um
+    // clique direto.
+    function donoDaChave(chave) {
+        for (var i = 0; i < modeloOrdemSecoes.count; i++) {
+            var dono = modeloOrdemSecoes.get(i).chave;
+            if (dono === chave)
+                return dono;
+            var linhas = raiz.linhasDoCampo(dono);
+            for (var j = 0; j < linhas.length; j++) {
+                if (linhas[j].campoEstilo === chave)
+                    return dono;
+            }
+        }
+        return chave;
+    }
+
+    // Abre o editor de estilo para TUDO que está selecionado. Ponto único
+    // porque três caminhos levam até ele (o botão, o duplo clique na linha e o
+    // duplo clique num segmento), e cada um montando a própria lista era como
+    // um deles ficaria para trás ao mudar a regra.
+    function abrirEstiloDaSelecao() {
+        var chaves = raiz.chavesEstilizaveisSelecionadas();
+        if (chaves.length === 0)
+            return;
+
+        var rotulo = chaves.length === 1
+            ? raiz.rotuloDe(chaves[0])
+            : chaves.length + " campos selecionados";
+        popupEstiloCampo.abrirPara(chaves, rotulo);
     }
 
     function podeEstilizar(chave) {
@@ -874,8 +1085,7 @@ Column {
             evento.accepted = true;
         }
         Keys.onEscapePressed: function (evento) {
-            raiz.chaveSelecionada = "";
-            raiz.donoSelecionado = "";
+            raiz.limparSelecao();
             evento.accepted = true;
         }
 
@@ -948,7 +1158,22 @@ Column {
 
             Text {
                 width: parent.width
-                text: raiz.chaveSelecionada === "" ? "Clique numa linha da comanda para selecioná-la; os controles aparecem ao lado dela — as setas mudam a posição, e \"Estilo…\" abre negrito, sublinhado, fundo preto e tamanho da fonte." :("Selecionado: " + raiz.rotuloDe(raiz.chaveSelecionada) + (raiz.donoSelecionado !== raiz.chaveSelecionada ? " — as setas movem a " + raiz.rotuloDe(raiz.donoSelecionado).toLowerCase() + " inteira." : ""))
+                text: {
+                    if (raiz.chaveSelecionada === "")
+                        return "Clique numa linha da comanda para selecioná-la; os controles aparecem ao lado dela — as setas mudam a posição, e \"Estilo…\" abre negrito, sublinhado, fundo preto e tamanho da fonte. Ctrl+clique junta outras linhas à seleção e Shift+clique pega tudo de uma até a outra, para estilizar várias de uma vez.";
+
+                    // Com mais de uma linha, o que interessa é quantas são e o
+                    // que ainda dá para fazer com elas — dizer o rótulo de uma
+                    // só esconderia as outras.
+                    if (raiz.chavesSelecionadas.length > 1)
+                        return raiz.chavesSelecionadas.length + " linhas selecionadas — \"Estilo…\" vale para todas. As setas movem uma linha de cada vez; deixe só uma selecionada para usá-las.";
+
+                    return "Selecionado: " + raiz.rotuloDe(raiz.chaveSelecionada)
+                        + (raiz.donoSelecionado !== raiz.chaveSelecionada
+                           ? " — as setas movem a " + raiz.rotuloDe(raiz.donoSelecionado).toLowerCase() + " inteira."
+                           : "")
+                        + " Ctrl+clique junta outras linhas; Shift+clique pega o intervalo.";
+                }
                 font.pixelSize: Estilo.global.fontSize.sm
                 color: Estilo.global.textSecondary
                 wrapMode: Text.WordWrap
@@ -1099,7 +1324,13 @@ Column {
                                             // divisão da conta) devolve o clique pro
                                             // bloco que a contém.
                                             readonly property string _campoClique: subLinha.modelData.campoEstilo !== "" ? subLinha.modelData.campoEstilo : linhaOrdem.chave
-                                            readonly property bool _selecionada: raiz.chaveSelecionada === subLinha._campoClique
+                                            readonly property bool _selecionada: raiz.estaSelecionada(subLinha._campoClique)
+                                            // A âncora (ver chaveSelecionada) é a única que
+                                            // posiciona os controles flutuantes: com várias
+                                            // linhas acesas, todas disputariam o mesmo
+                                            // Binding e os botões parariam na que o Qt
+                                            // avaliasse por último.
+                                            readonly property bool _ehAncora: raiz.chaveSelecionada === subLinha._campoClique
                                             // Quem posiciona os controles flutuantes.
                                             // Nas sub-linhas sem estilo próprio o
                                             // _campoClique é o mesmo para todas (o
@@ -1127,7 +1358,7 @@ Column {
                                             readonly property real _larguraFaixa: Math.max(subLinha.width, colunaPapel.width)
 
                                             Binding {
-                                                when: subLinha._selecionada && subLinha._ancora
+                                                when: subLinha._ehAncora && subLinha._ancora
                                                 target: raiz
                                                 property: "yLinhaSelecionada"
                                                 value: colunaPapel.y + linhaOrdem.y + subLinha.y
@@ -1135,7 +1366,7 @@ Column {
                                             }
 
                                             Binding {
-                                                when: subLinha._selecionada && subLinha._ancora
+                                                when: subLinha._ehAncora && subLinha._ancora
                                                 target: raiz
                                                 property: "alturaLinhaSelecionada"
                                                 value: subLinha.height
@@ -1225,11 +1456,12 @@ Column {
                                                             visible: enabled
                                                             hoverEnabled: true
                                                             cursorShape: Qt.PointingHandCursor
-                                                            onClicked: raiz.selecionar(_campo, linhaOrdem.chave)
-                                                            onDoubleClicked: {
-                                                                raiz.selecionar(_campo, linhaOrdem.chave);
-                                                                if (raiz.podeEstilizar(_campo))
-                                                                    popupEstiloCampo.abrirPara(_campo, raiz.rotuloDe(_campo));
+                                                            onClicked: function (mouse) {
+                                                                raiz.selecionar(_campo, linhaOrdem.chave, mouse.modifiers);
+                                                            }
+                                                            onDoubleClicked: function (mouse) {
+                                                                raiz.selecionar(_campo, linhaOrdem.chave, mouse.modifiers);
+                                                                raiz.abrirEstiloDaSelecao();
                                                             }
                                                         }
                                                     }
@@ -1239,19 +1471,72 @@ Column {
                                             MouseArea {
                                                 id: areaSubLinha
 
+                                                // Quanto o ponteiro precisa andar antes de
+                                                // virar arrasto. Sem folga, a mão treme no
+                                                // clique e o campo troca de lugar sozinho;
+                                                // com folga demais, arrastar parece travado.
+                                                readonly property int _folgaArrasto: 6
+
+                                                property real _yPressao: 0
+                                                property bool _arrastando: false
+
                                                 x: -6
                                                 width: subLinha._larguraFaixa + 12
                                                 anchors.top: parent.top
                                                 anchors.bottom: parent.bottom
                                                 hoverEnabled: true
-                                                cursorShape: Qt.PointingHandCursor
-                                                onClicked: raiz.selecionar(subLinha._campoClique, linhaOrdem.chave)
+                                                cursorShape: areaSubLinha._arrastando ? Qt.ClosedHandCursor : Qt.PointingHandCursor
+
+                                                onPressed: function (mouse) {
+                                                    areaSubLinha._yPressao = mouse.y;
+                                                    areaSubLinha._arrastando = false;
+                                                }
+
+                                                onPositionChanged: function (mouse) {
+                                                    if (!pressed)
+                                                        return;
+
+                                                    // Ctrl/Shift são para montar seleção
+                                                    // múltipla — arrastar com eles pressionados
+                                                    // seria reordenar quando se quis marcar.
+                                                    if (mouse.modifiers & (Qt.ControlModifier | Qt.ShiftModifier))
+                                                        return;
+
+                                                    if (!areaSubLinha._arrastando) {
+                                                        if (Math.abs(mouse.y - areaSubLinha._yPressao) < areaSubLinha._folgaArrasto)
+                                                            return;
+                                                        areaSubLinha._arrastando = true;
+                                                        raiz.indiceArrastado = linhaOrdem.index;
+                                                        // Arrastar é mexer NESTE campo: deixá-lo
+                                                        // selecionado é o que faz os controles
+                                                        // flutuantes seguirem junto.
+                                                        raiz.selecionar(subLinha._campoClique, linhaOrdem.chave, 0);
+                                                    }
+
+                                                    var ponto = areaSubLinha.mapToItem(colunaPapel, mouse.x, mouse.y);
+                                                    raiz.arrastarPara(raiz.indiceNaPosicao(ponto.y));
+                                                }
+
+                                                onReleased: {
+                                                    areaSubLinha._arrastando = false;
+                                                    raiz.indiceArrastado = -1;
+                                                }
+
+                                                // Um arrasto termina em "released", não em
+                                                // "clicked" — mas o Qt emite os dois, e sem esta
+                                                // guarda soltar o campo noutro lugar também
+                                                // refazia a seleção com os modificadores que
+                                                // estivessem pressionados na hora.
+                                                onClicked: function (mouse) {
+                                                    if (areaSubLinha._arrastando)
+                                                        return;
+                                                    raiz.selecionar(subLinha._campoClique, linhaOrdem.chave, mouse.modifiers);
+                                                }
                                                 // Atalho: quem já sabe o que quer
                                                 // mexer chega no popup direto.
-                                                onDoubleClicked: {
-                                                    raiz.selecionar(subLinha._campoClique, linhaOrdem.chave);
-                                                    if (raiz.podeEstilizar(subLinha._campoClique))
-                                                        popupEstiloCampo.abrirPara(subLinha._campoClique, raiz.rotuloDe(subLinha._campoClique));
+                                                onDoubleClicked: function (mouse) {
+                                                    raiz.selecionar(subLinha._campoClique, linhaOrdem.chave, mouse.modifiers);
+                                                    raiz.abrirEstiloDaSelecao();
                                                 }
                                             }
                                         }
@@ -1285,6 +1570,13 @@ Column {
     
                         readonly property int _lado: 34
 
+                        // Quantas linhas as setas conseguem mover: uma. Mover
+                        // várias de uma vez não tem significado único — cada
+                        // uma iria para um lugar diferente, e as que estão
+                        // longe uma da outra passariam por cima das do meio.
+                        // O estilo, esse sim, se aplica a todas.
+                        readonly property bool _umaSo: raiz.chavesSelecionadas.length <= 1
+
                         spacing: Estilo.global.spacing.sm
                         visible: raiz.chaveSelecionada !== ""
                         x: papel.width + Estilo.global.spacing.lg
@@ -1312,7 +1604,7 @@ Column {
                                 width: controlesLinha._lado
                                 height: controlesLinha._lado
                                 focusPolicy: Qt.NoFocus
-                                enabled: raiz.donoSelecionado !== ""
+                                enabled: raiz.donoSelecionado !== "" && controlesLinha._umaSo
                                 opacity: enabled ? 1 : Estilo.global.opacity.disabled
                                 onClicked: raiz.moverSelecionado(-1)
 
@@ -1335,7 +1627,7 @@ Column {
                                 width: controlesLinha._lado
                                 height: controlesLinha._lado
                                 focusPolicy: Qt.NoFocus
-                                enabled: raiz.donoSelecionado !== ""
+                                enabled: raiz.donoSelecionado !== "" && controlesLinha._umaSo
                                 opacity: enabled ? 1 : Estilo.global.opacity.disabled
                                 onClicked: raiz.moverSelecionado(1)
 
@@ -1360,9 +1652,9 @@ Column {
                                 height: controlesLinha._lado
                                 padding: Estilo.global.padding.md
                                 focusPolicy: Qt.NoFocus
-                                enabled: raiz.podeEstilizar(raiz.chaveSelecionada)
+                                enabled: raiz.chavesEstilizaveisSelecionadas().length > 0
                                 opacity: enabled ? 1 : Estilo.global.opacity.disabled
-                                onClicked: popupEstiloCampo.abrirPara(raiz.chaveSelecionada, raiz.rotuloDe(raiz.chaveSelecionada))
+                                onClicked: raiz.abrirEstiloDaSelecao()
 
                                 contentItem: Row {
                                     spacing: Estilo.global.spacing.xs
@@ -1713,6 +2005,10 @@ Column {
 
     PopupEstiloCampo {
         id: popupEstiloCampo
+
+        // Nomeado pelo mesmo motivo dos popups das outras telas: deixa o
+        // editor alcançável de fora para inspeção e teste.
+        objectName: "popupEstiloCampo"
 
         controlador: raiz
     }

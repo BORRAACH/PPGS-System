@@ -32,6 +32,12 @@ ColumnLayout {
     // dígitos aparecem nela em claro, e deixá-los à mostra entregaria de graça
     // exatamente o que a senha protege.
     //
+    // Falsa também na máquina que ainda NÃO tem senha nenhuma: ali o painel
+    // aparece no modo "definir", e o cadastro só surge depois que a senha for
+    // escolhida (definirSenhaDono destrava a sessão em seguida). É o caso da
+    // segunda máquina da casa, que antes abria o cadastro sozinha e nunca
+    // chegava a pedir a senha.
+    //
     // Espelho do estado do controller, nunca a fonte dele: quem decide é
     // cadastroDestrancado(), e este bool só existe para as bindings de
     // `visible` terem o que observar.

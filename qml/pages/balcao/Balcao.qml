@@ -44,6 +44,110 @@ Page {
     // item reaproveitado, não recriado a cada clique.
     property int indicePedidoAtual: -1
 
+    // --- RASCUNHO (ver services/rascunhosPedido.py) ---
+    // Id do rascunho que este formulário está editando. "" enquanto o pedido
+    // ainda não tem conteúdo nenhum — um formulário em branco não vira card na
+    // faixa. Preenchido ao retomar um rascunho e no primeiro autosave.
+    property string rascunhoIdInicial: ""
+    property string rascunhoId: telaBalcao.rascunhoIdInicial
+    // Quantas cópias, para a retomada devolver também isto. As outras
+    // "*Inicial" já existiam; esta faltava — cópias nunca teve canal de
+    // restauração (ver o segundo argumento de enviarPedido).
+    property int copiasIniciais: 1
+
+    // O que o autosave grava. Sai daqui, e não da Page, porque só o item de
+    // nível 0 do stackViewLocal enxerga os campos do formulário.
+    function _formulario() {
+        return stackViewLocal.get(0);
+    }
+
+    // Vale a pena guardar? Um formulário em que ninguém digitou nada não pode
+    // virar card — a faixa encheria de rascunhos de quem só abriu a tela.
+    //
+    // Mais largo que DestinoPedido.temPedidoEmAndamento, que só olha o nome do
+    // item: aqui um pedido com o nome do cliente e nada mais já é trabalho que
+    // se perde ao fechar a página, que é justamente o que isto evita.
+    function _temConteudo(estado) {
+        if (!estado || !estado.dados)
+            return false;
+
+        var dados = estado.dados;
+        if ((dados.cliente || "").trim() !== "")
+            return true;
+        if ((dados.telefone || "").trim() !== "" || (dados.endereco || "").trim() !== "")
+            return true;
+
+        var itens = dados.itens || [];
+        for (var i = 0; i < itens.length; i++) {
+            var item = itens[i];
+            if ((item.pedido || "").trim() !== "" || (item.observacao || "").trim() !== ""
+                    || (item.valor || "").trim() !== "")
+                return true;
+        }
+        return false;
+    }
+
+    // Grava o rascunho se houver o que gravar. Chamada pelo relógio de
+    // autosave, ao sair da tela e antes de trocar de rascunho.
+    //
+    // Não apaga o rascunho quando o formulário fica vazio: esvaziar um pedido
+    // é raro e desfazê-lo é impossível — deixar o card na faixa é o lado
+    // seguro de errar. Quem quer sumir com ele usa o × do card.
+    // `confirmarEdicao` só quando dá para mexer no foco — a página saindo, ou
+    // o formulário prestes a ser trocado por outro rascunho. O relógio de
+    // autosave passa false: roubar o foco a cada 3 segundos quebrava a
+    // digitação e o teclado dos popups.
+    //
+    // O custo de não confirmar no autosave é pequeno e temporário: um valor
+    // digitado e ainda não confirmado entra no rascunho no tique seguinte à
+    // saída do campo, e a saída da página confirma de qualquer jeito.
+    function salvarRascunho(confirmarEdicao) {
+        var formulario = telaBalcao._formulario();
+        if (!formulario || !formulario.estadoDoRascunho)
+            return "";
+
+        if (confirmarEdicao === true && formulario.confirmarEdicaoPendente)
+            formulario.confirmarEdicaoPendente();
+
+        var estado = formulario.estadoDoRascunho();
+        if (!telaBalcao._temConteudo(estado))
+            return "";
+
+        estado.id = telaBalcao.rascunhoId;
+        estado.tipo = "Balcão";
+        var id = rascunhosController.salvarRascunho(estado);
+        if (id !== "") {
+            telaBalcao.rascunhoId = id;
+            faixaRascunhosBalcao.rascunhoAtualId = id;
+            faixaRascunhosBalcao.recarregar();
+        }
+        return id;
+    }
+
+    // Repõe no formulário o rascunho com que esta página foi aberta. Adiada
+    // com Qt.callLater: no Component.onCompleted da Page o item de nível 0 do
+    // stackViewLocal pode ainda não existir, e _formulario() devolveria null —
+    // um quadro depois ele está de pé.
+    function carregarRascunhoInicial() {
+        Qt.callLater(function () {
+            var formulario = telaBalcao._formulario();
+            if (!formulario)
+                return;
+
+            var rascunho = rascunhosController.carregarRascunho(telaBalcao.rascunhoIdInicial);
+            // Sumiu entre o clique e a troca de tela (descartado noutra aba,
+            // podado por idade): a página fica em branco, mas sem o id — senão
+            // o autosave gravaria o formulário vazio por cima de um rascunho
+            // que já não existe, ressuscitando um card fantasma.
+            if (!rascunho || !rascunho.dados) {
+                telaBalcao.rascunhoId = "";
+                return;
+            }
+
+            formulario.aplicarRascunho(rascunho);
+        });
+    }
+
     function mostrarNotificacao(mensagem, sucesso) {
         filaNotificacoes.notificar(mensagem, sucesso);
     }
@@ -58,6 +162,20 @@ Page {
 
     objectName: "telaBalcao"
     Component.onCompleted: {
+        // Aberta para retomar um rascunho do OUTRO tipo (a faixa navegou até
+        // aqui — ver onRetomar). Sem isto a página nascia sabendo o id do
+        // rascunho e com o formulário em branco: o card era clicado, a tela
+        // trocava, e nada aparecia.
+        //
+        // Antes de itensIniciais de propósito: os dois nunca chegam juntos (um
+        // vem da faixa, o outro da Consulta), mas se chegarem, o rascunho é o
+        // mais completo — ele traz também pagamento, cópias e a edição em
+        // curso.
+        if (telaBalcao.rascunhoIdInicial !== "") {
+            telaBalcao.carregarRascunhoInicial();
+            return;
+        }
+
         if (itensIniciais && itensIniciais.length > 0) {
             modeloPedidos.clear();
             for (var i = 0; i < itensIniciais.length; i++) {
@@ -82,6 +200,29 @@ Page {
     // (Tab/Shift+Tab/Enter) sem precisar clicar em nada antes.
     // "focus: true" sozinho não é suficiente: o StackView assume o controle
     // do foco ao trocar de página, então é preciso pedir foco de novo aqui.
+    // O par onDeactivated + onDestruction é obrigatório, não redundante:
+    // onDeactivated nem sempre dispara antes da destruição, e a barra lateral
+    // navega com replace(null, ...), que destrói esta página inteira. Mesmo
+    // par usado em pages/cardapio/Cardapio.qml pelo mesmo motivo.
+    StackView.onDeactivated: telaBalcao.salvarRascunho(true)
+    Component.onDestruction: telaBalcao.salvarRascunho(true)
+
+    // Rede de segurança entre uma saída e outra: o pedido continua sendo
+    // digitado por minutos, e um travamento ou queda de energia no meio não
+    // dispara gancho nenhum.
+    //
+    // Um relógio só, em vez de pendurar onTextChanged nos doze campos do
+    // formulário: com um gatilho por campo, o décimo terceiro campo criado
+    // depois ficaria de fora em silêncio.
+    Timer {
+        id: relogioRascunho
+
+        interval: 3000
+        repeat: true
+        running: true
+        onTriggered: telaBalcao.salvarRascunho()
+    }
+
     StackView.onActivated: {
         if (stackViewLocal.currentItem)
             stackViewLocal.currentItem.inputNomeCliente.forceActiveFocus();
@@ -215,10 +356,75 @@ Page {
     // Sem barra lateral própria aqui: esta página já é empurrada para dentro
     // do StackView de main.qml, que fica ao lado da LateralBar permanente do
     // app. Carregar outra LateralBar aqui duplicava o logo "PPGS".
+    // --- FAIXA DE PEDIDOS EM ANDAMENTO ---
+    // Irmã do stackViewLocal, não filha: assim ela continua visível quando o
+    // atendente entra em Pizzas/Lanches (que são empilhados LÁ DENTRO), e é
+    // alcançável por id de dentro do Component do formulário.
+    FaixaRascunhos {
+        id: faixaRascunhosBalcao
+
+        anchors.top: parent.top
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.margins: Estilo.global.padding.xl
+        tipoAtual: "Balcão"
+        rascunhoAtualId: telaBalcao.rascunhoId
+
+        onDescartado: function (id) {
+            // Só o que está aberto no formulário: descartar o card de outro
+            // pedido não pode limpar o que se está digitando agora.
+            if (id !== telaBalcao.rascunhoId)
+                return;
+
+            // O id sai ANTES de esvaziar: o autosave roda a cada 3 segundos, e
+            // com o id ainda apontando para o arquivo apagado ele o gravaria
+            // de volta.
+            telaBalcao.rascunhoId = "";
+
+            var formulario = telaBalcao._formulario();
+            if (formulario)
+                formulario.descartarConteudo();
+        }
+
+        onRetomar: function (id, tipo) {
+            if (id === telaBalcao.rascunhoId)
+                return;
+
+            // O que está no formulário agora ainda não foi gravado — e aqui
+            // dá para confirmar a edição pendente, porque o formulário vai ser
+            // trocado logo em seguida.
+            telaBalcao.salvarRascunho(true);
+
+            if (tipo === "Balcão") {
+                var formulario = telaBalcao._formulario();
+                if (formulario)
+                    formulario.aplicarRascunho(rascunhosController.carregarRascunho(id));
+                telaBalcao.rascunhoId = id;
+                faixaRascunhosBalcao.rascunhoAtualId = id;
+                faixaRascunhosBalcao.recarregar();
+                return;
+            }
+
+            // Rascunho do outro tipo: trocar de tela. replace(null, ...), como
+            // a barra lateral e o lançamento rápido — esta página é destruída,
+            // e o rascunho dela já foi salvo acima.
+            telaBalcao.StackView.view.replace(null, raizProjeto + "qml/pages/entrega/Entrega.qml",
+                                            { "rascunhoIdInicial": id },
+                                            StackView.Immediate);
+        }
+    }
+
     StackView {
         id: stackViewLocal
 
-        anchors.fill: parent
+        // Abaixo da faixa, não a página inteira — mesmo arranjo de
+        // pages/salao/Salao.qml (ids do QML valem no documento todo,
+        // independente da ordem de declaração).
+        anchors.top: faixaRascunhosBalcao.bottom
+        anchors.topMargin: 15
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
         initialItem: conteudoBalcaoComponent
 
         // Sem animação de transição — ver o mesmo ajuste em qml/main.qml.
@@ -330,6 +536,97 @@ Page {
                 };
             }
 
+            // --- RASCUNHO ---
+            // O estado inteiro do formulário, pronto para
+            // rascunhosController.salvarRascunho (ver
+            // services/rascunhosPedido.py). Mora AQUI, e não na Page, porque
+            // os campos só existem dentro desta árvore instanciada — mesmo
+            // motivo de coletarDadosPedido estar aqui.
+            //
+            // LEITURA PURA: não mexe no foco. Já mexeu, e foi um desastre —
+            // o relógio de autosave chamava isto a cada 3 segundos, e o
+            // forceActiveFocus daqui arrancava o foco de quem estivesse
+            // digitando. Na prática: o nome do cliente perdia o cursor no meio
+            // da palavra, e as teclas (setas, Esc, Enter, Tab) paravam de
+            // funcionar em qualquer popup aberto por cima, como o de
+            // lançamento rápido do Ctrl+S.
+            //
+            // Quem precisa confirmar uma edição pendente chama
+            // confirmarEdicaoPendente() ANTES — e só quem pode se dar ao luxo
+            // de mexer no foco faz isso (ver salvarRascunho na Page).
+            function estadoDoRascunho() {
+                return {
+                    "dados": coletarDadosPedido(),
+                    "copias": spinnerCopias.value,
+                    // Um rascunho pode ser a EDIÇÃO de uma comanda já salva
+                    // (ver components/EdicaoComanda.js). Sem estes dois,
+                    // retomá-lo gravaria uma comanda nova e deixaria a antiga
+                    // para trás, duplicando a venda no caixa do dia.
+                    "arquivoOriginal": telaBalcao.arquivoOriginal,
+                    "manterBaixaAoSalvar": telaBalcao.manterBaixaAoSalvar
+                };
+            }
+
+            // Empurra para o modelo o que estiver digitado e ainda não
+            // confirmado. O campo de valor de cada linha só escreve no
+            // modeloPedidos em onEditingFinished (ver
+            // components/LinhaPedido.qml), então sem sair do campo o valor
+            // recém-digitado não entraria no rascunho.
+            //
+            // Mexe no foco, e por isso SÓ é chamada quando a página está de
+            // saída ou o formulário está prestes a ser trocado — nunca no
+            // autosave periódico.
+            function confirmarEdicaoPendente() {
+                conteudoBalcao.forceActiveFocus();
+            }
+
+            // Repovoa o formulário com um rascunho guardado.
+            //
+            // Escreve nos campos, e não nas properties "*Inicial" da Page: a
+            // primeira chamada de limparFormularioPedido() atribui ".text"
+            // direto e quebra para sempre os bindings dessas properties, então
+            // depois dela mexer nelas não mexe mais na tela.
+            function aplicarRascunho(rascunho) {
+                if (!rascunho || !rascunho.dados)
+                    return;
+
+                var dados = rascunho.dados;
+                telaBalcao.arquivoOriginal = rascunho.arquivoOriginal || "";
+                telaBalcao.manterBaixaAoSalvar = rascunho.manterBaixaAoSalvar === true;
+
+                inputNomeCliente.text = dados.cliente || "";
+
+                modeloPedidos.clear();
+                var itens = dados.itens || [];
+                for (var i = 0; i < itens.length; i++) {
+                    var item = itens[i];
+                    // Borda e adicionais voltam para STRING JSON, a convenção
+                    // do ListModel destas telas (ver Component.onCompleted):
+                    // um objeto/array atribuído a um role vira um list-model
+                    // aninhado em vez de continuar sendo objeto/array.
+                    modeloPedidos.append({
+                        "pedido": item.pedido || "",
+                        "observacao": item.observacao || "",
+                        "valor": item.valor || "",
+                        "borda": JSON.stringify(item.borda !== undefined ? item.borda : null),
+                        "adicionais": JSON.stringify(item.adicionais || [])
+                    });
+                }
+                // A lista nunca fica sem uma linha em branco no fim, senão não
+                // há onde digitar o próximo item.
+                if (modeloPedidos.count === 0) {
+                    modeloPedidos.append({
+                        "pedido": "", "observacao": "", "valor": "",
+                        "borda": "null", "adicionais": "[]"
+                    });
+                }
+
+                camposPagamento.aplicarValores(dados.formaPagamento || "", dados.troco || "",
+                                               dados.statusPagamento === "PG",
+                                               dados.taxaEntrega || "");
+                spinnerCopias.value = rascunho.copias || 1;
+            }
+
             // Verifica se a comanda tem pelo menos um campo preenchido (nome
             // do cliente, troco ou algum item do pedido) — evita
             // lançar/imprimir uma comanda completamente vazia.
@@ -420,10 +717,43 @@ Page {
             }
 
             function limparFormularioPedido() {
+                // O pedido virou comanda: o rascunho cumpriu o papel dele.
+                // Esta função só é chamada dos dois caminhos de SUCESSO
+                // (_imprimirAutorizado e _lancarAutorizado) — sair da tela não
+                // passa por aqui, e por isso não descarta nada.
+                if (telaBalcao.rascunhoId !== "") {
+                    rascunhosController.excluirRascunho(telaBalcao.rascunhoId);
+                    telaBalcao.rascunhoId = "";
+                }
+
+                // A comanda antiga só é apagada AQUI, no sucesso: editar é
+                // apagar-e-recriar, e a nova acabou de ser gravada no lugar
+                // dela. Descartar um rascunho não passa por este caminho, e é
+                // por isso que descartarConteudo() existe separada.
                 if (telaBalcao.arquivoOriginal !== "") {
                     consultaController.apagarComanda(telaBalcao.arquivoOriginal);
                     telaBalcao.arquivoOriginal = "";
                 }
+
+                zerarCampos();
+            }
+
+            // Esvazia o formulário sem apagar nada em disco — usada ao
+            // descartar o rascunho que está sendo editado (ver o × da faixa).
+            //
+            // NÃO chama limparFormularioPedido: aquela apaga a comanda original
+            // quando o rascunho é a edição de uma comanda salva, o que aqui
+            // seria destruir a venda por ter desistido de corrigi-la. Descartar
+            // o rascunho abandona a edição; a comanda continua como estava.
+            function descartarConteudo() {
+                telaBalcao.arquivoOriginal = "";
+                zerarCampos();
+            }
+
+            // Só os CAMPOS. Compartilhada pelas duas acima para não existirem
+            // duas listas de campos a zerar — a segunda esqueceria o campo
+            // novo criado depois.
+            function zerarCampos() {
                 telaBalcao.manterBaixaAoSalvar = false;
                 inputNomeCliente.text = "";
                 modeloPedidos.clear();

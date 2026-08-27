@@ -578,6 +578,21 @@ Popup {
             }
 
             if (nome === "adicionais") {
+                // Primeira da lista, como o "Sem borda" da etapa de borda: a
+                // resposta mais comum é "nenhum", e ela é a única que estava
+                // atrás do Tab/do botão do rodapé em vez de estar sob o dedo.
+                // Com ela no topo, o Enter resolve a etapa sem tirar a mão da
+                // fileira de teclas.
+                //
+                // valor null é o que a distingue de um adicional de verdade
+                // (ver _acionarFoco) — mesma convenção do "Sem borda".
+                saida.push({
+                    "rotulo": "Sem adicionais",
+                    "sublinha": "",
+                    "valor": null,
+                    "marcado": popupLancamento.escolhas.adicionais.length === 0
+                });
+
                 var lista = popupLancamento._opcoesDaEtapa("adicionais");
                 for (i = 0; i < lista.length; i++)
                     saida.push({ "rotulo": lista[i].nome, "sublinha": lista[i].resumoPrecos, "valor": lista[i], "marcado": popupLancamento._adicionalMarcado(lista[i].nome) });
@@ -692,10 +707,24 @@ Popup {
             return;
 
         var linha = modeloEtapa.linhas[popupLancamento.indiceFoco];
-        if (popupLancamento.etapa === "adicionais")
+        if (popupLancamento.etapa === "adicionais") {
+            // "Sem adicionais" (valor null) não alterna nada: ele é uma
+            // RESPOSTA à etapa, e por isso avança, ao contrário dos adicionais
+            // de verdade, que se acumulam.
+            //
+            // Limpa o que já estava marcado antes de seguir: quem marcou dois
+            // e depois escolheu "Sem adicionais" mudou de ideia, e seguir com
+            // os dois marcados cobraria por eles.
+            if (linha.valor === null) {
+                popupLancamento.escolhas.adicionais = [];
+                popupLancamento._avancar();
+                return;
+            }
             popupLancamento.alternarAdicional(linha.valor);
-        else
-            popupLancamento.escolher(linha.valor);
+            return;
+        }
+
+        popupLancamento.escolher(linha.valor);
     }
 
     contentItem: FocusScope {

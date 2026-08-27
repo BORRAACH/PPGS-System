@@ -80,6 +80,26 @@ Row {
         btnStatusPagamento.pago = false;
     }
 
+    // O contrário de redefinirPadrao: repõe valores guardados — usado ao
+    // retomar um rascunho (ver services/rascunhosPedido.py e a faixa no topo
+    // de Balcão/Entrega).
+    //
+    // Escreve nos campos, e não nas properties "*Inicial": elas só valem
+    // enquanto os bindings iniciais estiverem de pé, e redefinirPadrao() os
+    // quebra na primeira chamada ao atribuir ".text" direto. Uma tela que já
+    // lançou um pedido não conseguiria mais restaurar nada por ali.
+    //
+    // Forma vazia (ou desconhecida) cai no padrão, mesma regra do
+    // currentIndex inicial — um rascunho gravado por uma versão do app com
+    // outras formas de pagamento não deixa o combo em branco.
+    function aplicarValores(forma, troco, pago, taxaEntrega) {
+        var indice = camposPagamento.opcoesPagamento.indexOf(forma || "");
+        comboFormaPagamento.currentIndex = indice >= 0 ? indice : camposPagamento._indicePadrao;
+        inputTroco.text = troco || "";
+        inputTaxaEntrega.text = taxaEntrega || "";
+        btnStatusPagamento.pago = pago === true;
+    }
+
     Column {
         spacing: 4
 
@@ -90,10 +110,12 @@ Row {
             color: Estilo.global.textSecondary
         }
 
-        ComboBox {
+        ComboBoxPagamento {
             id: comboFormaPagamento
 
             width: camposPagamento.larguraCampo
+            corDestaque: camposPagamento.corDestaque
+            alturaCampo: inputTroco.implicitHeight
             model: camposPagamento.opcoesPagamento
             // Reabrir uma comanda salva manda a forma dela em
             // formaPagamentoInicial; formulário limpo (string vazia, que o
@@ -112,35 +134,6 @@ Row {
                 var alvo = camposPagamento.obterCampoAnterior ? camposPagamento.obterCampoAnterior() : null;
                 if (alvo)
                     alvo.forceActiveFocus();
-            }
-
-            contentItem: Text {
-                text: comboFormaPagamento.displayText
-                color: Estilo.global.textInput
-                leftPadding: 10
-                rightPadding: 10
-                verticalAlignment: Text.AlignVCenter
-                elide: Text.ElideRight
-            }
-
-            // O ItemDelegate padrão da lista suspensa pinta o texto com
-            // palette.text — mesma herança do tema do sistema que deixava os
-            // campos brancos no Windows. Fixa a cor aqui também, senão as
-            // opções abrem invisíveis mesmo com o campo legível.
-            delegate: ItemDelegate {
-                width: comboFormaPagamento.width
-                text: modelData
-                highlighted: comboFormaPagamento.highlightedIndex === index
-                palette.text: Estilo.global.textInput
-                palette.highlightedText: Estilo.global.textInput
-            }
-
-            background: Rectangle {
-                radius: Estilo.global.radius.pill
-                color: Estilo.global.inputBackground
-                border.color: comboFormaPagamento.activeFocus ? camposPagamento.corDestaque : Estilo.global.border
-                border.width: Estilo.global.borderWidth.hairline
-                implicitHeight: inputTroco.implicitHeight
             }
         }
     }

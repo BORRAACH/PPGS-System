@@ -40,7 +40,9 @@ Column {
 
     // Estado local: só a própria lista precisa saber se os botões rápidos
     // de editar/apagar estão visíveis.
-    property bool modoEdicao: false
+    // Instâncias compartilhadas por todas as linhas, passadas para cada
+    // delegate — uma por comanda do dia seria um popup por linha da lista.
+    property var popupCopias
 
     spacing: Estilo.global.spacing.md
 
@@ -62,7 +64,10 @@ Column {
         Search {
             id: campoBusca
 
-            width: parent.width - btnModoEdicao.width - linhaBusca.spacing
+            // A linha inteira: o botão "Editar" que dividia espaço aqui saiu
+            // junto com o modo de edição — as ações de cada comanda ficam no
+            // menu do botão direito (ver ItemComandaDelegate.qml).
+            width: parent.width
             corDestaque: Estilo.screen.consulta.accent
             // O alcance entra no próprio placeholder, e não só no aviso
             // abaixo: é o texto que está sob os olhos de quem vai digitar.
@@ -111,35 +116,6 @@ Column {
             onTriggered: colunaEsquerda.pagina.aplicarFiltro()
         }
 
-        Button {
-            id: btnModoEdicao
-
-            height: 42
-            padding: Estilo.global.padding.md
-            onClicked: colunaEsquerda.modoEdicao = !colunaEsquerda.modoEdicao
-
-            contentItem: Row {
-                spacing: Estilo.global.spacing.xs
-                anchors.centerIn: parent
-                Icone {
-                    nome: colunaEsquerda.modoEdicao ? "fa6s.xmark" : "fa6s.pen"
-                    cor: Estilo.global.textOnAccent
-                    tamanho: Estilo.global.fontSize.lg
-                    anchors.verticalCenter: parent.verticalCenter
-                }
-                Text {
-                    text: colunaEsquerda.modoEdicao ? "Concluir" : "Editar"
-                    font.family: Estilo.global.fontFamily.title
-                    color: Estilo.global.textOnAccent
-                    anchors.verticalCenter: parent.verticalCenter
-                }
-            }
-
-            background: Rectangle {
-                radius: Estilo.global.radius.pill
-                color: colunaEsquerda.modoEdicao ? (parent.down ? Estilo.screen.consulta.pressed : (parent.hovered ? Estilo.screen.consulta.hover : Estilo.screen.consulta.base)) : (parent.down ? Estilo.action.neutral.pressed : (parent.hovered ? Estilo.action.neutral.base : Estilo.action.neutral.hover))
-            }
-        }
     }
 
     // --- ALCANCE DA BUSCA ---
@@ -320,8 +296,7 @@ Column {
                 delegate: ItemComandaDelegate {
                     pagina: colunaEsquerda.pagina
                     popupExclusao: colunaEsquerda.popupExclusao
-                    modoEdicao: colunaEsquerda.modoEdicao
-                    onAlternarModoEdicao: colunaEsquerda.modoEdicao = !colunaEsquerda.modoEdicao
+                    popupCopias: colunaEsquerda.popupCopias
                 }
             }
 
@@ -456,8 +431,7 @@ Column {
                         delegate: ItemComandaDelegate {
                             pagina: colunaEsquerda.pagina
                             popupExclusao: colunaEsquerda.popupExclusao
-                            modoEdicao: colunaEsquerda.modoEdicao
-                            onAlternarModoEdicao: colunaEsquerda.modoEdicao = !colunaEsquerda.modoEdicao
+                            popupCopias: colunaEsquerda.popupCopias
                         }
                     }
                 }

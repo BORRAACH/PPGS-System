@@ -117,6 +117,10 @@ _EVENTOS = {
     "autorizacao_concedida": (USUARIOS, "Ação autorizada"),
     "autorizacao_negada": (USUARIOS, "Código recusado"),
     "autorizacao_sem_cadastro": (USUARIOS, "Ação liberada sem usuário cadastrado"),
+    # Irmão do de cima, pelo outro motivo: a máquina ainda não tem senha do
+    # dono, então a tranca inteira ainda não vale ali (ver
+    # UsuariosController.guardaAtivo).
+    "autorizacao_sem_senha": (USUARIOS, "Ação liberada sem senha do dono definida"),
     # A senha do dono, que tranca o CADASTRO (ver services/rede/senhaDono.py).
     # "senha_dono_alterada" passa pelo barramento (é o evento de sincronização);
     # os três de baixo vêm de registrar_local, mesmo raciocínio dos de
@@ -180,6 +184,7 @@ _DETALHE = {
     # tentando adivinhar deixa uma trilha de códigos errados).
     "autorizacao_negada": lambda p: f"código {p.get('codigo', '')} — {p.get('acao', '')}: {p.get('alvo', '')}".strip(" —:"),
     "autorizacao_sem_cadastro": lambda p: f"{p.get('acao', '')}: {p.get('alvo', '')}".strip(" :"),
+    "autorizacao_sem_senha": lambda p: f"{p.get('acao', '')}: {p.get('alvo', '')}".strip(" :"),
     # Quando ela passou a valer — nunca o hash, o salt ou qualquer parte do
     # registro: eles não dizem nada a quem lê a tela de Rede, e espalhá-los por
     # um arquivo a mais em toda máquina não ajuda ninguém.
