@@ -25,7 +25,20 @@ CODEPAGE_IMPRESSORA = "cp850"
 # linha de traços do arquivo" só funcionava enquanto a tabela de itens tinha
 # posição fixa. Visualmente, no papel, é só mais uma linha de traços (o "="
 # não chama atenção nem confunde quem lê o cupom).
-MARCADOR_ITENS = "=" * 40
+# Largura do papel, em caracteres. É a régua de tudo que se alinha no cupom:
+# as divisórias, o marcador da tabela de itens e a decisão de descer o tamanho
+# da pizza para a linha de baixo (ver _acomodar_tamanho).
+#
+# Vale para a fonte BASE. Um campo configurado com fonte ampliada ocupa o dobro
+# (ou mais) por caractere, e aí a impressora quebra onde quiser — isso já valia
+# antes e continua valendo; a régua aqui é a mesma que o resto do módulo sempre
+# assumiu.
+COLUNAS_PAPEL = 40
+
+MARCADOR_ITENS = "=" * COLUNAS_PAPEL
+
+# O que separa a coluna do pedido da coluna do valor em formatar_tabela.
+_SEPARADOR_COLUNA = " | "
 
 
 def montar_linhas_por_ordem(ordem, renderizadores):
@@ -67,7 +80,7 @@ def montar_linhas_por_ordem(ordem, renderizadores):
             tracos = estilo.linhas_separador_antes(chave, categoria_anterior)
             if tracos:
                 linhas.extend(estilo.linhas_espacamento_secoes())
-                linhas.extend(["-" * 40] * tracos)
+                linhas.extend(["-" * COLUNAS_PAPEL] * tracos)
                 linhas.extend(estilo.linhas_espacamento_secoes())
 
         linhas.extend(conteudo)
@@ -119,6 +132,25 @@ def valor_para_float(valor_texto):
 # observação livre digitada pelo atendente.
 PREFIXO_ADICIONAL = "+ "
 PREFIXO_BORDA = "* "
+
+# Tamanho que NÃO sai escrito no papel (ver _tamanho_impresso). O grande é a
+# pizza que se pede quando não se diz nada, então repeti-lo em toda linha só
+# gastava espaço numa coluna de 40 caracteres — o que precisa de aviso é a
+# exceção: "(BROTO)" e "(MINI)" continuam saindo.
+#
+# A leitura do papel passa a ser por AUSÊNCIA: sem tamanho escrito, é grande.
+TAMANHO_OMITIDO = "GRANDE"
+
+
+def _tamanho_impresso(tamanho):
+    """O tamanho como ele deve sair no papel, ou None quando não sai.
+
+    Só o texto muda: `dividir_sabores` continua devolvendo o tamanho de
+    verdade, e quem precisa dele para outra coisa (o parser da comanda, os
+    adicionais por sabor) não é afetado."""
+    if not tamanho or tamanho.strip().upper() == TAMANHO_OMITIDO:
+        return None
+    return tamanho
 
 
 def _linhas_de_list_model(modelo):
@@ -172,21 +204,70 @@ def _como_lista_de_dicts(valor):
     return [item for item in valor if isinstance(item, dict)]
 
 
+def item_preenchido(item):
+    """Se o item tem alguma coisa que mereça uma linha no papel.
+
+    POR QUE PRECISA EXISTIR: o formulário de Balcão/Entrega/Salão sempre
+    termina com uma linha em branco — o "+" cria uma e ela fica ali esperando
+    ser preenchida. Ela viajava até aqui junto com as de verdade e saía
+    impressa como um "- " solto no meio dos itens, com a coluna "|" e tudo.
+
+    "Vazio" aqui é vazio de VERDADE: nada digitado no nome, na observação nem
+    no valor, e nenhuma borda ou adicional escolhido. Uma linha com valor e sem
+    nome NÃO é descartada — ela é um erro de digitação, e sumir com ela em
+    silêncio tiraria dinheiro do cupom sem ninguém ver; saindo como uma linha
+    sem nome, quem confere percebe na hora.
+
+    É essa régua, também, que garante que filtrar não mexe no TOTAL: quem chama
+    soma o "valor" de cada item (ver balcaoController._salvarComanda), e tudo
+    que esta função rejeita tem valor vazio, que vale R$ 0,00. Afrouxar o
+    critério daqui quebraria essa garantia — a tabela impressa passaria a não
+    fechar com o total impresso, que é o pior tipo de erro num cupom."""
+    if str(item.get("pedido") or "").strip():
+        return True
+    if str(item.get("observacao") or "").strip():
+        return True
+    if str(item.get("valor") or "").strip():
+        return True
+    if _formatar_borda(item.get("borda")):
+        return True
+    if _como_lista_de_dicts(item.get("adicionais")):
+        return True
+    return False
+
+
 def montar_grupos(itens):
     """Converte os itens do pedido em grupos (um por item; uma pizza meio a
     meio gera várias linhas — uma por sabor/fração — mas continua sendo um
     único grupo), para que se possa separar os grupos com uma linha em
     branco depois de formatados.
 
-    Cada grupo é um dict: {"linhas": [(coluna_pedido, valor, extras)], ...},
+    Cada grupo é um dict:
+    {"linhas": [(coluna_pedido, valor, extras, tamanho)], ...},
     "borda": texto da borda (nível do item/pizza inteira, "" se não houver),
     "observacao": texto da observação geral do item.
 
     "extras" (dentro de cada linha) é a lista de adicionais atribuídos
     especificamente àquele sabor (ver Pizzas.qml/PopupAdicionaisBordas.qml) —
-    cada um sai numa linha própria, logo abaixo da fração correspondente."""
+    cada um sai numa linha própria, logo abaixo da fração correspondente.
+
+    Linhas em branco do formulário não viram grupo nenhum (ver
+    item_preenchido) — a filtragem mora AQUI, e não em cada controller, porque
+    Balcão, Entrega e as duas comandas do Salão passam todos por esta função:
+    filtrar em cada um significaria quatro lugares para lembrar, e o quarto
+    ficaria para trás em silêncio.
+
+    "tamanho" é o tamanho da pizza ("GRANDE", "BROTO", "MINI") quando ele
+    aparece NAQUELA linha, e None quando não. Ele já está dentro de
+    `coluna_pedido` — vai repetido aqui só para quem formata saber ONDE está,
+    e conseguir estilizá-lo à parte do resto do nome do item (ver
+    formatar_coluna_pedido). Numa pizza meio a meio o tamanho sai uma vez só,
+    na primeira fração, então só ela o carrega."""
     grupos = []
-    for item in itens:
+    for item in (itens or []):
+        if not item_preenchido(item):
+            continue
+
         # Nome do item e observação saem em caixa alta no cupom impresso.
         pedido = item.get("pedido", "").upper()
         observacao = item.get("observacao", "").upper()
@@ -195,18 +276,33 @@ def montar_grupos(itens):
 
         sabores, tamanho = dividir_sabores(pedido)
 
+        # O tamanho de verdade continua servindo para casar os adicionais com
+        # o sabor; o que muda é só o que vai para o papel.
+        tamanho_no_papel = _tamanho_impresso(tamanho)
+
         if len(sabores) <= 1:
             sabor_unico = sabores[0] if sabores else pedido
-            linhas = [(f"- {pedido}", valor, _extras_adicionais(adicionais, sabor_unico))]
+            # Remontado a partir do sabor, e não reaproveitando `pedido` como
+            # antes: é a remontagem que deixa o "(GRANDE)" de fora. Sem
+            # tamanho, `sabores[0]` já é o `pedido` inteiro, então o resultado
+            # é o mesmo de sempre para lanche, bebida e afins.
+            nome = f"{sabor_unico} ({tamanho_no_papel})" if tamanho_no_papel else sabor_unico
+            linhas = [(f"- {nome}", valor, _extras_adicionais(adicionais, sabor_unico), tamanho_no_papel)]
         else:
             # Pizza meio a meio: cada sabor ocupa "1/N" da pizza.
             total = len(sabores)
             linhas = []
             for indice, sabor in enumerate(sabores):
-                nome_sabor = f"{sabor} ({tamanho})" if indice == 0 and tamanho else sabor
+                tem_tamanho = indice == 0 and tamanho_no_papel
+                nome_sabor = f"{sabor} ({tamanho_no_papel})" if tem_tamanho else sabor
                 coluna_pedido = f"1/{total} - {nome_sabor}"
                 valor_linha = valor if indice == 0 else ""
-                linhas.append((coluna_pedido, valor_linha, _extras_adicionais(adicionais, sabor)))
+                linhas.append((
+                    coluna_pedido,
+                    valor_linha,
+                    _extras_adicionais(adicionais, sabor),
+                    tamanho_no_papel if tem_tamanho else None,
+                ))
 
         grupos.append({
             "linhas": linhas,
@@ -251,6 +347,83 @@ def _formatar_borda(borda):
     return f"{PREFIXO_BORDA}{nome.upper()}{sufixo}"
 
 
+def formatar_coluna_pedido(coluna, tamanho):
+    """A coluna do item já estilizada, com o TAMANHO da pizza ("(GRANDE)") no
+    campo próprio "pedido_tamanho" e o resto em "pedido".
+
+    Existe porque o tamanho é parte da mesma string do nome do item (ver
+    montar_grupos) e, até haver este campo, saía obrigatoriamente com o estilo
+    do nome. Quem quisesse o "(GRANDE)" menor que o sabor, ou sem o negrito
+    dele, não tinha como.
+
+    Compartilhada por formatar_tabela e pela comanda do pizzaiolo
+    (salaoController._linhas_itens_producao), que montam a tabela de formas
+    diferentes mas precisam estilizar a coluna igual — se cada uma fizesse o
+    seu, o tamanho sairia estilizado num papel e não no outro.
+
+    Sem tamanho (lanche, bebida, ou uma linha de fração que não é a primeira),
+    devolve a coluna inteira em "pedido", exatamente como antes.
+
+    A busca é pela ÚLTIMA ocorrência: o tamanho vem no fim, e um sabor com
+    parênteses no nome não pode roubar a marcação. Não achando (nome editado à
+    mão, formato inesperado), estiliza tudo como "pedido" em vez de arriscar
+    cortar a coluna no lugar errado."""
+    if not tamanho:
+        return estilo.formatar_campo(coluna, "pedido")
+
+    marca = f"({tamanho})"
+    posicao = coluna.rfind(marca)
+    if posicao < 0:
+        return estilo.formatar_campo(coluna, "pedido")
+
+    antes = coluna[:posicao]
+    depois = coluna[posicao + len(marca):]
+
+    partes = []
+    if antes:
+        partes.append(estilo.formatar_campo(antes, "pedido"))
+    partes.append(estilo.formatar_campo(marca, "pedido_tamanho"))
+    # O que vem depois costuma ser só o preenchimento do ljust — vai como
+    # "pedido" porque era assim que ele saía antes de o tamanho ter campo
+    # proprio, e espaço em branco não muda de aparência mesmo.
+    if depois:
+        partes.append(estilo.formatar_campo(depois, "pedido"))
+    return "".join(partes)
+
+
+def _acomodar_tamanho(coluna, tamanho, valor, largura_pedido):
+    """Decide se o "(BROTO)" cabe na linha do item ou tem de descer para a
+    linha de baixo. Devolve (coluna, tamanho_na_coluna, tamanho_na_linha_de_baixo).
+
+    O PROBLEMA: a linha do item é "pedido | valor", e quando ela passa das
+    COLUNAS_PAPEL a impressora quebra onde a conta der — no meio do tamanho,
+    saindo "(BRO" numa linha e "TO)" na outra. Um sabor comprido bastava para
+    isso, e o que se perdia era justamente a informação que só aparece na
+    exceção (grande não sai escrito, ver TAMANHO_OMITIDO).
+
+    Desce o tamanho INTEIRO, em vez de tentar encurtar o nome do sabor: o nome
+    é o que a cozinha lê primeiro, e abreviá-lo para caber um "(BROTO)" trocaria
+    um problema por outro pior.
+
+    A conta usa `largura_pedido` (a largura JÁ preenchida da coluna, comum a
+    todas as linhas da tabela), e não o comprimento desta coluna: é ela que sai
+    no papel. Uma linha curta ao lado de uma comprida é esticada até a mesma
+    largura, e sem isso o tamanho dela quebraria mesmo com o nome curto."""
+    if not tamanho:
+        return coluna, None, None
+
+    if largura_pedido + len(_SEPARADOR_COLUNA) + len(valor) <= COLUNAS_PAPEL:
+        return coluna, tamanho, None
+
+    marca = f" ({tamanho})"
+    if not coluna.endswith(marca):
+        # Formato inesperado (coluna montada de outro jeito, comanda antiga):
+        # deixa como está em vez de cortar no lugar errado.
+        return coluna, tamanho, None
+
+    return coluna[:-len(marca)], None, tamanho
+
+
 def formatar_tabela(grupos):
     """Alinha pedido e valor em uma coluna "|" e separa cada grupo com uma
     linha em branco. Depois de cada fração vêm seus adicionais (se houver);
@@ -258,23 +431,43 @@ def formatar_tabela(grupos):
     último a observação — mesmo numa pizza meio a meio (ou dividida em mais
     partes), borda e observação saem só ao final, abaixo do nome completo,
     nunca entre uma fração e outra."""
-    linhas = [linha for grupo in grupos for linha in grupo["linhas"]]
-    if not linhas:
+    todas = [linha for grupo in grupos for linha in grupo["linhas"]]
+    if not todas:
         return []
 
-    largura_pedido = max(len(l[0]) for l in linhas)
+    # Dois passos porque a largura da coluna e a decisão de descer o tamanho
+    # dependem uma da outra: mede-se com os tamanhos ainda no lugar, decide-se
+    # quais descem, e só então se mede de novo. Descer um tamanho só ENCURTA a
+    # coluna, então a segunda medida nunca desmente a primeira — no máximo
+    # sobra espaço onde um tamanho já desceu, o que é o lado seguro de errar.
+    largura_medida = max(len(coluna) for coluna, _valor, _extras, _tamanho in todas)
+
+    preparados = []
+    for grupo in grupos:
+        preparados.append([
+            _acomodar_tamanho(coluna, tamanho, valor, largura_medida) + (valor, extras)
+            for coluna, valor, extras, tamanho in grupo["linhas"]
+        ])
+
+    largura_pedido = max(
+        len(coluna) for linhas_grupo in preparados for coluna, _t, _b, _v, _e in linhas_grupo
+    )
 
     texto_linhas = []
     for indice, grupo in enumerate(grupos):
         if indice > 0:
             texto_linhas.append("")
 
-        for coluna_pedido, valor, extras in grupo["linhas"]:
+        for coluna_pedido, tamanho_na_coluna, tamanho_abaixo, valor, extras in preparados[indice]:
             # Alinha primeiro com o texto puro, e só então aplica o
             # estilo configurado — assim os bytes de controle (invisíveis
             # na impressão) não contam como largura na coluna.
-            coluna_pedido_fmt = estilo.formatar_campo(coluna_pedido.ljust(largura_pedido), "pedido")
-            texto_linhas.append(f"{coluna_pedido_fmt} | {valor}")
+            coluna_pedido_fmt = formatar_coluna_pedido(coluna_pedido.ljust(largura_pedido), tamanho_na_coluna)
+            texto_linhas.append(f"{coluna_pedido_fmt}{_SEPARADOR_COLUNA}{valor}")
+            # O tamanho que desceu vem colado no nome, ANTES dos adicionais:
+            # ele é parte do item, não um extra dele.
+            if tamanho_abaixo:
+                texto_linhas.append(f"  {estilo.formatar_campo(f'({tamanho_abaixo})', 'pedido_tamanho')}")
             for extra in extras:
                 texto_linhas.append(f"  {estilo.formatar_campo(extra, 'adicional_item')}")
 

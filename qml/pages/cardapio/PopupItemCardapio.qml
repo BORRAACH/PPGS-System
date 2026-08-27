@@ -179,6 +179,10 @@ Popup {
                         // dos campos abaixo estão em outro escopo.
                         readonly property string chave: model.chave
                         readonly property bool longo: model.tipo === "texto_longo"
+                        // "preco" espelha o tipo PRECO de
+                        // services/cardapioService.py — ver o `formatoPreco`
+                        // usado em confirmar().
+                        readonly property bool preco: model.tipo === "preco"
 
                         width: parent.width
                         spacing: 5
@@ -196,6 +200,12 @@ Popup {
                         TextField {
                             id: campoLinha
 
+                            // Nomeado pela chave do campo — mesmo motivo dos
+                            // popups das outras telas: deixa cada campo
+                            // alcançável de fora para inspeção e teste, e aqui
+                            // eles são gerados por um Repeater, sem id fixo.
+                            objectName: "campoCardapio_" + blocoCampo.chave
+
                             visible: !blocoCampo.longo
                             width: parent.width
                             height: 40
@@ -206,13 +216,51 @@ Popup {
                             rightPadding: 12
                             selectByMouse: true
                             placeholderTextColor: Estilo.global.textPlaceholder
-                            placeholderText: model.tipo === "preco" ? "0,00" : ""
+                            placeholderText: blocoCampo.preco ? "0,00" : ""
                             onTextChanged: raiz.valores[blocoCampo.chave] = text
                             onAccepted: raiz.confirmar()
                             Component.onCompleted: {
                                 if (index === 0)
                                     campoLinha.forceActiveFocus();
                             }
+
+                            // Preço digitado vira "24,00" ao sair do campo —
+                            // até aqui "24" ficava "24" na tela e só era
+                            // normalizado lá no Python, ao gravar (ver
+                            // cardapioService.normalizar_preco). O disco ficava
+                            // certo e a tela mentia: quem conferia a lista via
+                            // um preço sem centavos e não sabia se tinha
+                            // esquecido de digitá-los.
+                            //
+                            // SEM o "R$ ", ao contrário dos campos de valor do
+                            // resto do app: o cardápio guarda o preço nu em
+                            // data/cardapio/*.json, e é esse texto que volta
+                            // para cá ao editar o item.
+                            //
+                            // Em onActiveFocusChanged, e não em
+                            // onEditingFinished: este último só dispara com
+                            // acceptableInput, e um campo deixado pela metade
+                            // ("24,") é exatamente o que mais precisa ser
+                            // arrumado.
+                            onActiveFocusChanged: {
+                                if (!blocoCampo.preco)
+                                    return;
+
+                                if (activeFocus) {
+                                    // Quem entra num preço já preenchido vem
+                                    // trocá-lo, não emendar dígitos no fim.
+                                    campoLinha.selectAll();
+                                    return;
+                                }
+
+                                campoLinha.text = Moeda.formatarSemSimbolo(campoLinha.text);
+                            }
+
+                            // Aceita o que formatarSemSimbolo escreve e barra
+                            // letra no campo de preço. Ver estilo/Moeda.qml
+                            // para por que não é um DoubleValidator.
+                            validator: blocoCampo.preco ? Moeda.validador : null
+                            inputMethodHints: blocoCampo.preco ? Qt.ImhFormattedNumbersOnly : Qt.ImhNone
 
                             background: Rectangle {
                                 radius: Estilo.global.radius.pill

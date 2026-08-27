@@ -1,12 +1,24 @@
+import "../../components"
+import "../../components/DestinoPedido.js" as Destino
+import "../../components/Texto.js" as Texto
+import "../pedidos"
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
-import "../pedidos"
-import "../../components"
-import "../../components/DestinoPedido.js" as Destino
 import estilo 1.0
 
 Page {
+    // --- Lançamento rápido pelo Ctrl+S (ver components/PopupLancamentoRapido.qml) ---
+    // As duas funções abaixo são a API que o popup global usa nesta tela. Ficam
+    // aqui na raiz da Page, e não dentro do Component do StackView local, porque
+    // é modeloPedidos que elas mexem — que também mora aqui — e porque o popup
+    // precisa poder chamá-las mesmo que o formulário ainda não tenha sido
+    // instanciado.
+    // O resultado de enviarPedido() só confirma que o .txt foi salvo — o
+    // resultado de verdade da impressão (que pode acontecer em outra
+    // máquina da rede) chega depois, de forma assíncrona, por este sinal
+    // (ver services/rede/redeService.py:solicitar_impressao).
+
     id: telaBalcao
 
     property string clienteNome: ""
@@ -32,18 +44,9 @@ Page {
     // item reaproveitado, não recriado a cada clique.
     property int indicePedidoAtual: -1
 
-    objectName: "telaBalcao"
-
     function mostrarNotificacao(mensagem, sucesso) {
         filaNotificacoes.notificar(mensagem, sucesso);
     }
-
-    // --- Lançamento rápido pelo Ctrl+S (ver components/PopupLancamentoRapido.qml) ---
-    // As duas funções abaixo são a API que o popup global usa nesta tela. Ficam
-    // aqui na raiz da Page, e não dentro do Component do StackView local, porque
-    // é modeloPedidos que elas mexem — que também mora aqui — e porque o popup
-    // precisa poder chamá-las mesmo que o formulário ainda não tenha sido
-    // instanciado.
 
     function acrescentarItens(itens) {
         return Destino.acrescentarAoModelo(modeloPedidos, itens);
@@ -53,11 +56,38 @@ Page {
         return Destino.temPedidoEmAndamento(modeloPedidos);
     }
 
-    // O resultado de enviarPedido() só confirma que o .txt foi salvo — o
-    // resultado de verdade da impressão (que pode acontecer em outra
-    // máquina da rede) chega depois, de forma assíncrona, por este sinal
-    // (ver services/rede/redeService.py:solicitar_impressao).
-    //
+    objectName: "telaBalcao"
+    Component.onCompleted: {
+        if (itensIniciais && itensIniciais.length > 0) {
+            modeloPedidos.clear();
+            for (var i = 0; i < itensIniciais.length; i++) {
+                // Guardado como string, não array: um array atribuído a um
+                // role de ListModel vira um list-model aninhado (não um
+                // JS array de verdade), e isso quebra tanto a leitura em
+                // coletarDadosPedido() quanto o envio pro Python (que
+                // recebe um QAbstractListModel em vez de uma lista).
+
+                modeloPedidos.append({
+                    "pedido": itensIniciais[i].pedido || "",
+                    "observacao": itensIniciais[i].observacao || "",
+                    "valor": itensIniciais[i].valor || "",
+                    "borda": JSON.stringify(itensIniciais[i].borda || null),
+                    "adicionais": JSON.stringify(itensIniciais[i].adicionais || [])
+                });
+            }
+        }
+    }
+    // Foca o primeiro campo assim que esta página vira a atual no StackView
+    // de main.qml, para já dar para navegar só com o teclado
+    // (Tab/Shift+Tab/Enter) sem precisar clicar em nada antes.
+    // "focus: true" sozinho não é suficiente: o StackView assume o controle
+    // do foco ao trocar de página, então é preciso pedir foco de novo aqui.
+    StackView.onActivated: {
+        if (stackViewLocal.currentItem)
+            stackViewLocal.currentItem.inputNomeCliente.forceActiveFocus();
+
+    }
+
     // Conexão DECLARATIVA (Connections), não um
     // "redeController.impressaoResultado.connect(function(){...})" solto em
     // Component.onCompleted: um Connections é um filho desta página, então
@@ -69,43 +99,23 @@ Page {
     // instância antiga que devia ter sido esquecida, um vazamento de
     // memória silencioso que piora a cada navegação.
     Connections {
-        target: redeController
-
         function onImpressaoResultado(sucesso, mensagem) {
             telaBalcao.mostrarNotificacao(sucesso ? ("Comanda impressa (" + mensagem + ")") : ("Falha ao imprimir: " + mensagem), sucesso);
         }
-    }
 
-    Component.onCompleted: {
-        if (itensIniciais && itensIniciais.length > 0) {
-            modeloPedidos.clear();
-            for (var i = 0; i < itensIniciais.length; i++) {
-                modeloPedidos.append({
-                    "pedido": itensIniciais[i].pedido || "",
-                    "observacao": itensIniciais[i].observacao || "",
-                    "valor": itensIniciais[i].valor || "",
-                    "borda": JSON.stringify(itensIniciais[i].borda || null),
-                    // Guardado como string, não array: um array atribuído a um
-                    // role de ListModel vira um list-model aninhado (não um
-                    // JS array de verdade), e isso quebra tanto a leitura em
-                    // coletarDadosPedido() quanto o envio pro Python (que
-                    // recebe um QAbstractListModel em vez de uma lista).
-                    "adicionais": JSON.stringify(itensIniciais[i].adicionais || [])
-                });
-            }
-        }
+        target: redeController
     }
 
     // --- MODELO GLOBAL DA TELA (Agora acessível pelos Shortcuts e pela ListView) ---
     ListModel {
-        id: modeloPedidos
-
         // Todos os roles precisam existir já no primeiro elemento:
         // ListModel.setProperty() NÃO cria role novo quando o valor é um
         // objeto (só quando é tipo simples), e append() com um valor null
         // também não cria. Sem declarar aqui, "borda" nunca chegava a
         // existir e a borda escolhida sumia da comanda sem aviso nenhum.
-        //
+
+        id: modeloPedidos
+
         // "borda" e "adicionais" são STRING JSON, não objeto/array: um
         // array ou objeto atribuído a um role vira um model aninhado, que
         // chega no Python como QAbstractListModel em vez de lista/dict.
@@ -116,6 +126,7 @@ Page {
             borda: "null"
             adicionais: "[]"
         }
+
     }
 
     // --- TECLAS DE ATALHO GLOBAIS DA TELA ---
@@ -148,6 +159,7 @@ Page {
                 }
                 if (linhaParaRemover !== -1)
                     break;
+
             }
             if (linhaParaRemover !== -1)
                 modeloPedidos.remove(linhaParaRemover);
@@ -161,9 +173,9 @@ Page {
         id: popupSelecaoPedido
 
         pilha: stackViewLocal
-        onPedidoSelecionado: function (nomePedido, valorPedido) {
+        onPedidoSelecionado: function(nomePedido, valorPedido) {
             if (telaBalcao.indicePedidoAtual === -1)
-                return;
+                return ;
 
             // Quando mais de um lanche é selecionado de uma vez, Lanches.qml
             // envia um array de itens em vez de nome/valor — a primeira
@@ -172,7 +184,7 @@ Page {
             if (Array.isArray(nomePedido)) {
                 var itens = nomePedido;
                 if (itens.length === 0)
-                    return;
+                    return ;
 
                 modeloPedidos.setProperty(telaBalcao.indicePedidoAtual, "pedido", itens[0].nome);
                 modeloPedidos.setProperty(telaBalcao.indicePedidoAtual, "valor", itens[0].valor);
@@ -190,23 +202,13 @@ Page {
                         "adicionais": JSON.stringify(itens[i].adicionais || [])
                     });
                 }
-                return;
+                return ;
             }
-
             modeloPedidos.setProperty(telaBalcao.indicePedidoAtual, "pedido", nomePedido);
             if (valorPedido !== undefined && valorPedido !== "")
                 modeloPedidos.setProperty(telaBalcao.indicePedidoAtual, "valor", valorPedido);
-        }
-    }
 
-    // Foca o primeiro campo assim que esta página vira a atual no StackView
-    // de main.qml, para já dar para navegar só com o teclado
-    // (Tab/Shift+Tab/Enter) sem precisar clicar em nada antes.
-    // "focus: true" sozinho não é suficiente: o StackView assume o controle
-    // do foco ao trocar de página, então é preciso pedir foco de novo aqui.
-    StackView.onActivated: {
-        if (stackViewLocal.currentItem)
-            stackViewLocal.currentItem.inputNomeCliente.forceActiveFocus();
+        }
     }
 
     // --- ÁREA DE CONTEÚDO DINÂMICO ---
@@ -217,14 +219,27 @@ Page {
         id: stackViewLocal
 
         anchors.fill: parent
-        // Sem animação de transição — ver o mesmo ajuste em qml/main.qml.
-        pushEnter: Transition {}
-        pushExit: Transition {}
-        popEnter: Transition {}
-        popExit: Transition {}
-        replaceEnter: Transition {}
-        replaceExit: Transition {}
         initialItem: conteudoBalcaoComponent
+
+        // Sem animação de transição — ver o mesmo ajuste em qml/main.qml.
+        pushEnter: Transition {
+        }
+
+        pushExit: Transition {
+        }
+
+        popEnter: Transition {
+        }
+
+        popExit: Transition {
+        }
+
+        replaceEnter: Transition {
+        }
+
+        replaceExit: Transition {
+        }
+
     }
 
     // --- COMPONENTE DA TELA PRINCIPAL DO BALCÃO ---
@@ -232,9 +247,31 @@ Page {
         id: conteudoBalcaoComponent
 
         Item {
-            id: conteudoBalcao
+            // Prosseguem de fato com o envio, depois que comandaVazia() já
+            // foi checada (e, se vazia, o popup de comanda de teste já
+            // respondeu) — chamadas tanto direto pelos botões quanto pelo
+            // handler de popupComandaTeste.respondido.
+            // Fecha a correção de uma comanda que veio do Fechamento: devolve
+            // pra comanda recém-gravada a baixa que a comanda editada tinha e
+            // deixa registrada, no caixa daquele dia, a alteração e quem a
+            // fez. Chamada ANTES de limparFormularioPedido(), que zera
+            // manterBaixaAoSalvar junto com arquivoOriginal — e que também
+            // apaga a comanda antiga, o que precisa acontecer DEPOIS: o valor
+            // que o caixa tinha antes só existe enquanto aquele .txt existe.
+            // O nome do arquivo novo vem do controller (ultimoArquivoSalvo) e
+            // não daqui: editar gera um .txt com carimbo e sufixo aleatório
+            // novos, que a QML não tem como saber. darBaixa cuida do resto —
+            // registra, propaga pra malha e recalcula o caixa do dia.
+            // O usuário é o mesmo que já sai impresso na comanda: quem liberou
+            // ESTA gravação (ver prosseguirImprimir), e não quem abriu a fila
+            // lá no Fechamento — a correção é assinada por quem a salvou.
+            // O código do usuário é pedido aqui, e não no onClicked do botão,
+            // porque este é o ponto por onde passam os DOIS caminhos até a
+            // impressão: o clique direto e a confirmação de comanda de teste
+            // (ver PopupComandaTeste). Guardar só o botão deixaria o segundo
+            // aberto.
 
-            anchors.fill: parent
+            id: conteudoBalcao
 
             // ===== MEDIDAS DO LAYOUT =====
             // Antes, formulário (690) e resumo (300) eram larguras cravadas
@@ -257,7 +294,6 @@ Page {
             // passar dos 200 originais nem descer abaixo do que o rótulo mais
             // longo ("Voltar para o Menu") precisa para ser lido.
             readonly property int larguraBotaoAcao: Math.max(140, Math.min(200, Math.floor((larguraFormulario - Estilo.global.spacing.xl * 2) / 3)))
-
             // Exposto para telaBalcao.StackView.onActivated poder focar o
             // primeiro campo assim que a tela vira a atual (ver comentário
             // lá — Component.onCompleted sozinho é cedo demais: o StackView
@@ -272,19 +308,19 @@ Page {
             function coletarDadosPedido() {
                 var itens = [];
                 for (var i = 0; i < modeloPedidos.count; i++) {
+                    // item.adicionais é a string JSON guardada no
+                    // ListModel (ver Component.onCompleted) — desfaz aqui
+                    // pra virar array de novo antes de mandar pro Python.
+
                     var item = modeloPedidos.get(i);
                     itens.push({
                         "pedido": item.pedido,
                         "observacao": item.observacao,
                         "valor": item.valor,
                         "borda": JSON.parse(item.borda || "null"),
-                        // item.adicionais é a string JSON guardada no
-                        // ListModel (ver Component.onCompleted) — desfaz aqui
-                        // pra virar array de novo antes de mandar pro Python.
                         "adicionais": JSON.parse(item.adicionais || "[]")
                     });
                 }
-
                 return {
                     "cliente": inputNomeCliente.text,
                     "itens": itens,
@@ -307,8 +343,8 @@ Page {
                     var item = dados.itens[i];
                     if (item.pedido !== "" || item.observacao.trim() !== "" || item.valor !== "")
                         return false;
-                }
 
+                }
                 return true;
             }
 
@@ -327,31 +363,37 @@ Page {
                 return linha ? linha.campoValor : inputNomeCliente;
             }
 
-            // Prosseguem de fato com o envio, depois que comandaVazia() já
-            // foi checada (e, se vazia, o popup de comanda de teste já
-            // respondeu) — chamadas tanto direto pelos botões quanto pelo
-            // handler de popupComandaTeste.respondido.
-            // Devolve pra comanda recém-gravada a baixa que a comanda editada
-            // tinha. Chamada ANTES de limparFormularioPedido(), que zera
-            // manterBaixaAoSalvar junto com arquivoOriginal.
-            //
-            // O nome do arquivo novo vem do controller (ultimoArquivoSalvo) e
-            // não daqui: editar gera um .txt com carimbo e sufixo aleatório
-            // novos, que a QML não tem como saber. darBaixa cuida do resto —
-            // registra, propaga pra malha e recalcula o caixa do dia.
-            function transferirBaixa() {
-                if (!telaBalcao.manterBaixaAoSalvar)
-                    return;
+            // Chamada em toda edição, e não só quando manterBaixaAoSalvar:
+            // quem decide se houve alteração de caixa a registrar é o
+            // controller, olhando se a comanda editada tinha baixa (ver
+            // FechamentoController.registrarEdicaoCaixa). Uma correção que
+            // NÃO devolve a baixa também mexe no caixa — tira a venda dele.
+            function concluirEdicao(usuario) {
+                if (telaBalcao.arquivoOriginal === "")
+                    return ;
 
                 var novoArquivo = balcaoController.ultimoArquivoSalvo();
-                if (novoArquivo !== "")
+                fechamentoController.registrarEdicaoCaixa(telaBalcao.arquivoOriginal, novoArquivo, usuario, telaBalcao.manterBaixaAoSalvar);
+                if (telaBalcao.manterBaixaAoSalvar && novoArquivo !== "")
                     fechamentoController.darBaixa(novoArquivo);
+
             }
 
+            // O nome de quem autorizou entra em dadosPedido e sai impresso na
+            // comanda (ver o campo "usuario" em services/comandaEstiloService.py
+            // e balcaoController.py). Sem ninguém cadastrado o guarda
+            // libera e devolve nome vazio — a linha some do cupom.
             function prosseguirImprimir(dadosPedido) {
+                popupAutorizacao.solicitar("Imprimir comanda (Balcão)", dadosPedido.cliente || "sem cliente", function(usuario) {
+                    dadosPedido.usuario = usuario.nome || "";
+                    _imprimirAutorizado(dadosPedido);
+                });
+            }
+
+            function _imprimirAutorizado(dadosPedido) {
                 var sucesso = balcaoController.enviarPedido(dadosPedido, spinnerCopias.value);
                 if (sucesso) {
-                    transferirBaixa();
+                    concluirEdicao(dadosPedido.usuario);
                     limparFormularioPedido();
                     telaBalcao.mostrarNotificacao(dadosPedido.teste ? "Comanda de teste impressa." : "Pedido salvo com sucesso!", true);
                 } else {
@@ -360,9 +402,16 @@ Page {
             }
 
             function prosseguirLancar(dadosPedido) {
+                popupAutorizacao.solicitar("Lançar comanda (Balcão)", dadosPedido.cliente || "sem cliente", function(usuario) {
+                    dadosPedido.usuario = usuario.nome || "";
+                    _lancarAutorizado(dadosPedido);
+                });
+            }
+
+            function _lancarAutorizado(dadosPedido) {
                 var sucesso = balcaoController.lancarPedido(dadosPedido);
                 if (sucesso) {
-                    transferirBaixa();
+                    concluirEdicao(dadosPedido.usuario);
                     limparFormularioPedido();
                     telaBalcao.mostrarNotificacao(dadosPedido.teste ? "Comanda de teste registrada (não aparece na Consulta)." : "Comanda lançada com sucesso!", true);
                 } else {
@@ -389,6 +438,8 @@ Page {
                 spinnerCopias.value = 1;
             }
 
+            anchors.fill: parent
+
             // Rola verticalmente quando a lista de pedidos cresce (ou a
             // janela é pequena) o suficiente pra empurrar o conteúdo pra
             // fora da área visível — mesmo padrão de Flickable+ScrollBar
@@ -402,10 +453,6 @@ Page {
                 contentWidth: width
                 contentHeight: Math.max(height, rowConteudo.implicitHeight + 40)
                 boundsBehavior: Flickable.StopAtBounds
-
-                ScrollBar.vertical: ScrollBar {
-                    policy: ScrollBar.AsNeeded
-                }
 
                 // GridLayout de uma ou duas colunas, no lugar do Row de antes:
                 // é a mesma árvore de itens nos dois casos — muda só o número
@@ -429,12 +476,14 @@ Page {
                         Row {
                             spacing: Estilo.global.spacing.md
                             anchors.horizontalCenter: parent.horizontalCenter
+
                             Icone {
-                                nome: "fa6s.building"
+                                nome: "fa6s.bag-shopping"
                                 cor: Estilo.action.confirm.base
                                 tamanho: Estilo.global.fontSize.title
                                 anchors.verticalCenter: parent.verticalCenter
                             }
+
                             Text {
                                 text: "ATENDIMENTO BALCÃO"
                                 font.pixelSize: Estilo.global.fontSize.title
@@ -442,6 +491,7 @@ Page {
                                 color: Estilo.action.confirm.base
                                 anchors.verticalCenter: parent.verticalCenter
                             }
+
                         }
 
                         // Campo Nome do Cliente
@@ -463,11 +513,21 @@ Page {
                             }
 
                             TextField {
+                                // "Maria Alice" mesmo digitando tudo minusculo: capitaliza a
+                                // primeira letra e cada uma logo depois de um espaco, sem tirar o
+                                // cursor do lugar (ver components/Texto.js).
+
                                 id: inputNomeCliente
 
                                 color: Estilo.global.textInput
                                 placeholderTextColor: Estilo.global.textPlaceholder
                                 placeholderText: "NOME DO CLIENTE"
+                                // Em onTextChanged, e nao em onEditingFinished: o nome ja sai
+                                // formatado enquanto se digita, e o que vem preenchido ao editar
+                                // uma comanda antiga tambem entra na regra. O campo passa a ter uma
+                                // invariante simples — o que esta nele esta sempre capitalizado —,
+                                // que e o que faz a comanda impressa nunca discordar da tela.
+                                onTextChanged: Texto.capitalizarCampo(inputNomeCliente)
                                 // Confortável quando há espaço, encolhe junto
                                 // com o formulário quando não há.
                                 width: Math.min(420, conteudoBalcao.larguraFormulario)
@@ -493,7 +553,9 @@ Page {
                                     border.color: parent.activeFocus ? Estilo.action.confirm.base : Estilo.global.border
                                     border.width: Estilo.global.borderWidth.hairline
                                 }
+
                             }
+
                         }
 
                         // --- CABEÇALHO DA LISTA DE PEDIDOS (rótulo das colunas, uma vez só —
@@ -510,6 +572,7 @@ Page {
                                 font.bold: true
                                 color: Estilo.global.textSecondary
                             }
+
                             Text {
                                 text: "Observação"
                                 width: conteudoBalcao.gradePedido.observacao
@@ -517,6 +580,7 @@ Page {
                                 font.bold: true
                                 color: Estilo.global.textSecondary
                             }
+
                             Text {
                                 text: "Valor"
                                 width: conteudoBalcao.gradePedido.valor
@@ -524,6 +588,7 @@ Page {
                                 font.bold: true
                                 color: Estilo.global.textSecondary
                             }
+
                         }
 
                         // --- LISTA DINÂMICA DE PEDIDOS ---
@@ -536,10 +601,6 @@ Page {
                             model: modeloPedidos // Consome o modelo declarado na raiz da Page
                             spacing: Estilo.global.spacing.md
                             anchors.horizontalCenter: parent.horizontalCenter
-
-                            ScrollBar.vertical: ScrollBar {
-                                policy: ScrollBar.AsNeeded
-                            }
 
                             // modeloPedidos é declarado na raiz da Page (fora deste
                             // Component), então é o único jeito seguro de reagir a
@@ -555,27 +616,34 @@ Page {
                                 target: modeloPedidos
                             }
 
+                            ScrollBar.vertical: ScrollBar {
+                                policy: ScrollBar.AsNeeded
+                            }
+
                             delegate: LinhaPedido {
                                 corDestaque: Estilo.action.confirm.base
                                 campoExternoAnterior: inputNomeCliente
                                 campoExternoProximo: camposPagamento.primeiroCampo
-                                onSelecionarPedido: function (indice) {
+                                onSelecionarPedido: function(indice) {
                                     telaBalcao.indicePedidoAtual = indice;
                                     popupSelecaoPedido.open();
                                 }
                             }
+
                         }
 
                         // --- SEÇÃO DE PAGAMENTO ---
                         Row {
                             spacing: Estilo.global.spacing.sm
                             anchors.horizontalCenter: parent.horizontalCenter
+
                             Icone {
                                 nome: "fa6s.credit-card"
                                 cor: Estilo.action.confirm.base
                                 tamanho: 16
                                 anchors.verticalCenter: parent.verticalCenter
                             }
+
                             Text {
                                 text: "PAGAMENTO"
                                 font.pixelSize: Estilo.global.fontSize.xl
@@ -583,6 +651,7 @@ Page {
                                 color: Estilo.action.confirm.base
                                 anchors.verticalCenter: parent.verticalCenter
                             }
+
                         }
 
                         // Flow: se os campos de pagamento e o seletor de cópias
@@ -602,7 +671,7 @@ Page {
                                 formaPagamentoInicial: telaBalcao.formaPagamentoInicial
                                 trocoInicial: telaBalcao.trocoInicial
                                 statusPagamentoInicial: telaBalcao.statusPagamentoInicial
-                                obterCampoAnterior: function () {
+                                obterCampoAnterior: function() {
                                     return ultimoCampoValor();
                                 }
                                 proximoCampo: spinnerCopias
@@ -630,7 +699,9 @@ Page {
                                     KeyNavigation.tab: btnImprimir
                                     KeyNavigation.backtab: camposPagamento.ultimoCampo
                                 }
+
                             }
+
                         }
 
                         // --- BOTÕES DE AÇÃO INFERIORES ---
@@ -657,7 +728,7 @@ Page {
                                     var dados = coletarDadosPedido();
                                     if (comandaVazia(dados)) {
                                         popupComandaTeste.abrirPara("imprimir", dados);
-                                        return;
+                                        return ;
                                     }
                                     prosseguirImprimir(dados);
                                 }
@@ -665,18 +736,21 @@ Page {
                                 contentItem: Row {
                                     spacing: Estilo.global.spacing.xs
                                     anchors.centerIn: parent
+
                                     Icone {
                                         nome: "fa6s.print"
                                         cor: Estilo.global.textOnAccent
                                         tamanho: Estilo.global.fontSize.lg
                                         anchors.verticalCenter: parent.verticalCenter
                                     }
+
                                     Text {
                                         text: "Imprimir"
                                         font.family: Estilo.global.fontFamily.title
                                         color: Estilo.global.textOnAccent
                                         anchors.verticalCenter: parent.verticalCenter
                                     }
+
                                 }
 
                                 background: Rectangle {
@@ -687,6 +761,7 @@ Page {
                                     border.color: parent.activeFocus ? Estilo.global.text : Estilo.action.confirm.pressed
                                     border.width: parent.activeFocus ? Estilo.global.borderWidth.focus : Estilo.global.borderWidth.hairline
                                 }
+
                             }
 
                             // Botão Lançar — só salva o .txt da comanda (aparece em
@@ -704,7 +779,7 @@ Page {
                                     var dados = coletarDadosPedido();
                                     if (comandaVazia(dados)) {
                                         popupComandaTeste.abrirPara("lancar", dados);
-                                        return;
+                                        return ;
                                     }
                                     prosseguirLancar(dados);
                                 }
@@ -712,18 +787,21 @@ Page {
                                 contentItem: Row {
                                     spacing: Estilo.global.spacing.xs
                                     anchors.centerIn: parent
+
                                     Icone {
                                         nome: "fa6s.floppy-disk"
                                         cor: Estilo.global.textOnAccent
                                         tamanho: Estilo.global.fontSize.lg
                                         anchors.verticalCenter: parent.verticalCenter
                                     }
+
                                     Text {
                                         text: "Lançar"
                                         font.family: Estilo.global.fontFamily.title
                                         color: Estilo.global.textOnAccent
                                         anchors.verticalCenter: parent.verticalCenter
                                     }
+
                                 }
 
                                 background: Rectangle {
@@ -734,6 +812,7 @@ Page {
                                     border.color: parent.activeFocus ? Estilo.global.focusRing : Estilo.action.save.border
                                     border.width: parent.activeFocus ? Estilo.global.borderWidth.focus : Estilo.global.borderWidth.hairline
                                 }
+
                             }
 
                             // Botão Voltar
@@ -760,18 +839,21 @@ Page {
                                 contentItem: Row {
                                     spacing: Estilo.global.spacing.xs
                                     anchors.centerIn: parent
+
                                     Icone {
                                         nome: "fa6s.arrow-left"
                                         cor: Estilo.global.textOnAccent
                                         tamanho: Estilo.global.fontSize.lg
                                         anchors.verticalCenter: parent.verticalCenter
                                     }
+
                                     Text {
                                         text: "Voltar para o Menu"
                                         font.family: Estilo.global.fontFamily.title
                                         color: Estilo.global.textOnAccent
                                         anchors.verticalCenter: parent.verticalCenter
                                     }
+
                                 }
 
                                 background: Rectangle {
@@ -782,8 +864,11 @@ Page {
                                     border.color: parent.activeFocus ? Estilo.global.text : Estilo.action.danger.pressed
                                     border.width: parent.activeFocus ? Estilo.global.borderWidth.focus : Estilo.global.borderWidth.hairline
                                 }
+
                             }
+
                         }
+
                     }
 
                     ResumoComanda {
@@ -795,16 +880,27 @@ Page {
                         troco: camposPagamento.formaPagamento === "Dinheiro" ? camposPagamento.troco : ""
                         pago: camposPagamento.pago
                     }
+
                 }
+
+                ScrollBar.vertical: ScrollBar {
+                    policy: ScrollBar.AsNeeded
+                }
+
             }
 
             // Só abre quando comandaVazia() barra o clique em Imprimir/Lançar
             // (ver os dois onClicked acima) — nunca some sem resposta: ou o
             // usuário escolhe teste/normal, ou fecha sem prosseguir.
+            // Guarda de Imprimir/Lançar (ver prosseguirImprimir).
+            PopupAutorizacao {
+                id: popupAutorizacao
+            }
+
             PopupComandaTeste {
                 id: popupComandaTeste
 
-                onRespondido: function (teste) {
+                onRespondido: function(teste) {
                     var dadosPedido = dados;
                     if (teste) {
                         dadosPedido.cliente = "Teste";
@@ -816,7 +912,9 @@ Page {
                         prosseguirLancar(dadosPedido);
                 }
             }
+
         }
+
     }
 
     // --- NOTIFICAÇÕES TEMPORÁRIAS (SALVAR/LANÇAR O PEDIDO, RESULTADO DA IMPRESSÃO) ---
@@ -828,4 +926,5 @@ Page {
         color: Estilo.global.background
         radius: Estilo.global.radius.xl
     }
+
 }

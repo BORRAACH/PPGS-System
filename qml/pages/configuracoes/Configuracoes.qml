@@ -4,18 +4,42 @@ import QtQuick.Layouts
 import estilo 1.0
 import "../../components"
 import "impressora"
+import "usuarios"
 
-// Tela de Configurações — hoje só tem a seção de estilo da comanda impressa
-// (EstiloImpressora.qml, em pages/configuracoes/impressora/), mas fica
-// separada da Page em si para dar espaço a outras categorias de
-// configuração no futuro (cada uma na sua própria subpasta), sem
-// sobrecarregar este arquivo.
+// Tela de Configurações — coluna de seções à esquerda, conteúdo da seção
+// escolhida à direita, no formato das telas de preferências de IDE. Cada
+// seção mora na sua própria subpasta (impressora/, usuarios/), e este arquivo
+// só sabe listá-las e mostrar a que está selecionada.
+//
+// Acrescentar uma seção é uma entrada em `secoes` mais um filho na área de
+// conteúdo — a coluna da esquerda é montada por Repeater a partir da lista.
+//
+// AS SEÇÕES FICAM TODAS INSTANCIADAS, escondidas por `visible`, e não trocadas
+// por um Loader. Não é detalhe de estilo: EstiloImpressora guarda as edições
+// em memória até alguém clicar em "Aplicar alterações" (ver
+// alteracoesPendentes), então destruí-la ao trocar de seção jogaria fora o
+// trabalho da pessoa sem avisar — e o rodapé, o StackView.onDeactivated e o
+// popup de pendências lá embaixo todos apontam para essa mesma instância.
 Page {
     id: telaConfiguracoes
 
     objectName: "telaConfiguracoes"
 
     readonly property color corDestaque: Estilo.screen.config.accent
+
+    // A coluna da esquerda sai daqui. "chave" amarra o item da lista ao filho
+    // correspondente na área de conteúdo.
+    readonly property var secoes: [
+        { "chave": "impressao", "titulo": "Estilo de impressão", "icone": "fa6s.receipt" },
+        { "chave": "usuarios", "titulo": "Usuários", "icone": "fa6s.user-lock" }
+    ]
+    property string secaoAtual: "impressao"
+
+    // Numa janela estreita não cabem a coluna de seções e o conteúdo lado a
+    // lado — a coluna vira uma fileira de abas em cima. Mesmo recurso que o
+    // rodapé daqui já usa para empilhar os botões, e que Fechamento.qml chama
+    // de "empilhado".
+    readonly property bool estreito: width < 620
 
     // Para onde ir depois que o usuário decidir o que fazer com as edições
     // pendentes (ver confirmarSaida/popupPendencias) — "" quando ninguém
@@ -75,44 +99,161 @@ Page {
             }
         }
 
-        // --- ÁREA DE CONTEÚDO (rolável) ---
-        Flickable {
+        // --- CORPO: COLUNA DE SEÇÕES + CONTEÚDO ---
+        GridLayout {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            clip: true
-            // Também na horizontal, e não só na vertical: a prévia do cupom
-            // tem a largura FÍSICA do papel (40 colunas numa fonte
-            // monoespaçada — ver EstiloImpressora.colunasPapel), que não é
-            // uma medida de interface e não pode encolher junto com a janela
-            // sem deixar de representar o que a impressora vai imprimir. Numa
-            // tela estreita, a saída certa é poder arrastar até o resto do
-            // papel, não espremê-lo.
-            contentWidth: Math.max(width, estiloImpressora.implicitWidth)
-            contentHeight: estiloImpressora.implicitHeight
-            boundsBehavior: Flickable.StopAtBounds
-            // O conteúdo encolhe bastante quando um campo da comanda volta de
-            // uma fonte grande (8x = 8 linhas de altura numa linha só) pro
-            // tamanho normal. Com StopAtBounds o Flickable NÃO corrige o
-            // contentY sozinho nesse caso: se a tela estava rolada até o fim,
-            // o usuário fica olhando pro vazio embaixo do conteúdo até
-            // arrastar de volta na mão.
-            onContentHeightChanged: returnToBounds()
+            columns: telaConfiguracoes.estreito ? 1 : 2
+            columnSpacing: Estilo.global.spacing.xl
+            rowSpacing: Estilo.global.spacing.lg
 
-            ScrollBar.vertical: ScrollBar {
-                policy: ScrollBar.AsNeeded
+            // --- COLUNA DE OPÇÕES ---
+            GridLayout {
+                id: colunaOpcoes
+
+                // Alinhada ao topo, não esticada: a lista tem a altura dos
+                // seus itens, e centralizá-la verticalmente ao lado de um
+                // painel alto faria os links flutuarem no meio do vazio.
+                Layout.alignment: Qt.AlignTop
+                Layout.fillWidth: telaConfiguracoes.estreito
+                Layout.preferredWidth: telaConfiguracoes.estreito ? -1 : 200
+                // Deitada quando a coluna vira fileira de abas.
+                columns: telaConfiguracoes.estreito ? telaConfiguracoes.secoes.length : 1
+                columnSpacing: Estilo.global.spacing.sm
+                rowSpacing: 4
+
+                Repeater {
+                    model: telaConfiguracoes.secoes
+
+                    Button {
+                        id: itemSecao
+
+                        required property var modelData
+
+                        readonly property bool selecionada: telaConfiguracoes.secaoAtual === itemSecao.modelData.chave
+                        // Marca de "tem coisa aqui que ainda não foi
+                        // aplicada". Sem ela, quem mexe no estilo da comanda e
+                        // pula para Usuários perde de vista o pendente: o botão
+                        // "Aplicar alterações" do rodapé é da seção de
+                        // impressão e some junto com ela.
+                        readonly property bool pendente: itemSecao.modelData.chave === "impressao"
+                            && estiloImpressora.alteracoesPendentes
+
+                        Layout.fillWidth: true
+                        padding: Estilo.global.padding.md
+                        onClicked: telaConfiguracoes.secaoAtual = itemSecao.modelData.chave
+
+                        contentItem: Row {
+                            spacing: Estilo.global.spacing.sm
+
+                            Icone {
+                                nome: itemSecao.modelData.icone
+                                cor: itemSecao.selecionada ? telaConfiguracoes.corDestaque : Estilo.global.textSecondary
+                                tamanho: Estilo.global.fontSize.md
+                                anchors.verticalCenter: parent.verticalCenter
+                            }
+
+                            Text {
+                                text: itemSecao.modelData.titulo
+                                font.pixelSize: Estilo.global.fontSize.md
+                                font.bold: itemSecao.selecionada
+                                color: itemSecao.selecionada ? telaConfiguracoes.corDestaque : Estilo.global.text
+                                anchors.verticalCenter: parent.verticalCenter
+                            }
+
+                            Rectangle {
+                                visible: itemSecao.pendente
+                                width: 7
+                                height: 7
+                                radius: 3.5
+                                color: Estilo.status.warning.border
+                                anchors.verticalCenter: parent.verticalCenter
+                            }
+                        }
+
+                        background: Rectangle {
+                            radius: Estilo.global.radius.md
+                            color: {
+                                if (itemSecao.selecionada)
+                                    return Estilo.screen.config.soft;
+                                return itemSecao.hovered ? Estilo.global.surface : "transparent";
+                            }
+                        }
+                    }
+                }
             }
 
-            ScrollBar.horizontal: ScrollBar {
-                policy: ScrollBar.AsNeeded
-            }
+            // --- CONTEÚDO DA SEÇÃO (rolável) ---
+            Flickable {
+                id: areaSecao
 
-            EstiloImpressora {
-                id: estiloImpressora
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                clip: true
+                // Rolagem horizontal SÓ na seção de impressão: a prévia do
+                // cupom tem a largura FÍSICA do papel (40 colunas numa fonte
+                // monoespaçada — ver EstiloImpressora.colunasPapel), que não é
+                // uma medida de interface e não pode encolher junto com a
+                // janela sem deixar de representar o que a impressora vai
+                // imprimir; ali a saída certa é arrastar até o resto do papel,
+                // não espremê-lo.
+                //
+                // Nas outras seções isso seria o contrário do que se quer:
+                // texto e listas devem quebrar linha dentro da área, e herdar
+                // a largura do papel jogava metade da lista de usuários pra
+                // fora da tela.
+                contentWidth: telaConfiguracoes.secaoAtual === "impressao"
+                    ? Math.max(width, colunaSecoes.implicitWidth)
+                    : width
+                contentHeight: colunaSecoes.implicitHeight
+                boundsBehavior: Flickable.StopAtBounds
+                // O conteúdo encolhe bastante quando um campo da comanda volta
+                // de uma fonte grande (8x = 8 linhas de altura numa linha só)
+                // pro tamanho normal, e também ao trocar de seção. Com
+                // StopAtBounds o Flickable NÃO corrige o contentY sozinho
+                // nesses casos: se a tela estava rolada até o fim, o usuário
+                // fica olhando pro vazio embaixo do conteúdo até arrastar de
+                // volta na mão.
+                onContentHeightChanged: returnToBounds()
 
-                // Acompanha a área rolável, não a janela: quando o papel é
-                // mais largo que a tela, o conteúdo continua inteiro e é a
-                // rolagem que dá acesso ao resto.
-                width: Math.max(parent.width, implicitWidth)
+                ScrollBar.vertical: ScrollBar {
+                    policy: ScrollBar.AsNeeded
+                }
+
+                ScrollBar.horizontal: ScrollBar {
+                    policy: ScrollBar.AsNeeded
+                }
+
+                // Só a seção escolhida fica visível. Um ColumnLayout ignora
+                // filho invisível ao medir, então a área rolável passa a ter
+                // exatamente a altura da seção à vista — sem sobra de rolagem
+                // vinda da que está escondida.
+                ColumnLayout {
+                    id: colunaSecoes
+
+                    // Exatamente a área rolável — é contentWidth que decide
+                    // se há papel a mais para arrastar, e a coluna só o
+                    // acompanha.
+                    width: areaSecao.contentWidth
+                    spacing: Estilo.global.spacing.xxl
+
+                    EstiloImpressora {
+                        id: estiloImpressora
+
+                        visible: telaConfiguracoes.secaoAtual === "impressao"
+                        // Acompanha a área rolável, não a janela: quando o
+                        // papel é mais largo que a tela, o conteúdo continua
+                        // inteiro e é a rolagem que dá acesso ao resto.
+                        Layout.fillWidth: true
+                        Layout.preferredWidth: Math.max(colunaSecoes.width, implicitWidth)
+                        Layout.maximumWidth: Math.max(colunaSecoes.width, implicitWidth)
+                    }
+
+                    GerenciarUsuarios {
+                        visible: telaConfiguracoes.secaoAtual === "usuarios"
+                        Layout.fillWidth: true
+                    }
+                }
             }
         }
 
@@ -130,6 +271,12 @@ Page {
 
                 padding: Estilo.global.padding.md
                 Layout.preferredWidth: Math.min(230, telaConfiguracoes.width - Estilo.global.padding.xl * 2)
+                // Aplica o estilo da comanda, e só ele — na seção de Usuários
+                // não há nada para aplicar (cada Confirmar de lá já grava e
+                // publica na hora), então o botão sai de cena junto com a
+                // seção. O pendente não fica invisível por causa disso: a
+                // coluna da esquerda marca a seção com um ponto.
+                visible: telaConfiguracoes.secaoAtual === "impressao"
                 // Desabilitado quando não há nada a aplicar: é o que diferencia
                 // "já está tudo gravado" de "falta aplicar", sem precisar de um
                 // rótulo extra na tela.

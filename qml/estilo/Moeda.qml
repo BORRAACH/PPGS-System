@@ -36,6 +36,17 @@ QtObject {
         regularExpression: /^(R\$\s*)?\d*([.,]\d{0,2})?$/
     }
 
+    // Igual ao de cima, mas deixa digitar o sinal de menos antes do número.
+    // Separado de propósito: preço de item, troco e taxa de entrega são
+    // valores que não existem negativos, e aceitar "-" ali só abriria porta
+    // pra erro de digitação passar batido. Quem usa este é a contagem de
+    // caixa do Fechamento, onde um valor negativo é uma correção legítima
+    // (estorno de cartão, sangria já lançada em outro lugar) que precisa
+    // entrar na conta puxando o total pra baixo.
+    readonly property RegularExpressionValidator validadorComSinal: RegularExpressionValidator {
+        regularExpression: /^(R\$\s*)?-?\d*([.,]\d{0,2})?$/
+    }
+
     // "R$ 45,00" / "45,00" / "45.00" / "45" -> 45.0
     // Vazio, lixo ou incompleto (só "," por exemplo) -> 0.
     function paraNumero(texto) {
@@ -44,6 +55,50 @@ QtObject {
 
         var numero = parseFloat(String(texto).replace("R$", "").replace(/\s/g, "").replace(",", "."));
         return isNaN(numero) ? 0 : numero;
+    }
+
+    // O caminho de volta de formatar(): "R$ 45,00" -> "45", "R$ 45,98" ->
+    // "45,98", "R$ -45,00" -> "-45". É o que se põe no campo quando ele ganha
+    // o foco, pra quem clicou pra corrigir um valor encontrar o número puro em
+    // vez de ter que desviar do "R$ " e dos centavos zerados antes de digitar.
+    //
+    // Os centavos só somem quando são ",00" — ",90" fica ",90" inteiro, senão
+    // o campo diria "45,9" e a próxima tecla digitada valeria dez vezes mais
+    // do que quem digitou quis.
+    //
+    // Campo vazio (ou entrada que não vira número) continua vazio, mesmo
+    // critério de formatar().
+    function paraEdicao(texto) {
+        var limpo = String(texto || "").replace("R$", "").replace(/\s/g, "").replace(",", ".");
+        if (limpo === "")
+            return "";
+
+        var numero = parseFloat(limpo);
+        if (isNaN(numero))
+            return "";
+
+        return numero.toFixed(2).replace(".", ",").replace(/,00$/, "");
+    }
+
+    // O mesmo que formatar(), mas sem o "R$ ": "24,9" -> "24,90",
+    // "24" -> "24,00", "" -> "".
+    //
+    // Existe por causa do CARDÁPIO, que é o único lugar do app onde o preço é
+    // guardado sem o símbolo — os arquivos de data/cardapio/ trazem
+    // `"valor": "13,00"`, e é esse texto que services/cardapioService.py lê de
+    // volta (ver normalizar_preco). Escrever "R$ " ali faria o campo mostrar
+    // uma coisa e o disco guardar outra.
+    //
+    // Campo vazio continua vazio, pelo mesmo motivo de formatar(): apagar o
+    // preço é uma edição legítima, e escrever zero afirmaria algo que ninguém
+    // pediu.
+    function formatarSemSimbolo(texto) {
+        var limpo = String(texto || "").replace("R$", "").replace(/\s/g, "").replace(",", ".");
+        if (limpo === "")
+            return "";
+
+        var numero = parseFloat(limpo);
+        return isNaN(numero) ? "" : numero.toFixed(2).replace(".", ",");
     }
 
     // O que o usuário digitou -> "R$ 45,00". Campo vazio (ou com entrada

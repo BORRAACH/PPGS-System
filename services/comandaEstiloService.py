@@ -117,7 +117,9 @@ CAMPOS = [
     "endereco",
     "bairro",
     "data",
+    "usuario",
     "pedido",
+    "pedido_tamanho",
     "observacao_item",
     "borda_item",
     "adicional_item",
@@ -130,9 +132,14 @@ CAMPOS = [
     "troco_a_dar",
     # --- Recibo de pagamento de diária (Fechamento > Extras) ---
     "extra_titulo",
-    "extra_funcionario",
+    "extra_subtitulo",
+    "extra_hora_data",
+    "extra_recebi",
     "extra_valor",
-    "extra_data",
+    "extra_discriminacao_item",
+    "extra_discriminacao_total",
+    "extra_quitacao",
+    "extra_assina_nome",
     "extra_assinatura",
     # --- Cupom de fechamento de caixa ---
     "fech_titulo",
@@ -144,6 +151,9 @@ CAMPOS = [
     "fech_origem_forma",
     "fech_diarias_titulo",
     "fech_diarias_item",
+    "fech_edicoes_titulo",
+    "fech_edicoes_item",
+    "fech_edicoes_autor",
     "fech_lucro",
     "fech_lucro_real",
 ]
@@ -157,7 +167,17 @@ RODULOS_CAMPOS = {
     "endereco": "Endereço (com número)",
     "bairro": "Bairro",
     "data": "Data/hora do pedido",
+    # Quem autorizou o lançamento no balcão (ver services/rede/usuarios.py e
+    # components/PopupAutorizacao.qml). Sai em branco — e a linha some — nas
+    # comandas gravadas antes disto existir, e enquanto ninguém estiver
+    # cadastrado.
+    "usuario": "Usuário que lançou",
     "pedido": "Nome do pedido",
+    # O "(GRANDE)"/"(BROTO)"/"(MINI)" que vem colado no nome do item. Campo
+    # próprio, mas SEM posição própria (fora de CAMPOS_ORDENAVEIS): ele sai no
+    # meio da linha do item, não numa linha que dê para mover — ver
+    # comandaTextoService.formatar_coluna_pedido.
+    "pedido_tamanho": "Tamanho da pizza (Grande/Broto/Mini)",
     # Distintos de propósito: "observacao_item" é a observação de cada
     # sabor/item (ex: "sem cebola", digitada na tela de seleção de pizza);
     # "observacao_entrega" é a observação geral do pedido, que só existe na
@@ -173,9 +193,24 @@ RODULOS_CAMPOS = {
     "valor_total": "Valor do pedido",
     "troco_a_dar": "Troco a dar",
     "extra_titulo": "Título do recibo",
-    "extra_funcionario": "Funcionário",
+    "extra_subtitulo": "Subtítulo do recibo",
+    "extra_hora_data": "Hora e data do pagamento",
+    "extra_recebi": "Linha \"Recebi de\"",
     "extra_valor": "Valor da diária",
-    "extra_data": "Data/hora do pagamento",
+    "extra_discriminacao_item": "Item da discriminação (linha)",
+    "extra_discriminacao_total": "Total a receber",
+    "extra_quitacao": "Texto de quitação",
+    # CHAVES NOVAS, e não as duas antigas reaproveitadas ("extra_funcionario"
+    # era o "Funcionário: ..." do cabeçalho e "extra_data" o "Data: ...").
+    # As duas mudaram de POSIÇÃO no papel, não só de texto: o nome passou para
+    # cima da linha de assinatura e a hora/data para o cabeçalho. Reaproveitar
+    # a chave faria _mesclar_ordem preservar a posição salva — que era a certa
+    # do campo antigo e a errada do novo, e o recibo sairia com o nome do
+    # funcionário no meio do cabeçalho. Como chaves novas, elas se encaixam na
+    # vizinhança padrão, e _mesclar_ordem descarta sozinho as antigas de quem
+    # já tinha uma ordem gravada. O custo é perder o estilo que estivesse
+    # configurado nas duas, que volta ao padrão.
+    "extra_assina_nome": "Nome de quem assina",
     "extra_assinatura": "Linha de assinatura",
     "fech_titulo": "Título do fechamento",
     "fech_data": "Data do caixa",
@@ -186,12 +221,18 @@ RODULOS_CAMPOS = {
     "fech_origem_forma": "Forma de pagamento da origem",
     "fech_diarias_titulo": "Título \"Pagamentos de diária\"",
     "fech_diarias_item": "Pagamento de diária (linha)",
+    # Comandas já fechadas que alguém corrigiu ou apagou depois (ver
+    # services/rede/edicoesCaixa.py). Duas sub-linhas por alteração, como as
+    # do bloco "Por origem": o que mudou, e quem mudou/quanto.
+    "fech_edicoes_titulo": "Título \"Alterações após a baixa\"",
+    "fech_edicoes_item": "Comanda alterada (linha)",
+    "fech_edicoes_autor": "Autor e valores da alteração",
     # "fech_lucro" é o nome histórico da chave: o campo já foi o Lucro e
     # hoje imprime SOBROU/FALTOU. Renomeá-la sumiria com a seção no cupom de
     # quem já tem um estilo_impressao.json salvo, então o Lucro de verdade
     # (contagem menos diárias) entrou como uma chave nova ao lado.
     "fech_lucro": "Sobra/falta do caixa",
-    "fech_lucro_real": "Lucro (contagem - diárias)",
+    "fech_lucro_real": "Lucro (contagem - diárias - despesas)",
 }
 
 RODULOS_ATRIBUTOS = {
@@ -213,6 +254,7 @@ RODULOS_ATRIBUTOS = {
 # fora: são estilo de linhas DENTRO da tabela de itens, sem posição própria
 # fora dela.
 CAMPOS_ORDENAVEIS = [
+    "usuario",
     "id_pedido",
     "cliente",
     "mesa",
@@ -229,11 +271,18 @@ CAMPOS_ORDENAVEIS = [
     "valor_total",
     "troco_a_dar",
     "divisao_conta",
-    # --- Recibo de pagamento de diária ---
+    # --- Recibo de pagamento de diária. "extra_discriminacao" é âncora de
+    # posição (mesmo papel de "itens" e de "fech_por_origem"): o bloco
+    # "SENDO..." inteiro se move junto, e quem tem estilo próprio são as
+    # sub-linhas dele.
     "extra_titulo",
-    "extra_funcionario",
+    "extra_subtitulo",
+    "extra_hora_data",
+    "extra_recebi",
     "extra_valor",
-    "extra_data",
+    "extra_discriminacao",
+    "extra_quitacao",
+    "extra_assina_nome",
     "extra_assinatura",
     # --- Cupom de fechamento de caixa. "fech_por_origem" e "fech_diarias"
     # são âncoras de posição (mesmo papel de "itens"): o bloco inteiro se
@@ -244,6 +293,7 @@ CAMPOS_ORDENAVEIS = [
     "fech_liquido",
     "fech_por_origem",
     "fech_diarias",
+    "fech_edicoes",
     "fech_lucro",
     "fech_lucro_real",
 ]
@@ -257,8 +307,10 @@ RODULOS_CAMPOS_ORDENAVEIS = {
     **RODULOS_CAMPOS,
     "itens": "Tabela de itens do pedido",
     "divisao_conta": "Divisão da conta (Mesa)",
+    "extra_discriminacao": "Bloco \"Sendo\" (discriminação)",
     "fech_por_origem": "Bloco \"Por origem\"",
     "fech_diarias": "Bloco \"Pagamentos de diária\"",
+    "fech_edicoes": "Bloco \"Alterações após a baixa\"",
 }
 
 # Categoria de cada campo ordenável — usada só por
@@ -269,6 +321,7 @@ RODULOS_CAMPOS_ORDENAVEIS = {
 # aparece aqui porque é sempre tratado à parte (marcador próprio, ver
 # comandaTextoService.MARCADOR_ITENS).
 CATEGORIA_CAMPO = {
+    "usuario": "cabecalho",
     "id_pedido": "cabecalho",
     "cliente": "cabecalho",
     "mesa": "cabecalho",
@@ -289,17 +342,27 @@ CATEGORIA_CAMPO = {
     # como "anterior" de um campo de fechamento — mas prefixar deixa
     # explícito que a divisória entre "totais" e "fech_totais" nunca é
     # avaliada, em vez de parecer coincidência.
+    # Uma divisória só no recibo, entre o cabeçalho (título, subtítulo,
+    # hora/data) e todo o resto — é o desenho pedido pelo dono. Do "RECEBI DE"
+    # até a linha de assinatura corre tudo colado, na mesma categoria: o nome
+    # de quem assina tem de encostar na linha em que ele assina, e uma
+    # divisória no meio disso separaria a assinatura da pessoa.
     "extra_titulo": "extra_cabecalho",
-    "extra_funcionario": "extra_corpo",
+    "extra_subtitulo": "extra_cabecalho",
+    "extra_hora_data": "extra_cabecalho",
+    "extra_recebi": "extra_corpo",
     "extra_valor": "extra_corpo",
-    "extra_data": "extra_corpo",
-    "extra_assinatura": "extra_assinatura",
+    "extra_discriminacao": "extra_corpo",
+    "extra_quitacao": "extra_corpo",
+    "extra_assina_nome": "extra_corpo",
+    "extra_assinatura": "extra_corpo",
     "fech_titulo": "fech_cabecalho",
     "fech_data": "fech_cabecalho",
     "fech_bruto": "fech_totais",
     "fech_liquido": "fech_totais",
     "fech_por_origem": "fech_origem",
     "fech_diarias": "fech_diarias",
+    "fech_edicoes": "fech_edicoes",
     "fech_lucro": "fech_lucro",
     "fech_lucro_real": "fech_lucro_real",
 }
@@ -348,6 +411,7 @@ TIPOS_POR_CAMPO = {
     "endereco": ["Entrega"],
     "bairro": ["Entrega"],
     "data": ["Balcão", "Entrega", "Mesa"],
+    "usuario": ["Balcão", "Entrega", "Mesa"],
     "itens": ["Balcão", "Entrega", "Mesa"],
     "observacao_entrega": ["Entrega"],
     "forma_pagamento": ["Balcão", "Entrega"],
@@ -358,9 +422,13 @@ TIPOS_POR_CAMPO = {
     "troco_a_dar": ["Balcão", "Entrega"],
     "divisao_conta": ["Mesa"],
     "extra_titulo": ["Extras"],
-    "extra_funcionario": ["Extras"],
+    "extra_subtitulo": ["Extras"],
+    "extra_hora_data": ["Extras"],
+    "extra_recebi": ["Extras"],
     "extra_valor": ["Extras"],
-    "extra_data": ["Extras"],
+    "extra_discriminacao": ["Extras"],
+    "extra_quitacao": ["Extras"],
+    "extra_assina_nome": ["Extras"],
     "extra_assinatura": ["Extras"],
     "fech_titulo": ["Fechamento"],
     "fech_data": ["Fechamento"],
@@ -368,6 +436,7 @@ TIPOS_POR_CAMPO = {
     "fech_liquido": ["Fechamento"],
     "fech_por_origem": ["Fechamento"],
     "fech_diarias": ["Fechamento"],
+    "fech_edicoes": ["Fechamento"],
     "fech_lucro": ["Fechamento"],
     "fech_lucro_real": ["Fechamento"],
 }
@@ -385,6 +454,10 @@ DOCUMENTO_POR_CAMPO = {
 # antes desta tela existir (ver docstring do módulo e
 # controllers/balcaoController.py/entregaController.py/salaoController.py).
 _ORDEM_PADRAO = [
+    # Quem lançou vem PRIMEIRO, colado no código do pedido: é a primeira coisa
+    # que se procura no papel quando alguém precisa saber de quem foi a
+    # comanda, e no rodapé ela se perdia no meio dos totais.
+    "usuario",
     "id_pedido",
     "cliente",
     "mesa",
@@ -406,9 +479,13 @@ _ORDEM_PADRAO = [
     # documento, já que na impressão as dos outros são puladas por não terem
     # conteúdo (ver comandaTextoService.montar_linhas_por_ordem).
     "extra_titulo",
-    "extra_funcionario",
+    "extra_subtitulo",
+    "extra_hora_data",
+    "extra_recebi",
     "extra_valor",
-    "extra_data",
+    "extra_discriminacao",
+    "extra_quitacao",
+    "extra_assina_nome",
     "extra_assinatura",
     "fech_titulo",
     "fech_data",
@@ -416,6 +493,7 @@ _ORDEM_PADRAO = [
     "fech_liquido",
     "fech_por_origem",
     "fech_diarias",
+    "fech_edicoes",
     "fech_lucro",
     "fech_lucro_real",
 ]
@@ -459,6 +537,10 @@ def _padrao():
     # Preserva o comportamento original do app (nome do item/observação já
     # saíam em negrito antes de existir essa tela de configuração).
     config["campos"]["pedido"]["negrito"] = True
+    # Mesmo negrito de "pedido": até este campo existir, o tamanho fazia parte
+    # da string do nome do item e saía com o estilo dele. O padrão reproduz o
+    # cupom de antes; quem quiser o tamanho diferente do sabor agora pode.
+    config["campos"]["pedido_tamanho"]["negrito"] = True
     config["campos"]["observacao_item"]["negrito"] = True
     # Pedido explícito do dono: o código do pedido sempre sai em negrito no
     # cabeçalho por padrão (continua editável em Configurações, como todo
@@ -468,8 +550,9 @@ def _padrao():
     # em negrito fixo antes de virarem campos configuráveis (ver
     # fechamentoController._montar_recibo_extra/_montar_recibo_fechamento),
     # então o padrão reproduz o cupom de antes.
-    for campo in ("extra_titulo", "fech_titulo", "fech_origem_titulo",
-                  "fech_origem_nome", "fech_diarias_titulo", "fech_lucro",
+    for campo in ("extra_titulo", "extra_subtitulo", "extra_discriminacao_total",
+                  "fech_titulo", "fech_origem_titulo", "fech_origem_nome",
+                  "fech_diarias_titulo", "fech_edicoes_titulo", "fech_lucro",
                   "fech_lucro_real"):
         config["campos"][campo]["negrito"] = True
     return config
@@ -498,24 +581,68 @@ def _mesclar_campos(destino, campos_lidos):
             destino[campo]["tamanho_fonte"] = max(1, int(atributos["tamanho_fonte"]))
 
 
+def _posicao_padrao(ordem, indice_padrao):
+    """Onde encaixar, dentro de `ordem`, a chave que ocupa `indice_padrao`
+    em _ORDEM_PADRAO: logo depois do vizinho ANTERIOR dela que já esteja em
+    `ordem`; não havendo nenhum, logo antes do primeiro vizinho POSTERIOR
+    que esteja; e só no fim quando nenhum dos dois lados aparece."""
+    for chave in reversed(_ORDEM_PADRAO[:indice_padrao]):
+        if chave in ordem:
+            return ordem.index(chave) + 1
+
+    for chave in _ORDEM_PADRAO[indice_padrao + 1:]:
+        if chave in ordem:
+            return ordem.index(chave)
+
+    return len(ordem)
+
+
+def _herdar_estilo_do_nome_do_item(destino, campos_lidos):
+    """Faz "pedido_tamanho" nascer com o estilo que a pessoa já tinha escolhido
+    para "pedido", num estilo_impressao.json salvo antes deste campo existir.
+
+    Sem isto, quem tivesse tirado o negrito do nome do item (ou aumentado a
+    fonte dele) veria o "(GRANDE)" descolar sozinho do resto da linha na
+    primeira abertura depois da atualização — uma mudança no papel que ninguém
+    pediu, e que apareceria como defeito de impressão, não como campo novo.
+
+    Só herda quando o arquivo tem "pedido" e NÃO tem "pedido_tamanho": a partir
+    da primeira gravação os dois são independentes, e uma segunda herança
+    desfaria a escolha de quem separou os dois de propósito."""
+    lidos = campos_lidos or {}
+    if "pedido_tamanho" in lidos or "pedido" not in lidos:
+        return
+
+    destino["pedido_tamanho"] = dict(destino["pedido"])
+
+
 def _mesclar_ordem(ordem_lida):
     """Valida `ordem_lida` (lista de chaves de CAMPOS_ORDENAVEIS) e devolve
     uma ordem completa e utilizável: mantém a ordem lida, descartando
     chaves desconhecidas (versão mais nova do app removeu um campo), e
-    acrescenta ao final — na ordem padrão — qualquer chave de
-    CAMPOS_ORDENAVEIS que não apareça nela (JSON salvo por uma versão do
-    app anterior à introdução de um campo novo). Sem essa segunda parte, um
-    campo novo simplesmente nunca seria impresso em instalações que já
-    tinham um estilo_impressao.json salvo."""
+    encaixa qualquer chave de CAMPOS_ORDENAVEIS que não apareça nela (JSON
+    salvo por uma versão do app anterior à introdução de um campo novo). Sem
+    essa segunda parte, um campo novo simplesmente nunca seria impresso em
+    instalações que já tinham um estilo_impressao.json salvo.
+
+    O campo novo entra NA VIZINHANÇA que ele tem em _ORDEM_PADRAO, e não no
+    fim da lista como antes: o fim da lista é o rodapé do papel, que quase
+    nunca é onde o campo foi projetado para sair — e "quem já usava o app
+    recebe o campo no lugar errado" é pior do que não recebê-lo, porque
+    passa por bug de layout em vez de configuração. A ordem que a pessoa
+    escolheu na tela é preservada inteira; o campo novo só se acomoda entre
+    os vizinhos dela.
+
+    Um campo que a pessoa moveu de lugar continua onde ela o pôs — a busca
+    é pelo vizinho de _ORDEM_PADRAO que EXISTE na ordem lida, então o encaixe
+    acompanha a escolha dela em vez de desfazê-la."""
     if not isinstance(ordem_lida, list):
         return list(_ORDEM_PADRAO)
 
     ordem = [chave for chave in ordem_lida if chave in CAMPOS_ORDENAVEIS]
-    vistas = set(ordem)
-    for chave in _ORDEM_PADRAO:
-        if chave not in vistas:
-            ordem.append(chave)
-            vistas.add(chave)
+    for indice, chave in enumerate(_ORDEM_PADRAO):
+        if chave not in ordem:
+            ordem.insert(_posicao_padrao(ordem, indice), chave)
     return ordem
 
 
@@ -570,6 +697,7 @@ def _carregar():
         return config
 
     _mesclar_campos(config["campos"], dados.get("campos"))
+    _herdar_estilo_do_nome_do_item(config["campos"], dados.get("campos"))
     config["ordem_secoes"] = _mesclar_ordem(dados.get("ordem_secoes"))
     _mesclar_ajustes(config, dados)
 

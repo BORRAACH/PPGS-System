@@ -118,8 +118,12 @@ def _linhas_itens_producao(grupos):
         if indice > 0:
             linhas.append("")
 
-        for coluna_pedido, _valor, extras in grupo["linhas"]:
-            linhas.append(estilo.formatar_campo(coluna_pedido, "pedido"))
+        for coluna_pedido, _valor, extras, tamanho in grupo["linhas"]:
+            # Mesma função da comanda do cliente (ver
+            # comandaTextoService.formatar_coluna_pedido): o tamanho da pizza
+            # sai no campo "pedido_tamanho" também aqui, senão o pizzaiolo
+            # receberia um papel estilizado por regras próprias.
+            linhas.append(texto.formatar_coluna_pedido(coluna_pedido, tamanho))
             for extra in extras:
                 linhas.append(f"  {estilo.formatar_campo(extra, 'adicional_item')}")
 
@@ -408,8 +412,13 @@ class SalaoController(QObject):
 
     @pyqtSlot(str, "QVariantList", result=bool)
     @pyqtSlot(str, "QVariantList", int, result=bool)
+    # Sobrecarga com o usuário que autorizou o fechamento (ver
+    # components/PopupAutorizacao.qml). As duas assinaturas antigas continuam
+    # declaradas: o parâmetro é opcional, e uma chamada sem ele imprime o
+    # cupom sem a linha de usuário, exatamente como antes.
+    @pyqtSlot(str, "QVariantList", int, str, result=bool)
     @protegido(False)
-    def fecharMesa(self, mesa_id, divisoes, copias=1):
+    def fecharMesa(self, mesa_id, divisoes, copias=1, usuario=""):
         """Fecha a conta: monta o cupom final (itens + divisão da conta já
         resolvida — cada item de `divisoes` já vem com nome/valor/forma de
         pagamento/status prontos, o rateio "igual" já foi calculado do lado
@@ -429,7 +438,7 @@ class SalaoController(QObject):
         if mesa is None:
             return False
 
-        conteudo_bytes = self._montarCupomFinal(mesa, divisoes)
+        conteudo_bytes = self._montarCupomFinal(mesa, divisoes, usuario)
 
         agora = datetime.now()
         nome_arquivo = f"mesa_{agora.strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}.txt"
@@ -455,7 +464,7 @@ class SalaoController(QObject):
 
         return True
 
-    def _montarCupomFinal(self, mesa, divisoes):
+    def _montarCupomFinal(self, mesa, divisoes, usuario=""):
         itens = mesa.get("itens", [])
         grupos = texto.montar_grupos(itens)
         valor_total = _valor_total_itens(itens)
@@ -479,6 +488,10 @@ class SalaoController(QObject):
             "mesa": [f"Mesa: {estilo.formatar_campo(str(mesa.get('mesa', '')), 'mesa')}"],
             "cliente": [f"Cliente: {estilo.formatar_campo(mesa.get('cliente', ''), 'cliente')}"],
             "data": [f"Data: {estilo.formatar_campo(agora.strftime('%d/%m/%Y %H:%M:%S'), 'data')}"],
+            # Quem autorizou o fechamento da conta. Vazio (linha some) quando
+            # ninguém está cadastrado — mesmo critério de
+            # BalcaoController.enviarPedido.
+            "usuario": [f"Usuário: {estilo.formatar_campo(usuario, 'usuario')}"] if usuario else None,
             "itens": texto.formatar_tabela(grupos),
             "valor_total": [f"Valor do pedido: {estilo.formatar_campo(valor_total_formatado, 'valor_total')}"],
             "divisao_conta": divisao_linhas,

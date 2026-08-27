@@ -93,6 +93,18 @@ Page {
     readonly property int quantidadeExtras: telaFechamento._extras.quantidade || 0
     readonly property real totalExtras: telaFechamento._extras.total || 0
 
+    // Despesas do dia — contas do negócio pagas com dinheiro do caixa (gás,
+    // embalagem, insumo comprado na hora). Ver services/rede/despesasCaixa.py.
+    // Chave ausente em resumos gravados em cache antes desta feature existir,
+    // daí o valor padrão — mesmo cuidado de "_extras" acima.
+    readonly property var _despesas: telaFechamento.resumoAtual.despesas || ({
+        "quantidade": 0,
+        "total": 0,
+        "itens": []
+    })
+    readonly property int quantidadeDespesas: telaFechamento._despesas.quantidade || 0
+    readonly property real totalDespesas: telaFechamento._despesas.total || 0
+
     // Contagem manual de Cartão/Dinheiro/Pix do dia (ver
     // services/rede/contagemCaixa.py) — diferente de resumoAtual, não vem
     // do recálculo das comandas: é preenchida à parte por carregarDia() e
@@ -102,18 +114,44 @@ Page {
         "dinheiro": 0,
         "pix": 0
     })
+    // Verdadeira só durante gravarContagem() — ver o comentário lá e o uso
+    // em onContagemAtualChanged.
+    property bool gravandoContagem: false
+    // Tudo que saiu da GAVETA hoje sem ser venda: diárias pagas a funcionário
+    // e despesas do negócio. As duas coisas saem em dinheiro vivo, e é por
+    // isso que se somam à cédula contada, e não ao cartão ou ao pix.
+    readonly property real totalSaidasEmDinheiro: telaFechamento.totalExtras + telaFechamento.totalDespesas
+
+    // O que TINHA na gaveta hoje: o que ainda está lá (contado à mão) mais o
+    // que saiu dela para pagar diária e despesa.
+    //
+    // Somar pagamento a uma contagem de gaveta parece errado à primeira vista,
+    // e é o contrário: sem isso, esse dinheiro aparece como falta em
+    // diferencaCaixa — a gaveta acusa sumiço de um dinheiro cujo destino se
+    // sabe exatamente qual foi, e quem confere fica caçando um buraco que não
+    // existe.
+    //
+    // O campo digitado NÃO é alterado por isto, de propósito: ele é gravado em
+    // disco e replicado na malha (ver contagemCaixa.py), então escrever a soma
+    // dentro dele faria a diária ser somada de novo na próxima abertura da
+    // tela, e de novo na seguinte. O que se guarda é o que a pessoa contou; a
+    // soma é derivada.
+    readonly property real dinheiroComSaidas: (telaFechamento.contagemAtual.dinheiro || 0)
+        + telaFechamento.totalSaidasEmDinheiro
+
     readonly property real totalContagem: (telaFechamento.contagemAtual.cartao || 0)
-        + (telaFechamento.contagemAtual.dinheiro || 0)
+        + telaFechamento.dinheiroComSaidas
         + (telaFechamento.contagemAtual.pix || 0)
 
     // Confere o caixa: o que foi contado à mão (Cartão+Dinheiro+Pix)
     // comparado com o que as comandas do dia dizem que foi vendido.
     // Positivo, sobrou dinheiro no caixa; negativo, faltou.
     //
-    // É uma comparação literal entre os dois, sem passar pelas diárias: uma
-    // diária paga do caixa (ver totalExtras acima) tira dinheiro da gaveta
-    // sem tirar venda nenhuma do total, então aparece aqui como falta — que
-    // é justamente o que se quer enxergar ao conferir a gaveta.
+    // Diária e despesa NÃO aparecem mais aqui como falta: elas já entraram na
+    // contagem (ver dinheiroComSaidas). Antes apareciam, e o argumento era que
+    // isso era o que se queria enxergar — mas na prática obrigava quem confere
+    // a fazer a conta de cabeça toda vez para descontar o que ele mesmo tinha
+    // acabado de lançar na tela.
     //
     // Cuidado ao ler o resultado: resumoAtual.total só conta comandas que
     // receberam baixa (ver FechamentoController._calcular_resumo_dia), então
@@ -129,7 +167,19 @@ Page {
     // entra, porque venda que ainda não virou dinheiro contado não é lucro
     // nenhum; o bruto serve pra conferir a gaveta (diferencaCaixa), não pra
     // dizer quanto sobrou no fim do dia.
-    readonly property real lucro: telaFechamento.totalContagem - telaFechamento.totalExtras
+    // O que entrou na gaveta menos o que saiu dela. Como as saídas agora entram
+    // em totalContagem (ver dinheiroComSaidas) e são subtraídas aqui, elas se
+    // anulam — e o lucro acaba sendo, exatamente, o dinheiro que sobrou:
+    // cartão + dinheiro contado + pix.
+    //
+    // ISTO CORRIGE UM DESCONTO EM DOBRO que existia antes. A diária saía da
+    // gaveta (logo, a contagem já era menor por causa dela) e ainda era
+    // subtraída aqui — uma diária de R$ 80 tirava R$ 160 do lucro do dia. O
+    // número que esta tela mostra ficou MAIOR por isso, e o valor novo é o
+    // certo.
+    readonly property real lucro: telaFechamento.totalContagem
+        - telaFechamento.totalExtras
+        - telaFechamento.totalDespesas
 
     readonly property var ordemTipos: ["Balcão", "Entrega", "Mesa"]
     readonly property var coresTipo: ({
@@ -248,6 +298,11 @@ Page {
     }
 
     function carregarDia(iso) {
+        // Digitação ainda pendente pertence ao dia que está na tela AGORA
+        // (dataSelecionada só muda duas linhas abaixo) — sem esta descarga,
+        // trocar de dia logo depois de digitar jogaria fora o valor, ou pior,
+        // gravaria ele no dia novo quando o timer estourasse.
+        telaFechamento.salvarContagemPendente();
         // A busca vale para o dia que está na tela: trocar de dia com um termo
         // antigo ainda filtrando esconderia comandas sem explicação.
         telaFechamento.limparBusca();
@@ -256,12 +311,52 @@ Page {
         telaFechamento.contagemAtual = fechamentoController.obterContagem(iso);
     }
 
-    // Chamado pelos campos de Cartão/Dinheiro/Pix (botão "Salvar
-    // contagem") — sobrescreve a contagem do dia visualizado e atualiza a
-    // tela na hora com o que foi de fato salvo.
+    // Chamado pelo botão "Salvar contagem" — sobrescreve a contagem do dia
+    // visualizado e atualiza a tela na hora com o que foi de fato salvo. O
+    // botão sobrevive ao salvamento automático porque é ele que dá o aviso
+    // na tela: quem quer ver "salva" escrito com todas as letras clica.
     function salvarContagem(cartaoTexto, dinheiroTexto, pixTexto) {
-        telaFechamento.contagemAtual = fechamentoController.registrarContagem(telaFechamento.dataSelecionada, cartaoTexto, dinheiroTexto, pixTexto);
+        // Já vai gravar agora; deixar o timer de pé só faria uma segunda
+        // gravação idêntica (e um segundo evento na malha) logo em seguida.
+        salvamentoContagem.stop();
+        telaFechamento.gravarContagem(cartaoTexto, dinheiroTexto, pixTexto);
         telaFechamento.mostrarNotificacao("Contagem de " + telaFechamento.formatarDataExibicao(telaFechamento.dataSelecionada) + " salva.", true);
+    }
+
+    // O caminho único de gravação da contagem: o botão acima e o salvamento
+    // automático passam os dois por aqui.
+    //
+    // A bandeira existe por causa de onContagemAtualChanged, lá embaixo:
+    // registrarContagem devolve a contagem salva e reescrever os campos com
+    // ela é justamente o que mantém a tela honesta ao trocar de dia — mas
+    // aqui a mudança veio do que o usuário está digitando neste instante, e
+    // reescrever o campo focado no meio da digitação jogaria o cursor pro
+    // fim da linha a cada pausa.
+    function gravarContagem(cartaoTexto, dinheiroTexto, pixTexto) {
+        telaFechamento.gravandoContagem = true;
+        telaFechamento.contagemAtual = fechamentoController.registrarContagem(telaFechamento.dataSelecionada, cartaoTexto, dinheiroTexto, pixTexto);
+        telaFechamento.gravandoContagem = false;
+    }
+
+    // Salvamento automático, disparado pelo timer depois que a digitação
+    // para. Silencioso de propósito: um aviso a cada pausa de digitação, três
+    // campos, viraria ruído — quem confere a gaveta digita e olha direto pro
+    // "sobrou/faltou" logo abaixo, que já se atualiza junto. O rótulo discreto
+    // ao lado do botão é a confirmação de que gravou.
+    function salvarContagemAuto() {
+        telaFechamento.gravarContagem(inputCartao.text, inputDinheiro.text, inputPix.text);
+        avisoSalvoAuto.piscar();
+    }
+
+    // Antecipa o salvamento pendente (sair do campo, trocar de dia). Sem
+    // nada pendente é um nada — o timer parado é a prova de que tudo que foi
+    // digitado já está no disco.
+    function salvarContagemPendente() {
+        if (!salvamentoContagem.running)
+            return;
+
+        salvamentoContagem.stop();
+        telaFechamento.salvarContagemAuto();
     }
 
     function fecharCaixa() {
@@ -288,13 +383,31 @@ Page {
         popupExtras.abrirPara(telaFechamento.dataSelecionada);
     }
 
+    function abrirDespesas() {
+        popupDespesas.abrirPara(telaFechamento.dataSelecionada);
+    }
+
     // Correção de uma comanda já fechada — único caminho pra isso agora
     // (ver ItemComandaDelegate.qml, que escondeu lápis/lixeira de comandas
     // fechadas na Consulta). Fila espelhada da de "Fechamento rápido", só
     // que sobre as que já têm baixa.
     function abrirEditarCaixa() {
-        if (!popupFechamentoRapido.abrirParaFechadas(telaFechamento.dataSelecionada))
-            telaFechamento.mostrarNotificacao("Nenhuma comanda fechada em " + telaFechamento.formatarDataExibicao(telaFechamento.dataSelecionada) + ".", true);
+        // O código é pedido AQUI, na porta, e não a cada "Editar" lá dentro:
+        // abrir esta fila é assumir a intenção de mexer no caixa já fechado, e
+        // quem corrige três comandas seguidas não precisa se identificar três
+        // vezes. A fila aberta por este caminho já entra autorizada — ver
+        // PopupFechamentoRapido.abrirParaFechadas.
+        //
+        // A contrapartida, registrada aqui para não ser descoberta depois: a
+        // linha do histórico passa a dizer o DIA que foi aberto para edição,
+        // não qual comanda foi corrigida. Os outros dois caminhos até a mesma
+        // edição (Fechamento rápido e o clique numa comanda da lista do dia)
+        // continuam pedindo o código por comanda, porque neles não houve porta
+        // nenhuma antes.
+        popupAutorizacao.solicitar("Editar caixa", telaFechamento.dataSelecionada, function () {
+            if (!popupFechamentoRapido.abrirParaFechadas(telaFechamento.dataSelecionada))
+                telaFechamento.mostrarNotificacao("Nenhuma comanda fechada em " + telaFechamento.formatarDataExibicao(telaFechamento.dataSelecionada) + ".", true);
+        });
     }
 
     // Conexão declarativa, não um .connect() solto em Component.onCompleted
@@ -317,6 +430,13 @@ Page {
         // dois casos; o daqui só recarrega o que darBaixa() acabou de
         // recalcular, o que é barato e mantém um caminho só.
         function onBaixasAtualizadas() {
+            telaFechamento.carregarDia(telaFechamento.dataSelecionada);
+        }
+
+        // Despesa lançada/editada/apagada em outra máquina — mesmo espírito
+        // do handler de extras que o popup daqui já cobre pelo sinal
+        // "concluido".
+        function onDespesasAtualizadas() {
             telaFechamento.carregarDia(telaFechamento.dataSelecionada);
         }
 
@@ -362,9 +482,38 @@ Page {
     // TextField) — sem isto, trocar de dia e voltar mostraria o valor
     // digitado no dia anterior em vez do que está salvo pra este dia.
     onContagemAtualChanged: {
-        inputCartao.text = "R$ " + Number(telaFechamento.contagemAtual.cartao || 0).toFixed(2).replace(".", ",");
-        inputDinheiro.text = "R$ " + Number(telaFechamento.contagemAtual.dinheiro || 0).toFixed(2).replace(".", ",");
-        inputPix.text = "R$ " + Number(telaFechamento.contagemAtual.pix || 0).toFixed(2).replace(".", ",");
+        telaFechamento.escreverNoCampo(inputCartao, telaFechamento.contagemAtual.cartao);
+        telaFechamento.escreverNoCampo(inputDinheiro, telaFechamento.contagemAtual.dinheiro);
+        telaFechamento.escreverNoCampo(inputPix, telaFechamento.contagemAtual.pix);
+    }
+
+    // Escreve o valor salvo no campo, exceto no campo que está sendo digitado
+    // agora durante um salvamento automático (ver gravarContagem). Nos outros
+    // casos — troca de dia, contagem editada em outra máquina — o campo é
+    // reescrito mesmo estando focado: ali o texto na tela é de outro dia ou
+    // está desatualizado, e deixá-lo de pé seria mentir sobre o que está salvo.
+    function escreverNoCampo(campo, valor) {
+        if (telaFechamento.gravandoContagem && campo.activeFocus)
+            return;
+
+        // Zero deixa o campo VAZIO, com o "R$ 0,00" ficando por conta do
+        // placeholder. Escrever o zero de verdade enchia os três campos de
+        // "R$ 0,00" logo ao abrir a tela — e aí contar a gaveta começava por
+        // apagar o que estava escrito, com o risco de sobrar um dígito do
+        // valor antigo colado no novo. Vazio e zero contam a mesma coisa aqui
+        // (totalContagem soma 0 nos dois casos), então não se perde nada.
+        campo.text = valor ? Moeda.formatar(String(valor)) : "";
+    }
+
+    // Espera a digitação parar antes de gravar. Sem isso seria uma escrita em
+    // disco E um evento publicado na malha (ver
+    // FechamentoController.registrarContagem) a cada tecla digitada, com as
+    // outras máquinas recebendo "R$ 1", "R$ 12", "R$ 120"... uma por uma.
+    Timer {
+        id: salvamentoContagem
+
+        interval: 600
+        onTriggered: telaFechamento.salvarContagemAuto()
     }
 
     // obterFechamento/obterContagem varrem as comandas do dia no disco e
@@ -434,12 +583,42 @@ Page {
             // uma só quando não couberem, com os controles fluindo para as linhas
             // seguintes em vez de saírem pela borda.
             GridLayout {
+                id: cabecalhoFechamento
+
+                // Largura que os controles pediriam numa linha só. Medida a
+                // partir dos filhos do Flow, e não chutada por um número
+                // fixo: são seis blocos (navegação de data + cinco botões)
+                // cujo tamanho depende da fonte e da escala do tema, e um
+                // limiar cravado aqui erraria assim que qualquer um deles
+                // mudasse de texto.
+                readonly property real larguraNaturalControles: {
+                    var total = 0;
+                    var filhos = fluxoControles.children;
+                    for (var i = 0; i < filhos.length; i++) {
+                        if (filhos[i].visible)
+                            total += filhos[i].implicitWidth + fluxoControles.spacing;
+                    }
+                    return Math.max(0, total - fluxoControles.spacing);
+                }
+
+                // Título e controles dividem a linha só quando cabem MESMO os
+                // dois. Antes a segunda coluna simplesmente recebia o que
+                // sobrava do título, e o Flow quebrava lá dentro — o que
+                // largava o último botão sozinho numa linha, com espaço de
+                // sobra ao lado do título.
+                readonly property bool controlesCabemAoLado: telaFechamento.larguraUtil
+                    >= linhaTituloFechamento.implicitWidth
+                     + cabecalhoFechamento.larguraNaturalControles
+                     + Estilo.global.spacing.xl
+
                 Layout.fillWidth: true
-                columns: telaFechamento.empilhado ? 1 : 2
+                columns: (telaFechamento.empilhado || !cabecalhoFechamento.controlesCabemAoLado) ? 1 : 2
                 columnSpacing: Estilo.global.spacing.xl
                 rowSpacing: Estilo.global.spacing.md
 
                 Row {
+                    id: linhaTituloFechamento
+
                     spacing: Estilo.global.spacing.sm
                     Icone { nome: "fa6s.cash-register"; cor: Estilo.screen.caixa.accent; tamanho: Estilo.global.fontSize.title; anchors.verticalCenter: parent.verticalCenter }
                     Text {
@@ -455,7 +634,13 @@ Page {
                 // Encostados à direita quando há espaço (como sempre foram), e
                 // quebrando em linhas quando não há.
                 Flow {
-                    Layout.fillWidth: telaFechamento.empilhado
+                    id: fluxoControles
+
+                    // Numa linha própria ocupa a largura toda (é o que dá
+                    // espaço para os cinco botões ficarem lado a lado);
+                    // dividindo a linha com o título, fica encostado à
+                    // direita, como sempre foi.
+                    Layout.fillWidth: cabecalhoFechamento.columns === 1
                     Layout.maximumWidth: telaFechamento.larguraUtil
                     Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
                     spacing: Estilo.global.spacing.md
@@ -614,6 +799,33 @@ Page {
                         color: btnExtras.down ? Estilo.action.outflow.pressed : (btnExtras.hovered ? Estilo.action.outflow.hover : Estilo.action.outflow.base)
                         border.color: btnExtras.activeFocus ? Estilo.global.text : "transparent"
                         border.width: btnExtras.activeFocus ? Estilo.global.borderWidth.focus : Estilo.global.borderWidth.hairline
+                    }
+                }
+
+                Button {
+                    id: btnDespesas
+
+                    padding: Estilo.global.padding.md
+                    focusPolicy: Qt.StrongFocus
+                    onClicked: telaFechamento.abrirDespesas()
+
+                    contentItem: Row {
+                        spacing: Estilo.global.spacing.xs
+                        anchors.centerIn: parent
+                        Icone { nome: "fa6s.receipt"; cor: Estilo.global.textOnAccent; tamanho: Estilo.global.fontSize.lg; anchors.verticalCenter: parent.verticalCenter }
+                        Text {
+                            text: "Despesas"
+                            font.family: Estilo.global.fontFamily.title
+                            color: Estilo.global.textOnAccent
+                            anchors.verticalCenter: parent.verticalCenter
+                        }
+                    }
+
+                    background: Rectangle {
+                        radius: Estilo.global.radius.pill
+                        color: btnDespesas.down ? Estilo.action.outflow.pressed : (btnDespesas.hovered ? Estilo.action.outflow.hover : Estilo.action.outflow.base)
+                        border.color: btnDespesas.activeFocus ? Estilo.global.text : "transparent"
+                        border.width: btnDespesas.activeFocus ? Estilo.global.borderWidth.focus : Estilo.global.borderWidth.hairline
                     }
                 }
 
@@ -1013,95 +1225,199 @@ Page {
                         }
                     }
 
-                    // --- EXTRAS (pagamento de diária, descontado do caixa) ---
-                    Rectangle {
+                    // --- EXTRAS E DESPESAS, LADO A LADO ---
+                    // Empilham quando a janela é estreita, pelo mesmo
+                    // "empilhado" que já rege o resto desta tela — duas
+                    // listas espremidas lado a lado numa tela de balcão
+                    // cortariam os nomes no meio.
+                    GridLayout {
                         Layout.fillWidth: true
-                        visible: telaFechamento.quantidadeExtras > 0
-                        implicitHeight: colunaExtras.implicitHeight + 20
-                        radius: Estilo.global.radius.sm
-                        color: Estilo.status.pending.background
-                        border.color: Estilo.status.pending.border
-                        border.width: Estilo.global.borderWidth.hairline
+                        visible: telaFechamento.quantidadeExtras > 0 || telaFechamento.quantidadeDespesas > 0
+                        columns: telaFechamento.empilhado ? 1 : 2
+                        columnSpacing: Estilo.global.spacing.sm
+                        rowSpacing: Estilo.global.spacing.sm
 
-                        ColumnLayout {
-                            id: colunaExtras
+    Rectangle {
+                            Layout.fillWidth: true
+                            visible: telaFechamento.quantidadeExtras > 0
+                            implicitHeight: colunaExtras.implicitHeight + 20
+                            radius: Estilo.global.radius.sm
+                            color: Estilo.status.pending.background
+                            border.color: Estilo.status.pending.border
+                            border.width: Estilo.global.borderWidth.hairline
 
-                            anchors.left: parent.left
-                            anchors.right: parent.right
-                            anchors.top: parent.top
-                            anchors.margins: 10
-                            spacing: Estilo.global.spacing.xs
+                            ColumnLayout {
+                                id: colunaExtras
 
-                            Row {
+                                anchors.left: parent.left
+                                anchors.right: parent.right
+                                anchors.top: parent.top
+                                anchors.margins: 10
                                 spacing: Estilo.global.spacing.xs
-                                Icone { nome: "fa6s.hand-holding-dollar"; cor: Estilo.finance.outflow; tamanho: 14; anchors.verticalCenter: parent.verticalCenter }
+
+                                Row {
+                                    spacing: Estilo.global.spacing.xs
+                                    Icone { nome: "fa6s.hand-holding-dollar"; cor: Estilo.finance.outflow; tamanho: 14; anchors.verticalCenter: parent.verticalCenter }
+                                    Text {
+                                        text: "Diárias (somadas de volta à contagem)"
+                                        font.bold: true
+                                        font.pixelSize: Estilo.global.fontSize.md
+                                        color: Estilo.finance.outflow
+                                        anchors.verticalCenter: parent.verticalCenter
+                                    }
+                                }
+
+                                Repeater {
+                                    model: telaFechamento._extras.itens
+
+                                    delegate: RowLayout {
+                                        Layout.fillWidth: true
+                                        spacing: Estilo.global.spacing.sm
+
+                                        Text {
+                                            Layout.fillWidth: true
+                                            text: modelData.funcionario
+                                            font.pixelSize: Estilo.global.fontSize.sm
+                                            color: Estilo.global.text
+                                            elide: Text.ElideRight
+                                        }
+
+                                        Text {
+                                            text: modelData.dataHora
+                                            font.pixelSize: Estilo.global.fontSize.xs
+                                            color: Estilo.global.textSecondary
+                                        }
+
+                                        Text {
+                                            text: "R$ " + Number(modelData.valor).toFixed(2).replace(".", ",")
+                                            font.bold: true
+                                            font.pixelSize: Estilo.global.fontSize.sm
+                                            color: Estilo.finance.outflow
+                                        }
+
+                                        Button {
+                                            id: btnEditarExtra
+
+                                            implicitWidth: 24
+                                            implicitHeight: 24
+                                            padding: 0
+                                            onClicked: popupExtras.abrirParaEditar(modelData)
+
+                                            contentItem: Icone {
+                                                nome: "fa6s.pen"
+                                                cor: Estilo.global.textSecondary
+                                                tamanho: 11
+                                                anchors.centerIn: parent
+                                            }
+
+                                            background: Rectangle {
+                                                radius: Estilo.global.radius.pill
+                                                color: btnEditarExtra.down ? Estilo.action.ghost.pressed : (btnEditarExtra.hovered ? Estilo.action.ghost.hover : Estilo.action.ghost.base)
+                                            }
+                                        }
+                                    }
+                                }
+
                                 Text {
-                                    text: "Pagamentos de diária (descontados do caixa)"
+                                    Layout.fillWidth: true
+                                    Layout.topMargin: 2
+                                    text: "Total em diárias: R$ " + telaFechamento.totalExtras.toFixed(2).replace(".", ",")
                                     font.bold: true
                                     font.pixelSize: Estilo.global.fontSize.md
                                     color: Estilo.finance.outflow
-                                    anchors.verticalCenter: parent.verticalCenter
                                 }
                             }
+                        }
 
-                            Repeater {
-                                model: telaFechamento._extras.itens
+    Rectangle {
+                            Layout.fillWidth: true
+                            visible: telaFechamento.quantidadeDespesas > 0
+                            implicitHeight: colunaDespesas.implicitHeight + 20
+                            radius: Estilo.global.radius.sm
+                            color: Estilo.status.pending.background
+                            border.color: Estilo.status.pending.border
+                            border.width: Estilo.global.borderWidth.hairline
 
-                                delegate: RowLayout {
-                                    Layout.fillWidth: true
-                                    spacing: Estilo.global.spacing.sm
+                            ColumnLayout {
+                                id: colunaDespesas
 
+                                anchors.left: parent.left
+                                anchors.right: parent.right
+                                anchors.top: parent.top
+                                anchors.margins: 10
+                                spacing: Estilo.global.spacing.xs
+
+                                Row {
+                                    spacing: Estilo.global.spacing.xs
+                                    Icone { nome: "fa6s.receipt"; cor: Estilo.finance.outflow; tamanho: 14; anchors.verticalCenter: parent.verticalCenter }
                                     Text {
-                                        Layout.fillWidth: true
-                                        text: modelData.funcionario
-                                        font.pixelSize: Estilo.global.fontSize.sm
-                                        color: Estilo.global.text
-                                        elide: Text.ElideRight
-                                    }
-
-                                    Text {
-                                        text: modelData.dataHora
-                                        font.pixelSize: Estilo.global.fontSize.xs
-                                        color: Estilo.global.textSecondary
-                                    }
-
-                                    Text {
-                                        text: "R$ " + Number(modelData.valor).toFixed(2).replace(".", ",")
+                                        text: "Despesas (somadas de volta à contagem)"
                                         font.bold: true
-                                        font.pixelSize: Estilo.global.fontSize.sm
+                                        font.pixelSize: Estilo.global.fontSize.md
                                         color: Estilo.finance.outflow
+                                        anchors.verticalCenter: parent.verticalCenter
                                     }
+                                }
 
-                                    Button {
-                                        id: btnEditarExtra
+                                Repeater {
+                                    model: telaFechamento._despesas.itens
 
-                                        implicitWidth: 24
-                                        implicitHeight: 24
-                                        padding: 0
-                                        onClicked: popupExtras.abrirParaEditar(modelData)
+                                    delegate: RowLayout {
+                                        Layout.fillWidth: true
+                                        spacing: Estilo.global.spacing.sm
 
-                                        contentItem: Icone {
-                                            nome: "fa6s.pen"
-                                            cor: Estilo.global.textSecondary
-                                            tamanho: 11
-                                            anchors.centerIn: parent
+                                        Text {
+                                            Layout.fillWidth: true
+                                            text: modelData.nome
+                                            font.pixelSize: Estilo.global.fontSize.sm
+                                            color: Estilo.global.text
+                                            elide: Text.ElideRight
                                         }
 
-                                        background: Rectangle {
-                                            radius: Estilo.global.radius.pill
-                                            color: btnEditarExtra.down ? Estilo.action.ghost.pressed : (btnEditarExtra.hovered ? Estilo.action.ghost.hover : Estilo.action.ghost.base)
+                                        Text {
+                                            text: modelData.dataHora
+                                            font.pixelSize: Estilo.global.fontSize.xs
+                                            color: Estilo.global.textSecondary
+                                        }
+
+                                        Text {
+                                            text: "R$ " + Number(modelData.valor).toFixed(2).replace(".", ",")
+                                            font.bold: true
+                                            font.pixelSize: Estilo.global.fontSize.sm
+                                            color: Estilo.finance.outflow
+                                        }
+
+                                        Button {
+                                            id: btnEditarDespesa
+
+                                            implicitWidth: 24
+                                            implicitHeight: 24
+                                            padding: 0
+                                            onClicked: popupDespesas.abrirParaEditar(modelData)
+
+                                            contentItem: Icone {
+                                                nome: "fa6s.pen"
+                                                cor: Estilo.global.textSecondary
+                                                tamanho: 11
+                                                anchors.centerIn: parent
+                                            }
+
+                                            background: Rectangle {
+                                                radius: Estilo.global.radius.pill
+                                                color: btnEditarDespesa.down ? Estilo.action.ghost.pressed : (btnEditarDespesa.hovered ? Estilo.action.ghost.hover : Estilo.action.ghost.base)
+                                            }
                                         }
                                     }
                                 }
-                            }
 
-                            Text {
-                                Layout.fillWidth: true
-                                Layout.topMargin: 2
-                                text: "Total descontado: R$ " + telaFechamento.totalExtras.toFixed(2).replace(".", ",")
-                                font.bold: true
-                                font.pixelSize: Estilo.global.fontSize.md
-                                color: Estilo.finance.outflow
+                                Text {
+                                    Layout.fillWidth: true
+                                    Layout.topMargin: 2
+                                    text: "Total em despesas: R$ " + telaFechamento.totalDespesas.toFixed(2).replace(".", ",")
+                                    font.bold: true
+                                    font.pixelSize: Estilo.global.fontSize.md
+                                    color: Estilo.finance.outflow
+                                }
                             }
                         }
                     }
@@ -1164,15 +1480,36 @@ Page {
                                     width: parent.width
                                     color: Estilo.global.textInput
                                     placeholderTextColor: Estilo.global.textPlaceholder
-                                    placeholderText: "VALOR"
+                                    placeholderText: "R$ 0,00"
                                     topPadding: 10
                                     bottomPadding: 10
                                     leftPadding: 10
                                     rightPadding: 10
-                                    validator: Moeda.validador
+                                    // Com sinal: contagem de caixa aceita valor
+                                    // negativo (ver Moeda.validadorComSinal).
+                                    validator: Moeda.validadorComSinal
                                     // Mesmo padrão de inputTroco/inputTaxaEntrega
                                     // em CamposPagamento.qml.
-                                    onEditingFinished: text = Moeda.formatar(text)
+                                    onEditingFinished: {
+                                        text = Moeda.formatar(text);
+                                        // Sair do campo é sinal claro de que
+                                        // acabou de digitar: não faz sentido
+                                        // esperar o resto do timer.
+                                        telaFechamento.salvarContagemPendente();
+                                    }
+                                    // Ao ganhar o foco o campo tira a máscara e
+                                    // mostra o número puro ("500", "500,98") —
+                                    // ver Moeda.paraEdicao. É atribuição
+                                    // programática, então não dispara
+                                    // textEdited nem agenda salvamento.
+                                    onActiveFocusChanged: if (activeFocus)
+                                        text = Moeda.paraEdicao(text)
+                                    // textEdited, não textChanged: só dispara em
+                                    // digitação de gente. textChanged pegaria
+                                    // também o texto que onContagemAtualChanged
+                                    // escreve aqui, e cada gravação agendaria a
+                                    // próxima, pra sempre.
+                                    onTextEdited: salvamentoContagem.restart()
 
                                     background: Rectangle {
                                         radius: Estilo.global.radius.pill
@@ -1188,7 +1525,7 @@ Page {
                                 spacing: 4
 
                                 Text {
-                                    text: "Dinheiro (no caixa)"
+                                    text: "Dinheiro (o que está na gaveta agora)"
                                     font.pixelSize: Estilo.global.fontSize.sm
                                     font.bold: true
                                     color: Estilo.global.textSecondary
@@ -1200,13 +1537,19 @@ Page {
                                     width: parent.width
                                     color: Estilo.global.textInput
                                     placeholderTextColor: Estilo.global.textPlaceholder
-                                    placeholderText: "VALOR"
+                                    placeholderText: "R$ 0,00"
                                     topPadding: 10
                                     bottomPadding: 10
                                     leftPadding: 10
                                     rightPadding: 10
-                                    validator: Moeda.validador
-                                    onEditingFinished: text = Moeda.formatar(text)
+                                    validator: Moeda.validadorComSinal
+                                    onEditingFinished: {
+                                        text = Moeda.formatar(text);
+                                        telaFechamento.salvarContagemPendente();
+                                    }
+                                    onActiveFocusChanged: if (activeFocus)
+                                        text = Moeda.paraEdicao(text)
+                                    onTextEdited: salvamentoContagem.restart()
 
                                     background: Rectangle {
                                         radius: Estilo.global.radius.pill
@@ -1214,6 +1557,23 @@ Page {
                                         border.color: inputDinheiro.activeFocus ? Estilo.screen.caixa.base : Estilo.global.border
                                         border.width: Estilo.global.borderWidth.hairline
                                     }
+                                }
+
+                                // O campo guarda o que foi contado; a soma com
+                                // diárias e despesas é derivada (ver
+                                // dinheiroComSaidas). Sem esta linha, a conta
+                                // do "sobrou/faltou" logo abaixo não bateria
+                                // com nenhum número visível na tela — e quem
+                                // confere ficaria procurando o erro.
+                                Text {
+                                    width: parent.width
+                                    visible: telaFechamento.totalSaidasEmDinheiro > 0
+                                    text: "+ R$ " + telaFechamento.totalSaidasEmDinheiro.toFixed(2).replace(".", ",")
+                                        + " pagos em diárias/despesas  =  R$ "
+                                        + telaFechamento.dinheiroComSaidas.toFixed(2).replace(".", ",")
+                                    font.pixelSize: Estilo.global.fontSize.xs
+                                    color: Estilo.global.textSecondary
+                                    wrapMode: Text.Wrap
                                 }
                             }
 
@@ -1234,13 +1594,19 @@ Page {
                                     width: parent.width
                                     color: Estilo.global.textInput
                                     placeholderTextColor: Estilo.global.textPlaceholder
-                                    placeholderText: "VALOR"
+                                    placeholderText: "R$ 0,00"
                                     topPadding: 10
                                     bottomPadding: 10
                                     leftPadding: 10
                                     rightPadding: 10
-                                    validator: Moeda.validador
-                                    onEditingFinished: text = Moeda.formatar(text)
+                                    validator: Moeda.validadorComSinal
+                                    onEditingFinished: {
+                                        text = Moeda.formatar(text);
+                                        telaFechamento.salvarContagemPendente();
+                                    }
+                                    onActiveFocusChanged: if (activeFocus)
+                                        text = Moeda.paraEdicao(text)
+                                    onTextEdited: salvamentoContagem.restart()
 
                                     background: Rectangle {
                                         radius: Estilo.global.radius.pill
@@ -1248,6 +1614,39 @@ Page {
                                         border.color: inputPix.activeFocus ? Estilo.screen.caixa.base : Estilo.global.border
                                         border.width: Estilo.global.borderWidth.hairline
                                     }
+                                }
+                            }
+
+                            // Confirmação discreta do salvamento automático:
+                            // aparece por um instante a cada gravação e some.
+                            // A contagem grava sozinha, então sem nenhum sinal
+                            // na tela o botão logo abaixo pareceria a única
+                            // forma de salvar — e quem fechasse a tela sem
+                            // clicar nele acharia que perdeu o que digitou.
+                            Text {
+                                id: avisoSalvoAuto
+
+                                function piscar() {
+                                    opacity = 1;
+                                    sumir.restart();
+                                }
+
+                                Layout.fillWidth: true
+                                text: "Salvo automaticamente"
+                                font.pixelSize: Estilo.global.fontSize.xs
+                                color: Estilo.global.textSecondary
+                                horizontalAlignment: Text.AlignRight
+                                opacity: 0
+
+                                Behavior on opacity {
+                                    NumberAnimation { duration: 300 }
+                                }
+
+                                Timer {
+                                    id: sumir
+
+                                    interval: 1600
+                                    onTriggered: avisoSalvoAuto.opacity = 0
                                 }
                             }
 
@@ -1352,7 +1751,7 @@ Page {
 
                             Text {
                                 Layout.alignment: Qt.AlignHCenter
-                                text: "contagem - diárias"
+                                text: "contagem - diárias - despesas"
                                 font.pixelSize: Estilo.global.fontSize.sm
                                 color: Estilo.global.textSecondary
                             }
@@ -1407,10 +1806,22 @@ Page {
         onConcluido: telaFechamento.carregarDia(telaFechamento.dataSelecionada)
     }
 
+    // Guarda do botão "Editar caixa" (ver abrirEditarCaixa).
+    PopupAutorizacao {
+        id: popupAutorizacao
+    }
+
     PopupExtras {
         id: popupExtras
         objectName: "popupExtras"
 
+        onConcluido: telaFechamento.carregarDia(telaFechamento.dataSelecionada)
+    }
+
+    PopupDespesas {
+        id: popupDespesas
+
+        objectName: "popupDespesas"
         onConcluido: telaFechamento.carregarDia(telaFechamento.dataSelecionada)
     }
 

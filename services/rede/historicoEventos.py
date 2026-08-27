@@ -36,7 +36,11 @@ _ROTULO = "historicoEventos"
 # Retenção dupla, por idade e por quantidade. A idade sozinha não segura um dia
 # de movimento intenso (cada comanda replicada gera evento em toda máquina), e
 # a quantidade sozinha apagaria o histórico de uma semana calma.
-_RETENCAO_DIAS = 7
+# Público: a tela de Usuários precisa dizer de quantos dias é a janela ao
+# mostrar quantas ações uma pessoa autorizou (ver contar_autorizacoes e
+# UsuariosController.detalhesUsuario) — um número sem a janela ao lado mentiria
+# por omissão, parecendo o total de sempre.
+RETENCAO_DIAS = 7
 _MAXIMO_REGISTROS = 1000
 
 # Categorias exibidas na tela de Rede — o filtro de lá é montado a partir
@@ -46,6 +50,7 @@ CARDAPIO = "cardapio"
 CAIXA = "caixa"
 CONFIGURACOES = "configuracoes"
 MAQUINAS = "maquinas"
+USUARIOS = "usuarios"
 
 ROTULOS_CATEGORIAS = {
     COMANDAS: "Comandas",
@@ -53,6 +58,7 @@ ROTULOS_CATEGORIAS = {
     CAIXA: "Fechamento e caixa",
     CONFIGURACOES: "Configurações",
     MAQUINAS: "Máquinas",
+    USUARIOS: "Usuários e autorizações",
 }
 
 # Ícone por categoria, nos mesmos nomes do qtawesome já usados no app (ver
@@ -64,6 +70,7 @@ _ICONES = {
     CAIXA: "fa6s.cash-register",
     CONFIGURACOES: "fa6s.gear",
     MAQUINAS: "fa6s.desktop",
+    USUARIOS: "fa6s.user-lock",
 }
 
 # Eventos que a malha publica hoje (ver RedeService.publicarEvento e quem
@@ -78,6 +85,11 @@ _EVENTOS = {
     "cardapio_alterado": (CARDAPIO, "Cardápio alterado"),
     "fechamento_atualizado": (CAIXA, "Fechamento do dia atualizado"),
     "comanda_baixada": (CAIXA, "Comanda baixada"),
+    # Correção/exclusão de uma comanda que já tinha baixa (ver
+    # services/rede/edicoesCaixa.py). Aparece aqui e no cupom de fechamento
+    # do dia atingido — a tela de Rede responde "o que andou acontecendo",
+    # o cupom é a trilha que acompanha o papel guardado.
+    "edicao_caixa": (CAIXA, "Comanda fechada alterada"),
     "extra_lancado": (CAIXA, "Extra lançado"),
     "extra_apagado": (CAIXA, "Extra apagado"),
     "contagem_caixa_atualizada": (CAIXA, "Contagem de caixa atualizada"),
@@ -90,11 +102,36 @@ _EVENTOS = {
     "servidor_designado": (MAQUINAS, "Servidor central mudou de máquina"),
     "conflito_detectado": (COMANDAS, "Divergência detectada entre máquinas"),
     "conflito_resolvido": (COMANDAS, "Divergência resolvida"),
+    # Cadastro de quem pode autorizar as ações destrutivas (ver
+    # services/rede/usuarios.py). Estes dois passam pelo barramento.
+    "usuario_alterado": (USUARIOS, "Usuário cadastrado ou alterado"),
+    "usuario_apagado": (USUARIOS, "Usuário removido"),
+    # Uso do código no balcão. Publicados por registrar_local, NÃO pelo
+    # barramento: é uma linha por ação protegida, e em malha isso seria
+    # tráfego constante dizendo o que a reconciliação do domínio "historico"
+    # já entrega sozinha alguns segundos depois.
+    "autorizacao_concedida": (USUARIOS, "Ação autorizada"),
+    "autorizacao_negada": (USUARIOS, "Código recusado"),
+    "autorizacao_sem_cadastro": (USUARIOS, "Ação liberada sem usuário cadastrado"),
+    # A senha do dono, que tranca o CADASTRO (ver services/rede/senhaDono.py).
+    # "senha_dono_alterada" passa pelo barramento (é o evento de sincronização);
+    # os três de baixo vêm de registrar_local, mesmo raciocínio dos de
+    # autorização — é uma linha por tentativa, e pôr isso em gossip seria
+    # tráfego constante na malha.
+    "senha_dono_alterada": (USUARIOS, "Senha do dono definida ou trocada"),
+    "usuarios_destrancado": (USUARIOS, "Cadastro de usuários destrancado"),
+    "usuarios_senha_recusada": (USUARIOS, "Senha do dono recusada"),
+    # Gravação no cadastro liberada porque ainda não há senha do dono definida
+    # (ver UsuariosController._autorizar_escrita). O buraco do bootstrap
+    # existe, mas nunca em silêncio — mesmo espírito de
+    # "autorizacao_sem_cadastro".
+    "usuarios_sem_senha": (USUARIOS, "Cadastro alterado sem senha definida"),
+    "usuarios_bloqueado": (USUARIOS, "Cadastro recusado por estar trancado"),
 }
 
 # Eventos de escrituração que NÃO entram no histórico. A tela de Rede existe
 # pra responder "o que aconteceu na malha", e a retenção é limitada
-# (_MAXIMO_REGISTROS / _RETENCAO_DIAS): um evento que dispara uma vez por
+# (_MAXIMO_REGISTROS / RETENCAO_DIAS): um evento que dispara uma vez por
 # comanda, sem dizer nada que o usuário queira saber, encurtaria pela metade a
 # janela de dias realmente visível em troca de ruído.
 #
@@ -114,6 +151,7 @@ _DETALHE = {
     "cardapio_alterado": lambda p: p.get("categoria", ""),
     "fechamento_atualizado": lambda p: p.get("data", ""),
     "comanda_baixada": lambda p: p.get("arquivo", ""),
+    "edicao_caixa": lambda p: f"{p.get('usuario', '')} — {p.get('codigo', '')} ({p.get('dataIso', '')})".strip(" —"),
     "extra_lancado": lambda p: p.get("descricao", ""),
     "extra_apagado": lambda p: "",
     "contagem_caixa_atualizada": lambda p: p.get("data", ""),
@@ -126,6 +164,23 @@ _DETALHE = {
     "servidor_designado": lambda p: p.get("nome", ""),
     "conflito_detectado": lambda p: p.get("arquivo", ""),
     "conflito_resolvido": lambda p: p.get("arquivo", ""),
+    # Só o nome, nunca o código: o código não é segredo (ver o topo de
+    # services/rede/usuarios.py), mas carimbá-lo para sempre no histórico de
+    # todas as máquinas não ajuda ninguém a responder "quem fez isto?".
+    "usuario_alterado": lambda p: p.get("nome", ""),
+    "usuario_apagado": lambda p: p.get("nome", ""),
+    "autorizacao_concedida": lambda p: f"{p.get('usuario', '')} — {p.get('acao', '')}: {p.get('alvo', '')}".strip(" —:"),
+    # Aqui o código digitado ENTRA: numa recusa ele é a evidência útil (alguém
+    # tentando adivinhar deixa uma trilha de códigos errados).
+    "autorizacao_negada": lambda p: f"código {p.get('codigo', '')} — {p.get('acao', '')}: {p.get('alvo', '')}".strip(" —:"),
+    "autorizacao_sem_cadastro": lambda p: f"{p.get('acao', '')}: {p.get('alvo', '')}".strip(" :"),
+    # Quando ela passou a valer — nunca o hash, o salt ou qualquer parte do
+    # registro: eles não dizem nada a quem lê a tela de Rede, e espalhá-los por
+    # um arquivo a mais em toda máquina não ajuda ninguém.
+    "senha_dono_alterada": lambda p: p.get("definidaEm", ""),
+    "usuarios_bloqueado": lambda p: p.get("acao", ""),
+    "usuarios_sem_senha": lambda p: p.get("acao", ""),
+    "usuarios_senha_recusada": lambda p: p.get("acao", ""),
 }
 
 
@@ -196,7 +251,7 @@ def _purgados(dados):
         # Comparar id com id como string é comparar cronologicamente (ver
         # relogio) — o limiar fictício de id_para_instante existe pra isso, e
         # é o mesmo truque de tombstones.purgar_antigos.
-        limite = relogio.id_para_instante(datetime.now() - timedelta(days=_RETENCAO_DIAS))
+        limite = relogio.id_para_instante(datetime.now() - timedelta(days=RETENCAO_DIAS))
         antigos = [id_evento for id_evento in dados if id_evento < limite]
         if not antigos:
             return dados
@@ -217,6 +272,40 @@ def _purgados(dados):
 
     mantidos = sorted(dados, key=_prioridade, reverse=True)[:_MAXIMO_REGISTROS]
     return {id_evento: dados[id_evento] for id_evento in mantidos}
+
+
+def contar_autorizacoes(nome):
+    """(quantas, id_do_mais_recente) das ações que `nome` autorizou dentro da
+    janela de retenção deste histórico. (0, "") quando não há nenhuma.
+
+    DUAS LIMITAÇÕES, ditas aqui para não serem descobertas na tela: a janela é
+    a da retenção (ver RETENCAO_DIAS/_MAXIMO_REGISTROS), então isto conta os
+    últimos dias e não a vida inteira da pessoa; e o casamento é pelo NOME,
+    porque o id do usuário não é guardado no registro — só o `detalhe` é (ver
+    o topo do módulo). Dois homônimos no cadastro somam juntos.
+
+    O nome vem no começo do detalhe, na forma "Nome — Ação: alvo" (ver
+    _DETALHE), e vira só "Nome" quando ação e alvo estão vazios — daí a
+    comparação aceitar as duas formas."""
+    nome = (nome or "").strip()
+    if not nome:
+        return 0, ""
+
+    prefixo = f"{nome} \u2014"
+    quantas = 0
+    ultimo = ""
+    for id_evento, entrada in _carregar().items():
+        if not isinstance(entrada, dict) or entrada.get("tipo") != "autorizacao_concedida":
+            continue
+        detalhe = entrada.get("detalhe", "")
+        if detalhe != nome and not detalhe.startswith(prefixo):
+            continue
+        quantas += 1
+        # Comparar id com id como string é comparar cronologicamente (ver
+        # relogio) — mesmo truque de _purgados.
+        if id_evento > ultimo:
+            ultimo = id_evento
+    return quantas, ultimo
 
 
 def listar(limite=200, categorias=None):

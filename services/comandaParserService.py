@@ -104,6 +104,14 @@ _PADRAO_SUFIXO_TAMANHO = re.compile(r"^(.*)\s\(([^)]+)\)$")
 _TAMANHOS_VALIDOS = ("Grande", "Broto", "Mini", "300 ML", "500 ML", "700 ML")
 _TAMANHOS_VALIDOS_UPPER = tuple(t.upper() for t in _TAMANHOS_VALIDOS)
 
+# Tamanho que não coube na linha do item e desceu sozinho para a de baixo (ver
+# comandaTextoService._acomodar_tamanho). Precisa ser reconhecido ANTES da
+# linha de observação, que também é recuada e casaria com ele — e aí o
+# "(BROTO)" viraria a observação do pedido ao editar a comanda, some do nome do
+# item e ainda aparece escrito no lugar errado.
+
+_PADRAO_LINHA_TAMANHO = re.compile(r"^\s+\(([^)]+)\)\s*$")
+
 _PADRAO_STATUS_PAGAMENTO = re.compile(r"^Status:[ \t]*(.*)$", re.MULTILINE)
 # balcaoController imprime o status colado no fim da linha do valor total
 # (ex: "Valor do pedido: R$ 45,00 [PG]") em vez de uma linha "Status:"
@@ -390,6 +398,22 @@ def reconstruir_itens(linhas_tabela):
         if match_borda and grupo_atual:
             borda_atual["nome"] = match_borda.group(1).strip()
             borda_atual["valor"] = (match_borda.group(2) or "").strip()
+            continue
+
+        # Tamanho que desceu de linha: volta para o fim do nome do item, que é
+        # de onde ele saiu. Reconstruído assim, o item volta idêntico ao que
+        # foi lançado — e reimprimi-lo torna a descer o tamanho, se continuar
+        # não cabendo.
+        match_tamanho_solto = _PADRAO_LINHA_TAMANHO.match(linha)
+        if (match_tamanho_solto and grupo_atual
+                and match_tamanho_solto.group(1).strip().upper() in _TAMANHOS_VALIDOS_UPPER):
+            coluna_pedido, observacao, valor, adicionais = grupo_atual[-1]
+            grupo_atual[-1] = (
+                f"{coluna_pedido} ({match_tamanho_solto.group(1).strip()})",
+                observacao,
+                valor,
+                adicionais,
+            )
             continue
 
         # Linha de observação (recuada), pertence ao pedido imediatamente

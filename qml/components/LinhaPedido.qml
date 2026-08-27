@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import estilo 1.0
+import "Texto.js" as Texto
 
 // Linha de item do pedido (pedido/observação/valor) — usado como delegate
 // da lista de itens em Balcao.qml/Entrega.qml/Salao.qml, onde era
@@ -133,7 +134,32 @@ Row {
         leftPadding: 10
         rightPadding: 10
         text: model.observacao
-        onTextChanged: model.observacao = text
+        // So a primeira letra da frase (ver capitalizarFrase em Texto.js):
+        // "sem cebola e sem azeitona" vira "Sem cebola e sem azeitona", e nao
+        // "Sem Cebola E Sem Azeitona" — capitalizar cada palavra deixaria mais
+        // dificil de ler justamente a linha que a cozinha le com pressa.
+        //
+        // Aplicada escrevendo no MODEL, e nao atribuindo "text" como fazem os
+        // campos de nome e endereco: aqui o binding "text: model.observacao"
+        // continua vivo mesmo depois de digitar, e e o model que a comanda
+        // impressa le. Passar por "text" quebraria o binding e deixaria duas
+        // fontes para o mesmo dado, com o campo e o model livres para
+        // discordar — e quem discordasse em silencio seria o papel.
+        //
+        // O cursor e devolvido na mao porque a volta pelo binding reposiciona o
+        // campo no fim: sem isso, corrigir a primeira letra de uma observacao
+        // ja escrita jogaria a proxima tecla para o final da linha.
+        onTextChanged: {
+            var formatado = Texto.capitalizarFrase(text);
+            if (formatado === text) {
+                model.observacao = text;
+                return;
+            }
+
+            var cursor = cursorPosition;
+            model.observacao = formatado;
+            cursorPosition = cursor;
+        }
         KeyNavigation.tab: campoValor
         KeyNavigation.backtab: campoPedido
         Keys.onReturnPressed: campoValor.forceActiveFocus()
