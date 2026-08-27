@@ -184,6 +184,13 @@ class ServidorLocalService(QObject):
         # de um travamento.
         if estado == PREPARANDO:
             status.iniciando("servidor", self._texto_de_status())
+        # As outras máquinas são avisadas na hora em que o servidor entra (ou
+        # sai) do ar, em vez de descobrirem sozinhas no próximo tique de 30s
+        # da verificação de conexão — ver RedeService.anunciar_servidor_no_ar.
+        # Chamado a cada mudança de estado porque "no ar" é justamente o que
+        # este método sabe; o RedeService ignora a repetição quando nada
+        # cruzou a fronteira entre RODANDO e o resto.
+        rede.anunciar_servidor_no_ar(estado == RODANDO)
         self.estadoMudou.emit()
 
     def _texto_de_status(self) -> str:

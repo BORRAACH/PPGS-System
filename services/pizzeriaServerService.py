@@ -71,6 +71,12 @@ class PizzeriaServerService(QObject):
         # permite trocar): quando isso acontece, o estado de conexão anterior
         # não vale mais nada.
         rede.servidorDesignadoMudou.connect(self.verificarConexao)
+        # Aviso direto da máquina hospedeira: o servidor acabou de subir (ou
+        # de cair) lá — ver RedeService.servidorNoArMudou. Sem isto, um
+        # servidor que sobe às 18h02 só era notado neste balcão no tique
+        # seguinte de _INTERVALO_VERIFICACAO_CONEXAO_MS, e até lá a Entrega
+        # ficava sem autofill de endereço com o servidor já de pé.
+        rede.servidorNoArMudou.connect(self._ao_avisar_servidor)
         # None até a primeira resposta chegar — diferente de False, que já
         # afirmaria "desconectado" antes de qualquer tentativa real.
         self._conectado = None
@@ -120,6 +126,22 @@ class PizzeriaServerService(QObject):
         # status 0 = a requisição não chegou a ser respondida (sem máquina
         # hospedeira, timeout da malha, socket caído).
         tratador(int(status), bytes(corpo))
+
+    def _ao_avisar_servidor(self, _maquina, _no_ar):
+        """Acata o aviso conferindo, em vez de simplesmente acreditar nele: a
+        verificação percorre o caminho inteiro (malha → hospedeira →
+        127.0.0.1) e é ela que dá o veredito — inclusive reenviando os
+        fechamentos que ficaram pendentes enquanto o servidor esteve fora (ver
+        _tratar_verificacao_conexao). Confiar no aviso e só marcar "conectado"
+        anunciaria conexão para um caminho que pode não existir deste balcão
+        até lá, que é o pior erro possível nesta tela.
+
+        Não filtra pela máquina avisada de propósito: a designação e o aviso
+        chegam quase juntos numa máquina que acabou de entrar na malha, e
+        descartar o aviso porque a designação ainda não chegou adiaria a
+        reconexão justamente no caso que ele existe para resolver. Uma
+        verificação a mais custa uma requisição."""
+        self.verificarConexao()
 
     @pyqtSlot()
     @protegido(None)
