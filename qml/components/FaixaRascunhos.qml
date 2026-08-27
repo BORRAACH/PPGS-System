@@ -52,6 +52,28 @@ Item {
         faixa.rascunhos = rascunhosController.listarRascunhos();
     }
 
+    // Descartar um rascunho pelo × do card.
+    //
+    // MORA AQUI, e não no onClicked do botão, por uma razão que não é de
+    // organização: apagar recarrega a faixa (RascunhosController avisa que o
+    // conjunto mudou), recarregar troca `rascunhos`, e trocar o modelo destrói
+    // o delegate na hora — junto com o CONTEXTO em que o handler do botão
+    // estaria rodando. O resto do handler morre ali, com "ReferenceError: faixa
+    // is not defined", e o passo seguinte (avisar a tela) nunca acontece: o
+    // card sumia e o formulário continuava preenchido, editando um rascunho
+    // que já não existe. Esta função roda no contexto da FAIXA, que sobrevive
+    // à troca do modelo, então a sequência inteira chega ao fim.
+    //
+    // A tela é avisada ANTES de apagar: se este era o rascunho aberto, ela
+    // precisa esvaziar o formulário e soltar o id. Sem isso o autosave o
+    // gravava de volta três segundos depois, com o mesmo id — o card sumia e
+    // reaparecia sozinho.
+    function descartar(idRascunho) {
+        faixa.descartado(idRascunho);
+        rascunhosController.excluirRascunho(idRascunho);
+        faixa.recarregar();
+    }
+
     // Ícone por tipo, os mesmos que a tela Início usa nos cartões de Balcão e
     // Entrega — é por eles que se reconhece o tipo sem ler.
     function _icone(tipo) {
@@ -194,17 +216,10 @@ Item {
                     width: 22
                     height: 22
                     padding: 0
-                    onClicked: {
-                        var id = cardRascunho.modelData.id;
-                        rascunhosController.excluirRascunho(id);
-                        // Avisa a tela ANTES de recarregar: se este era o
-                        // rascunho aberto, ela precisa esvaziar o formulário e
-                        // soltar o id. Sem isso o autosave o gravava de volta
-                        // três segundos depois, com o mesmo id — o card sumia
-                        // e reaparecia sozinho.
-                        faixa.descartado(id);
-                        faixa.recarregar();
-                    }
+                    // Uma chamada só, e nada depois dela: o que este clique
+                    // dispara destrói este delegate no meio do caminho (ver
+                    // faixa.descartar).
+                    onClicked: faixa.descartar(cardRascunho.modelData.id)
 
                     contentItem: Icone {
                         nome: "fa6s.xmark"
