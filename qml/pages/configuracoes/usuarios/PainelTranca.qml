@@ -18,9 +18,9 @@ import "../../../components"
 //
 // - DEFINIR (não há senha ainda) — primeira abertura numa instalação nova, ou
 //   numa máquina que ainda não recebeu o registro da malha. Enquanto não
-//   houver senha o cadastro fica ABERTO no controller (ver _pode_escrever), e
-//   por isso esta tela pede para defini-la de cara em vez de deixar a porta
-//   encostada.
+//   houver senha, o cadastro não aparece: a tela fica NESTE painel até a
+//   senha ser escolhida (ver UsuariosController.cadastroDestrancado), em vez
+//   de abrir o cadastro e deixar a porta encostada.
 // - DESTRANCAR (já há senha) — o caso de sempre.
 ColumnLayout {
     id: painelTranca
@@ -104,10 +104,24 @@ ColumnLayout {
             return;
         }
 
-        if (resultado && resultado.erro === "senha_curta")
+        if (resultado && resultado.erro === "senha_curta") {
             painelTranca.erro = "A senha precisa ter pelo menos " + (resultado.tamanhoMinimo || 6) + " caracteres.";
-        else
-            painelTranca.erro = "Não foi possível definir a senha.";
+            return;
+        }
+
+        // A senha chegou da malha entre a abertura desta tela e o clique: o
+        // controller recusa porque trocar uma senha existente exige a atual
+        // (ver definirSenhaDono), e "não foi possível" não diria o que houve.
+        // Trocar de modo aqui é o que impede a pessoa de insistir num
+        // formulário que já não é o certo.
+        if (resultado && resultado.erro === "senha_atual_incorreta") {
+            painelTranca.recomecar();
+            painelTranca.erro = "Outra máquina da malha já tem senha definida — digite a senha do dono.";
+            inputSenha.forceActiveFocus();
+            return;
+        }
+
+        painelTranca.erro = "Não foi possível definir a senha.";
     }
 
     spacing: Estilo.global.spacing.lg
@@ -163,10 +177,12 @@ ColumnLayout {
             Text {
                 Layout.fillWidth: true
                 text: painelTranca.definindo
-                    ? "Enquanto não houver senha, qualquer pessoa que chegue nesta máquina "
-                      + "pode cadastrar, editar e remover usuários. A senha vale em todas as "
-                      + "máquinas da malha e não é a mesma coisa que o código de dois dígitos — "
-                      + "ela nunca é digitada no balcão."
+                    ? "Esta máquina ainda não tem senha do dono: o cadastro só abre depois "
+                      + "que ela existir, e até lá o app não pede o código de dois dígitos para "
+                      + "imprimir, lançar ou apagar comanda. A senha vale em todas as máquinas "
+                      + "da malha e não é a mesma coisa que o código — ela nunca é digitada no "
+                      + "balcão. Se outra máquina já tiver senha, ela chega pela malha e esta "
+                      + "tela troca sozinha para pedi-la."
                     : "Cadastrar, editar ou remover usuários exige a senha do dono. "
                       + "Ela não é o código de dois dígitos.";
                 font.pixelSize: Estilo.global.fontSize.sm
