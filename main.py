@@ -50,6 +50,7 @@ try:
     from controllers.consultaController import ConsultaController
     from controllers.fechamentoController import FechamentoController
     from controllers.usuariosController import UsuariosController
+    from controllers.rascunhosController import RascunhosController
     from services.rede import rede
     from services.pizzeriaServerService import pizzeria_server
     from services.servidor import servidor_local
@@ -227,6 +228,11 @@ if __name__ == "__main__":
     # próprio porque Consulta e Fechamento consomem os dois lados disto.
     usuariosController = UsuariosController()
     engine.rootContext().setContextProperty("usuariosController", usuariosController)
+    # Pedidos começados e não finalizados, listados na faixa do topo de Balcão e
+    # Entrega (ver services/rascunhosPedido.py). Controller próprio porque a
+    # faixa é uma só, compartilhada pelas duas telas.
+    rascunhosController = RascunhosController()
+    engine.rootContext().setContextProperty("rascunhosController", rascunhosController)
     # Edição de data/cardapio/*.json pela tela Cardápio — as telas de pedido
     # continuam lendo esses arquivos direto por XMLHttpRequest; o controller
     # só existe porque o QML não grava arquivo.

@@ -210,80 +210,17 @@ ApplicationWindow {
         }
     }
 
-    Rectangle {
+    // O resultado de qualquer impressão do app, em qualquer tela — daí morar
+    // aqui e não numa página (ver components/NotificacaoImpressao.qml).
+    NotificacaoImpressao {
         id: notificacaoImpressao
 
-        property string texto: ""
-        property bool sucesso: true
-        property bool aberta: false
-
-        z: 2000
-        radius: Estilo.global.radius.lg
-        color: sucesso ? Estilo.action.confirm.base : Estilo.action.danger.base
-        // Cresce com o texto até onde a janela permite; passando disso, é o
-        // texto que encolhe (elide, abaixo) em vez de a faixa vazar pela
-        // esquerda da tela.
-        width: Math.min(linhaNotificacaoImpressao.implicitWidth + 40, root.width - 40)
-        height: Math.max(40, linhaNotificacaoImpressao.implicitHeight + 20)
-        anchors.right: parent.right
-        anchors.rightMargin: 20
-        anchors.bottom: parent.bottom
-        anchors.bottomMargin: aberta ? 20 : -(height + 20)
-
-        Row {
-            id: linhaNotificacaoImpressao
-
-            spacing: Estilo.global.spacing.sm
-            anchors.centerIn: parent
-
-            Icone {
-                id: iconeNotificacaoImpressao
-
-                nome: notificacaoImpressao.sucesso ? "fa6s.print" : "fa6s.circle-xmark"
-                cor: Estilo.global.textOnAccent
-                tamanho: Estilo.global.fontSize.lg
-                anchors.verticalCenter: parent.verticalCenter
-            }
-
-            Text {
-                text: notificacaoImpressao.texto
-                color: Estilo.global.textOnAccent
-                font.bold: true
-                font.pixelSize: Estilo.global.fontSize.lg
-                // Limitado ao que sobra da faixa depois do ícone: o nome da
-                // máquina que imprimiu pode ser longo, e sem isto a faixa
-                // ficava mais larga que a janela.
-                width: Math.min(implicitWidth, notificacaoImpressao.width - iconeNotificacaoImpressao.width - parent.spacing - 40)
-                elide: Text.ElideRight
-                anchors.verticalCenter: parent.verticalCenter
-            }
-
-        }
-
-        Behavior on anchors.bottomMargin {
-            NumberAnimation {
-                duration: Estilo.global.motion.slow
-                easing.type: Easing.OutCubic
-            }
-
-        }
-
-    }
-
-    Timer {
-        id: timerNotificacaoImpressao
-
-        interval: 4000
-        repeat: false
-        onTriggered: notificacaoImpressao.aberta = false
+        larguraDisponivel: root.width
     }
 
     Connections {
         function onImpressaoResultado(sucesso, detalhe) {
-            notificacaoImpressao.texto = sucesso ? ("Comanda impressa em " + detalhe) : ("Falha ao imprimir: " + detalhe);
-            notificacaoImpressao.sucesso = sucesso;
-            notificacaoImpressao.aberta = true;
-            timerNotificacaoImpressao.restart();
+            notificacaoImpressao.mostrar(sucesso, detalhe);
         }
 
         target: redeController

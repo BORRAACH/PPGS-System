@@ -439,40 +439,15 @@ Popup {
                         }
                     }
 
-                    ComboBox {
+                    ComboBoxPagamento {
                         id: comboFormaDivisao
 
                         Layout.preferredWidth: 110
+                        corDestaque: Estilo.screen.salao.accent
+                        alturaCampo: inputValorDivisao.implicitHeight
                         model: popupFecharConta.opcoesPagamento
                         currentIndex: popupFecharConta.opcoesPagamento.indexOf(linhaDivisao.formaDaDivisao)
                         onActivated: modeloDivisoes.setProperty(linhaDivisao.indiceDivisao, "formaPagamento", currentText)
-
-                        contentItem: Text {
-                            text: comboFormaDivisao.displayText
-                            color: Estilo.global.textInput
-                            leftPadding: 10
-                            rightPadding: 10
-                            verticalAlignment: Text.AlignVCenter
-                            elide: Text.ElideRight
-                        }
-
-                        // Ver o comentário do mesmo delegate em
-                        // components/CamposPagamento.qml.
-                        delegate: ItemDelegate {
-                            width: comboFormaDivisao.width
-                            text: modelData
-                            highlighted: comboFormaDivisao.highlightedIndex === index
-                            palette.text: Estilo.global.textInput
-                            palette.highlightedText: Estilo.global.textInput
-                        }
-
-                        background: Rectangle {
-                            radius: Estilo.global.radius.pill
-                            color: Estilo.global.inputBackground
-                            border.color: parent.activeFocus ? Estilo.screen.salao.accent : Estilo.global.border
-                            border.width: Estilo.global.borderWidth.hairline
-                            implicitHeight: inputValorDivisao.implicitHeight
-                        }
                     }
 
                     Button {
