@@ -128,9 +128,22 @@ class RedeService(QObject):
     # A máquina que hospeda o ppgs_server mudou (ou o preparo dela mudou de
     # estado) — a tela Rede e o cliente HTTP reagem a isto.
     servidorDesignadoMudou = pyqtSignal()
+    # (nome da máquina hospedeira, servidor no ar nela) — o aviso DIRETO que a
+    # hospedeira manda no instante em que o ppgs_server dela sobe ou cai, mais
+    # o que ela conta de si mesma no handshake. Existe porque o único jeito de
+    # um terminal descobrir isso antes era perguntando de 30 em 30 segundos
+    # (ver services/pizzeriaServerService.py): o servidor subia e o balcão
+    # ficava até meio minuto sem autofill de endereço, sem nada acontecendo na
+    # rede além da espera.
+    servidorNoArMudou = pyqtSignal(str, bool)
     # Uso interno: uma requisição encaminhada terminou nesta máquina e
     # precisa voltar pro socket de origem a partir da thread dele.
     _servidorRespostaLocal = pyqtSignal(str, str, int, QByteArray)
+    # Uso interno: o ServidorLocalService avisa que o processo do servidor
+    # subiu/caiu de dentro da thread de preparo dele, e anunciar isso escreve
+    # em QTcpSocket — só seguro na thread que os criou. Mesmo motivo (e mesmo
+    # desenho) de _servidorRespostaLocal acima.
+    _servidorLocalNoAr = pyqtSignal(bool)
     # Uso interno: repassa o resultado da checagem da impressora local (rodada
     # numa thread, porque PrinterService.localizar_impressora() executa
     # lpstat/PowerShell) de volta pra thread principal — mesmo padrão de
@@ -226,6 +239,10 @@ class RedeService(QObject):
         # hospedeira — encaminhar requisições exige o token, e só ele sabe
         # se o processo já subiu.
         self._encaminhar_para_servidor_local = None
+        # O ppgs_server desta máquina está no ar? Só chega a ser verdadeiro na
+        # hospedeira, e é isto que ela anuncia aos peers e conta no handshake
+        # (ver anunciar_servidor_no_ar).
+        self._servidor_no_ar_local = False
 
         # Domínios de estado inscritos na camada de anti-entropy periódica
         # (ver registrarDominioSincronizado) — nome -> {"resumo", "obter",
@@ -247,6 +264,7 @@ class RedeService(QObject):
         self._eventos.registrar(_EVENTO_COMANDA_NUMERADA, self._ao_receber_evento_comanda_numerada)
         self._eventos.registrar(_EVENTO_SERVIDOR_DESIGNADO, self._ao_receber_evento_servidor_designado)
         self._servidorRespostaLocal.connect(self._responder_servidor_ao_peer)
+        self._servidorLocalNoAr.connect(self._ao_mudar_servidor_local)
 
         # Histórico da malha: eventos são imutáveis, então a reconciliação é a
         # união dos dois lados e não existe "apagar" (a retenção é local, ver
@@ -546,6 +564,12 @@ class RedeService(QObject):
             # como a malha é sempre full-mesh, cada peer já manda a dele
             # diretamente pra todo mundo, não precisa repassar de terceiros.
             "idEntrada": self._id_entrada,
+            # Pelo mesmo motivo de nomeMaquinaFixada logo acima: quem conecta
+            # DEPOIS de o servidor já ter subido não recebeu o aviso da hora
+            # (ver _ao_mudar_servidor_local, que só alcança quem estava
+            # conectado naquele instante) e ficaria esperando o próximo tique
+            # de verificação para descobrir o que a hospedeira já sabia.
+            "servidorNoAr": self._servidor_no_ar_local,
         }
 
     def _preparar_socket(self, socket: QTcpSocket, destino: str = "", id_remoto: str = ""):
@@ -771,6 +795,7 @@ class RedeService(QObject):
                 "temImpressora": bool(mensagem.get("temImpressora")),
                 "infoImpressora": mensagem.get("infoImpressora"),
                 "idEntrada": mensagem.get("idEntrada"),
+                "servidorNoAr": bool(mensagem.get("servidorNoAr")),
             }
             print(f"[RedeService] Conectado a '{self._info_peers[id_remoto]['nome']}' ({self._info_peers[id_remoto]['endereco']}) — {len(self._peers)} peer(s) na malha.")
             # Entrada/saída de máquina não passa pelo barramento de eventos
@@ -797,6 +822,11 @@ class RedeService(QObject):
                 # desse sinal pra atualizar nomeMaquinaFixada/candidatosImpressora
                 # (ver fixarImpressoraPrincipal, mesmo motivo documentado lá).
                 self.impressoraPrincipalMudou.emit()
+            # O peer pode estar com o servidor no ar há horas: para quem
+            # acabou de entrar na malha, o handshake é o "aviso de que o
+            # servidor subiu" — e é aqui que ele passa a valer.
+            if self._info_peers[id_remoto]["servidorNoAr"]:
+                self.servidorNoArMudou.emit(self._info_peers[id_remoto]["nome"], True)
             # Assim que os dois se identificam, trocam a lista de arquivos
             # locais pra resolver o catch-up de quem ficou offline.
             self._enviar(socket, {"tipo": "meus_arquivos", "arquivos": self._listar_arquivos_locais()})
@@ -895,6 +925,22 @@ class RedeService(QObject):
             except ValueError:
                 corpo = b""
             self.respostaServidor.emit(id_req, int(mensagem.get("status") or 0), QByteArray(corpo))
+
+        elif tipo == "servidor_status":
+            # A máquina hospedeira avisando que o ppgs_server dela acabou de
+            # subir (ou de sair do ar). Não passa pelo barramento de eventos
+            # de propósito: isto não é um dado a guardar e reconciliar, é
+            # estado de um processo que só vale enquanto aquela máquina está
+            # conectada — exatamente o caso do "status_impressora" acima.
+            id_remoto = self._id_do_socket(socket)
+            if id_remoto is None or id_remoto not in self._info_peers:
+                return
+            no_ar = bool(mensagem.get("noAr"))
+            self._info_peers[id_remoto]["servidorNoAr"] = no_ar
+            nome_peer = self._info_peers[id_remoto].get("nome") or ""
+            print(f"[RedeService] '{nome_peer}' avisou que o servidor central "
+                  f"{'subiu' if no_ar else 'saiu do ar'} lá.")
+            self.servidorNoArMudou.emit(nome_peer, no_ar)
 
         elif tipo == "imprimir":
             job_id = mensagem.get("job_id", "")
@@ -1707,6 +1753,44 @@ class RedeService(QObject):
         em todo o resto: RedeService cuida de sockets e protocolo, e não sabe
         o que é um token HTTP nem se o processo do servidor está de pé."""
         self._encaminhar_para_servidor_local = funcao
+
+    def anunciar_servidor_no_ar(self, no_ar: bool):
+        """Avisa a malha inteira que o ppgs_server DESTA máquina subiu (ou
+        caiu). Chamado pelo ServidorLocalService a cada mudança de estado,
+        inclusive de dentro da thread de preparo — daí o sinal interno: o
+        anúncio em si só acontece na thread dona dos sockets."""
+        self._servidorLocalNoAr.emit(bool(no_ar))
+
+    def _ao_mudar_servidor_local(self, no_ar: bool):
+        """Manda o aviso a todo peer conectado agora. Quem conectar depois
+        recebe a mesma informação no handshake (ver _mensagem_identificar), e
+        quem estiver fora do ar neste instante não perde nada: ao voltar, o
+        handshake conta a situação já atualizada.
+
+        Só age na mudança de fato: o estado do servidor é recalculado a cada
+        passo do preparo, e repetir "continua no ar" a cada um deles viraria
+        tráfego (e uma linha de histórico) sem informação nenhuma."""
+        if no_ar == self._servidor_no_ar_local:
+            return
+        self._servidor_no_ar_local = no_ar
+
+        for socket in self._peers.values():
+            self._enviar(socket, {"tipo": "servidor_status", "noAr": no_ar})
+        print(f"[RedeService] Avisando {len(self._peers)} peer(s): o servidor central "
+              f"{'subiu' if no_ar else 'parou'} nesta máquina.")
+
+        # Registrado só aqui, na hospedeira, e não em cada máquina que recebe
+        # o aviso: subir e cair é um fato ÚNICO, do servidor — diferente de
+        # "maquina_conectada", que é o ponto de vista de cada uma. A
+        # reconciliação do domínio "historico" leva esta linha às demais.
+        historicoEventos.registrar_local(
+            "servidor_no_ar" if no_ar else "servidor_fora_do_ar",
+            {"nome": self._nome_local},
+        )
+
+        # A hospedeira também é cliente do próprio servidor (ver o atalho em
+        # solicitar_servidor), então o aviso vale para ela na mesma hora.
+        self.servidorNoArMudou.emit(self._nome_local, no_ar)
 
     def solicitar_servidor(self, metodo: str, caminho: str, corpo: bytes = b"") -> str:
         """Manda uma requisição ao ppgs_server, onde quer que ele esteja, e

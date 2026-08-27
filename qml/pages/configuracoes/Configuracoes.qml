@@ -207,6 +207,20 @@ Page {
                     : width
                 contentHeight: colunaSecoes.implicitHeight
                 boundsBehavior: Flickable.StopAtBounds
+                // A rolagem VERTICAL sai só da rodinha (WheelHandler abaixo) e
+                // da barra: arrastar com o botão do mouse não rola a página.
+                //
+                // Não é preferência de gosto — é conflito de gesto. Na prévia
+                // do cupom, arrastar uma linha para cima ou para baixo é como
+                // se reordena os campos da comanda (ver areaSubLinha em
+                // impressora/EstiloImpressora.qml), e o Flickable filtra o
+                // arrasto dos filhos: passado o limiar ele tomava o mouse do
+                // MouseArea da linha e rolava a tela no lugar de mover o
+                // campo. Deixando só HorizontalFlick, o arrasto vertical fica
+                // com quem o interpreta, e o horizontal — o de puxar o resto
+                // da largura do papel, ver contentWidth acima — continua
+                // funcionando.
+                flickableDirection: Flickable.HorizontalFlick
                 // O conteúdo encolhe bastante quando um campo da comanda volta
                 // de uma fonte grande (8x = 8 linhas de altura numa linha só)
                 // pro tamanho normal, e também ao trocar de seção. Com
@@ -222,6 +236,36 @@ Page {
 
                 ScrollBar.horizontal: ScrollBar {
                     policy: ScrollBar.AsNeeded
+                }
+
+                // Com HorizontalFlick o Flickable ignora a rodinha no eixo
+                // vertical, então a rolagem de sempre é refeita aqui. O
+                // handler recebe a roda antes do Flickable, de modo que o
+                // eixo horizontal também passa por aqui e não rola duas vezes.
+                WheelHandler {
+                    // Quanto anda um "clique" da rodinha (120 unidades de
+                    // angleDelta), na mesma ordem de grandeza das três linhas
+                    // que o resto do sistema rola.
+                    readonly property int _passo: 60
+
+                    acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+
+                    onWheel: function (roda) {
+                        // pixelDelta é o deslocamento real que o touchpad já
+                        // calculou; a rodinha do mouse só manda angleDelta.
+                        var dy = roda.pixelDelta.y !== 0 ? roda.pixelDelta.y : roda.angleDelta.y / 120 * _passo;
+                        var dx = roda.pixelDelta.x !== 0 ? roda.pixelDelta.x : roda.angleDelta.x / 120 * _passo;
+
+                        // Shift + rodinha é o atalho de rolagem horizontal, e
+                        // alguns sistemas o entregam ainda no eixo vertical.
+                        if ((roda.modifiers & Qt.ShiftModifier) && dx === 0) {
+                            dx = dy;
+                            dy = 0;
+                        }
+
+                        areaSecao.contentY = Math.max(0, Math.min(areaSecao.contentHeight - areaSecao.height, areaSecao.contentY - dy));
+                        areaSecao.contentX = Math.max(0, Math.min(areaSecao.contentWidth - areaSecao.width, areaSecao.contentX - dx));
+                    }
                 }
 
                 // Só a seção escolhida fica visível. Um ColumnLayout ignora
