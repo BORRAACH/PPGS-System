@@ -27,7 +27,14 @@ A tranca mora AQUI, e não só na tela: os três slots que mexem no cadastro
 conferem a senha eles mesmos (`_autorizar_escrita`), então uma tela que
 esquecesse de perguntar não conseguiria gravar nada mesmo assim. E é por
 gravação, não por sessão — cadastrar, editar e remover pedem a senha cada um
-na sua vez."""
+na sua vez.
+
+E É A SENHA QUE LIGA O GUARDA (ver `guardaAtivo`): enquanto ela não existir
+nesta máquina, nem o código de dois dígitos é pedido no balcão. Isso é o que
+impede o estado em que a máquina que só aprendeu o CADASTRO pela malha ficava
+sem imprimir e sem lançar comanda, exigindo um código que ninguém dali tinha
+— com o conserto do outro lado da mesma tranca. Escolher a senha é a decisão
+de usar a tranca, e ela vale para a malha inteira."""
 
 import time
 from datetime import datetime
@@ -243,8 +250,31 @@ class UsuariosController(QObject):
 
     @pyqtSlot(result=bool)
     @protegido(False)
-    def haUsuarios(self):
-        return usuarios.existe_algum()
+    def guardaAtivo(self):
+        """Se as ações protegidas (imprimir, lançar, editar comanda fechada,
+        apagar comanda) devem pedir o código de dois dígitos nesta máquina.
+
+        DUAS CONDIÇÕES, e não só o cadastro. A senha do dono é o que liga a
+        tranca: enquanto ela não existir aqui, o guarda fica desligado, mesmo
+        com gente cadastrada.
+
+        O motivo é a máquina que aprendeu o CADASTRO pela malha e mais nada.
+        Ali o guarda passava a exigir um código que ninguém daquele balcão
+        tinha — a máquina ficava sem imprimir e sem lançar comanda, e o
+        conserto (cadastrar alguém dali) estava do outro lado da mesma
+        tranca. Uma casa que ainda não escolheu a senha ainda não decidiu usar
+        a tranca; quem decide é o dono, na tela de Usuários, e é a senha que
+        marca essa decisão para toda a malha.
+
+        Sem cadastro nenhum continua liberando também — o bootstrap de sempre
+        (ver usuarios.existe_algum). Nos dois casos a liberação vai para o
+        histórico por validarCodigo: a porta aberta existe, nunca em silêncio.
+
+        Fail-open no @protegido: se a leitura do disco falhar, a resposta que
+        mantém a pizzaria funcionando é "não trancado" — um app que para de
+        imprimir por causa de um JSON ilegível é pior que um guarda que deixou
+        de perguntar."""
+        return senhaDono.definida() and usuarios.existe_algum()
 
     @pyqtSlot(str, str, str, result="QVariantMap")
     @protegido({})
@@ -429,8 +459,20 @@ class UsuariosController(QObject):
         por ação: isto aqui abre a vista, e cada gravação pede a senha de novo
         (ver _autorizar_escrita). Consultado pela tela a cada ação, e não
         guardado nela: o destrave expira sozinho, e uma cópia na QML ficaria
-        dizendo "aberto" depois de o prazo ter passado."""
-        return not senhaDono.definida() or self._destrancado()
+        dizendo "aberto" depois de o prazo ter passado.
+
+        SEM SENHA NENHUMA A RESPOSTA É FALSE, e não True. Antes era o
+        contrário, e o efeito era o oposto do pretendido: numa máquina que
+        nunca definiu senha (instalação nova, ou a segunda máquina da casa) o
+        cadastro abria sozinho e o painel que pede para DEFINIR a senha —
+        PainelTranca em modo `definindo`, escondido por `!destrancado` —
+        ficava invisível justamente onde ele era necessário. A porta ficava
+        encostada e ninguém era convidado a fechá-la; o dono só descobria a
+        senha existindo no dia em que uma máquina aprendia a da malha e
+        travava. Agora a primeira visita à tela pede a senha, e é
+        `definirSenhaDono` quem destrava a sessão em seguida — quem acabou de
+        escolher a senha não precisa digitá-la de novo."""
+        return self._destrancado()
 
     @pyqtSlot(str, result="QVariantMap")
     @protegido({})
@@ -510,8 +552,11 @@ class UsuariosController(QObject):
 
         Devolve:
         - `{"autorizado": True, "id", "nome", "codigo"}` — liberado.
-        - `{"autorizado": True, "semCadastro": True}` — ninguém cadastrado
-          ainda; ver o bootstrap descrito em usuarios.existe_algum.
+        - `{"autorizado": True, "semCadastro": True}` — o guarda não está
+          valendo nesta máquina: ninguém cadastrado ainda, ou ainda não há
+          senha do dono. Ver guardaAtivo, que é quem a tela consulta antes de
+          abrir o popup — aqui a checagem é repetida porque um caminho que
+          esquecesse de perguntar não pode acabar liberando sem registrar.
         - `{"autorizado": False, "erro": "codigo_invalido"}` — não existe.
         - `{"autorizado": False, "erro": "codigo_ambiguo", "candidatos": [...]}`
           — duas pessoas com o mesmo código; quem chamou pergunta qual
@@ -519,6 +564,15 @@ class UsuariosController(QObject):
         """
         acao = acao or ""
         alvo = alvo or ""
+
+        if not senhaDono.definida():
+            # A casa ainda não ligou a tranca (ver guardaAtivo). O evento é
+            # próprio, e não o de cadastro vazio: quem lê a tela de Rede
+            # precisa distinguir "ninguém cadastrado" de "cadastro existe, mas
+            # a senha do dono ainda não foi definida" — os consertos são
+            # diferentes.
+            historicoEventos.registrar_local("autorizacao_sem_senha", {"acao": acao, "alvo": alvo})
+            return {"autorizado": True, "semCadastro": True, "nome": ""}
 
         if not usuarios.existe_algum():
             historicoEventos.registrar_local("autorizacao_sem_cadastro", {"acao": acao, "alvo": alvo})

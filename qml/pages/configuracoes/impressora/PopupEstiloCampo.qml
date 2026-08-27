@@ -3,9 +3,18 @@ import QtQuick.Controls
 import estilo 1.0
 import "../../../components"
 
-// Popup com as alterações de estilo disponíveis para um único campo da
-// comanda (negrito, sublinhado, fundo preto, tamanho de fonte) — aberto ao
-// clicar num item da lista em EstiloImpressora.qml (abrirPara()).
+// Popup com as alterações de estilo disponíveis para os campos SELECIONADOS
+// da comanda (negrito, sublinhado, fundo preto, tamanho de fonte) — aberto por
+// EstiloImpressora.abrirEstiloDaSelecao().
+//
+// Trabalha sobre uma LISTA de campos, não um só: estilizar quinze campos um a
+// um era o trabalho que a tela dava, e com Ctrl/Shift+clique dá para pegar
+// vários e ligar o negrito de todos numa tacada. Um campo só é o caso de uma
+// lista de tamanho um — não há dois caminhos aqui.
+//
+// Quando os campos escolhidos DISCORDAM num atributo (uns em negrito, outros
+// não), o controle mostra "misto" em vez de fingir um valor comum. Clicar nele
+// resolve a divergência: todos passam a valer o que foi clicado.
 //
 // Reaproveitado para os 14 campos (um popup só, não um por campo): por isso
 // os controles (checkboxes e o campo de tamanho de fonte) NÃO usam "checked:
@@ -20,25 +29,96 @@ Popup {
     id: popup
 
     property var controlador
-    property string campoChave: ""
+    // Os campos que este popup está editando. Sempre uma lista, mesmo com um
+    // campo só.
+    property var campoChaves: []
     property string campoRotulo: ""
+    // Atributos em que os campos escolhidos discordam entre si — {atributo:
+    // true}. O que está aqui aparece como "misto" na tela.
+    property var mistos: ({})
     // Nível do multiplicador ESC/POS atual (1x a 8x) — não um valor em
     // pixels: ver o bloco "Tamanho da fonte" mais abaixo pro motivo.
     property int nivelFonte: 1
 
-    function abrirPara(chave, rotulo) {
-        campoChave = chave;
-        campoRotulo = rotulo;
-        chkNegrito.checked = controlador.obterAtributo(chave, "negrito");
-        chkSublinhado.checked = controlador.obterAtributo(chave, "sublinhado");
-        chkFundoPreto.checked = controlador.obterAtributo(chave, "fundo_preto");
-        nivelFonte = controlador.multiplicadorFonte(controlador.obterTamanhoFonte(chave));
+    // `chaves` aceita uma lista ou uma string solta — o segundo caso existe
+    // para quem chama com um campo só não precisar embrulhá-lo.
+    function abrirPara(chaves, rotulo) {
+        popup.campoChaves = (typeof chaves === "string") ? [chaves] : (chaves || []);
+        if (popup.campoChaves.length === 0)
+            return;
+
+        popup.campoRotulo = rotulo;
+
+        var divergentes = {};
+        chkNegrito.checked = popup._valorComum("negrito", divergentes);
+        chkSublinhado.checked = popup._valorComum("sublinhado", divergentes);
+        chkFundoPreto.checked = popup._valorComum("fundo_preto", divergentes);
+
+        var nivel = popup._nivelComum(divergentes);
+        popup.nivelFonte = nivel;
+        popup.mistos = divergentes;
         open();
     }
 
+    // O valor do atributo quando todos os campos concordam. Discordando,
+    // devolve o do PRIMEIRO e marca o atributo como misto — o primeiro porque
+    // é o campo em que a pessoa clicou primeiro, o que torna o estado inicial
+    // previsível em vez de arbitrário.
+    function _valorComum(atributo, divergentes) {
+        var primeiro = !!popup.controlador.obterAtributo(popup.campoChaves[0], atributo);
+        for (var i = 1; i < popup.campoChaves.length; i++) {
+            if (!!popup.controlador.obterAtributo(popup.campoChaves[i], atributo) !== primeiro) {
+                divergentes[atributo] = true;
+                return primeiro;
+            }
+        }
+        return primeiro;
+    }
+
+    function _nivelComum(divergentes) {
+        var primeiro = popup.controlador.multiplicadorFonte(
+            popup.controlador.obterTamanhoFonte(popup.campoChaves[0]));
+        for (var i = 1; i < popup.campoChaves.length; i++) {
+            var nivel = popup.controlador.multiplicadorFonte(
+                popup.controlador.obterTamanhoFonte(popup.campoChaves[i]));
+            if (nivel !== primeiro) {
+                divergentes["tamanho_fonte"] = true;
+                return primeiro;
+            }
+        }
+        return primeiro;
+    }
+
+    // Aplicar resolve a divergência: o atributo deixa de ser misto porque
+    // todos passam a valer o mesmo.
+    function _definirAtributo(atributo, valor) {
+        for (var i = 0; i < popup.campoChaves.length; i++)
+            popup.controlador.definirAtributoLocal(popup.campoChaves[i], atributo, valor);
+        popup._limparMisto(atributo);
+    }
+
     function _definirNivelFonte(nivel) {
-        nivelFonte = nivel;
-        controlador.definirTamanhoFonteLocal(campoChave, nivel * controlador.tamanhoFontePadrao);
+        popup.nivelFonte = nivel;
+        for (var i = 0; i < popup.campoChaves.length; i++) {
+            popup.controlador.definirTamanhoFonteLocal(
+                popup.campoChaves[i], nivel * popup.controlador.tamanhoFontePadrao);
+        }
+        popup._limparMisto("tamanho_fonte");
+    }
+
+    function _limparMisto(atributo) {
+        if (!popup.mistos[atributo])
+            return;
+
+        // Cópia, não mutação: `mistos` é um objeto JS comum, e mutar não
+        // emite sinal nenhum — os rótulos "misto" ficariam na tela depois de
+        // a divergência ter sido resolvida.
+        var restantes = {};
+        for (var chave in popup.mistos) {
+            if (chave !== atributo)
+                restantes[chave] = true;
+        }
+        popup.mistos = restantes;
     }
 
     modal: true
@@ -108,7 +188,7 @@ Popup {
                     implicitWidth: 22
                     implicitHeight: 22
                     anchors.verticalCenter: parent.verticalCenter
-                    onClicked: popup.controlador.definirAtributoLocal(popup.campoChave, "negrito", checked)
+                    onClicked: popup._definirAtributo("negrito", checked)
 
                     contentItem: Item {}
                     indicator: Rectangle {
@@ -135,6 +215,17 @@ Popup {
                     color: Estilo.global.text
                     anchors.verticalCenter: parent.verticalCenter
                 }
+
+                // Os campos escolhidos discordam neste atributo. Clicar
+                // resolve: todos passam a valer o que foi clicado.
+                Text {
+                    visible: popup.mistos["negrito"] === true
+                    text: "misto"
+                    font.pixelSize: Estilo.global.fontSize.sm
+                    font.italic: true
+                    color: Estilo.global.textSecondary
+                    anchors.verticalCenter: parent.verticalCenter
+                }
             }
 
             Row {
@@ -147,7 +238,7 @@ Popup {
                     implicitWidth: 22
                     implicitHeight: 22
                     anchors.verticalCenter: parent.verticalCenter
-                    onClicked: popup.controlador.definirAtributoLocal(popup.campoChave, "sublinhado", checked)
+                    onClicked: popup._definirAtributo("sublinhado", checked)
 
                     contentItem: Item {}
                     indicator: Rectangle {
@@ -174,6 +265,17 @@ Popup {
                     color: Estilo.global.text
                     anchors.verticalCenter: parent.verticalCenter
                 }
+
+                // Os campos escolhidos discordam neste atributo. Clicar
+                // resolve: todos passam a valer o que foi clicado.
+                Text {
+                    visible: popup.mistos["sublinhado"] === true
+                    text: "misto"
+                    font.pixelSize: Estilo.global.fontSize.sm
+                    font.italic: true
+                    color: Estilo.global.textSecondary
+                    anchors.verticalCenter: parent.verticalCenter
+                }
             }
 
             Row {
@@ -186,7 +288,7 @@ Popup {
                     implicitWidth: 22
                     implicitHeight: 22
                     anchors.verticalCenter: parent.verticalCenter
-                    onClicked: popup.controlador.definirAtributoLocal(popup.campoChave, "fundo_preto", checked)
+                    onClicked: popup._definirAtributo("fundo_preto", checked)
 
                     contentItem: Item {}
                     indicator: Rectangle {
@@ -213,6 +315,17 @@ Popup {
                     color: Estilo.global.text
                     anchors.verticalCenter: parent.verticalCenter
                 }
+
+                // Os campos escolhidos discordam neste atributo. Clicar
+                // resolve: todos passam a valer o que foi clicado.
+                Text {
+                    visible: popup.mistos["fundo_preto"] === true
+                    text: "misto"
+                    font.pixelSize: Estilo.global.fontSize.sm
+                    font.italic: true
+                    color: Estilo.global.textSecondary
+                    anchors.verticalCenter: parent.verticalCenter
+                }
             }
         }
 
@@ -229,12 +342,26 @@ Popup {
             width: parent.width
             height: 32
 
-            Text {
-                text: "Tamanho da fonte"
-                font.pixelSize: Estilo.global.fontSize.lg
-                color: Estilo.global.text
+            Row {
+                spacing: Estilo.global.spacing.sm
                 anchors.left: parent.left
                 anchors.verticalCenter: parent.verticalCenter
+
+                Text {
+                    text: "Tamanho da fonte"
+                    font.pixelSize: Estilo.global.fontSize.lg
+                    color: Estilo.global.text
+                    anchors.verticalCenter: parent.verticalCenter
+                }
+
+                Text {
+                    visible: popup.mistos["tamanho_fonte"] === true
+                    text: "misto"
+                    font.pixelSize: Estilo.global.fontSize.sm
+                    font.italic: true
+                    color: Estilo.global.textSecondary
+                    anchors.verticalCenter: parent.verticalCenter
+                }
             }
 
             Row {

@@ -62,13 +62,18 @@ Popup {
         popupAutorizacao.acao = acao || "";
         popupAutorizacao.alvo = alvo || "";
 
-        // Bootstrap: sem ninguém cadastrado o app não pode se trancar para
-        // fora das próprias funções — a instalação nova ficaria sem como
-        // corrigir uma comanda, e a máquina recém-chegada à malha ficaria
-        // inútil até a primeira reconciliação. A ação passa direto, e
-        // validarCodigo registra "Ação liberada sem usuário cadastrado" no
+        // Bootstrap: enquanto a tranca não estiver ligada nesta máquina, o app
+        // não pode se trancar para fora das próprias funções. São dois casos, e
+        // quem decide é o controller (ver UsuariosController.guardaAtivo):
+        // ninguém cadastrado ainda, ou nenhuma senha do dono definida.
+        //
+        // O segundo é o que derrubava a segunda máquina da casa: ela aprendia
+        // o CADASTRO pela malha e passava a exigir um código de dois dígitos
+        // que ninguém daquele balcão tinha — sem imprimir, sem lançar comanda,
+        // e com o conserto (cadastrar alguém dali) do outro lado da mesma
+        // tranca. A ação passa direto, e validarCodigo registra a liberação no
         // histórico: o buraco existe, mas nunca em silêncio.
-        if (!usuariosController.haUsuarios()) {
+        if (!usuariosController.guardaAtivo()) {
             usuariosController.validarCodigo("", popupAutorizacao.acao, popupAutorizacao.alvo);
             if (aoAutorizar)
                 aoAutorizar({ "nome": "", "semCadastro": true });

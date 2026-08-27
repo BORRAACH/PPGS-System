@@ -592,6 +592,17 @@ Page {
         onComandaApagada: telaConsulta.carregarComandas()
     }
 
+    // Quantas vias reimprimir — aberto pelo "Reimprimir…" do menu de contexto
+    // de cada linha. Instância única, como a confirmação de exclusão acima e
+    // pelo mesmo motivo: uma por linha seria uma por comanda do dia.
+    //
+    // Não recarrega a lista ao terminar: reimprimir não muda nada em disco (ver
+    // FechamentoController.reimprimirComanda). O resultado da impressão chega
+    // depois, por redeController.impressaoResultado, como o de qualquer outra.
+    PopupCopiasImpressao {
+        id: popupCopiasImpressao
+    }
+
     // Guarda do lápis. A lixeira tem o dela dentro do próprio
     // PopupConfirmarExclusao, que é compartilhado com o Fechamento.
     PopupAutorizacao {
@@ -673,6 +684,7 @@ Page {
             Layout.fillHeight: true
             pagina: telaConsulta
             popupExclusao: popupConfirmarExclusao
+            popupCopias: popupCopiasImpressao
         }
 
         // --- BOTÃO VOLTAR ---

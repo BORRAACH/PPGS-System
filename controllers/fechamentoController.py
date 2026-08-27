@@ -1345,9 +1345,11 @@ class FechamentoController(QObject):
         return dados
 
     @pyqtSlot(str, result=bool)
+    @pyqtSlot(str, int, result=bool)
     @protegido(False)
-    def reimprimirComanda(self, nome_arquivo):
-        """Manda a comanda pra impressora exatamente como ela está em disco.
+    def reimprimirComanda(self, nome_arquivo, copias=1):
+        """Manda a comanda pra impressora exatamente como ela está em disco,
+        `copias` vezes (padrão 1).
 
         Sem decodificar e sem limpar_codigos_impressora: o .txt JÁ é o cupom
         ESC/POS byte a byte (é por isso que ele não é um JSON — ver
@@ -1355,9 +1357,15 @@ class FechamentoController(QObject):
         arquivo, não remontar a comanda. Diferente de editar, não grava nada
         novo: nenhum arquivo, nenhum código sequencial, nenhum evento na malha.
 
-        O True daqui significa só "o pedido de impressão foi despachado" — a
-        impressão em si é assíncrona e o resultado chega por
-        rede.impressaoResultado, igual ao de um pedido novo."""
+        As cópias repetem só o PEDIDO de impressão, nunca a leitura nem a
+        gravação — mesmo desenho de BalcaoController.enviarPedido. Uma
+        reimpressão não grava nada de todo jeito, mas manter os dois iguais é o
+        que evita alguém "melhorar" um dos dois sozinho depois.
+
+        O True daqui significa só "os pedidos de impressão foram despachados" —
+        a impressão em si é assíncrona e o resultado chega por
+        rede.impressaoResultado, igual ao de um pedido novo. Com várias cópias
+        chega um resultado por cópia."""
         nome_arquivo = os.path.basename(nome_arquivo)
         caminho = os.path.join(self.pasta_pedidos, nome_arquivo)
 
@@ -1368,7 +1376,8 @@ class FechamentoController(QObject):
             print(f"[FechamentoController] Falha ao ler {caminho} para reimpressão: {erro}")
             return False
 
-        rede.solicitar_impressao(conteudo_bytes)
+        for _ in range(max(1, copias)):
+            rede.solicitar_impressao(conteudo_bytes)
         return True
 
     @pyqtSlot(str, result=bool)
