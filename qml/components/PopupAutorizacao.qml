@@ -338,9 +338,16 @@ Popup {
                 Layout.fillWidth: true
                 visible: popupAutorizacao._candidatos.length === 0
                 padding: Estilo.global.padding.md
-                // Exige os dois dígitos: sem isto, um Enter apressado com um
-                // dígito só queimaria uma tentativa do freio.
-                enabled: campoCodigo.text.length === 2 && !popupAutorizacao._travado
+                // Um dígito basta para os códigos que começam com zero: quem
+                // é "07" digita 7, e o Python completa (ver
+                // usuarios.normalizar_codigo, por onde passam tanto a
+                // gravação quanto a busca). Exigir os dois aqui era a tela
+                // cobrando um zero que ela mesma sabia pôr — e no balcão, com
+                // a fila andando, esse zero é digitado errado ou esquecido.
+                //
+                // O campo vazio continua desabilitando: um Enter apressado em
+                // nada queimaria uma tentativa do freio à toa.
+                enabled: campoCodigo.text.length > 0 && !popupAutorizacao._travado
                 onClicked: popupAutorizacao._confirmar()
 
                 contentItem: Text {

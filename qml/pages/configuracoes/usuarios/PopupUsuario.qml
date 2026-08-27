@@ -260,6 +260,15 @@ Popup {
                     inputMethodHints: Qt.ImhDigitsOnly
                     validator: RegularExpressionValidator { regularExpression: /^\d{0,2}$/ }
                     Keys.onReturnPressed: popupUsuario._confirmar()
+                    // "7" vira "07" ao sair do campo. O Python já normaliza na
+                    // gravação, então sem isto o disco ficava certo e a tela
+                    // mentia — mesmo conserto do preço do cardápio. Aqui a
+                    // mentira custa mais: é por este campo que se confere se o
+                    // código de alguém colide com o de outra pessoa.
+                    onEditingFinished: {
+                        if (inputCodigo.text.length === 1)
+                            inputCodigo.text = "0" + inputCodigo.text;
+                    }
                 }
 
                 Text {
@@ -450,8 +459,10 @@ Popup {
 
                 Layout.fillWidth: true
                 padding: Estilo.global.padding.md
+                // Um dígito basta, como no popup do balcão: "7" é gravado
+                // como "07" (ver usuarios.normalizar_codigo).
                 enabled: popupUsuario.confirmandoExclusao
-                    || (inputNome.text.trim() !== "" && inputCodigo.text.length === 2)
+                    || (inputNome.text.trim() !== "" && inputCodigo.text.length > 0)
                 onClicked: {
                     if (popupUsuario.confirmandoExclusao)
                         popupUsuario._excluir();
