@@ -4,10 +4,15 @@ import estilo 1.0
 // Um "campo" de texto da prévia da comanda (ver EstiloImpressora.qml),
 // estilizado de acordo com a configuração atual do campo indicado —
 // negrito/sublinhado refletidos via font, fundo preto via cor de fundo +
-// texto branco (o modo reverso real da impressora), e tamanho de fonte via
-// o mesmo multiplicador ESC/POS (1x-8x) que realmente sai impresso — não o
-// valor em pixels puro, pra prévia não prometer uma granularidade que a
-// impressora não tem.
+// texto branco (o modo reverso real da impressora), e tamanho de fonte na
+// mesma escala que realmente sai impressa.
+//
+// Essa escala depende de quem desenha a comanda: sendo a impressora, é o
+// multiplicador ESC/POS (1x-8x) e não o valor em pixels puro, pra prévia não
+// prometer uma granularidade que a impressora não tem; havendo uma fonte
+// escolhida (ver services/comandaImagemService.py), quem desenha somos nós e
+// o tamanho em pixels vale como está — a prévia então mostra 30px como 30px,
+// e não arredondado pra 2x.
 Rectangle {
     id: raizCampo
 
@@ -36,7 +41,9 @@ Rectangle {
     property bool _negrito: false
     property bool _sublinhado: false
     property bool _fundoPreto: false
-    property int _multiplicador: 1
+    // Quantas vezes o tamanho base — fracionário quando o tamanho vai em
+    // pixels livres, inteiro quando é multiplicador de impressora.
+    property real _escala: 1
 
     function recarregarEstilo() {
         if (!controlador)
@@ -45,7 +52,8 @@ Rectangle {
         _negrito = !!controlador.obterAtributo(campo, "negrito");
         _sublinhado = !!controlador.obterAtributo(campo, "sublinhado");
         _fundoPreto = !!controlador.obterAtributo(campo, "fundo_preto");
-        _multiplicador = controlador.multiplicadorFonte(controlador.obterTamanhoFonte(campo));
+        var tamanhoPx = controlador.obterTamanhoFonte(campo);
+        _escala = controlador.fonteImpressao === "" ? controlador.multiplicadorFonte(tamanhoPx) : tamanhoPx / controlador.tamanhoFontePadrao;
     }
 
     Component.onCompleted: recarregarEstilo()
@@ -76,7 +84,7 @@ Rectangle {
         font.family: "monospace"
         font.bold: raizCampo._negrito
         font.underline: raizCampo._sublinhado
-        font.pixelSize: raizCampo.tamanhoBase * raizCampo._multiplicador
+        font.pixelSize: Math.max(1, Math.round(raizCampo.tamanhoBase * raizCampo._escala))
         color: raizCampo._fundoPreto ? Estilo.printer.reverseText : Estilo.printer.ink
     }
 }

@@ -43,6 +43,12 @@ Column {
     property int espacamentoSecoes: 1
     property int espacamentoCorte: 4
     property int tamanhoFontePadrao: 24
+    // Faixa aceita pro tamanho em pixels, espelhada do Python
+    // (comandaEstiloService.TAMANHO_FONTE_MIN_PX/MAX_PX) como o padrão acima:
+    // quem edita é o PopupEstiloCampo, e ele conversa com esta tela, não com o
+    // controller.
+    property int tamanhoFonteMin: 8
+    property int tamanhoFonteMax: 200
     // Família da fonte usada pra DESENHAR a comanda. Vazio = a fonte da própria
     // impressora, que é o padrão: nesse caso o cupom sai como texto, do jeito
     // de sempre. Com uma família escolhida, a comanda passa a ser desenhada
@@ -226,7 +232,14 @@ Column {
     // e por isso zera a flag no fim.
     onEspacamentoSecoesChanged: raiz.marcarPendente()
     onEspacamentoCorteChanged: raiz.marcarPendente()
-    onFonteImpressaoChanged: raiz.marcarPendente()
+    onFonteImpressaoChanged: {
+        raiz.marcarPendente();
+        // Trocar a fonte muda a ESCALA de todo campo da prévia de uma vez (de
+        // multiplicador inteiro para pixels livres, ou o contrário), e não o
+        // estilo de um campo em particular — é exatamente o caso que
+        // versaoConfig existe para cobrir.
+        raiz.versaoConfig += 1;
+    }
 
     function obterAtributo(campo, atributo) {
         var atributosCampo = raiz.configAtual.campos[campo];
@@ -306,6 +319,8 @@ Column {
         var campos = comandaEstiloController.listarCampos();
         var camposOrdenaveis = comandaEstiloController.listarCamposOrdenaveis();
         raiz.tamanhoFontePadrao = comandaEstiloController.tamanhoFontePadrao();
+        raiz.tamanhoFonteMin = comandaEstiloController.tamanhoFonteMinimo();
+        raiz.tamanhoFonteMax = comandaEstiloController.tamanhoFonteMaximo();
         raiz.maxLinhasSeparador = comandaEstiloController.maxLinhasSeparador();
         raiz.tiposComanda = comandaEstiloController.listarTiposComanda();
         raiz.configAtual = config;

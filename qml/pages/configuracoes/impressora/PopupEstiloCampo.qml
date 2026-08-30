@@ -36,9 +36,14 @@ Popup {
     // Atributos em que os campos escolhidos discordam entre si — {atributo:
     // true}. O que está aqui aparece como "misto" na tela.
     property var mistos: ({})
-    // Nível do multiplicador ESC/POS atual (1x a 8x) — não um valor em
-    // pixels: ver o bloco "Tamanho da fonte" mais abaixo pro motivo.
+    // Nível do multiplicador ESC/POS atual (1x a 8x) e o tamanho em pixels.
+    // Qual dos dois o popup mostra depende de quem vai desenhar a comanda —
+    // ver o bloco "Tamanho da fonte" mais abaixo.
     property int nivelFonte: 1
+    property int tamanhoPx: 24
+    // Quando há uma fonte escolhida, quem desenha a comanda somos nós, e o
+    // tamanho deixa de estar preso aos 8 multiplicadores do ESC/POS.
+    readonly property bool tamanhoEmPixels: !!popup.controlador && popup.controlador.fonteImpressao !== ""
 
     // `chaves` aceita uma lista ou uma string solta — o segundo caso existe
     // para quem chama com um campo só não precisar embrulhá-lo.
@@ -56,6 +61,8 @@ Popup {
 
         var nivel = popup._nivelComum(divergentes);
         popup.nivelFonte = nivel;
+        popup.tamanhoPx = popup.controlador.obterTamanhoFonte(popup.campoChaves[0]);
+        campoTamanhoPx.text = popup.tamanhoPx;
         popup.mistos = divergentes;
         open();
     }
@@ -99,10 +106,29 @@ Popup {
 
     function _definirNivelFonte(nivel) {
         popup.nivelFonte = nivel;
-        for (var i = 0; i < popup.campoChaves.length; i++) {
-            popup.controlador.definirTamanhoFonteLocal(
-                popup.campoChaves[i], nivel * popup.controlador.tamanhoFontePadrao);
-        }
+        popup.tamanhoPx = nivel * popup.controlador.tamanhoFontePadrao;
+        campoTamanhoPx.text = popup.tamanhoPx;
+        for (var i = 0; i < popup.campoChaves.length; i++)
+            popup.controlador.definirTamanhoFonteLocal(popup.campoChaves[i], popup.tamanhoPx);
+
+        popup._limparMisto("tamanho_fonte");
+    }
+
+    function _definirTamanhoPx(px) {
+        // Vazio ou não numérico (o campo aceita ser apagado enquanto se
+        // digita) volta pro tamanho que já valia, em vez de virar o mínimo.
+        var alvo = isNaN(px) ? popup.tamanhoPx : px;
+        var limitado = Math.max(popup.controlador.tamanhoFonteMin,
+                                Math.min(popup.controlador.tamanhoFonteMax, Math.round(alvo)));
+
+        popup.tamanhoPx = limitado;
+        // Reescrito mesmo quando o valor não mudou: é o que devolve o campo
+        // ao normal depois de alguém digitar "999" ou deixá-lo vazio.
+        campoTamanhoPx.text = limitado;
+        for (var i = 0; i < popup.campoChaves.length; i++)
+            popup.controlador.definirTamanhoFonteLocal(popup.campoChaves[i], limitado);
+
+        popup.nivelFonte = popup.controlador.multiplicadorFonte(limitado);
         popup._limparMisto("tamanho_fonte");
     }
 
@@ -332,12 +358,22 @@ Popup {
         Rectangle { width: parent.width; height: 1; color: Estilo.global.borderCard }
 
         // --- Tamanho da fonte ---
-        // Um campo livre em pixels dava a falsa impressão de controle
-        // contínuo: o ESC/POS só tem 8 multiplicadores inteiros do
-        // tamanho normal (1x a 8x), então digitar "25" ou "30" imprimia
-        // exatamente do mesmo tamanho (os dois viram 2x) — parecia bug
-        // ("só muda pra valores específicos"). Aqui o controle já mostra
-        // direto qual dos 8 níveis está selecionado.
+        // DOIS controles, e qual aparece depende de quem vai desenhar a
+        // comanda.
+        //
+        // Quando é a impressora (nenhuma fonte escolhida), são os 8 níveis.
+        // Um campo livre em pixels aqui dava a falsa impressão de controle
+        // contínuo: o ESC/POS só tem multiplicadores inteiros do tamanho
+        // normal (1x a 8x), então digitar "25" ou "30" imprimia exatamente do
+        // mesmo tamanho (os dois viram 2x) — parecia bug ("só muda pra
+        // valores específicos"). O controle de nível mostra direto o que vai
+        // sair.
+        //
+        // Quando somos nós que desenhamos (uma fonte escolhida, ver
+        // services/comandaImagemService.py), esse teto não existe: o tamanho
+        // vai em pixels até o papel, e aí o campo livre passa a dizer a
+        // verdade — 30 imprime 30. É a mesma razão de antes, aplicada ao
+        // caso novo, e não uma volta atrás.
         Item {
             width: parent.width
             height: 32
@@ -364,9 +400,55 @@ Popup {
                 }
             }
 
+            // --- Em pixels: só quando somos nós que desenhamos ---
+            Row {
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: Estilo.global.spacing.md
+                visible: popup.tamanhoEmPixels
+
+                TextField {
+                    id: campoTamanhoPx
+
+                    width: 80
+                    height: 32
+                    horizontalAlignment: TextInput.AlignHCenter
+                    inputMethodHints: Qt.ImhDigitsOnly
+                    validator: IntValidator {
+                        bottom: 1
+                        top: 999
+                    }
+                    font.pixelSize: Estilo.global.fontSize.lg
+                    font.bold: true
+                    color: Estilo.global.textInput
+                    anchors.verticalCenter: parent.verticalCenter
+                    // Só ao confirmar/sair do campo, nunca a cada tecla: com
+                    // onTextChanged, apagar "48" pra digitar "30" passaria por
+                    // "4" e o campo já teria sido limitado ao mínimo antes de
+                    // a pessoa terminar de digitar.
+                    onEditingFinished: popup._definirTamanhoPx(parseInt(text, 10))
+
+                    background: Rectangle {
+                        radius: Estilo.global.radius.md
+                        color: Estilo.global.inputBackground
+                        border.color: campoTamanhoPx.activeFocus ? Estilo.screen.config.accent : Estilo.global.border
+                        border.width: campoTamanhoPx.activeFocus ? 2 : 1
+                    }
+                }
+
+                Text {
+                    text: "px"
+                    font.pixelSize: Estilo.global.fontSize.md
+                    color: Estilo.global.textSecondary
+                    anchors.verticalCenter: parent.verticalCenter
+                }
+            }
+
+            // --- Em níveis: quando quem desenha é a impressora ---
             Row {
                 anchors.right: parent.right
                 spacing: Estilo.global.spacing.lg
+                visible: !popup.tamanhoEmPixels
 
                 Button {
                     text: "-"
