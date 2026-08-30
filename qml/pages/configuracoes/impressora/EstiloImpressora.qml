@@ -43,6 +43,22 @@ Column {
     property int espacamentoSecoes: 1
     property int espacamentoCorte: 4
     property int tamanhoFontePadrao: 24
+    // Família da fonte usada pra DESENHAR a comanda. Vazio = a fonte da própria
+    // impressora, que é o padrão: nesse caso o cupom sai como texto, do jeito
+    // de sempre. Com uma família escolhida, a comanda passa a ser desenhada
+    // como imagem antes de ser enviada (ver services/comandaImagemService.py).
+    property string fonteImpressao: ""
+    // Catálogo vindo do Python ([{chave, rotulo}]) — a opção padrão seguida
+    // das famílias da máquina que IMPRIME (ver comandaEstiloController.
+    // listarFontes), que não é necessariamente esta.
+    property var fontesDisponiveis: []
+    // De onde veio esse catálogo: {maquina, local, conhecida}. Só serve pra
+    // tela explicar a lista; a escolha em si não depende dele.
+    property var origemFontes: ({
+        "maquina": "",
+        "local": false,
+        "conhecida": false
+    })
     // Espessura padrão de cada divisória tracejada, e as exceções por campo
     // ({chave: nº de traços antes dela}) que ignoram a regra automática de
     // categoria. Espelham "linhas_separador"/"separadores_campo" do JSON —
@@ -210,6 +226,7 @@ Column {
     // e por isso zera a flag no fim.
     onEspacamentoSecoesChanged: raiz.marcarPendente()
     onEspacamentoCorteChanged: raiz.marcarPendente()
+    onFonteImpressaoChanged: raiz.marcarPendente()
 
     function obterAtributo(campo, atributo) {
         var atributosCampo = raiz.configAtual.campos[campo];
@@ -269,9 +286,19 @@ Column {
             "espacamento_secoes": raiz.espacamentoSecoes,
             "espacamento_corte": raiz.espacamentoCorte,
             "linhas_separador": raiz.linhasSeparadorPadrao,
-            "separadores_campo": raiz.separadoresPorCampo
+            "separadores_campo": raiz.separadoresPorCampo,
+            "fonte_impressao": raiz.fonteImpressao
         });
         raiz.alteracoesPendentes = false;
+    }
+
+    // Só o catálogo de fontes, sem mexer no resto da configuração — usado ao
+    // abrir a tela e sempre que a máquina que imprime mudar (a eleição muda
+    // sozinha quando alguém pluga a impressora em outro computador, e aí as
+    // fontes oferecidas passam a ser as de lá).
+    function recarregarFontes() {
+        raiz.origemFontes = comandaEstiloController.origemFontes();
+        raiz.fontesDisponiveis = comandaEstiloController.listarFontes();
     }
 
     function carregarConfiguracao() {
@@ -316,6 +343,11 @@ Column {
         raiz.espacamentoSecoes = config.espacamento_secoes !== undefined ? config.espacamento_secoes : 1;
         raiz.espacamentoCorte = config.espacamento_corte !== undefined ? config.espacamento_corte : 4;
         raiz.linhasSeparadorPadrao = config.linhas_separador !== undefined ? config.linhas_separador : 1;
+        // A escolha antes da lista, de propósito: é a atribuição de
+        // fontesDisponiveis que manda o combo refazer o índice, e ela precisa
+        // encontrar fonteImpressao já com o valor novo.
+        raiz.fonteImpressao = config.fonte_impressao !== undefined ? config.fonte_impressao : "";
+        raiz.recarregarFontes();
         // Cópia, não a referência de dentro de configAtual: as exceções são
         // editadas por reatribuição (definirExcecaoSeparador) e não devem
         // mexer no dict que veio do Python.
@@ -978,6 +1010,20 @@ Column {
     Component.onDestruction: {
         if (raiz.alteracoesPendentes)
             raiz.salvarNoBackend();
+    }
+
+    // A máquina que imprime é eleita pela malha e pode trocar enquanto esta
+    // tela está aberta (alguém pluga a impressora em outro computador, ou o
+    // dono fixa outra máquina na tela de Rede). Quando isso acontece, as
+    // fontes oferecidas passam a ser as de lá — recarregar só o catálogo, e
+    // não a configuração inteira, pra não jogar fora o que já foi editado
+    // aqui e ainda não foi aplicado.
+    Connections {
+        target: redeController
+
+        function onImpressoraPrincipalMudou() {
+            raiz.recarregarFontes();
+        }
     }
 
     ListModel {
@@ -1994,6 +2040,126 @@ Column {
                                     border.color: Estilo.global.border
                                     border.width: Estilo.global.borderWidth.hairline
                                 }
+                            }
+                        }
+
+                        // Título próprio: daqui pra baixo não é mais
+                        // espaçamento, e um bloco sem título ficaria pendurado
+                        // no anterior.
+                        Text {
+                            text: "FONTE"
+                            font.pixelSize: Estilo.global.fontSize.xl
+                            font.bold: true
+                            color: raiz.corDestaque
+                        }
+
+                        Column {
+                            spacing: Estilo.global.spacing.md
+
+                            Text {
+                                width: 400
+                                text: "Fonte usada para desenhar a comanda"
+                                font.pixelSize: Estilo.global.fontSize.md
+                                color: Estilo.global.text
+                            }
+
+                            // De qual máquina saiu a lista abaixo. Sem isto, o
+                            // dono não teria como entender por que a lista é
+                            // essa (são as fontes de OUTRO computador) nem por
+                            // que ela muda quando a impressora troca de lugar.
+                            Text {
+                                width: 400
+                                wrapMode: Text.WordWrap
+                                text: !raiz.origemFontes.conhecida ? "Nenhuma máquina com impressora foi encontrada agora — sem saber quais fontes ela tem, só a opção padrão é oferecida." : raiz.origemFontes.local ? "Fontes instaladas nesta máquina, que é a que está imprimindo." : "Fontes instaladas em " + raiz.origemFontes.maquina + ", a máquina que está imprimindo."
+                                font.pixelSize: Estilo.global.fontSize.sm
+                                color: Estilo.global.textSecondary
+                            }
+
+                            ComboBox {
+                                id: comboFonte
+
+                                // Nomeado pelo mesmo motivo do popup lá
+                                // embaixo: deixa o seletor alcançável de fora
+                                // para inspeção e teste.
+                                objectName: "comboFonteComanda"
+                                width: 400
+                                model: raiz.fontesDisponiveis
+                                textRole: "rotulo"
+                                valueRole: "chave"
+
+                                // Mesmo padrão do combo de impressora em
+                                // pages/rede/Rede.qml: currentIndex não é um
+                                // binding vivo (o usuário mexe nele à vontade),
+                                // então é recalculado explicitamente sempre que
+                                // a configuração é relida — abrir a tela ou
+                                // "Restaurar padrões".
+                                function sincronizarSelecao() {
+                                    for (var i = 0; i < raiz.fontesDisponiveis.length; i++) {
+                                        if (raiz.fontesDisponiveis[i].chave === raiz.fonteImpressao) {
+                                            currentIndex = i;
+                                            return;
+                                        }
+                                    }
+                                    // A fonte gravada não existe nesta máquina
+                                    // (veio de outra pela malha). Cai na opção
+                                    // padrão, que é o que a impressão também
+                                    // faz — mas SEM escrever em fonteImpressao:
+                                    // apagar aqui a escolha do dono a desfaria
+                                    // em todas as máquinas na próxima gravação.
+                                    currentIndex = 0;
+                                }
+
+                                Component.onCompleted: sincronizarSelecao()
+                                Connections {
+                                    target: raiz
+
+                                    function onFontesDisponiveisChanged() {
+                                        comboFonte.sincronizarSelecao();
+                                    }
+
+                                    // Também quando só a escolha muda sem a
+                                    // lista mudar — é o caso de "Restaurar
+                                    // padrões", que devolve a fonte pro vazio.
+                                    function onFonteImpressaoChanged() {
+                                        comboFonte.sincronizarSelecao();
+                                    }
+                                }
+                                onActivated: raiz.fonteImpressao = currentValue
+
+                                // Ver o comentário do mesmo delegate em
+                                // components/CamposPagamento.qml.
+                                delegate: ItemDelegate {
+                                    width: comboFonte.width
+                                    text: modelData.rotulo
+                                    highlighted: comboFonte.highlightedIndex === index
+                                    palette.text: Estilo.global.textInput
+                                    palette.highlightedText: Estilo.global.textInput
+                                }
+
+                                contentItem: Text {
+                                    text: comboFonte.displayText
+                                    color: Estilo.global.textInput
+                                    leftPadding: 10
+                                    rightPadding: 10
+                                    verticalAlignment: Text.AlignVCenter
+                                    elide: Text.ElideRight
+                                }
+
+                                background: Rectangle {
+                                    radius: Estilo.global.radius.pill
+                                    color: Estilo.global.inputBackground
+                                    border.color: comboFonte.activeFocus ? raiz.corDestaque : Estilo.global.border
+                                    border.width: comboFonte.activeFocus ? 2 : 1
+                                    implicitHeight: 38
+                                }
+                            }
+
+                            Text {
+                                width: 400
+                                wrapMode: Text.WordWrap
+                                text: raiz.fonteImpressao === "" ? "A impressora desenha as letras com a fonte que ela tem gravada. É o formato de sempre, e o mais rápido." : "A comanda é desenhada como imagem antes de ser impressa, o que deixa a impressão mais lenta. A prévia acima continua na fonte de medida: ela mostra o alinhamento das colunas, que é igual em qualquer fonte."
+                                font.pixelSize: Estilo.global.fontSize.sm
+                                color: Estilo.global.textSecondary
                             }
                         }
                     }
