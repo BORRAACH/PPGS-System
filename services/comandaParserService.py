@@ -19,7 +19,13 @@ a comparação passaria a acusar diferença onde não há."""
 
 import re
 
-from services.comandaTextoService import MARCADOR_ITENS, PREFIXO_ADICIONAL, PREFIXO_BORDA, valor_para_float
+from services.comandaTextoService import (
+    MARCADOR_ITENS,
+    PREFIXO_ADICIONAL,
+    PREFIXO_BORDA,
+    PREFIXO_ITEM_UNICO,
+    valor_para_float,
+)
 
 CODEPAGE_IMPRESSORA = "cp850"
 
@@ -93,6 +99,12 @@ _PADRAO_LINHA_ADICIONAL = re.compile(r"^  " + re.escape(PREFIXO_ADICIONAL) + r"(
 _PADRAO_LINHA_BORDA = re.compile(r"^  " + re.escape(PREFIXO_BORDA) + r"(.+?)(?: \((.+)\))?$")
 # Fração de sabor de pizza meio a meio: "1/3 - Nome do Sabor".
 _PADRAO_FRACAO_SABOR = re.compile(r"^\d+/\d+ - (.+)$")
+# O prefixo de um item que não é pizza fracionada. Reconhece o de hoje
+# (PREFIXO_ITEM_UNICO, a quantidade: "1 PORTUGUESA") e o "- " que as comandas
+# gravadas antes dele têm — sem o segundo, editar uma comanda antiga via
+# Consulta traria o traço para dentro do nome do item, e ele sairia reimpresso
+# como "1 - PORTUGUESA".
+_PADRAO_PREFIXO_ITEM = re.compile(r"^(?:" + re.escape(PREFIXO_ITEM_UNICO) + r"|- )")
 # Sufixo de tamanho no primeiro sabor: "Nome do Sabor (Grande)".
 _PADRAO_SUFIXO_TAMANHO = re.compile(r"^(.*)\s\(([^)]+)\)$")
 # balcaoController/entregaController agora imprimem o nome do item em caixa
@@ -319,7 +331,7 @@ def reconstruir_itens(linhas_tabela):
 
         if len(grupo_atual) == 1:
             coluna_pedido, observacao, valor, adicionais = grupo_atual[0]
-            pedido = coluna_pedido[2:] if coluna_pedido.startswith("- ") else coluna_pedido
+            pedido = _PADRAO_PREFIXO_ITEM.sub("", coluna_pedido, count=1)
             # O adicional foi salvo (em Pizzas.qml) com o nome do sabor SEM o
             # sufixo de tamanho — precisa desfazer o mesmo sufixo aqui para
             # que "sabor" volte a bater com o nome usado ao reimprimir.

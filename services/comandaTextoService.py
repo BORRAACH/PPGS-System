@@ -133,6 +133,17 @@ def valor_para_float(valor_texto):
 PREFIXO_ADICIONAL = "+ "
 PREFIXO_BORDA = "* "
 
+# O que abre a linha de um item que não é pizza fracionada: a QUANTIDADE dele.
+# Era um "- " de marcador de lista, que não dizia nada — e ficava estranho ao
+# lado das frações logo acima/abaixo, que já abrem com número ("1/2 - ...").
+# Hoje cada linha do formulário é uma unidade, então a quantidade é sempre 1;
+# o dia em que o formulário ganhar um campo de quantidade, é aqui que ele entra.
+#
+# Tem o mesmo comprimento do "- " antigo de propósito: a coluna do pedido é
+# alinhada por contagem de caracteres (ver formatar_tabela), e trocar a largura
+# do prefixo mexeria no alinhamento de todo cupom.
+PREFIXO_ITEM_UNICO = "1 "
+
 # Tamanho que NÃO sai escrito no papel (ver _tamanho_impresso). O grande é a
 # pizza que se pede quando não se diz nada, então repeti-lo em toda linha só
 # gastava espaço numa coluna de 40 caracteres — o que precisa de aviso é a
@@ -210,7 +221,8 @@ def item_preenchido(item):
     POR QUE PRECISA EXISTIR: o formulário de Balcão/Entrega/Salão sempre
     termina com uma linha em branco — o "+" cria uma e ela fica ali esperando
     ser preenchida. Ela viajava até aqui junto com as de verdade e saía
-    impressa como um "- " solto no meio dos itens, com a coluna "|" e tudo.
+    impressa como um prefixo solto no meio dos itens (ver PREFIXO_ITEM_UNICO),
+    com a coluna "|" e tudo.
 
     "Vazio" aqui é vazio de VERDADE: nada digitado no nome, na observação nem
     no valor, e nenhuma borda ou adicional escolhido. Uma linha com valor e sem
@@ -287,7 +299,12 @@ def montar_grupos(itens):
             # tamanho, `sabores[0]` já é o `pedido` inteiro, então o resultado
             # é o mesmo de sempre para lanche, bebida e afins.
             nome = f"{sabor_unico} ({tamanho_no_papel})" if tamanho_no_papel else sabor_unico
-            linhas = [(f"- {nome}", valor, _extras_adicionais(adicionais, sabor_unico), tamanho_no_papel)]
+            linhas = [(
+                f"{PREFIXO_ITEM_UNICO}{nome}",
+                valor,
+                _extras_adicionais(adicionais, sabor_unico),
+                tamanho_no_papel,
+            )]
         else:
             # Pizza meio a meio: cada sabor ocupa "1/N" da pizza.
             total = len(sabores)
