@@ -19,6 +19,7 @@ a comparação passaria a acusar diferença onde não há."""
 
 import re
 
+from services import comandaEstiloService as estilo
 from services.comandaTextoService import (
     MARCADOR_ITENS,
     PREFIXO_ADICIONAL,
@@ -55,7 +56,16 @@ GS = "\x1d"
 # saem sublinhados e maiores por padrão) voltavam de reconstruirComanda com
 # os bytes de controle no meio do texto — e eram reimpressos assim,
 # aninhando um estilo dentro do outro a cada edição da mesma comanda.
-_PADRAO_ESTILO = re.compile(r"(?:" + re.escape(ESC) + r"[E\-]|" + re.escape(GS) + r"[B!])[\s\S]")
+# O marcador de tamanho exato em pixels entra na mesma limpeza (ver
+# comandaEstiloService.MARCA_TAMANHO_PX): ele só existe para quem DESENHA a
+# comanda, e aqui, que é quem a lê de volta, é lixo igual aos outros — sem
+# removê-lo, o "\x1d~048" apareceria no meio do nome do cliente na Consulta e
+# seria reimpresso junto a cada edição, aninhando um marcador dentro do outro.
+# Diferente dos quatro de cima, o parâmetro dele tem três caracteres.
+_PADRAO_ESTILO = re.compile(
+    r"(?:" + re.escape(ESC) + r"[E\-]|" + re.escape(GS) + r"[B!])[\s\S]"
+    r"|" + re.escape(estilo.MARCA_TAMANHO_PX) + r"\d{3}"
+)
 
 # Sem underscore: usadas de fora (ConsultaController) via extrair_campo(),
 # diferente das de baixo, que só interessam às funções desta própria

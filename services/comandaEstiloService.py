@@ -95,6 +95,55 @@ def _comando_tamanho_fonte(multiplicador):
 
 FONTE_NORMAL_DESLIGA = _GS + "!" + "\x00"
 
+# Faixa aceita para o tamanho de fonte em pixels. O teto cobre os 8x do
+# ESC/POS (8 x 24 = 192px), pra que nenhuma configuração já existente encolha
+# ao passar por aqui; o piso é o menor tamanho ainda legível num cupom térmico.
+TAMANHO_FONTE_MIN_PX = 8
+TAMANHO_FONTE_MAX_PX = 200
+
+# Marcador que carrega o tamanho EXATO em pixels de um campo, para quando a
+# comanda é desenhada como imagem (ver services/comandaImagemService.py).
+#
+# POR QUE ELE PRECISA EXISTIR: o "GS !" do ESC/POS só sabe dizer "2x", "3x" —
+# multiplicadores inteiros do tamanho normal. Quando quem desenha é a
+# impressora, é só isso que existe e não há o que fazer. Quando quem desenha
+# somos nós, num QImage, qualquer tamanho é possível — mas o desenho acontece
+# na outra ponta, a partir dos bytes da comanda, e nesses bytes o tamanho já
+# tinha virado multiplicador. O valor exato precisa de carona própria.
+#
+# O parâmetro vai como TRÊS DÍGITOS ASCII ("048"), e não como um byte de valor:
+# o texto é codificado em cp850 antes de ir pro papel (ver
+# comandaTextoService.CODEPAGE_IMPRESSORA), e um byte acima de 127 sairia
+# traduzido pra outro no caminho — o tamanho chegaria mudado do outro lado.
+# Dígitos são ASCII, atravessam qualquer codepage intactos, e ainda aparecem
+# legíveis para quem for depurar um cupom com um visualizador de bytes.
+#
+# ESTE MARCADOR NUNCA CHEGA À IMPRESSORA: quem imprime em texto o remove antes
+# de enviar (ver PrinterService._preparar_conteudo), e quem lê a comanda salva
+# o remove junto com os outros códigos de estilo (ver
+# comandaParserService._PADRAO_ESTILO). O "GS !" continua sendo emitido do lado
+# dele, então uma comanda gravada com fonte escolhida continua sendo um cupom
+# de texto válido, com o mesmo tamanho aproximado de antes, se acabar impressa
+# pelo caminho de texto.
+MARCA_TAMANHO_PX = _GS + "~"
+
+
+def _comando_tamanho_px(tamanho_px):
+    return f"{MARCA_TAMANHO_PX}{tamanho_px:03d}"
+
+
+TAMANHO_PX_DESLIGA = _comando_tamanho_px(TAMANHO_FONTE_BASE_PX)
+
+
+def limitar_tamanho_fonte(tamanho_px):
+    """O tamanho em pixels dentro da faixa aceita, ou a base quando o valor não
+    é um número. Mesma regra para o JSON em disco, o payload da malha e o que a
+    tela manda — o motivo de estar aqui num lugar só é o mesmo de
+    _mesclar_ajustes."""
+    if not isinstance(tamanho_px, (int, float)):
+        return TAMANHO_FONTE_BASE_PX
+    return max(TAMANHO_FONTE_MIN_PX, min(TAMANHO_FONTE_MAX_PX, int(tamanho_px)))
+
 # Campos da comanda que podem ter estilo configurado. Alguns só são usados
 # por um dos dois tipos de pedido (ex: "taxa_entrega", "endereco" só saem em
 # pedidos de Entrega) — ficam na mesma lista/tela mesmo assim; não fazem
@@ -158,6 +207,20 @@ CAMPOS = [
     "fech_lucro_real",
 ]
 ATRIBUTOS_BOOLEANOS = ["negrito", "sublinhado", "fundo_preto"]
+
+# Família de fonte usada pra DESENHAR a comanda, quando o dono escolhe uma.
+#
+# String vazia = nenhuma escolhida, que é o padrão e significa "deixa a
+# impressora desenhar": sai o texto ESC/POS de sempre, com as fontes gravadas
+# dentro dela. Com uma família escolhida, a comanda passa a ser rasterizada
+# antes de ser enviada (ver services/comandaImagemService.py e
+# PrinterService.imprimir) — é o único jeito de uma fonte do computador chegar
+# ao papel, já que no modo texto quem desenha as letras é a impressora.
+#
+# É ajuste GLOBAL, não por campo: a fonte vale pro cupom inteiro. Misturar
+# famílias numa comanda de 40 colunas não teria uso, e o desenho é feito de uma
+# vez só, com a imagem inteira montada junto.
+FONTE_DA_IMPRESSORA = ""
 
 RODULOS_CAMPOS = {
     "id_pedido": "Código do pedido",
@@ -528,6 +591,9 @@ def _padrao():
         # (campos da mesma categoria) e tirar onde apareceria (0). Vazio =
         # tudo automático.
         "separadores_campo": {},
+        # Família de fonte pra desenhar a comanda (ver FONTE_DA_IMPRESSORA). O
+        # padrão vazio reproduz exatamente o cupom de antes desta opção existir.
+        "fonte_impressao": FONTE_DA_IMPRESSORA,
         # Marca de qual mudança é mais recente entre as máquinas da malha
         # (ver _aplicar_estilo_remoto/relogio.mais_novo) — "" numa
         # instalação nova, ou num arquivo salvo antes deste mecanismo
@@ -578,7 +644,7 @@ def _mesclar_campos(destino, campos_lidos):
             if atributo in atributos:
                 destino[campo][atributo] = bool(atributos[atributo])
         if isinstance(atributos.get("tamanho_fonte"), (int, float)):
-            destino[campo]["tamanho_fonte"] = max(1, int(atributos["tamanho_fonte"]))
+            destino[campo]["tamanho_fonte"] = limitar_tamanho_fonte(atributos["tamanho_fonte"])
 
 
 def _posicao_padrao(ordem, indice_padrao):
@@ -681,6 +747,14 @@ def _mesclar_ajustes(destino, dados):
     if isinstance(dados.get("linhas_separador"), (int, float)):
         destino["linhas_separador"] = _limitar_linhas_separador(dados["linhas_separador"])
     destino["separadores_campo"] = _mesclar_separadores_campo(dados.get("separadores_campo"))
+    # Só o tipo é conferido, de propósito: NÃO se valida contra as fontes
+    # instaladas nesta máquina. O estilo é sincronizado pela malha, e uma
+    # máquina que não tenha a fonte escolhida ainda precisa GUARDAR o nome dela
+    # — apagá-la aqui faria essa máquina publicar de volta a configuração sem a
+    # fonte e desfazer a escolha do dono em todas as outras. Quem não tem a
+    # fonte simplesmente imprime em texto (ver comandaImagemService.para_raster).
+    if isinstance(dados.get("fonte_impressao"), str):
+        destino["fonte_impressao"] = dados["fonte_impressao"].strip()
 
 
 def _carregar():
@@ -742,6 +816,15 @@ def formatar_campo(texto, campo):
     if multiplicador > 1:
         prefixo += _comando_tamanho_fonte(multiplicador)
         sufixo = FONTE_NORMAL_DESLIGA + sufixo
+
+    # O tamanho exato vai junto do multiplicador, não no lugar dele: o "GS !"
+    # é o que vale se esta comanda acabar impressa como texto (fonte não
+    # escolhida, ou a máquina que imprime sem ela), e o marcador é o que vale
+    # quando ela for desenhada. Assim o mesmo arquivo serve aos dois caminhos.
+    tamanho_px = limitar_tamanho_fonte(atributos.get("tamanho_fonte"))
+    if fonte_impressao() and tamanho_px != TAMANHO_FONTE_BASE_PX:
+        prefixo += _comando_tamanho_px(tamanho_px)
+        sufixo = TAMANHO_PX_DESLIGA + sufixo
 
     if atributos.get("sublinhado"):
         prefixo += SUBLINHADO_LIGA
@@ -811,6 +894,13 @@ def linhas_espacamento_corte():
     (ver printerService.py) — margem pra o papel avançar de verdade além da
     lâmina antes de cortar."""
     return _config["espacamento_corte"]
+
+
+def fonte_impressao():
+    """Família de fonte escolhida pra desenhar a comanda, ou "" quando o cupom
+    deve sair em texto, como sempre saiu (ver FONTE_DA_IMPRESSORA). Consultada
+    por PrinterService.imprimir na hora de decidir se rasteriza."""
+    return _config["fonte_impressao"]
 
 
 # ---------- Sincronização entre máquinas da malha (ver
@@ -941,6 +1031,42 @@ class ComandaEstiloController(QObject):
 
     @pyqtSlot(result="QVariantList")
     @protegido([])
+    def listarFontes(self):
+        """Catálogo pro seletor de fonte da comanda: a opção padrão (imprimir
+        em texto, com a fonte da própria impressora) seguida das famílias
+        oferecidas — que são as da MÁQUINA QUE IMPRIME, não as desta.
+
+        Quem desenha a comanda é a máquina em que a impressora está ligada (o
+        cupom viaja até lá, ver RedeService.solicitar_impressao). Oferecer aqui
+        as fontes do computador em que o dono está mexendo seria oferecer uma
+        escolha que não se cumpre: uma fonte instalada só no caixa não sai no
+        papel se quem imprime é a máquina da cozinha.
+
+        Sem saber quais são as fontes de lá (nenhuma máquina eleita, ou ela
+        numa versão anterior a esta lista existir), sobra só a opção padrão —
+        ver origemFontes(), que é o que a tela usa pra explicar a ausência.
+        Melhor um seletor curto e honesto do que uma lista que promete o que
+        não vai acontecer."""
+        opcoes = [{"chave": FONTE_DA_IMPRESSORA, "rotulo": "Fonte da impressora (padrão)"}]
+        opcoes.extend({"chave": familia, "rotulo": familia} for familia in self._fontes_da_impressora()["fontes"])
+        return opcoes
+
+    @pyqtSlot(result="QVariantMap")
+    @protegido({})
+    def origemFontes(self):
+        """De qual máquina veio a lista de listarFontes(), pra tela poder dizer
+        isso em vez de deixar o dono adivinhar por que a lista está curta ou
+        por que mudou de uma hora pra outra (a máquina que imprime é eleita, e
+        a eleição muda quando alguém pluga a impressora em outro lugar)."""
+        return self._fontes_da_impressora()
+
+    def _fontes_da_impressora(self):
+        from services.rede import rede
+
+        return rede.fontes_da_impressora()
+
+    @pyqtSlot(result="QVariantList")
+    @protegido([])
     def listarCamposOrdenaveis(self):
         """Catálogo dos campos que têm posição própria na comanda. Devolve
         também `categoria`, `tipos`, `documento` e `estilizavel` para a
@@ -981,6 +1107,14 @@ class ComandaEstiloController(QObject):
     @pyqtSlot(result=int)
     def maxLinhasSeparador(self):
         return MAX_LINHAS_SEPARADOR
+
+    @pyqtSlot(result=int)
+    def tamanhoFonteMinimo(self):
+        return TAMANHO_FONTE_MIN_PX
+
+    @pyqtSlot(result=int)
+    def tamanhoFonteMaximo(self):
+        return TAMANHO_FONTE_MAX_PX
 
     @pyqtSlot("QVariantMap")
     @protegido()

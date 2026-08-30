@@ -13,6 +13,7 @@ from PyQt6.QtCore import QObject, QByteArray, QTimer, pyqtProperty, pyqtSignal, 
 from PyQt6.QtNetwork import QHostAddress, QTcpServer, QTcpSocket
 
 from Config.logConfig import protegido
+from services import comandaImagemService
 from services.printerService import PrinterService
 from services.rede import caminhos, historicoEventos, impressoraFixada, indicePedidos, relogio, seguranca, sequenciaComandas, servidorDesignado, tombstones
 from services.rede.descoberta import criar_descoberta
@@ -1365,6 +1366,19 @@ class RedeService(QObject):
                 "fabricante": impressora.fabricante,
                 "tipoPorta": impressora.tipo_porta,
                 "porta": impressora.porta,
+                # As fontes DESTA máquina viajam junto porque é ELA que vai
+                # desenhar a comanda quando a impressão for em imagem (ver
+                # PrinterService._preparar_conteudo): quem escolhe a fonte na
+                # tela de Configurações costuma estar em outra máquina, e
+                # oferecer ali as fontes de quem não imprime seria oferecer
+                # uma escolha que não se cumpre.
+                #
+                # Só quem TEM impressora publica esta lista (info é None nas
+                # demais), então ela não engorda o handshake da malha inteira —
+                # e a leitura vem do cache de comandaImagemService, porque isto
+                # aqui roda numa thread e o banco de fontes do Qt não pode ser
+                # consultado fora da thread da interface.
+                "fontes": comandaImagemService.familias_locais(),
             }
         self._impressoraLocalVerificada.emit(tem_impressora_valida, info)
 
@@ -1592,6 +1606,47 @@ class RedeService(QObject):
             "fabricante": info.get("fabricante", ""),
             "tipoPorta": info.get("tipoPorta", ""),
             "porta": info.get("porta", ""),
+        }
+
+    def fontes_da_impressora(self):
+        """As fontes da máquina que a malha está usando pra imprimir agora, pra
+        alimentar o seletor de fonte da comanda (ver
+        ComandaEstiloController.listarFontes).
+
+        Devolve {"maquina", "local", "fontes", "conhecida"}. "conhecida" é
+        False quando não dá pra saber quais são — não há máquina eleita, ou a
+        eleita está numa versão do app anterior a esta lista existir. Nesse
+        caso a decisão de o que oferecer é de quem chama; aqui não se inventa
+        substituto, porque uma lista errada faria o dono escolher uma fonte que
+        a impressora nunca vai desenhar.
+
+        POR QUE AS FONTES SÃO AS DELA, e não as de quem está mexendo na tela:
+        quem desenha a comanda é a máquina que tem a impressora (ver
+        RedeService.solicitar_impressao, que manda o cupom pra lá). Uma fonte
+        que só existe no computador do caixa não sai no papel se quem imprime é
+        o computador da cozinha."""
+        if self._id_maquina_impressora is None:
+            return {"maquina": "", "local": False, "fontes": [], "conhecida": False}
+
+        if self._id_maquina_impressora == self._id:
+            nome_maquina = self._nome_local
+            info = self._info_impressora_local
+            local = True
+        else:
+            peer = self._info_peers.get(self._id_maquina_impressora)
+            nome_maquina = (peer.get("nome") if peer else "") or "Máquina desconhecida"
+            info = peer.get("infoImpressora") if peer else None
+            local = False
+
+        fontes = (info or {}).get("fontes")
+        if not isinstance(fontes, list):
+            return {"maquina": nome_maquina, "local": local, "fontes": [], "conhecida": False}
+
+        return {
+            "maquina": nome_maquina,
+            "local": local,
+            "fontes": [familia for familia in fontes if isinstance(familia, str)],
+            "conhecida": True,
         }
 
     def _tentar_imprimir_localmente(self, conteudo_bytes: bytes):

@@ -56,6 +56,7 @@ try:
     from services.servidor import servidor_local
     from services.iconProvider import IconProvider
     from services.comandaEstiloService import ComandaEstiloController
+    from services import comandaImagemService
     from services.cardapioService import CardapioController
     from services.statusInicializacaoService import status
     from Config import diagnosticar_impressora, fontes
@@ -195,6 +196,12 @@ if __name__ == "__main__":
     # Config/fontes.py para por que a Figtree entra por aqui e a Caprasimo
     # não.
     fontes.aplicar(app)
+
+    # Logo depois de aplicar as fontes, e ainda na thread da interface: a lista
+    # de famílias é lida uma vez aqui pra ficar pronta pras threads que vão
+    # precisar dela sem poder consultá-la (a detecção de impressora e a
+    # impressão em si). Ver comandaImagemService.familias_locais.
+    comandaImagemService.aquecer_familias()
 
     engine = QQmlApplicationEngine()
 

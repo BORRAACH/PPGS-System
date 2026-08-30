@@ -6,7 +6,10 @@ física direta — então a impressora precisa estar instalada e com o driver
 configurado em modo RAW/genérico antes de usar este serviço.
 """
 
+import re
+
 from services import comandaEstiloService as estilo
+from services import comandaImagemService
 from services.printer import coletar_informacoes_impressoras, enviar_para_impressora
 from services.printer.modelos import eh_bematech_mp4200th
 
@@ -25,6 +28,13 @@ _COMANDO_CORTE = b"\x1d\x56\x00"
 # este comando: "ç", "ã", "õ", "á" etc saem trocados/corrompidos no cupom,
 # mesmo com o texto certo sendo enviado.
 _COMANDO_CODEPAGE_CP850 = b"\x1b\x74\x02"
+
+# O marcador de tamanho em pixels, do lado de cá já em bytes — é assim que ele
+# chega, e converter o conteúdo inteiro pra texto só pra limpá-lo seria trocar
+# uma substituição por duas conversões de codepage.
+_PADRAO_MARCA_TAMANHO = re.compile(
+    re.escape(estilo.MARCA_TAMANHO_PX.encode("ascii")) + rb"\d{3}"
+)
 
 # A quantidade de linhas em branco inseridas antes do corte é configurável
 # (tela Configurações, ver services/comandaEstiloService.py) — sem elas, o
@@ -68,12 +78,66 @@ class PrinterService:
         print("[PrinterService] Nenhuma impressora instalada foi encontrada no sistema.")
         return None
 
+    def _preparar_conteudo(self, conteudo: bytes) -> bytes:
+        """O conteúdo pronto pra ir ao papel: a comanda desenhada como imagem,
+        quando há uma fonte configurada, ou o texto ESC/POS de sempre.
+
+        POR QUE A CONVERSÃO É AQUI, e não em quem monta a comanda: o que os
+        controllers produzem é o mesmo objeto de bytes que vai pro arquivo
+        pedidos/*.txt e pra malha. Esse arquivo é o REGISTRO da comanda — a
+        Consulta reabre e edita, o Fechamento tira dele o caixa do dia, a
+        comparação entre máquinas confere campo a campo, e a reimpressão
+        reenvia o arquivo byte a byte. Todos leem texto cp850. Rasterizar mais
+        cedo trocaria o registro por uma imagem e derrubaria os quatro de uma
+        vez; aqui, no último instante, o arquivo já foi gravado e replicado, e
+        só o que segue pro cabeçote muda.
+
+        O comando de codepage não acompanha a imagem: ele diz à impressora como
+        interpretar bytes de TEXTO, e num raster não há nenhum."""
+        familia = estilo.fonte_impressao()
+        if not familia:
+            return _COMANDO_CODEPAGE_CP850 + self._sem_marcadores(conteudo)
+
+        raster = comandaImagemService.para_raster(conteudo, familia)
+        if raster is None:
+            # Melhor esforço, no espírito de Config/fontes.py: a máquina que
+            # imprime pode não ter a fonte que o dono escolheu em outra (o
+            # estilo é sincronizado pela malha, as fontes instaladas não).
+            # Cupom na fonte errada é contratempo; cupom que não sai é pedido
+            # perdido.
+            print(f"[PrinterService] Não foi possível desenhar a comanda em '{familia}' — imprimindo em texto.")
+            return _COMANDO_CODEPAGE_CP850 + self._sem_marcadores(conteudo)
+
+        print(f"[PrinterService] Comanda desenhada em '{familia}': {len(conteudo)} bytes de texto viraram {len(raster)} bytes de imagem.")
+        return raster
+
+    @staticmethod
+    def _sem_marcadores(conteudo: bytes) -> bytes:
+        """O conteúdo sem os marcadores de tamanho exato (ver
+        comandaEstiloService.MARCA_TAMANHO_PX), pro caminho de texto.
+
+        Eles são recado nosso pra quem desenha a comanda, não comando de
+        impressora — indo pro papel, sairiam como caracteres soltos no meio do
+        cupom ("~048" grudado no nome do cliente). Uma comanda ganha esses
+        marcadores quando há fonte escolhida, e ainda assim pode acabar aqui:
+        basta a máquina que imprime não ter a fonte, ou o arquivo ser
+        reimpresso depois de a fonte ter sido desligada.
+
+        O tamanho não se perde nessa limpeza — o "GS !" com o multiplicador
+        continua no texto, ao lado, e é ele que a impressora entende."""
+        return _PADRAO_MARCA_TAMANHO.sub(b"", conteudo)
+
     def imprimir(self, conteudo: bytes) -> None:
         """Envia `conteudo` (bytes crus, já formatados em ESC/POS) para a
         impressora localizada por `localizar_impressora` (a configurada, ou a
         padrão do sistema). Se essa impressora for identificada como uma
         Bematech MP-4200 TH, anexa o comando ESC/POS de corte automático do
         papel ao final do conteúdo antes de enviar.
+
+        Havendo uma fonte configurada, o texto vira imagem antes do envio (ver
+        _preparar_conteudo). O espaçamento e o corte valem igual nos dois
+        casos: são avanço de papel e lâmina, indiferentes a o que foi impresso
+        acima.
 
         Levanta `RuntimeError` se nenhuma impressora for encontrada, ou se o
         envio falhar (ver `services.printer.windows`/`.linux` para detalhes).
@@ -86,7 +150,7 @@ class PrinterService:
 
         print(f"[PrinterService] Repassando pedido para '{impressora.nome}' (tipo de porta: {impressora.tipo_porta}, porta: {impressora.porta}).")
 
-        conteudo = _COMANDO_CODEPAGE_CP850 + conteudo
+        conteudo = self._preparar_conteudo(conteudo)
 
         if eh_bematech_mp4200th(impressora):
             print(f"[PrinterService] '{impressora.nome}' identificada como Bematech MP-4200 TH — anexando espaçamento e corte automático do papel.")

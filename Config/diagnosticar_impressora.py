@@ -19,6 +19,7 @@ Uso:
     python -m Config.diagnosticar_impressora
     python -m Config.diagnosticar_impressora --sem-teste
     python -m Config.diagnosticar_impressora --impressora "Bematech MP-4200 TH"
+    python -m Config.diagnosticar_impressora --fonte "Figtree"
 """
 
 import argparse
@@ -50,6 +51,50 @@ def _payload_teste() -> bytes:
     conteudo = texto.encode("ascii", "replace")
     conteudo += b"\x1d\x56\x00"  # GS V 0 — corte total (ignorado por impressoras sem essa função).
     return conteudo
+
+
+def _payload_teste_raster(familia: str) -> bytes | None:
+    """O mesmo teste acima, mas DESENHADO na fonte `familia` e enviado como
+    imagem (ver services/comandaImagemService.py). None se não der pra
+    desenhar.
+
+    Serve pra responder no papel, sem passar pelo app inteiro, as duas
+    perguntas que só a impressora de verdade responde: ela entende o comando de
+    imagem (GS v 0)? E a largura suposta cabe no rolo, ou o texto sai cortado à
+    direita? Por isso a régua de traços e o "|" na borda — se o cupom sair sem
+    a ponta direita deles, a largura em comandaImagemService precisa descer.
+
+    Este script é uma CLI: não sobe tela nenhuma, e sem uma QGuiApplication o
+    Qt não desenha texto (pior: aborta o processo ao tocar no banco de fontes).
+    Por isso a aplicação é criada aqui, em modo offscreen — ela existe só pra
+    dar acesso às fontes, nada é mostrado."""
+    import os
+
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PyQt6.QtGui import QGuiApplication
+
+    from Config import fontes
+    from services import comandaImagemService
+    from services.comandaTextoService import CODEPAGE_IMPRESSORA, COLUNAS_PAPEL
+
+    aplicacao = QGuiApplication.instance() or QGuiApplication([])
+    # As fontes embarcadas no repositório (Figtree) só existem na
+    # QFontDatabase depois de registradas — sem isto, testar com uma delas
+    # cairia no "fonte não encontrada" mesmo com o arquivo ali do lado.
+    fontes.aplicar(aplicacao)
+
+    regua = "".join(str((coluna + 1) % 10) for coluna in range(COLUNAS_PAPEL))
+    texto = (
+        "=== TESTE DE IMPRESSAO EM IMAGEM ===\n"
+        f"Fonte: {familia}\n"
+        f"Rodado em: {time.strftime('%d/%m/%Y %H:%M:%S')}\n"
+        f"{regua}\n"
+        f"{'-' * (COLUNAS_PAPEL - 1)}|\n"
+        "Se a regua acima saiu inteira, a largura esta certa.\n"
+        "\n\n\n"
+    )
+    return comandaImagemService.para_raster(texto.encode(CODEPAGE_IMPRESSORA, errors="replace"), familia)
 
 
 def listar_impressoras():
@@ -132,6 +177,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--sem-teste", action="store_true", help="Só lista as impressoras instaladas, sem enviar nada")
     parser.add_argument("--impressora", default=None, help="Nome exato da impressora a testar (padrão: a configurada, ou a padrão do sistema)")
+    parser.add_argument("--fonte", default=None, help="Manda o teste DESENHADO nesta família de fonte, como imagem (ex: \"Figtree\"), em vez do teste em texto")
     args = parser.parse_args()
 
     logConfig.configurar_logging()
@@ -164,7 +210,16 @@ def main() -> None:
         log("Teste de impressão pulado (--sem-teste). === Diagnóstico concluído ===")
         return
 
-    conteudo = _payload_teste()
+    if args.fonte:
+        conteudo = _payload_teste_raster(args.fonte)
+        if conteudo is None:
+            log(f"Não foi possível desenhar o teste em '{args.fonte}' — veja o aviso acima (fonte ausente?).")
+            log("=== Diagnóstico de impressão concluído (sem enviar) ===")
+            return
+        log(f"Teste desenhado em '{args.fonte}' e convertido em imagem.")
+    else:
+        conteudo = _payload_teste()
+
     log(f"3/4 — Enviando {len(conteudo)} bytes de teste para '{impressora.nome}'...")
     try:
         servico.imprimir(conteudo)
