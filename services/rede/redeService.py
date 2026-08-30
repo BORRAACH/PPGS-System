@@ -570,6 +570,19 @@ class RedeService(QObject):
             # conectado naquele instante) e ficaria esperando o próximo tique
             # de verificação para descobrir o que a hospedeira já sabia.
             "servidorNoAr": self._servidor_no_ar_local,
+            # QUEM hospeda, não só se está no ar — e pelo mesmo motivo de
+            # nomeMaquinaFixada. A designação só viajava no evento de gossip
+            # publicado no instante do clique em "Rodar aqui", que alcança
+            # exclusivamente quem estava conectado NAQUELE momento. A máquina
+            # que abre o app depois (o balcão que liga às 18h, a máquina nova,
+            # a que foi reinstalada) nunca aprendia por caminho nenhum: ficava
+            # com _nome_servidor vazio, e aí solicitar_servidor responde 0 sem
+            # nem sair da máquina — a tela de Rede dizia "Servidor central
+            # inacessível" para sempre, com o servidor de pé e anunciado ao
+            # lado. O idEvento vai junto porque é ele que arbitra duas
+            # designações em disputa (ver _aplicar_designacao).
+            "nomeMaquinaServidor": self._nome_servidor,
+            "idEventoServidor": self._id_evento_servidor,
         }
 
     def _preparar_socket(self, socket: QTcpSocket, destino: str = "", id_remoto: str = ""):
@@ -822,6 +835,16 @@ class RedeService(QObject):
                 # desse sinal pra atualizar nomeMaquinaFixada/candidatosImpressora
                 # (ver fixarImpressoraPrincipal, mesmo motivo documentado lá).
                 self.impressoraPrincipalMudou.emit()
+            # Quem hospeda o servidor, aprendido do peer. ANTES do aviso de
+            # "servidor no ar" logo abaixo, e não depois: aquele aviso faz o
+            # PizzeriaServerService conferir a conexão na hora, e uma conferência
+            # feita sem saber para qual máquina mandar a requisição falha na
+            # porta de casa — o balcão passaria mais 30s dizendo "inacessível"
+            # com tudo já no lugar.
+            self._aplicar_designacao(
+                mensagem.get("nomeMaquinaServidor") or "",
+                mensagem.get("idEventoServidor") or "",
+            )
             # O peer pode estar com o servidor no ar há horas: para quem
             # acabou de entrar na malha, o handshake é o "aviso de que o
             # servidor subiu" — e é aqui que ele passa a valer.
@@ -1734,7 +1757,20 @@ class RedeService(QObject):
         fechamento já sofreu uma vez (ver architecture/EXPLAIN.md)."""
         if not nome:
             return
-        if self._id_evento_servidor and relogio.mais_novo(self._id_evento_servidor, id_evento) == self._id_evento_servidor:
+        # `mais_novo` devolve BOOL, não o id vencedor. Comparar o retorno com
+        # `self._id_evento_servidor` (uma string) dava sempre False, então esta
+        # guarda nunca guardou nada: qualquer designação que chegasse era
+        # aplicada, inclusive uma antiga chegando atrasada — exatamente o
+        # ping-pong que o parágrafo acima diz evitar. Passou a importar de
+        # verdade agora que a designação viaja em todo handshake: sem isto, uma
+        # máquina com a escolha velha empurraria a escolha velha para a malha
+        # inteira a cada reconexão.
+        #
+        # Adota só o que for ESTRITAMENTE mais novo. idEvento vazio (registro
+        # antigo, ou peer de uma versão sem este campo) conta como mais velho
+        # que qualquer id real — ver relogio.mais_novo —, então não derruba uma
+        # escolha datada.
+        if self._id_evento_servidor and not relogio.mais_novo(id_evento, self._id_evento_servidor):
             return
         if nome == self._nome_servidor and id_evento == self._id_evento_servidor:
             return
