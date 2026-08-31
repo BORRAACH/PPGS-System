@@ -52,7 +52,11 @@ Rectangle {
         _negrito = !!controlador.obterAtributo(campo, "negrito");
         _sublinhado = !!controlador.obterAtributo(campo, "sublinhado");
         _fundoPreto = !!controlador.obterAtributo(campo, "fundo_preto");
-        var tamanhoPx = controlador.obterTamanhoFonte(campo);
+        // O tamanho DESENHADO, não o configurado: o modelo em colunas limita o
+        // conteúdo da tabela de itens ao tamanho normal (ver
+        // EstiloImpressora.tamanhoFonteDesenhado), e a prévia tem que mostrar
+        // a letra que vai sair no papel.
+        var tamanhoPx = controlador.tamanhoFonteDesenhado(campo);
         _escala = controlador.fonteImpressao === "" ? controlador.multiplicadorFonte(tamanhoPx) : tamanhoPx / controlador.tamanhoFontePadrao;
     }
 

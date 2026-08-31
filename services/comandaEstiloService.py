@@ -222,6 +222,50 @@ ATRIBUTOS_BOOLEANOS = ["negrito", "sublinhado", "fundo_preto"]
 # vez só, com a imagem inteira montada junto.
 FONTE_DA_IMPRESSORA = ""
 
+# --- MODELO DE DESENHO DA COMANDA ---
+#
+# Qual DISPOSIÇÃO é usada quando a comanda é desenhada como imagem. Só tem
+# efeito no caminho de imagem (ver FONTE_DA_IMPRESSORA acima): sem fonte
+# escolhida quem desenha é a impressora, que só sabe empilhar caracteres numa
+# grade — não há disposição a escolher.
+#
+# POR QUE ISTO É UMA OPÇÃO, e não uma troca de código: mudar como a comanda sai
+# no papel é uma decisão que se testa com o papel na mão, numa pizzaria em
+# funcionamento, e que precisa poder ser desfeita na hora se a cozinha não
+# gostar. O modelo clássico é o padrão e reproduz exatamente o cupom de sempre;
+# qualquer modelo novo é um caminho paralelo, escolhido aqui, que nunca toca no
+# arquivo gravado em pedidos/*.txt (esse continua sendo texto cp850, ver
+# PrinterService._preparar_conteudo).
+MODELO_CLASSICO = "classico"
+MODELO_RASCUNHO = "rascunho"
+
+# Catálogo oferecido pelo seletor da tela de Configurações. A descrição vai
+# junto porque a diferença entre os modelos não cabe num rótulo de combo — e
+# sem ela o dono teria que imprimir os dois pra descobrir qual é qual.
+MODELOS_IMPRESSAO = (
+    {
+        "chave": MODELO_CLASSICO,
+        "rotulo": "Clássico (mesma grade do cupom de texto)",
+        "descricao": (
+            "Cada caractere no centro de uma célula de largura fixa, como a "
+            "impressora faria. O papel sai idêntico ao cupom de sempre — só as "
+            "letras mudam de fonte."
+        ),
+    },
+    {
+        "chave": MODELO_RASCUNHO,
+        "rotulo": "Rascunho (colunas da tela de pedidos)",
+        "descricao": (
+            "A tabela de itens sai em três colunas — Pedido, Observação e "
+            "Valor — na mesma proporção da lista de itens do Balcão, da "
+            "Entrega e do Salão. O resto da comanda continua igual ao modelo "
+            "clássico."
+        ),
+    },
+)
+
+MODELO_PADRAO = MODELO_CLASSICO
+
 RODULOS_CAMPOS = {
     "id_pedido": "Código do pedido",
     "cliente": "Nome do cliente",
@@ -594,6 +638,10 @@ def _padrao():
         # Família de fonte pra desenhar a comanda (ver FONTE_DA_IMPRESSORA). O
         # padrão vazio reproduz exatamente o cupom de antes desta opção existir.
         "fonte_impressao": FONTE_DA_IMPRESSORA,
+        # Disposição usada quando a comanda é desenhada como imagem (ver
+        # MODELOS_IMPRESSAO). O padrão clássico reproduz o cupom de antes desta
+        # opção existir.
+        "modelo_impressao": MODELO_PADRAO,
         # Marca de qual mudança é mais recente entre as máquinas da malha
         # (ver _aplicar_estilo_remoto/relogio.mais_novo) — "" numa
         # instalação nova, ou num arquivo salvo antes deste mecanismo
@@ -755,6 +803,15 @@ def _mesclar_ajustes(destino, dados):
     # fonte simplesmente imprime em texto (ver comandaImagemService.para_raster).
     if isinstance(dados.get("fonte_impressao"), str):
         destino["fonte_impressao"] = dados["fonte_impressao"].strip()
+    # Guardado como veio, sem conferir contra MODELOS_IMPRESSAO, pelo mesmo
+    # motivo da fonte logo acima: a malha sincroniza esta configuração entre
+    # máquinas que podem estar em versões diferentes do app, e apagar aqui um
+    # modelo que só a versão mais nova conhece faria esta máquina republicar a
+    # config sem ele — desfazendo a escolha do dono em todas as outras. Quem
+    # não conhece o modelo simplesmente desenha no clássico (ver
+    # comandaImagemService._desenho_do_modelo).
+    if isinstance(dados.get("modelo_impressao"), str):
+        destino["modelo_impressao"] = dados["modelo_impressao"].strip()
 
 
 def _carregar():
@@ -901,6 +958,35 @@ def fonte_impressao():
     deve sair em texto, como sempre saiu (ver FONTE_DA_IMPRESSORA). Consultada
     por PrinterService.imprimir na hora de decidir se rasteriza."""
     return _config["fonte_impressao"]
+
+
+def modelo_impressao():
+    """Disposição escolhida pra desenhar a comanda como imagem (ver
+    MODELOS_IMPRESSAO). Pode devolver uma chave desconhecida — é o que uma
+    máquina numa versão anterior recebe da malha quando outra, mais nova,
+    escolhe um modelo que ainda não existia aqui (ver _mesclar_ajustes). Quem
+    desenha trata isso como o modelo clássico."""
+    return _config.get("modelo_impressao", MODELO_PADRAO)
+
+
+def atributos_campo(campo):
+    """Os atributos de estilo configurados pra `campo` (negrito, sublinhado,
+    fundo preto, tamanho em pixels), numa cópia.
+
+    Existe pra quem DESENHA a comanda em vez de imprimi-la em texto: no caminho
+    de texto o estilo viaja embutido na própria string (ver formatar_campo), mas
+    um modelo de imagem que remonta a tabela de itens a partir dos dados
+    (comandaImagemService, modelo "rascunho") não tem essa string — precisa ler
+    os atributos direto. Cópia, e não o dict interno, porque quem chama está
+    fora deste módulo e uma escrita distraída ali mudaria a configuração do app
+    inteiro sem passar por _salvar.
+
+    Campo desconhecido devolve o padrão, e não um dict vazio: um modelo novo que
+    invente uma chave de estilo ainda desenha com um tamanho de fonte válido em
+    vez de tropeçar num None."""
+    padrao = _atributos_campo_padrao()
+    padrao.update(_config["campos"].get(campo, {}))
+    return padrao
 
 
 # ---------- Sincronização entre máquinas da malha (ver
@@ -1050,6 +1136,16 @@ class ComandaEstiloController(QObject):
         opcoes = [{"chave": FONTE_DA_IMPRESSORA, "rotulo": "Fonte da impressora (padrão)"}]
         opcoes.extend({"chave": familia, "rotulo": familia} for familia in self._fontes_da_impressora()["fontes"])
         return opcoes
+
+    @pyqtSlot(result="QVariantList")
+    @protegido([])
+    def listarModelosImpressao(self):
+        """Catálogo pro seletor de modelo de desenho (ver MODELOS_IMPRESSAO).
+
+        Ao contrário de listarFontes, esta lista não depende de máquina
+        nenhuma: os modelos são código, e todas as máquinas da malha que
+        estejam nesta versão têm os mesmos."""
+        return [dict(modelo) for modelo in MODELOS_IMPRESSAO]
 
     @pyqtSlot(result="QVariantMap")
     @protegido({})

@@ -22,6 +22,19 @@ arquivo byte a byte. Tudo isso lê texto cp850. Rasterizar mais cedo — dentro 
 controllers, onde o mesmo `conteudo_bytes` serve pra gravar, replicar E imprimir
 — derrubaria os quatro de uma vez.
 
+HÁ DOIS MODELOS DE DESENHO, escolhidos na tela de Configurações (ver
+comandaEstiloService.MODELOS_IMPRESSAO):
+
+* "clássico" — o padrão, descrito no parágrafo abaixo: a comanda inteira numa
+  grade de células de largura fixa, igual ao cupom de texto de sempre.
+* "rascunho" — igual ao clássico em tudo, menos a tabela de itens, que sai em
+  três colunas (Pedido / Observação / Valor) como a lista de itens das telas de
+  Balcão, Entrega e Salão. Ver _desenhar_modelo_rascunho.
+
+Um modelo novo é sempre um caminho PARALELO, e qualquer tropeço nele cai de
+volta no clássico em vez de derrubar a impressão — é o que permite testar
+disposições numa pizzaria em funcionamento.
+
 O ALINHAMENTO É EM GRADE, e essa é a decisão de desenho mais importante daqui.
 O texto que chega já foi montado numa régua de COLUNAS_PAPEL caracteres: o
 ljust da tabela de itens, a coluna "|", as linhas de traço e o MARCADOR_ITENS
@@ -34,12 +47,14 @@ pagar, porque uma coluna de valores desalinhada é erro de cupom, e letra com
 folga estranha é só questão de gosto.
 """
 
+import math
 import re
 
-from PyQt6.QtCore import QThread
+from PyQt6.QtCore import QRectF, Qt, QThread
 from PyQt6.QtGui import QColor, QFont, QFontDatabase, QFontMetricsF, QGuiApplication, QImage, QPainter
 
 from services import comandaEstiloService as estilo
+from services import comandaParserService as parser
 from services import comandaTextoService as texto
 
 _ESC = "\x1b"
@@ -250,11 +265,23 @@ def _fonte(familia, tamanho_px, negrito, sublinhado):
     return fonte
 
 
-def _desenhar(fisicas, familia, largura_dots, altura_dots):
-    """Desenha o cupom inteiro e devolve o QImage em tons de cinza.
+def _nova_imagem(largura_dots, altura_dots):
+    """Uma folha em branco do tamanho pedido, com o pintor já configurado.
 
     Fundo branco e tinta preta: o papel é branco, e o que for preto na imagem é
-    onde o cabeçote térmico queima.
+    onde o cabeçote térmico queima."""
+    imagem = QImage(largura_dots, altura_dots, QImage.Format.Format_Grayscale8)
+    imagem.fill(255)
+
+    pintor = QPainter(imagem)
+    pintor.setRenderHint(QPainter.RenderHint.TextAntialiasing, True)
+    return imagem, pintor
+
+
+def _pintar_linhas(pintor, fisicas, familia, topo):
+    """Pinta as linhas físicas de `fisicas` a partir de `topo` e devolve o topo
+    logo abaixo da última — é o desenho em GRADE, usado pelo modelo clássico e
+    também pelos trechos fora da tabela de itens no modelo rascunho.
 
     Cada caractere é centrado na sua célula da grade — é o que mantém a coluna
     "|" e o ljust da tabela de itens alinhados mesmo numa fonte proporcional
@@ -263,18 +290,11 @@ def _desenhar(fisicas, familia, largura_dots, altura_dots):
     A base do texto fica no fundo da linha menos uma folga de um oitavo da
     altura: sem ela, as letras com descida (g, p, q) encostam na linha de baixo,
     e é justamente onde ficam os nomes dos sabores."""
-    imagem = QImage(largura_dots, altura_dots, QImage.Format.Format_Grayscale8)
-    imagem.fill(255)
-
-    pintor = QPainter(imagem)
-    pintor.setRenderHint(QPainter.RenderHint.TextAntialiasing, True)
-
     # As fontes e suas métricas são caras de montar e se repetem muito (uma
     # comanda inteira costuma usar duas ou três combinações), então cada uma é
     # montada na primeira vez que aparece e reaproveitada daí em diante.
     fontes = {}
 
-    topo = 0
     for glifos in fisicas:
         altura = _altura_da_linha(glifos)
         base = topo + altura - max(1, altura // 8)
@@ -309,8 +329,443 @@ def _desenhar(fisicas, familia, largura_dots, altura_dots):
 
         topo += altura
 
-    pintor.end()
+    return topo
+
+
+def _desenhar_modelo_classico(conteudo, familia, largura_dots):
+    """A comanda inteira na grade de células, que é o cupom de sempre com
+    outras letras. Devolve o QImage, ou None se não sobrou nada a desenhar."""
+    fisicas = _quebrar_em_linhas_fisicas(_linhas_com_estilo(conteudo), largura_dots)
+    altura = sum(_altura_da_linha(glifos) for glifos in fisicas)
+    if altura <= 0:
+        return None
+
+    imagem, pintor = _nova_imagem(largura_dots, altura)
+    try:
+        _pintar_linhas(pintor, fisicas, familia, 0)
+    finally:
+        pintor.end()
+
     return imagem
+
+
+# --------------------------------------------------------------------------
+# MODELO "RASCUNHO": a tabela de itens em três colunas, como na tela
+# --------------------------------------------------------------------------
+#
+# A ideia: no papel, hoje, um item é "nome ................ | R$ 45,00" e a
+# observação dele desce recuada na linha de baixo. Nas telas de Balcão, Entrega
+# e Salão o mesmo item é UMA linha com três colunas — Pedido, Observação e
+# Valor — e é essa disposição que este modelo leva pro cupom: quem monta o
+# pedido na tela e quem lê o papel na cozinha passam a ver a mesma coisa no
+# mesmo lugar.
+#
+# SÓ A TABELA MUDA. Cabeçalho (data, cliente, endereço) e rodapé (forma de
+# pagamento, total, status) continuam desenhados na grade do modelo clássico:
+# são linhas montadas com ljust/rjust sobre a régua de COLUNAS_PAPEL, e
+# redesenhá-las em texto proporcional desalinharia exatamente o que elas
+# alinham.
+#
+# DE ONDE SAEM OS ITENS: da própria comanda em texto, relida por
+# comandaParserService.reconstruir_itens — o mesmo caminho que a Consulta usa
+# pra reabrir uma comanda gravada. Não há como recebê-los prontos: o que chega
+# aqui é o cupom em bytes (ver o cabeçalho do módulo sobre por que a
+# rasterização acontece no último instante), e as frações de uma pizza meio a
+# meio só voltam a ser um item só depois dessa leitura — que é justamente a
+# forma como a tela mostra ("GÊNOVA / FRANGO BACON", uma linha).
+#
+# QUANDO NÃO DÁ, CAI NO CLÁSSICO: recibo de extra e fechamento não têm tabela
+# de itens, uma comanda antiga pode não ter o MARCADOR_ITENS, e um cupom
+# montado à mão pode não ser relido. Nesses casos _desenhar_modelo_rascunho
+# devolve None e quem chama desenha no modelo de sempre — nunca há cupom que
+# deixa de sair por causa da disposição escolhida.
+
+# Proporção entre as colunas Pedido e Observação. São os mesmos números de
+# qml/estilo/Responsivo.qml (gradePedido), que é o que faz a tabela impressa
+# ter a cara da lista da tela. Mudar lá sem mudar aqui não quebra nada — só
+# afasta os dois.
+_PROPORCAO_PEDIDO = 0.41
+_PROPORCAO_OBSERVACAO = 0.37
+
+# A coluna do Valor NÃO segue a proporção da tela (os 22% que sobram lá), e
+# essa é a única liberdade que este modelo toma em relação ao original.
+#
+# Por quê: a tela tem uns 600 pixels de largura pra três colunas e uma fonte de
+# 14; o papel tem 480 dots e uma fonte de 24. Na mesma proporção, o Valor
+# ficaria com 100 dots — e "R$ 1.234,56" mede 124 na Figtree em 24px. O preço
+# quebraria em duas linhas na comanda de qualquer pedido de três dígitos, que é
+# o dado que menos pode sair ambíguo num cupom.
+#
+# Então a coluna do Valor é MEDIDA: recebe a largura do maior valor da tabela,
+# e Pedido/Observação dividem o que sobra na proporção acima. Os limites abaixo
+# impedem os dois extremos — uma coluna estreita demais pra caber "R$ 0,00" e
+# uma que, por um valor absurdo, coma o nome do item.
+_LARGURA_VALOR_MINIMA_DOTS = 6 * LARGURA_CELULA_DOTS
+_LARGURA_VALOR_MAXIMA_DOTS = LARGURA_PAPEL_DOTS // 3
+
+# Folga depois do maior valor, pra ele não encostar na borda do papel.
+_FOLGA_VALOR_DOTS = LARGURA_CELULA_DOTS // 2
+
+# Vão entre uma coluna e a seguinte, em dots. Uma célula da grade (um
+# caractere da Fonte A) é o vão que a tabela clássica usa entre o nome e o
+# valor (" | "), e aqui ele faz o mesmo serviço sem a barra.
+_VAO_COLUNAS_DOTS = LARGURA_CELULA_DOTS
+
+# O cabeçalho "Pedido / Observação / Valor" sai menor que os itens, como na
+# tela (fontSize.sm contra md): ele é rótulo, não conteúdo, e disputar o mesmo
+# corpo do nome do sabor só roubaria linha de papel.
+_ESCALA_CABECALHO = 0.75
+
+# Recuo das sub-linhas de adicional/borda, em dots — o equivalente aos dois
+# espaços que a tabela clássica usa (ver comandaTextoService.formatar_tabela).
+_RECUO_EXTRAS_DOTS = 2 * LARGURA_CELULA_DOTS
+
+# Respiro entre um item e o próximo. Na tela é o spacing da ListView; no papel
+# é o que impede que duas pizzas com nome comprido virem um bloco só de texto.
+_ESPACO_ENTRE_ITENS_DOTS = ALTURA_LINHA_DOTS // 2
+
+# Quebra de linha dentro da célula, em duas versões — e elas NÃO se somam.
+#
+# Testado neste Qt: pedir as duas juntas (TextWordWrap | TextWrapAnywhere) dá o
+# comportamento da segunda sozinha, quebrando no meio da palavra mesmo quando
+# havia um espaço logo antes — "SEM CEBOLA, BEM ASSADA" numa coluna estreita
+# saía "SEM CEBOLA / , BEM ASSAD / A". Por isso a escolha é uma OU outra, feita
+# célula a célula em _Celula._medir: quebra nas palavras por padrão, e só quem
+# tem uma palavra mais larga que a própria coluna (nome de sabor colado, código
+# comprido) cai na quebra em qualquer letra — que é feia, mas é melhor que o
+# texto vazar por cima da coluna vizinha.
+_FLAGS_POR_PALAVRA = int(
+    Qt.TextFlag.TextWordWrap
+    | Qt.AlignmentFlag.AlignLeft
+    | Qt.AlignmentFlag.AlignTop
+)
+_FLAGS_EM_QUALQUER_LETRA = int(
+    Qt.TextFlag.TextWrapAnywhere
+    | Qt.AlignmentFlag.AlignLeft
+    | Qt.AlignmentFlag.AlignTop
+)
+
+# Altura de sobra dada ao retângulo de medição. Não limita nada: é só um teto
+# alto o bastante pra qualquer célula, já que o que interessa na medida é a
+# altura que o texto REALMENTE ocupou dentro dela.
+_ALTURA_MEDICAO_DOTS = 10000
+
+
+def _estilo_de_campo(familia, campo, escala=1.0, negrito=None):
+    """(fonte, reverso) para desenhar `campo` neste modelo, a partir dos
+    atributos configurados na tela de Configurações.
+
+    O TAMANHO É LIMITADO AO NORMAL (TAMANHO_FONTE_BASE_PX) dentro da tabela, e
+    é isso que faz este modelo continuar parecido com a tela em qualquer
+    configuração. Dois motivos, que se somam:
+
+    * cabimento — um campo ampliado (o dono pode pedir até 8x) ocupa uns 20
+      caracteres por linha na régua inteira do papel, mas só uns quatro numa
+      coluna de 40% dela: o nome do sabor viraria uma torre de sílabas;
+    * semelhança — na tela de pedidos os três campos têm o mesmo tamanho, e é
+      essa a disposição que este modelo copia. Um adicional saindo maior que o
+      nome do item não é o que se vê no Balcão.
+
+    Reduções passam intactas: pedir uma observação menor que o normal cabe
+    melhor numa coluna, não pior. E a ampliação continua valendo integral no
+    modelo clássico, que é onde ela tem a largura do papel inteiro pra usar."""
+    atributos = estilo.atributos_campo(campo)
+    tamanho_px = min(
+        estilo.limitar_tamanho_fonte(atributos.get("tamanho_fonte")),
+        estilo.TAMANHO_FONTE_BASE_PX,
+    )
+
+    fonte = _fonte(
+        familia,
+        max(1, int(round(tamanho_px * escala))),
+        bool(atributos.get("negrito")) if negrito is None else negrito,
+        bool(atributos.get("sublinhado")),
+    )
+    return fonte, bool(atributos.get("fundo_preto"))
+
+
+class _Celula:
+    """Um pedaço de texto a desenhar num retângulo: o texto, a fonte dele e
+    onde ele fica na largura do papel.
+
+    A altura é medida na construção, e não na hora de pintar, porque o QImage
+    precisa nascer com a altura total da comanda já sabida — o mesmo motivo
+    pelo qual o modelo clássico resolve as posições antes de desenhar (ver
+    _quebrar_em_linhas_fisicas)."""
+
+    def __init__(self, texto, x, largura, fonte, reverso=False):
+        self.texto = texto
+        self.x = x
+        self.largura = largura
+        self.fonte = fonte
+        self.reverso = reverso
+        self.flags = _FLAGS_POR_PALAVRA
+        self.altura = self._medir()
+
+    def _medir(self):
+        """A altura que este texto ocupa na coluna, decidindo de passagem como
+        ele vai quebrar (ver _FLAGS_POR_PALAVRA).
+
+        A conta é a mesma que o QPainter refaz ao desenhar, com as mesmas
+        flags — é isso que garante que a faixa reservada na imagem seja
+        exatamente a que o texto vai ocupar."""
+        if not self.texto:
+            return 0.0
+
+        metrica = QFontMetricsF(self.fonte)
+        caixa = metrica.boundingRect(
+            QRectF(0, 0, self.largura, _ALTURA_MEDICAO_DOTS), self.flags, self.texto
+        )
+        if caixa.width() > self.largura:
+            # Quebrando só nas palavras, alguma delas não coube na coluna e
+            # vazou. Refaz partindo qualquer letra: a medida devolvida é a
+            # largura REALMENTE usada, então esta comparação é o jeito de
+            # descobrir o vazamento sem ter que procurar a palavra comprida.
+            self.flags = _FLAGS_EM_QUALQUER_LETRA
+            caixa = metrica.boundingRect(
+                QRectF(0, 0, self.largura, _ALTURA_MEDICAO_DOTS), self.flags, self.texto
+            )
+        return caixa.height()
+
+    def pintar(self, pintor, topo):
+        if not self.texto:
+            return
+
+        destino = QRectF(self.x, topo, self.largura, self.altura)
+        if self.reverso:
+            # Mesma tinta invertida do modo reverso da grade (GS B), aqui
+            # cobrindo a célula inteira em vez de caractere a caractere.
+            pintor.fillRect(destino, QColor(0, 0, 0))
+            pintor.setPen(QColor(255, 255, 255))
+        else:
+            pintor.setPen(QColor(0, 0, 0))
+
+        pintor.setFont(self.fonte)
+        pintor.drawText(destino, self.flags, self.texto)
+
+
+def _colunas_rascunho(largura_dots, largura_valor):
+    """(x, largura) de cada uma das três colunas, em dots, dada a largura já
+    medida da coluna do Valor (ver _LARGURA_VALOR_MINIMA_DOTS)."""
+    largura_valor = int(max(_LARGURA_VALOR_MINIMA_DOTS, min(_LARGURA_VALOR_MAXIMA_DOTS, largura_valor)))
+    util = largura_dots - 2 * _VAO_COLUNAS_DOTS - largura_valor
+    # Normalizado entre as duas: elas dividem o que sobra, mantendo entre si a
+    # mesma relação que têm na tela.
+    pedido = int(round(util * _PROPORCAO_PEDIDO / (_PROPORCAO_PEDIDO + _PROPORCAO_OBSERVACAO)))
+    observacao = util - pedido
+    return (
+        (0, pedido),
+        (pedido + _VAO_COLUNAS_DOTS, observacao),
+        (pedido + observacao + 2 * _VAO_COLUNAS_DOTS, largura_valor),
+    )
+
+
+def _texto_adicional(adicional, varios_sabores):
+    """"+ BACON (R$ 5,00)", e com o sabor no fim quando a pizza tem mais de um
+    — senão, numa meio a meio, o adicional não diria em qual metade entra.
+
+    Mesmo formato de components/ResumoComanda.qml (_extrasDoItem), que é o
+    resumo de uma linha por item mostrado ao lado do formulário: é a tela que
+    este modelo copia, então o extra tem que sair escrito como sai lá."""
+    nome = (adicional.get("nome") or "").strip()
+    if not nome:
+        return ""
+
+    sabor = (adicional.get("sabor") or "").strip()
+    # Adicional sem sabor numa pizza dividida é o que vale pra pizza inteira, e
+    # isso PRECISA sair escrito: é a diferença entre bacon em tudo e bacon numa
+    # metade. O cupom clássico marca com o mesmo sufixo (ver
+    # comandaTextoService._extras_adicionais), e a Consulta o lê de volta.
+    if varios_sabores and not sabor:
+        nome += texto.SUFIXO_ADICIONAL_INTEIRA
+
+    valor = (adicional.get("valor") or "").strip()
+    linha = f"{texto.PREFIXO_ADICIONAL}{nome}" + (f" ({valor})" if valor else "")
+    return f"{linha} — {sabor}" if varios_sabores and sabor else linha
+
+
+def _texto_borda(borda):
+    """"* BORDA CATUPIRY (R$ 8,00)" — mesmo prefixo do cupom clássico."""
+    if not borda:
+        return ""
+
+    nome = (borda.get("nome") or "").strip()
+    if not nome:
+        return ""
+
+    valor = (borda.get("valor") or "").strip()
+    return f"{texto.PREFIXO_BORDA}{nome}" + (f" ({valor})" if valor else "")
+
+
+def _largura_da_coluna_valor(itens, fonte_valor, fonte_cabecalho):
+    """A largura que a coluna do Valor precisa ter: a do maior valor da tabela
+    (ou do rótulo "Valor", se ele for mais largo), com uma folga.
+
+    Medido item a item, e não estimado por um número de caracteres, porque a
+    largura de um dígito muda com a família escolhida — a mesma tabela pede 124
+    dots na Figtree e 146 na DejaVu Sans."""
+    metrica_valor = QFontMetricsF(fonte_valor)
+    larguras = [QFontMetricsF(fonte_cabecalho).horizontalAdvance("Valor")]
+    larguras.extend(
+        metrica_valor.horizontalAdvance((item.get("valor") or "").strip())
+        for item in itens
+    )
+    return math.ceil(max(larguras)) + _FOLGA_VALOR_DOTS
+
+
+def _bloco_tabela_rascunho(itens, familia, largura_dots):
+    """A tabela inteira como uma lista de faixas [(altura, [células])], já
+    medida. Quem chama soma as alturas pra dimensionar a imagem e depois pinta
+    faixa a faixa."""
+    # O valor do item não tem campo de estilo próprio nem no cupom clássico
+    # (ver comandaTextoService.formatar_tabela, que o concatena cru depois do
+    # "|") — sai na fonte base, como lá.
+    fonte_valor, reverso_valor = _estilo_de_campo(familia, "")
+    fonte_cabecalho, _reverso_cabecalho = _estilo_de_campo(
+        familia, "", escala=_ESCALA_CABECALHO, negrito=True
+    )
+    fonte_pedido, reverso_pedido = _estilo_de_campo(familia, "pedido")
+    fonte_obs, reverso_obs = _estilo_de_campo(familia, "observacao_item")
+    fonte_adicional, reverso_adicional = _estilo_de_campo(familia, "adicional_item")
+    fonte_borda, reverso_borda = _estilo_de_campo(familia, "borda_item")
+
+    colunas = _colunas_rascunho(largura_dots, _largura_da_coluna_valor(itens, fonte_valor, fonte_cabecalho))
+    (x_pedido, larg_pedido), (x_obs, larg_obs), (x_valor, larg_valor) = colunas
+    faixas = []
+
+    def faixa(celulas):
+        altas = [celula for celula in celulas if celula.texto]
+        if not altas:
+            return
+        faixas.append((max(celula.altura for celula in altas), altas))
+
+    # Cabeçalho das colunas, uma vez só no topo da tabela — é ele que faz a
+    # disposição se explicar sozinha pra quem pega o papel. Sem campo de estilo
+    # próprio: os rótulos não são conteúdo da comanda, não há por que deixá-los
+    # configuráveis junto com o nome do item.
+    faixa([
+        _Celula("Pedido", x_pedido, larg_pedido, fonte_cabecalho),
+        _Celula("Observação", x_obs, larg_obs, fonte_cabecalho),
+        _Celula("Valor", x_valor, larg_valor, fonte_cabecalho),
+    ])
+
+    largura_extras = largura_dots - _RECUO_EXTRAS_DOTS
+    for indice, item in enumerate(itens):
+        if indice > 0:
+            faixas.append((_ESPACO_ENTRE_ITENS_DOTS, []))
+
+        pedido = (item.get("pedido") or "").strip()
+        # O tamanho da pizza ("(BROTO)") sai junto do nome, no estilo do nome:
+        # aqui o item é uma célula só de texto corrido, e não a linha em
+        # segmentos da grade, então o campo "pedido_tamanho" não tem onde
+        # entrar. É a única configuração de estilo que este modelo não honra.
+        faixa([
+            _Celula(pedido, x_pedido, larg_pedido, fonte_pedido, reverso_pedido),
+            _Celula((item.get("observacao") or "").strip(), x_obs, larg_obs, fonte_obs, reverso_obs),
+            _Celula((item.get("valor") or "").strip(), x_valor, larg_valor, fonte_valor, reverso_valor),
+        ])
+
+        # Adicionais e borda ocupam a largura toda, recuados sob o item: são
+        # texto livre que não caberia numa coluna de 40% do papel, e na tela
+        # eles também não vivem dentro das três colunas.
+        sabores, _tamanho = texto.dividir_sabores(pedido)
+        varios_sabores = len(sabores) > 1
+        for adicional in item.get("adicionais") or []:
+            faixa([_Celula(
+                _texto_adicional(adicional, varios_sabores),
+                _RECUO_EXTRAS_DOTS, largura_extras, fonte_adicional, reverso_adicional,
+            )])
+
+        faixa([_Celula(
+            _texto_borda(item.get("borda")),
+            _RECUO_EXTRAS_DOTS, largura_extras, fonte_borda, reverso_borda,
+        )])
+
+    return faixas
+
+
+def _desenhar_modelo_rascunho(conteudo, familia, largura_dots):
+    """A comanda com a tabela de itens em três colunas, ou None quando este
+    cupom não tem tabela que possa ser relida — aí quem chama desenha no
+    modelo clássico.
+
+    As linhas de FORA da tabela são as mesmas do modelo clássico, e vêm da
+    varredura de estilo feita sobre o cupom INTEIRO (e não sobre cada pedaço
+    separadamente): os comandos ESC/POS valem dali pra frente, e reiniciar o
+    estado no meio da comanda perderia um negrito que tivesse sido ligado
+    antes da tabela."""
+    linhas_limpas = parser.limpar_codigos_impressora(conteudo).split("\n")
+    divisorias = [i for i, linha in enumerate(linhas_limpas) if linha == texto.MARCADOR_ITENS]
+    if len(divisorias) < 2:
+        # Sem as duas bordas da tabela não há o que recortar: é o caso dos
+        # recibos de extra e de fechamento, que não têm itens, e das comandas
+        # gravadas antes do MARCADOR_ITENS existir.
+        #
+        # De propósito NÃO se usa aqui o segundo critério de
+        # comandaParserService.linhas_tabela_itens ("a 1ª e a 2ª linha de
+        # traços do arquivo"), que serve justamente pras comandas antigas. A
+        # diferença é o que se faz com o resultado: lá ele é LIDO, e um recorte
+        # errado vira um formulário que a pessoa confere na tela; aqui ele é
+        # REDESENHADO, e um recorte errado transformaria calado o cabeçalho ou
+        # o rodapé do cupom numa tabela de itens inventada. Reimpressão de
+        # comanda antiga sai no modelo clássico — igualzinha à que saiu na
+        # primeira vez, que é o que se espera de uma segunda via.
+        return None
+
+    inicio, fim = divisorias[0], divisorias[1]
+    itens = parser.reconstruir_itens(linhas_limpas[inicio + 1:fim])
+    if not itens:
+        return None
+
+    logicas = _linhas_com_estilo(conteudo)
+    # As linhas de marcador ficam com os blocos em grade, uma de cada lado: são
+    # a moldura da tabela, e a Consulta as procura de volta no arquivo (que não
+    # muda) — no papel elas continuam sendo as duas linhas de "=" de sempre.
+    antes = _quebrar_em_linhas_fisicas(logicas[:inicio + 1], largura_dots)
+    depois = _quebrar_em_linhas_fisicas(logicas[fim:], largura_dots)
+    tabela = _bloco_tabela_rascunho(itens, familia, largura_dots)
+
+    altura = (
+        sum(_altura_da_linha(glifos) for glifos in antes)
+        + sum(altura_faixa for altura_faixa, _celulas in tabela)
+        + sum(_altura_da_linha(glifos) for glifos in depois)
+    )
+    altura_total = int(math.ceil(altura))
+    if altura_total <= 0:
+        return None
+
+    imagem, pintor = _nova_imagem(largura_dots, altura_total)
+    try:
+        topo = _pintar_linhas(pintor, antes, familia, 0)
+        for altura_faixa, celulas in tabela:
+            for celula in celulas:
+                celula.pintar(pintor, topo)
+            topo += altura_faixa
+        _pintar_linhas(pintor, depois, familia, topo)
+    finally:
+        pintor.end()
+
+    return imagem
+
+
+def _desenho_do_modelo(conteudo, familia, largura_dots):
+    """A comanda desenhada no modelo escolhido em Configurações, com o clássico
+    como rede de proteção.
+
+    Um modelo que não sabe desenhar ESTE cupom (o rascunho, num recibo de
+    fechamento, que não tem tabela de itens) devolve None e cai aqui no
+    clássico. Uma chave desconhecida — vinda pela malha de uma máquina em
+    versão mais nova, ver comandaEstiloService.modelo_impressao — também. A
+    escolha do dono nunca pode ser motivo pra um pedido não sair no papel."""
+    modelo = estilo.modelo_impressao()
+
+    if modelo == estilo.MODELO_RASCUNHO:
+        imagem = _desenhar_modelo_rascunho(conteudo, familia, largura_dots)
+        if imagem is not None:
+            return imagem
+        print("[comandaImagemService] Modelo 'rascunho' não se aplica a esta comanda (sem tabela de itens) — desenhando no clássico.")
+
+    return _desenhar_modelo_classico(conteudo, familia, largura_dots)
 
 
 # Tradução de um byte de cinza pro caractere "0"/"1" do bit correspondente:
@@ -428,7 +883,8 @@ def fonte_disponivel(familia):
 
 def para_raster(conteudo_bytes, familia, largura_dots=LARGURA_PAPEL_DOTS):
     """Converte uma comanda em texto ESC/POS na mesma comanda em imagem
-    ESC/POS, desenhada na fonte `familia`.
+    ESC/POS, desenhada na fonte `familia` e na disposição escolhida em
+    Configurações (ver _desenho_do_modelo).
 
     Devolve None quando não dá pra rasterizar — sem fonte escolhida, com uma
     fonte que não existe nesta máquina, sem QGuiApplication viva (o desenho de
@@ -445,14 +901,12 @@ def para_raster(conteudo_bytes, familia, largura_dots=LARGURA_PAPEL_DOTS):
 
     try:
         conteudo = conteudo_bytes.decode(texto.CODEPAGE_IMPRESSORA, errors="replace")
-        fisicas = _quebrar_em_linhas_fisicas(_linhas_com_estilo(conteudo), largura_dots)
-        altura = sum(_altura_da_linha(glifos) for glifos in fisicas)
-        if altura <= 0:
+        imagem = _desenho_do_modelo(conteudo, familia, largura_dots)
+        if imagem is None:
             return None
 
-        imagem = _desenhar(fisicas, familia, largura_dots, altura)
         empacotado, bytes_por_linha = _empacotar(imagem)
-        return _comandos_raster(empacotado, bytes_por_linha, altura)
+        return _comandos_raster(empacotado, bytes_por_linha, imagem.height())
     except Exception as erro:
         # Melhor esforço, como em Config/fontes.py: qualquer falha aqui vira
         # aviso no log e a comanda sai em texto. Isto roda dentro da thread de

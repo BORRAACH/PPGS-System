@@ -65,6 +65,26 @@ Column {
         "local": false,
         "conhecida": false
     })
+    // Disposição usada pra DESENHAR a comanda (ver
+    // comandaEstiloService.MODELOS_IMPRESSAO). Só tem efeito quando há fonte
+    // escolhida: sem ela quem desenha é a impressora, que só sabe empilhar
+    // caracteres numa grade.
+    property string modeloImpressao: "classico"
+    // Catálogo vindo do Python ([{chave, rotulo, descricao}]). Diferente das
+    // fontes, não depende de máquina nenhuma — os modelos são código.
+    property var modelosImpressao: []
+    // A descrição do modelo escolhido, pra linha de ajuda abaixo do combo.
+    readonly property string descricaoModelo: {
+        for (var i = 0; i < raiz.modelosImpressao.length; i++) {
+            if (raiz.modelosImpressao[i].chave === raiz.modeloImpressao)
+                return raiz.modelosImpressao[i].descricao;
+        }
+        return "";
+    }
+    // O modelo em três colunas está de fato valendo? Só quando escolhido E com
+    // fonte, já que ele só existe no caminho de imagem. É o que a prévia
+    // consulta pra não prometer uma disposição que o papel não vai ter.
+    readonly property bool tabelaEmColunas: raiz.modeloImpressao === "rascunho" && raiz.fonteImpressao !== ""
     // Espessura padrão de cada divisória tracejada, e as exceções por campo
     // ({chave: nº de traços antes dela}) que ignoram a regra automática de
     // categoria. Espelham "linhas_separador"/"separadores_campo" do JSON —
@@ -240,6 +260,12 @@ Column {
         // versaoConfig existe para cobrir.
         raiz.versaoConfig += 1;
     }
+    // Mesmo caso da fonte: o modelo muda a tabela de itens inteira na prévia
+    // (uma linha por item vira três colunas), não o estilo de um campo.
+    onModeloImpressaoChanged: {
+        raiz.marcarPendente();
+        raiz.versaoConfig += 1;
+    }
 
     function obterAtributo(campo, atributo) {
         var atributosCampo = raiz.configAtual.campos[campo];
@@ -259,6 +285,31 @@ Column {
         var atributosCampo = raiz.configAtual.campos[campo];
         var valor = atributosCampo && atributosCampo.tamanho_fonte;
         return valor ? valor : raiz.tamanhoFontePadrao;
+    }
+
+    // Os campos que vivem DENTRO da tabela de itens. Só eles são afetados pelo
+    // teto de tamanho do modelo em colunas (ver tamanhoFonteDesenhado).
+    readonly property var camposDaTabelaItens: ({
+        "pedido": true,
+        "pedido_tamanho": true,
+        "observacao_item": true,
+        "adicional_item": true,
+        "borda_item": true
+    })
+
+    // O tamanho que o campo REALMENTE sai no papel, que nem sempre é o
+    // configurado: no modelo em colunas o conteúdo da tabela é limitado ao
+    // tamanho normal, porque ampliação não cabe numa coluna estreita (ver
+    // comandaImagemService._estilo_de_campo). É este o número que a prévia usa
+    // — mostrar o configurado ali prometeria uma letra que a comanda não tem.
+    // Quem EDITA o tamanho continua lendo obterTamanhoFonte, que devolve o
+    // valor guardado: o teto é de desenho, não apaga a escolha de ninguém.
+    function tamanhoFonteDesenhado(campo) {
+        var tamanho = raiz.obterTamanhoFonte(campo);
+        if (raiz.tabelaEmColunas && raiz.camposDaTabelaItens[campo])
+            return Math.min(tamanho, raiz.tamanhoFontePadrao);
+
+        return tamanho;
     }
 
     function definirTamanhoFonteLocal(campo, valor) {
@@ -300,7 +351,8 @@ Column {
             "espacamento_corte": raiz.espacamentoCorte,
             "linhas_separador": raiz.linhasSeparadorPadrao,
             "separadores_campo": raiz.separadoresPorCampo,
-            "fonte_impressao": raiz.fonteImpressao
+            "fonte_impressao": raiz.fonteImpressao,
+            "modelo_impressao": raiz.modeloImpressao
         });
         raiz.alteracoesPendentes = false;
     }
@@ -363,6 +415,10 @@ Column {
         // encontrar fonteImpressao já com o valor novo.
         raiz.fonteImpressao = config.fonte_impressao !== undefined ? config.fonte_impressao : "";
         raiz.recarregarFontes();
+        // Mesma ordem, pelo mesmo motivo: a lista depois da escolha, pro combo
+        // achar o índice certo ao se reler.
+        raiz.modeloImpressao = config.modelo_impressao !== undefined ? config.modelo_impressao : "classico";
+        raiz.modelosImpressao = comandaEstiloController.listarModelosImpressao();
         // Cópia, não a referência de dentro de configAtual: as exceções são
         // editadas por reatribuição (definirExcecaoSeparador) e não devem
         // mexer no dict que veio do Python.
@@ -859,8 +915,65 @@ Column {
     // viram vários. `campoEstilo` é o que o clique naquela sub-linha
     // seleciona ("" = a sub-linha não tem estilo próprio, então o clique
     // seleciona a linha ordenável dona dela).
+    // Preenche `texto` até `largura` com espaços, ou corta o que passar. Usado
+    // só pela prévia da tabela em colunas: a prévia é monoespaçada, então
+    // contar caracteres é o que alinha as colunas na tela.
+    function preencherColuna(texto, largura) {
+        var conteudo = texto.length > largura ? texto.substring(0, largura) : texto;
+        while (conteudo.length < largura)
+            conteudo += " ";
+        return conteudo;
+    }
+
+    // A tabela de itens do modelo "rascunho" (ver
+    // comandaImagemService._bloco_tabela_rascunho): Pedido, Observação e Valor
+    // lado a lado, como na lista de itens do Balcão/Entrega/Salão.
+    //
+    // É uma APROXIMAÇÃO, e não pode deixar de ser: no papel as colunas são
+    // medidas em dots e o texto é proporcional, aqui são caracteres de uma
+    // fonte monoespaçada. O que a prévia promete é a disposição — o que está em
+    // qual coluna, e o que desce recuado embaixo —, não a quebra de linha exata.
+    //
+    // As larguras seguem a mesma conta do Python: a coluna do Valor recebe o
+    // que o maior valor precisa, e Pedido/Observação dividem o resto na
+    // proporção 41:37 de Responsivo.gradePedido.
+    function linhasItensEmColunas() {
+        var larguraValor = 9;
+        var util = raiz.colunasPapel - 2 - larguraValor;
+        var larguraPedido = Math.round(util * 41 / 78);
+        var larguraObservacao = util - larguraPedido;
+
+        return [
+            // Cabeçalho sem estilo próprio (campoEstilo vazio): os rótulos são
+            // desenho da tabela, não conteúdo da comanda — clicar neles
+            // seleciona o bloco de itens, como em qualquer sub-linha sem campo.
+            { "campoEstilo": "", "segmentos": [{
+                "t": raiz.preencherColuna("Pedido", larguraPedido) + " " + raiz.preencherColuna("Observação", larguraObservacao) + " " + "Valor",
+                "c": ""
+            }] },
+            { "campoEstilo": "pedido", "segmentos": [
+                { "t": raiz.preencherColuna("PIZZA CALABRESA", larguraPedido), "c": "pedido" },
+                { "t": " ", "c": "" },
+                { "t": raiz.preencherColuna("SEM CEBOLA", larguraObservacao), "c": "observacao_item", "clique": "observacao_item" },
+                { "t": " R$ 45,00", "c": "" }
+            ] },
+            // O tamanho desce junto do nome, dentro da coluna do Pedido — no
+            // papel ele é a continuação do mesmo texto, que quebra quando não
+            // cabe. Sai no estilo de "pedido", e não no de "pedido_tamanho":
+            // este modelo desenha o item como um texto corrido só, e é a única
+            // configuração de estilo que ele não honra (ver
+            // comandaImagemService._bloco_tabela_rascunho).
+            { "campoEstilo": "pedido", "segmentos": [{ "t": raiz.preencherColuna("(BROTO)", larguraPedido), "c": "pedido" }] },
+            { "campoEstilo": "adicional_item", "segmentos": [{ "t": "  + BACON (R$ 5,00)", "c": "adicional_item" }] },
+            { "campoEstilo": "borda_item", "segmentos": [{ "t": "  * BORDA CATUPIRY (R$ 8,00)", "c": "borda_item" }] }
+        ];
+    }
+
     function linhasDoCampo(chave) {
         if (chave === "itens") {
+            if (raiz.tabelaEmColunas)
+                return raiz.linhasItensEmColunas();
+
             return [
                 // O tamanho sai colado no nome do item, na mesma linha (ver
                 // comandaTextoService.formatar_coluna_pedido), entao ele e um
@@ -2206,7 +2319,133 @@ Column {
                                 font.pixelSize: Estilo.global.fontSize.sm
                                 color: Estilo.global.textSecondary
                             }
+
                         }
+
+                        // Título próprio pelo mesmo motivo do bloco FONTE
+                        // acima: daqui pra baixo não se escolhe mais a
+                        // tipografia, e sim a DISPOSIÇÃO do que é desenhado.
+                        Text {
+                            text: "MODELO"
+                            font.pixelSize: Estilo.global.fontSize.xl
+                            font.bold: true
+                            color: raiz.corDestaque
+                        }
+
+                        Column {
+                            spacing: Estilo.global.spacing.md
+
+                            Text {
+                                width: 400
+                                text: "Como a comanda é desenhada"
+                                font.pixelSize: Estilo.global.fontSize.md
+                                color: Estilo.global.text
+                            }
+
+                            ComboBox {
+                                id: comboModelo
+
+                                // Nomeado pelo mesmo motivo do combo de fonte
+                                // acima: deixa o seletor alcançável de fora
+                                // para inspeção e teste.
+                                objectName: "comboModeloComanda"
+                                width: 400
+                                model: raiz.modelosImpressao
+                                textRole: "rotulo"
+                                valueRole: "chave"
+                                // Desabilitado sem fonte escolhida porque aí
+                                // não há desenho nenhum a dispor: quem monta o
+                                // cupom é a impressora. Deixar o combo ativo
+                                // faria a escolha parecer surtir efeito.
+                                enabled: raiz.fonteImpressao !== ""
+                                opacity: enabled ? 1 : 0.5
+
+                                // Mesmo padrão do combo de fonte: currentIndex
+                                // não é binding vivo, então é recalculado a
+                                // cada releitura da configuração.
+                                function sincronizarSelecao() {
+                                    for (var i = 0; i < raiz.modelosImpressao.length; i++) {
+                                        if (raiz.modelosImpressao[i].chave === raiz.modeloImpressao) {
+                                            currentIndex = i;
+                                            return;
+                                        }
+                                    }
+                                    // Modelo gravado que esta versão do app não
+                                    // conhece (veio de uma máquina mais nova
+                                    // pela malha). Mostra o primeiro, SEM
+                                    // escrever em modeloImpressao — apagar aqui
+                                    // a escolha do dono a desfaria em todas as
+                                    // máquinas na próxima gravação, e é a mesma
+                                    // regra que o Python segue ao desenhar.
+                                    currentIndex = 0;
+                                }
+
+                                Component.onCompleted: sincronizarSelecao()
+                                Connections {
+                                    target: raiz
+
+                                    function onModelosImpressaoChanged() {
+                                        comboModelo.sincronizarSelecao();
+                                    }
+
+                                    // Também quando só a escolha muda: é o caso
+                                    // de "Restaurar padrões".
+                                    function onModeloImpressaoChanged() {
+                                        comboModelo.sincronizarSelecao();
+                                    }
+                                }
+                                onActivated: raiz.modeloImpressao = currentValue
+
+                                delegate: ItemDelegate {
+                                    width: comboModelo.width
+                                    text: modelData.rotulo
+                                    font.pixelSize: Estilo.global.fontSize.lg
+                                    highlighted: comboModelo.highlightedIndex === index
+                                    palette.text: Estilo.global.textInput
+                                    palette.highlightedText: Estilo.global.textInput
+                                }
+
+                                contentItem: Text {
+                                    text: comboModelo.displayText
+                                    font.pixelSize: Estilo.global.fontSize.lg
+                                    color: Estilo.global.textInput
+                                    leftPadding: 10
+                                    rightPadding: 10
+                                    verticalAlignment: Text.AlignVCenter
+                                    elide: Text.ElideRight
+                                }
+
+                                background: Rectangle {
+                                    radius: Estilo.global.radius.pill
+                                    color: Estilo.global.inputBackground
+                                    border.color: comboModelo.activeFocus ? raiz.corDestaque : Estilo.global.border
+                                    border.width: comboModelo.activeFocus ? 2 : 1
+                                    implicitHeight: 38
+                                }
+                            }
+
+                            Text {
+                                width: 400
+                                wrapMode: Text.WordWrap
+                                text: raiz.fonteImpressao === "" ? "Só vale com uma fonte escolhida acima: sem ela quem monta o cupom é a própria impressora, e não há desenho a dispor." : raiz.descricaoModelo
+                                font.pixelSize: Estilo.global.fontSize.sm
+                                color: Estilo.global.textSecondary
+                            }
+
+                            // Ressalvas que só o modelo em colunas tem. Ficam
+                            // aqui, e não no catálogo do Python, porque são
+                            // sobre o que a TELA mostra e sobre estilos que
+                            // esta mesma tela deixa configurar logo acima.
+                            Text {
+                                width: 400
+                                wrapMode: Text.WordWrap
+                                visible: raiz.tabelaEmColunas
+                                text: "Nas três colunas o texto sai sempre no tamanho normal, mesmo em campos configurados maiores — ampliação não cabe numa coluna estreita. Recibos de extra e de fechamento não têm tabela de itens e continuam saindo no modelo clássico."
+                                font.pixelSize: Estilo.global.fontSize.sm
+                                color: Estilo.global.textSecondary
+                            }
+                        }
+
                     }
                 }
             }
