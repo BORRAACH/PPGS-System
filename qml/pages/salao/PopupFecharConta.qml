@@ -454,6 +454,11 @@ Popup {
                         id: btnStatusDivisao
 
                         width: 60
+                        // Mesma altura dos campos da linha. Precisa ser dita:
+                        // o rótulo sai na fonte de TÍTULO, cuja linha é um
+                        // pixel mais baixa que a do corpo, e o botão ficava
+                        // menor que o valor e o combo ao lado.
+                        Layout.preferredHeight: inputValorDivisao.implicitHeight
                         topPadding: 10
                         bottomPadding: 10
                         focusPolicy: Qt.StrongFocus
@@ -482,6 +487,9 @@ Popup {
 
                     Button {
                         Layout.preferredWidth: 34
+                        // Idem: sem padding vertical nenhum, este saía bem mais
+                        // baixo que o resto da linha.
+                        Layout.preferredHeight: inputValorDivisao.implicitHeight
                         visible: !popupFecharConta.modoIgual && modeloDivisoes.count > 1
                         focusPolicy: Qt.StrongFocus
                         onClicked: modeloDivisoes.remove(linhaDivisao.indiceDivisao)

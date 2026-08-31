@@ -33,6 +33,16 @@ Row {
     // rateio; o resto do espaço é dividido igualmente entre os campos largos.
     readonly property int larguraCampo: larguraDisponivel < 0 ? 150 : Math.max(100, Math.min(150, Math.floor((larguraDisponivel - 60 - spacing * _camposLargos) / _camposLargos)))
 
+    // A altura de TODOS os controles desta linha, tirada de um campo de texto:
+    // é ele quem manda, porque a altura dele sai da fonte do app mais os 10+10
+    // de padding, e é o que o resto da tela também usa.
+    //
+    // Os outros três precisam ser mandados: o combo tem uma conta de altura
+    // própria (ver ComboBoxPagamento.alturaCampo) e o botão de status escreve
+    // na fonte de TÍTULO, cuja linha é um pixel mais baixa que a do corpo —
+    // sem isto ele saía um pixel menor que os campos ao lado.
+    readonly property real alturaCampo: inputTroco.implicitHeight
+
     property color corDestaque: Estilo.action.confirm.base
     property var opcoesPagamento: ["Pix", "Crédito", "Débito", "Dinheiro"]
     // Forma de pagamento já selecionada quando o formulário abre limpo. É
@@ -115,7 +125,7 @@ Row {
 
             width: camposPagamento.larguraCampo
             corDestaque: camposPagamento.corDestaque
-            alturaCampo: inputTroco.implicitHeight
+            alturaCampo: camposPagamento.alturaCampo
             model: camposPagamento.opcoesPagamento
             // Reabrir uma comanda salva manda a forma dela em
             // formaPagamentoInicial; formulário limpo (string vazia, que o
@@ -174,7 +184,11 @@ Row {
                 radius: Estilo.global.radius.pill
                 color: Estilo.global.inputBackground
                 border.color: parent.activeFocus ? camposPagamento.corDestaque : Estilo.global.border
-                border.width: Estilo.global.borderWidth.hairline
+                // Engrossa no foco, como o combo ao lado e como os campos do
+                // Salão — é o que o token diz ("thick: ênfase e input em
+                // foco"). Antes só a cor mudava aqui, e o campo em foco ficava
+                // visivelmente mais fraco que o combo em foco.
+                border.width: parent.activeFocus ? Estilo.global.borderWidth.thick : Estilo.global.borderWidth.hairline
             }
         }
     }
@@ -215,7 +229,11 @@ Row {
                 radius: Estilo.global.radius.pill
                 color: Estilo.global.inputBackground
                 border.color: parent.activeFocus ? camposPagamento.corDestaque : Estilo.global.border
-                border.width: Estilo.global.borderWidth.hairline
+                // Engrossa no foco, como o combo ao lado e como os campos do
+                // Salão — é o que o token diz ("thick: ênfase e input em
+                // foco"). Antes só a cor mudava aqui, e o campo em foco ficava
+                // visivelmente mais fraco que o combo em foco.
+                border.width: parent.activeFocus ? Estilo.global.borderWidth.thick : Estilo.global.borderWidth.hairline
             }
         }
     }
@@ -241,6 +259,7 @@ Row {
 
             text: pago ? "PG" : "NP"
             width: 60
+            height: camposPagamento.alturaCampo
             topPadding: 10
             bottomPadding: 10
             focusPolicy: Qt.StrongFocus
