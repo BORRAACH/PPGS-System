@@ -391,12 +391,18 @@ def familias_locais():
     if aplicacao is None:
         return []
 
-    if _familias_locais is None:
-        if QThread.currentThread() != aplicacao.thread():
-            return []
+    # Relida sempre que a chamada vem da thread da interface, e não só na
+    # primeira vez: a lista muda depois do aquecimento. A Caprasimo embarcada
+    # entra na QFontDatabase pelo FontLoader de qml/estilo/Estilo.qml, que só
+    # roda quando a QML sobe — depois de main.py ter aquecido —, e uma fonte
+    # instalada no sistema com o app aberto também não apareceria nunca. Quem
+    # pergunta da thread da interface é a tela de Configurações montando o
+    # seletor, e é justamente ela que precisa da lista certa; quem pergunta de
+    # outra thread (detecção de impressora, impressão) recebe a última lida.
+    if QThread.currentThread() == aplicacao.thread():
         _familias_locais = list(QFontDatabase.families())
 
-    return _familias_locais
+    return _familias_locais or []
 
 
 def aquecer_familias():
