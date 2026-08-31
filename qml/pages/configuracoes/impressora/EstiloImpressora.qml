@@ -2085,7 +2085,7 @@ Column {
                             Text {
                                 width: 400
                                 wrapMode: Text.WordWrap
-                                text: !raiz.origemFontes.conhecida ? "Nenhuma máquina com impressora foi encontrada agora — sem saber quais fontes ela tem, só a opção padrão é oferecida." : raiz.origemFontes.local ? "Fontes instaladas nesta máquina, que é a que está imprimindo." : "Fontes instaladas em " + raiz.origemFontes.maquina + ", a máquina que está imprimindo."
+                                text: !raiz.origemFontes.conhecida ? "Nenhuma máquina com impressora foi encontrada agora — sem saber quais fontes ela tem, só a opção padrão é oferecida." : raiz.origemFontes.local ? "Fontes instaladas nesta máquina, que é a que está imprimindo. Cada opção aparece escrita na própria fonte." : "Fontes instaladas em " + raiz.origemFontes.maquina + ", a máquina que está imprimindo. Cada opção aparece escrita na própria fonte, mas as que esta máquina não tem são mostradas na fonte comum."
                                 font.pixelSize: Estilo.global.fontSize.sm
                                 color: Estilo.global.textSecondary
                             }
@@ -2141,18 +2141,48 @@ Column {
                                 }
                                 onActivated: raiz.fonteImpressao = currentValue
 
-                                // Ver o comentário do mesmo delegate em
-                                // components/CamposPagamento.qml.
+                                // Cada opção escrita NA PRÓPRIA FONTE, que é
+                                // o que faz a lista responder sozinha a
+                                // pergunta que se tem ao abri-la: com que cara
+                                // esta fonte sai? Ler "Figtree" escrito na
+                                // fonte do app não diz nada sobre a Figtree.
+                                //
+                                // A opção padrão (chave vazia) fica na fonte da
+                                // interface de propósito: ela não é uma
+                                // família, é a ausência de escolha — quem
+                                // desenha ali é a impressora, e não há prévia
+                                // possível de uma fonte que mora dentro dela.
+                                //
+                                // Ressalva que a linha de aviso abaixo do combo
+                                // explica ao usuário: as famílias listadas são
+                                // as da MÁQUINA QUE IMPRIME, e o Qt desenha
+                                // aqui com o que ESTA máquina tem. Numa fonte
+                                // que só existe lá, ele substitui em silêncio e
+                                // a prévia mostra outra coisa.
                                 delegate: ItemDelegate {
                                     width: comboFonte.width
                                     text: modelData.rotulo
+                                    font.family: modelData.chave !== "" ? modelData.chave : comboFonte.font.family
+                                    // Fixo, e não herdado da família: fontes
+                                    // diferentes têm alturas de traço bem
+                                    // diferentes, e deixar cada uma escolher a
+                                    // sua faria a lista pular de tamanho a cada
+                                    // linha.
+                                    font.pixelSize: Estilo.global.fontSize.lg
                                     highlighted: comboFonte.highlightedIndex === index
                                     palette.text: Estilo.global.textInput
                                     palette.highlightedText: Estilo.global.textInput
                                 }
 
+                                // O campo fechado também mostra a escolhida na
+                                // fonte dela: depois de escolher, é ele que
+                                // fica na tela, e voltar para a fonte da
+                                // interface desfaria a prévia no instante em
+                                // que ela passa a valer.
                                 contentItem: Text {
                                     text: comboFonte.displayText
+                                    font.family: raiz.fonteImpressao !== "" ? raiz.fonteImpressao : comboFonte.font.family
+                                    font.pixelSize: Estilo.global.fontSize.lg
                                     color: Estilo.global.textInput
                                     leftPadding: 10
                                     rightPadding: 10
