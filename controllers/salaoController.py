@@ -127,6 +127,11 @@ def _linhas_itens_producao(grupos):
             for extra in extras:
                 linhas.append(f"  {estilo.formatar_campo(extra, 'adicional_item')}")
 
+        # Mesma posição da comanda do cliente (ver texto.formatar_tabela): o
+        # que vale para o item inteiro sai depois de todas as frações.
+        for extra in grupo.get("adicionais_inteiros", []):
+            linhas.append(f"  {estilo.formatar_campo(extra, 'adicional_item')}")
+
         if grupo["borda"]:
             linhas.append(f"  {estilo.formatar_campo(grupo['borda'], 'borda_item')}")
         if grupo["observacao"]:

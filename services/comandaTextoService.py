@@ -133,6 +133,24 @@ def valor_para_float(valor_texto):
 PREFIXO_ADICIONAL = "+ "
 PREFIXO_BORDA = "* "
 
+# Sufixo do adicional que vale para a PIZZA INTEIRA, e não para uma das
+# metades — "+ BACON INTEIRA".
+#
+# Ele tem dois papéis, e o segundo é o que o torna obrigatório. Para quem lê o
+# papel, avisa a cozinha de que o bacon é na pizza toda: sem isso a linha sairia
+# igual à de um adicional de metade, só que num lugar diferente da tabela, e
+# "lugar diferente" não é distinção que alguém note com a fila andando. Para
+# quem lê a comanda de volta (ver comandaParserService.reconstruir_itens), é a
+# ÚNICA marca que sobrevive à impressão: um adicional de pizza inteira sai
+# depois de todas as frações, exatamente onde sairia um adicional da última
+# fração, e sem o sufixo os dois seriam indistinguíveis ao reabrir a comanda em
+# Consulta > Editar.
+#
+# Guardado no item, o adicional de pizza inteira é o que tem "sabor" vazio — o
+# sufixo é coisa do papel, posto na impressão e retirado na leitura, para que o
+# nome do adicional no cardápio e no item continue sendo só "Bacon".
+SUFIXO_ADICIONAL_INTEIRA = " INTEIRA"
+
 # O que abre a linha de um item que não é pizza fracionada: a QUANTIDADE dele.
 # Era um "- " de marcador de lista, que não dizia nada — e ficava estranho ao
 # lado das frações logo acima/abaixo, que já abrem com número ("1/2 - ...").
@@ -256,12 +274,18 @@ def montar_grupos(itens):
 
     Cada grupo é um dict:
     {"linhas": [(coluna_pedido, valor, extras, tamanho)], ...},
+    "adicionais_inteiros": linhas dos adicionais que valem para o item inteiro,
     "borda": texto da borda (nível do item/pizza inteira, "" se não houver),
     "observacao": texto da observação geral do item.
 
     "extras" (dentro de cada linha) é a lista de adicionais atribuídos
     especificamente àquele sabor (ver Pizzas.qml/PopupAdicionaisBordas.qml) —
     cada um sai numa linha própria, logo abaixo da fração correspondente.
+
+    "adicionais_inteiros" é o resto: os que o atendente atribuiu à pizza toda
+    em vez de a uma metade (ver SUFIXO_ADICIONAL_INTEIRA). Saem uma vez só,
+    depois de todas as frações, no mesmo lugar da borda — que é onde já mora o
+    que vale para o item inteiro.
 
     Linhas em branco do formulário não viram grupo nenhum (ver
     item_preenchido) — a filtragem mora AQUI, e não em cada controller, porque
@@ -323,6 +347,7 @@ def montar_grupos(itens):
 
         grupos.append({
             "linhas": linhas,
+            "adicionais_inteiros": _extras_adicionais(adicionais, "", inteira=True),
             "observacao": observacao,
             "borda": _formatar_borda(item.get("borda")),
         })
@@ -330,15 +355,32 @@ def montar_grupos(itens):
     return grupos
 
 
-def _extras_adicionais(adicionais, sabor):
+def _extras_adicionais(adicionais, sabor, inteira=False):
     """Linhas dos adicionais atribuídos a `sabor` (comparação sem diferenciar
     caixa — os nomes de sabor chegam em caixa alta do cupom, mas o adicional
-    guarda o nome do sabor como veio de Pizzas.qml)."""
+    guarda o nome do sabor como veio de Pizzas.qml).
+
+    Com `inteira`, junta os do outro tipo: os de sabor VAZIO, que são os que
+    valem para o item inteiro, e que saem com SUFIXO_ADICIONAL_INTEIRA no nome.
+    Os dois casos moram na mesma função porque a diferença entre eles é só o
+    critério de casamento e o sufixo — separá-los em duas duplicaria a
+    formatação do nome e do valor, que é onde um erro passaria despercebido.
+
+    Um adicional cujo sabor não casa com nenhuma fração e não está vazio fica
+    de fora dos dois, e isso é intencional: é um dado corrompido (nome de sabor
+    editado à mão depois de o adicional ter sido atribuído), e imprimi-lo em
+    algum lugar arbitrário seria pior do que a ausência."""
     extras = []
     for adicional in adicionais:
-        if (adicional.get("sabor") or "").strip().upper() != (sabor or "").strip().upper():
+        sabor_adicional = (adicional.get("sabor") or "").strip()
+        if inteira:
+            if sabor_adicional:
+                continue
+        elif sabor_adicional.upper() != (sabor or "").strip().upper():
             continue
         nome = (adicional.get("nome") or "").upper()
+        if inteira:
+            nome += SUFIXO_ADICIONAL_INTEIRA
         valor_adicional = adicional.get("valor") or ""
         sufixo = f" ({valor_adicional})" if valor_adicional else ""
         extras.append(f"{PREFIXO_ADICIONAL}{nome}{sufixo}")
@@ -487,6 +529,12 @@ def formatar_tabela(grupos):
                 texto_linhas.append(f"  {estilo.formatar_campo(f'({tamanho_abaixo})', 'pedido_tamanho')}")
             for extra in extras:
                 texto_linhas.append(f"  {estilo.formatar_campo(extra, 'adicional_item')}")
+
+        # Antes da borda, e depois de todas as frações: são adicionais, então
+        # ficam perto dos outros adicionais; e valem para o item inteiro, então
+        # não podem ficar colados numa fração só.
+        for extra in grupo.get("adicionais_inteiros", []):
+            texto_linhas.append(f"  {estilo.formatar_campo(extra, 'adicional_item')}")
 
         if grupo["borda"]:
             texto_linhas.append(f"  {estilo.formatar_campo(grupo['borda'], 'borda_item')}")

@@ -25,6 +25,7 @@ from services.comandaTextoService import (
     PREFIXO_ADICIONAL,
     PREFIXO_BORDA,
     PREFIXO_ITEM_UNICO,
+    SUFIXO_ADICIONAL_INTEIRA,
     valor_para_float,
 )
 
@@ -350,7 +351,11 @@ def reconstruir_itens(linhas_tabela):
             if match_tamanho and match_tamanho.group(2).strip().upper() in _TAMANHOS_VALIDOS_UPPER:
                 sabor_sem_tamanho = match_tamanho.group(1)
             for adicional in adicionais:
-                adicional["sabor"] = sabor_sem_tamanho
+                # Um adicional de item inteiro guarda sabor vazio (ver
+                # comandaTextoService.SUFIXO_ADICIONAL_INTEIRA) e por isso não
+                # recebe o nome do sabor aqui.
+                if not adicional.pop("inteira", False):
+                    adicional["sabor"] = sabor_sem_tamanho
             itens.append({
                 "pedido": pedido,
                 "observacao": observacao,
@@ -379,7 +384,8 @@ def reconstruir_itens(linhas_tabela):
                 if observacao:
                     observacao_final = observacao
                 for adicional in adicionais:
-                    adicional["sabor"] = nome
+                    if not adicional.pop("inteira", False):
+                        adicional["sabor"] = nome
                 adicionais_totais.extend(adicionais)
                 sabores.append(nome)
 
@@ -408,9 +414,22 @@ def reconstruir_itens(linhas_tabela):
         match_adicional = _PADRAO_LINHA_ADICIONAL.match(linha)
         if match_adicional and grupo_atual:
             _coluna_pedido, _observacao, _valor, adicionais = grupo_atual[-1]
+            nome_adicional = match_adicional.group(1).strip()
+            # O sufixo é a única marca que distingue, no papel, um adicional da
+            # pizza inteira de um da última fração: os dois saem no mesmo lugar,
+            # depois de todas as frações. Sem reconhecê-lo aqui, reabrir a
+            # comanda em Consulta > Editar transformaria "bacon na pizza toda"
+            # em "bacon na segunda metade", calado.
+            inteira = nome_adicional.upper().endswith(SUFIXO_ADICIONAL_INTEIRA)
+            if inteira:
+                nome_adicional = nome_adicional[:-len(SUFIXO_ADICIONAL_INTEIRA)].strip()
             adicionais.append({
-                "nome": match_adicional.group(1).strip(),
+                "nome": nome_adicional,
                 "valor": (match_adicional.group(2) or "").strip(),
+                # Consumida por fechar_grupo, que decide o "sabor" de cada
+                # adicional; não sobra no item devolvido.
+                "inteira": inteira,
+                "sabor": "",
             })
             continue
 
