@@ -37,6 +37,7 @@ relevância (prefixo, pedaço do nome, ingrediente).
 import bisect
 import json
 import os
+import threading
 import unicodedata
 from datetime import date
 
@@ -276,16 +277,51 @@ def _assinatura_dos_arquivos():
     return tuple(assinatura)
 
 
+# Serializa a RECONSTRUÇÃO do índice, não a leitura dele.
+#
+# Passou a fazer falta quando o índice ganhou um aquecimento em segundo plano
+# (ver aquecer, chamado na subida do app): a thread de aquecimento e a thread da
+# interface podem chegar aqui ao mesmo tempo, e sem a trava as duas montam o
+# índice inteiro em paralelo — o dobro do trabalho justamente no instante em que
+# se queria tirá-lo do caminho. Ler o índice já pronto não passa por trava
+# nenhuma, que é o caso de quase toda chamada.
+_trava_indice = threading.Lock()
+
+
 def indice():
     """As entradas ordenadas por nome normalizado, reconstruídas só quando
     algum arquivo de cardápio mudou."""
     global _indice_em_memoria, _assinatura_em_memoria
 
     assinatura = _assinatura_dos_arquivos()
-    if _indice_em_memoria is None or assinatura != _assinatura_em_memoria:
-        _indice_em_memoria = _montar_entradas()
-        _assinatura_em_memoria = assinatura
-    return _indice_em_memoria
+    if _indice_em_memoria is not None and assinatura == _assinatura_em_memoria:
+        return _indice_em_memoria
+
+    with _trava_indice:
+        # Conferido de novo com a trava na mão: outra thread pode ter montado o
+        # índice enquanto se esperava por ela, e aí não há o que refazer.
+        if _indice_em_memoria is None or assinatura != _assinatura_em_memoria:
+            _indice_em_memoria = _montar_entradas()
+            _assinatura_em_memoria = assinatura
+        return _indice_em_memoria
+
+
+def aquecer():
+    """Monta o índice agora, para que a primeira consulta de verdade não pague
+    a leitura de todos os arquivos do cardápio.
+
+    Chamado numa thread na subida do app (ver CardapioController.aquecerIndice).
+    Sem isto, quem pagava a conta era o primeiro Ctrl+S do dia ou o primeiro
+    clique com o botão direito num item da comanda — cerca de 6 ms medidos, que
+    é pouco no relógio e muito no lugar errado: é tempo gasto entre o clique e o
+    primeiro pixel da resposta."""
+    try:
+        indice()
+    except Exception as erro:  # noqa: BLE001 - aquecimento nunca derruba o app
+        # Isto roda numa thread; deixar escapar mataria a thread em silêncio, e
+        # o índice seria montado de novo na primeira consulta — que é
+        # exatamente o comportamento de antes deste aquecimento existir.
+        print(f"[{_ROTULO}] Falha ao aquecer o índice: {erro} — será montado na primeira consulta.")
 
 
 def invalidar():

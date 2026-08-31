@@ -245,6 +245,11 @@ if __name__ == "__main__":
     # só existe porque o QML não grava arquivo.
     cardapioController = CardapioController()
     engine.rootContext().setContextProperty("cardapioController", cardapioController)
+    # Índice do cardápio montado numa thread, agora, em vez de na primeira
+    # consulta: quem pagava a conta era o primeiro Ctrl+S ou o primeiro clique
+    # com o botão direito num item da comanda, e ali ela sai do bolso errado —
+    # entre o clique e o primeiro pixel da resposta.
+    cardapioController.aquecerIndice()
 
     # Compartilha pedidos com outras instâncias deste app na mesma rede
     # local (ver architecture/EXPLAIN.md). Os sinais entram pelo

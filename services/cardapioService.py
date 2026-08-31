@@ -682,6 +682,24 @@ class CardapioController(QObject):
 
         return buscaCardapio.buscar(termo)
 
+    @pyqtSlot()
+    @protegido()
+    def aquecerIndice(self):
+        """Monta o índice do cardápio numa thread, para que ele já esteja
+        pronto quando alguém precisar dele.
+
+        Numa thread, e não aqui mesmo, porque quem chama é a subida do app: a
+        montagem lê todos os arquivos do cardápio, e fazê-la na thread da
+        interface só mudaria de lugar a espera que este aquecimento existe para
+        remover. Nada aqui toca em QObject nem em QML — só monta uma lista em
+        memória (ver services/buscaCardapio.aquecer, que serializa a montagem
+        com a trava do módulo)."""
+        import threading
+
+        from services import buscaCardapio
+
+        threading.Thread(target=buscaCardapio.aquecer, daemon=True).start()
+
     @pyqtSlot(str, result="QVariantMap")
     @protegido({})
     def analisarItemComanda(self, nome_impresso):
