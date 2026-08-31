@@ -449,11 +449,22 @@ def _linhas_entre_itens(logicas):
     e o que faz a conta continuar certa quando um item ocupa três linhas de
     extras e o seguinte, nenhuma.
 
-    Fora da moldura da tabela não se marca nada: linha em branco também é o
-    espaçamento entre as seções do cabeçalho e do rodapé (ver comandaEstilo
-    Service.linhas_espacamento_secoes), e um traço ali cortaria o cupom no meio
-    do endereço. Sem as duas bordas — recibo de extra, de fechamento, comanda
-    antiga — não há tabela e não há divisa: devolve vazio."""
+    SÓ ENTRE DOIS ITENS, e é por isso que a conta não é simplesmente "toda
+    linha em branco entre os marcadores". Dentro da moldura também entra o
+    espaçamento de seção (comandaEstiloService.linhas_espacamento_secoes, que
+    pode ser 2 ou mais), logo depois do marcador de cima e logo antes do de
+    baixo — aquilo é o respiro da tabela inteira, não divisa entre itens, e
+    marcá-lo punha um traço grudado em cada marcador, DOBRADO quando o
+    espaçamento era de duas linhas. Por isso os brancos das duas pontas ficam
+    de fora, contando a partir do primeiro item e até o último.
+
+    Uma CORRIDA de brancos vale um traço só, pelo mesmo motivo: dois traços
+    empilhados não separam melhor que um, só engordam a divisa.
+
+    Fora da moldura da tabela não se marca nada: um traço no espaçamento do
+    cabeçalho cortaria o cupom no meio do endereço. Sem as duas bordas —
+    recibo de extra, de fechamento, comanda antiga — não há tabela e não há
+    divisa: devolve vazio."""
     divisorias = [
         indice for indice, trechos in enumerate(logicas)
         if _texto_visivel(trechos) == texto.MARCADOR_ITENS
@@ -462,10 +473,23 @@ def _linhas_entre_itens(logicas):
         return set()
 
     inicio, fim = divisorias[0], divisorias[1]
-    return {
+    com_conteudo = [
         indice for indice in range(inicio + 1, fim)
-        if not _texto_visivel(logicas[indice]).strip()
-    }
+        if _texto_visivel(logicas[indice]).strip()
+    ]
+    if len(com_conteudo) < 2:
+        # Zero ou um item: não há nada que separar.
+        return set()
+
+    divisas = set()
+    branca_anterior = False
+    for indice in range(com_conteudo[0] + 1, com_conteudo[-1]):
+        branca = not _texto_visivel(logicas[indice]).strip()
+        if branca and not branca_anterior:
+            divisas.add(indice)
+        branca_anterior = branca
+
+    return divisas
 
 
 def _desenhar_modelo_classico(conteudo, familia, largura_dots):
