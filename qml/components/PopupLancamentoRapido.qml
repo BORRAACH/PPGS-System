@@ -55,6 +55,10 @@ Popup {
     property var escolhas: ({
         "borda": null,
         "adicionais": [],
+        // Os sabores da pizza, como itens do cardápio (o mesmo formato de
+        // itemBase). Vazio = ainda ninguém mexeu, e aí vale o item base
+        // sozinho — ver saboresEscolhidos, que é por onde todo mundo lê.
+        "sabores": [],
         "chavePreco": "",
         "rotuloPreco": "",
         "tipo": "",
@@ -71,11 +75,30 @@ Popup {
     readonly property string etapa: indiceEtapa >= 0 && indiceEtapa < sequencia.length ? sequencia[indiceEtapa] : ""
     readonly property string chaveCategoria: itemBusca ? (itemBusca.chaveCategoria || "") : ""
 
-    // Etapas em que dá pra seguir sem escolher nada: a borda é opcional (não
-    // escolher é "Sem borda") e os adicionais também. Uma propriedade só,
+    // Etapas em que o Enter MARCA em vez de escolher, e por isso precisam de
+    // outra tecla pra dizer "terminei" (o Tab). Uma propriedade só, consultada
+    // pela lista (quadrado x círculo), pelo rodapé e pelo _acionarFoco.
+    readonly property bool etapaMultipla: etapa === "adicionais" || etapa === "sabores"
+
+    // Etapas em que dá pra seguir sem escolher mais nada: a borda é opcional
+    // (não escolher é "Sem borda"), os adicionais também, e a de sabores já
+    // nasce com o sabor que abriu o fluxo marcado. Uma propriedade só,
     // consultada pelo botão do rodapé, pelo Tab e pela dica de teclado — as
     // três precisam concordar, e antes cada uma repetia a condição.
-    readonly property bool podePular: etapa === "adicionais" || etapa === "borda"
+    readonly property bool podePular: etapa === "adicionais" || etapa === "borda" || etapa === "sabores"
+
+    // Quantos sabores cabem no tamanho escolhido. Mesma regra de
+    // pizzas/Pizzas.qml (limiteSabores): três na grande, dois nas outras.
+    readonly property int limiteSabores: escolhas.rotuloPreco === "Grande" ? 3 : 2
+
+    // Os sabores que a pizza tem agora. Enquanto ninguém mexeu na etapa, é o
+    // item que abriu o fluxo sozinho — assim o resto do popup (cabeçalho,
+    // montagem do item) não precisa saber se a etapa já foi visitada.
+    readonly property var saboresEscolhidos: {
+        if (escolhas.sabores.length > 0)
+            return escolhas.sabores;
+        return itemBase ? [itemBase] : [];
+    }
 
     signal concluido(string mensagem, bool sucesso)
 
@@ -131,6 +154,7 @@ Popup {
         popupLancamento.escolhas = {
             "borda": null,
             "adicionais": [],
+            "sabores": [],
             "chavePreco": "",
             "rotuloPreco": "",
             "tipo": "",
@@ -177,6 +201,8 @@ Popup {
                 return popupLancamento._itensDe("acaiAdicionais");
             return popupLancamento._itensDe("pizzaAdicionais");
         }
+        if (nome === "sabores")
+            return popupLancamento._itensDe("pizzas");
         if (nome === "base")
             return popupLancamento._itensDe(Roteiro.categoriaBaseDe(popupLancamento.chaveCategoria));
         return [1]; // tipo/mesa nunca são puladas
@@ -195,6 +221,10 @@ Popup {
         var opcoes = popupLancamento._opcoesDaEtapa(nome);
         if (opcoes.length === 0)
             return true;
+        // Um cardápio com um sabor só não tem meio a meio a oferecer: a etapa
+        // seria a lista do próprio item já marcado.
+        if (nome === "sabores")
+            return opcoes.length <= 1;
         // Escolha única com uma opção só: decide sozinha e segue.
         return (nome === "tamanho" || nome === "pao") && opcoes.length === 1;
     }
@@ -319,16 +349,36 @@ Popup {
         var chave = base.chaveCategoria;
 
         if (chave === "pizzas") {
-            var preco = popupLancamento._precoPorChave(base, popupLancamento.escolhas.chavePreco, tipo);
+            // Cada sabor com o preço DO TAMANHO escolhido, e o preço da pizza
+            // é o MAIOR entre eles — nunca a soma. É a regra da casa, a mesma
+            // de valorAtualMaior em pizzas/Pizzas.qml.
+            var sabores = popupLancamento.saboresEscolhidos.map(function (item) {
+                return {
+                    "nome": item.nome,
+                    "valorNum": popupLancamento._precoPorChave(item, popupLancamento.escolhas.chavePreco, tipo)
+                };
+            });
+            var maior = 0;
+            for (var i = 0; i < sabores.length; i++) {
+                if (sabores[i].valorNum > maior)
+                    maior = sabores[i].valorNum;
+            }
+
+            // O "sabor" do adicional tem que ser o nome do sabor, é por ele que
+            // a impressão casa o adicional com a linha da pizza. Numa pizza de
+            // mais de um sabor o caminho rápido não pergunta em qual metade o
+            // adicional vai, então ele vale pra pizza INTEIRA — e sabor vazio é
+            // exatamente como comandaTextoService._extras_adicionais reconhece
+            // isso (sai marcado "INTEIRA" no cupom).
+            var saborDoAdicional = sabores.length === 1 ? sabores[0].nome : "";
+
             return Montagem.montarPizza({
-                "sabores": [{ "nome": base.nome, "valorNum": preco }],
+                "sabores": sabores,
                 "tamanho": popupLancamento.escolhas.rotuloPreco,
-                "valorNum": preco,
+                "valorNum": maior,
                 "borda": popupLancamento.escolhas.borda,
-                // O "sabor" do adicional tem que ser o nome do sabor, é por ele
-                // que a impressão casa o adicional com a linha da pizza.
                 "adicionais": popupLancamento.escolhas.adicionais.map(function (a) {
-                    return { "sabor": base.nome, "nome": a.nome, "valorNum": a.valorNum };
+                    return { "sabor": saborDoAdicional, "nome": a.nome, "valorNum": a.valorNum };
                 })
             });
         }
@@ -455,19 +505,42 @@ Popup {
 
     function escolher(valor) {
         var nome = popupLancamento.etapa;
+        // Trabalha numa CÓPIA e troca o objeto no fim, em vez de mexer nos
+        // campos de `escolhas` no lugar: ver _copiaEscolhas.
+        var novas = popupLancamento._copiaEscolhas();
 
         if (nome === "tamanho" || nome === "pao") {
-            popupLancamento.escolhas.chavePreco = valor.chave;
-            popupLancamento.escolhas.rotuloPreco = valor.rotulo;
+            novas.chavePreco = valor.chave;
+            novas.rotuloPreco = valor.rotulo;
+            // Voltar e trocar Grande por Broto derruba o limite de três sabores
+            // pra dois: o que não cabe mais sai, em vez de seguir escondido até
+            // a pizza sair impressa com um sabor a mais. Mesma poda que
+            // pizzas/Pizzas.qml faz ao trocar de tamanho.
+            //
+            // O limite é calculado aqui, e não lido de limiteSabores: aquele
+            // binding só reavalia depois que este objeto novo for atribuído.
+            var limite = valor.rotulo === "Grande" ? 3 : 2;
+            if (novas.sabores.length > limite)
+                novas.sabores = novas.sabores.slice(0, limite);
         } else if (nome === "borda") {
-            popupLancamento.escolhas.borda = valor === null ? null : {
+            novas.borda = valor === null ? null : {
                 "nome": valor.nome,
                 "valorNum": Montagem.parseValor(valor.precos.length ? valor.precos[0].valor : "")
             };
         } else if (nome === "base") {
             popupLancamento.itemBase = valor;
+            // A lista de sabores era a da pizza anterior — recomeça vazia, e
+            // saboresEscolhidos volta a devolver só a base nova.
+            novas.sabores = [];
         } else if (nome === "tipo") {
-            popupLancamento.escolhas.tipo = valor;
+            novas.tipo = valor;
+        } else if (nome === "mesa") {
+            novas.mesaId = valor;
+        }
+
+        popupLancamento.escolhas = novas;
+
+        if (nome === "tipo") {
             // Salão precisa saber em qual mesa; as outras duas não têm o que
             // perguntar. A etapa entra aqui, fora da sequência, porque só
             // existe dependendo desta resposta.
@@ -485,14 +558,74 @@ Popup {
             // "tipo" não muda de posição, então `etapa` continua apontando pra
             // ela enquanto isto é reatribuído.
             popupLancamento.sequencia = etapas;
-        } else if (nome === "mesa") {
-            popupLancamento.escolhas.mesaId = valor;
         }
 
         popupLancamento._avancar();
     }
 
-    // Adicionais é a única etapa de várias escolhas — alterna e não avança.
+    // Marca/desmarca um sabor da pizza. Como os adicionais, alterna e não
+    // avança — quem diz "terminei" é o Tab (ou o botão do rodapé).
+    //
+    // Duas travas, as mesmas de pizzas/Pizzas.qml: não passa do limite do
+    // tamanho e não deixa a pizza sem sabor nenhum. A segunda é o que permite
+    // TROCAR o sabor que veio da busca sem um passo a mais — desmarcar só é
+    // recusado quando ele é o último que sobrou.
+    function alternarSabor(item) {
+        var atuais = popupLancamento.saboresEscolhidos;
+        var lista = [];
+        var achou = false;
+        for (var i = 0; i < atuais.length; i++) {
+            if (atuais[i].nome === item.nome)
+                achou = true;
+            else
+                lista.push(atuais[i]);
+        }
+
+        if (achou) {
+            if (lista.length === 0)
+                return;
+        } else {
+            if (atuais.length >= popupLancamento.limiteSabores)
+                return;
+            lista = atuais.concat([item]);
+        }
+
+        var novas = popupLancamento._copiaEscolhas();
+        novas.sabores = lista;
+        popupLancamento.escolhas = novas;
+        modeloEtapa.recarregar();
+    }
+
+    function _saborMarcado(nome) {
+        var atuais = popupLancamento.saboresEscolhidos;
+        for (var i = 0; i < atuais.length; i++) {
+            if (atuais[i].nome === nome)
+                return true;
+        }
+        return false;
+    }
+
+    // Uma CÓPIA de `escolhas`, para quem vai mexer nela.
+    //
+    // `escolhas` é um objeto JS num property `var`: mudar um campo dentro dele
+    // não avisa ninguém, e os bindings que o leem (o limite de sabores, o
+    // resumo do cabeçalho) continuam com o valor velho até que alguma outra
+    // coisa os invalide. Reatribuir o MESMO objeto também não resolve — é a
+    // referência que o QML compara. Só trocar por um objeto novo notifica.
+    function _copiaEscolhas() {
+        var e = popupLancamento.escolhas;
+        return {
+            "borda": e.borda,
+            "adicionais": e.adicionais,
+            "sabores": e.sabores,
+            "chavePreco": e.chavePreco,
+            "rotuloPreco": e.rotuloPreco,
+            "tipo": e.tipo,
+            "mesaId": e.mesaId
+        };
+    }
+
+    // Adicionais é a outra etapa de várias escolhas — alterna e não avança.
     function alternarAdicional(item) {
         var valorNum = Montagem.parseValor(item.precos.length ? item.precos[0].valor : "");
         var lista = [];
@@ -507,8 +640,9 @@ Popup {
         if (!achou)
             lista.push({ "nome": item.nome, "valorNum": valorNum });
 
-        // Reatribuição, não push: é o que faz a lista da etapa repintar.
-        var novas = popupLancamento.escolhas;
+        // Objeto novo, não push no antigo: é o que faz os bindings que leem
+        // `escolhas` (o resumo do cabeçalho) enxergarem a mudança.
+        var novas = popupLancamento._copiaEscolhas();
         novas.adicionais = lista;
         popupLancamento.escolhas = novas;
         modeloEtapa.recarregar();
@@ -599,6 +733,23 @@ Popup {
                 return saida;
             }
 
+            if (nome === "sabores") {
+                var sabores = popupLancamento._opcoesDaEtapa("sabores");
+                for (i = 0; i < sabores.length; i++) {
+                    saida.push({
+                        "rotulo": sabores[i].nome,
+                        // O preço DAQUELE tamanho, não o resumo de todos: o
+                        // tamanho já foi escolhido na etapa anterior, e é este
+                        // número que decide o preço da pizza (numa meio a meio
+                        // vale o MAIOR entre os sabores, ver _montarItem).
+                        "sublinha": Montagem.formatarMoeda(popupLancamento._precoPorChave(sabores[i], popupLancamento.escolhas.chavePreco, "")),
+                        "valor": sabores[i],
+                        "marcado": popupLancamento._saborMarcado(sabores[i].nome)
+                    });
+                }
+                return saida;
+            }
+
             if (nome === "base") {
                 var bases = popupLancamento._opcoesDaEtapa("base");
                 for (i = 0; i < bases.length; i++) {
@@ -659,6 +810,9 @@ Popup {
         case "pao": return "Tipo de pão";
         case "borda": return "Borda";
         case "adicionais": return "Adicionais";
+        case "sabores": return escolhas.sabores.length > 1 || saboresEscolhidos.length > 1
+            ? "Sabores (" + saboresEscolhidos.length + " de " + limiteSabores + ")"
+            : "Sabores — marque outro para meio a meio";
         case "base": return chaveCategoria === "lanchesAdicionais" ? "Em qual lanche?"
                           : (chaveCategoria === "acaiAdicionais" ? "Em qual açaí?" : "Em qual pizza?");
         case "tipo": return "Tipo de pedido";
@@ -668,6 +822,7 @@ Popup {
     }
 
     property int indiceFoco: 0
+
 
     onEtapaChanged: {
         popupLancamento.indiceFoco = 0;
@@ -707,6 +862,11 @@ Popup {
             return;
 
         var linha = modeloEtapa.linhas[popupLancamento.indiceFoco];
+        if (popupLancamento.etapa === "sabores") {
+            popupLancamento.alternarSabor(linha.valor);
+            return;
+        }
+
         if (popupLancamento.etapa === "adicionais") {
             // "Sem adicionais" (valor null) não alterna nada: ele é uma
             // RESPOSTA à etapa, e por isso avança, ao contrário dos adicionais
@@ -811,8 +971,15 @@ Popup {
                         }
 
                         Text {
-                            text: popupLancamento.itemBase ? popupLancamento.itemBase.nome
-                                : (popupLancamento.itemBusca ? popupLancamento.itemBusca.nome : "")
+                            // Os sabores marcados, e não só o item da busca:
+                            // numa meio a meio é o "A / B" que diz o que está
+                            // sendo montado, e é assim que ele sai na comanda.
+                            text: {
+                                var sabores = popupLancamento.saboresEscolhidos;
+                                if (sabores.length > 0)
+                                    return sabores.map(function (s) { return s.nome; }).join(" / ");
+                                return popupLancamento.itemBusca ? popupLancamento.itemBusca.nome : "";
+                            }
                             font.pixelSize: Estilo.global.fontSize.xl
                             font.family: Estilo.global.fontFamily.title
                             color: Estilo.global.text
@@ -837,6 +1004,8 @@ Popup {
                             var partes = [];
                             if (popupLancamento.escolhas.rotuloPreco)
                                 partes.push(popupLancamento.escolhas.rotuloPreco);
+                            if (popupLancamento.saboresEscolhidos.length > 1)
+                                partes.push(popupLancamento.saboresEscolhidos.length + " sabores");
                             if (popupLancamento.escolhas.borda)
                                 partes.push(popupLancamento.escolhas.borda.nome);
                             for (var i = 0; i < popupLancamento.escolhas.adicionais.length; i++)
@@ -895,7 +1064,7 @@ Popup {
                         // estava desfazendo. Quadrado onde se marca mais de um
                         // (adicionais), círculo onde a escolha é única.
                         Icone {
-                            readonly property bool _multipla: popupLancamento.etapa === "adicionais"
+                            readonly property bool _multipla: popupLancamento.etapaMultipla
 
                             nome: linhaEtapa.modelData.marcado
                                 ? (_multipla ? "fa6s.square-check" : "fa6s.circle-check")
@@ -975,10 +1144,10 @@ Popup {
                     anchors.rightMargin: Estilo.global.spacing.md
                     anchors.verticalCenter: parent.verticalCenter
                     text: {
-                        var partes = popupLancamento.etapa === "adicionais"
+                        var partes = popupLancamento.etapaMultipla
                             ? ["Enter marca", "Tab continua"]
                             : ["↑ ↓ navegar", "Enter escolher"];
-                        if (popupLancamento.podePular && popupLancamento.etapa !== "adicionais")
+                        if (popupLancamento.podePular && !popupLancamento.etapaMultipla)
                             partes.push("Tab pula");
                         partes.push("Alt+← volta");
                         return partes.join("   ·   ");
@@ -995,7 +1164,7 @@ Popup {
                     anchors.rightMargin: Estilo.global.padding.xl
                     anchors.verticalCenter: parent.verticalCenter
                     visible: popupLancamento.podePular
-                    text: popupLancamento.etapa === "adicionais" ? "Continuar" : "Pular"
+                    text: popupLancamento.etapaMultipla ? "Continuar" : "Pular"
                     variante: "secundario"
                     focusPolicy: Qt.NoFocus
                     onClicked: popupLancamento._avancar()

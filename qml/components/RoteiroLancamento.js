@@ -37,7 +37,11 @@ function categoriaBaseDe(chaveModificador) {
 function sequenciaDe(chaveCategoria) {
     switch (chaveCategoria) {
     case "pizzas":
-        return ["tamanho", "borda", "adicionais", "tipo"];
+        // "sabores" vem depois de "tamanho" porque depende dele nas duas
+        // pontas: o tamanho é que diz quantos sabores cabem (três na grande,
+        // dois nas outras — ver limiteSabores em pizzas/Pizzas.qml) e é o
+        // preço daquele tamanho que cada sabor mostra.
+        return ["tamanho", "sabores", "borda", "adicionais", "tipo"];
     case "lanches":
         return ["pao", "adicionais", "tipo"];
     case "acaiTamanhos":
@@ -48,9 +52,9 @@ function sequenciaDe(chaveCategoria) {
     // Caminho invertido: o modificador já está escolhido e o que falta é o
     // item em que ele vai. A etapa do próprio modificador some do roteiro.
     case "pizzaBordas":
-        return ["base", "tamanho", "adicionais", "tipo"];
+        return ["base", "tamanho", "sabores", "adicionais", "tipo"];
     case "pizzaAdicionais":
-        return ["base", "tamanho", "borda", "tipo"];
+        return ["base", "tamanho", "sabores", "borda", "tipo"];
     case "lanchesAdicionais":
         return ["base", "pao", "tipo"];
     case "acaiAdicionais":
