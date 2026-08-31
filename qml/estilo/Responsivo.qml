@@ -81,6 +81,26 @@ QtObject {
     // O raio quase não muda: é identidade visual, não medida de layout.
     readonly property real escalaRaio: limitar(fator, 0.85, 1.1)
 
+    // ===== Altura de um campo de texto de linha de pedido =====
+    // Medida, não estimada: é a fonte PADRÃO DO APP que decide (a Figtree
+    // registrada em Config/fontes.py), e ela não passa pelas escalas daqui —
+    // os campos de components/LinhaPedido.qml não declaram font.pixelSize, ou
+    // seja, herdam a fonte da QApplication, cujo tamanho vem do sistema. Num
+    // computador com DPI diferente o campo tem outra altura, e um número
+    // cravado aqui erraria justamente lá.
+    //
+    // Serve a gradePedido: os botões "+"/"-" da linha são quadrados desta
+    // altura, e é ela que diz quanto espaço reservar pra eles.
+    //
+    // Os 20 são o topPadding + bottomPadding do campo (10 cada, cravados em
+    // LinhaPedido.qml). Mexer neles lá pede mexer aqui — e o sintoma de
+    // esquecer é o último botão da linha sair pela borda da lista.
+    readonly property TextMetrics _metricaCampoPedido: TextMetrics {
+        text: "0"
+    }
+
+    readonly property int alturaCampoPedido: 20 + Math.ceil(_metricaCampoPedido.height)
+
     // ===== Alvo mínimo de toque =====
     // Em tablet o dedo substitui o mouse e precisa de mais área que um clique
     // — sem isto, os botões encolhem junto com o resto e ficam difíceis de
@@ -133,11 +153,29 @@ QtObject {
     // aparece na hora como rótulo fora de cima do seu campo.
     //
     // As proporções (41/37/22) são as das larguras originais — 200, 180 e 110
-    // — agora relativas em vez de cravadas. O desconto de 100px é o par de
-    // botões +/- no fim da linha; errar essa estimativa por alguns pixels só
-    // sobra ou falta respiro na ponta direita, nunca desalinha as colunas.
+    // — agora relativas em vez de cravadas.
+    //
+    // O DESCONTO é o que a linha gasta ALÉM dos três campos: os botões "+" e
+    // "-" no fim dela e os quatro vãos que separam os cinco itens. Não é
+    // "respiro na ponta direita": o Row do delegate cresce com o conteúdo e a
+    // ListView que o hospeda tem clip, então descontar de menos não deixa a
+    // linha apertada — corta o último botão fora da tela. Era o que acontecia
+    // com o desconto fixo de 100px, que faltava exatamente 20: os três campos
+    // ficavam com 20px a mais do que sobrava, e o "-" da última linha (a única
+    // que mostra os dois botões) saía pela borda.
+    //
+    // Os dois pedaços do desconto vêm de onde eles realmente saem, e não de um
+    // palpite — o palpite é o que estava errado:
+    //   botão = alturaCampoPedido, o quadrado que os botões +/- ocupam. NÃO
+    //           acompanha as escalas daqui: o campo herda a fonte do app (ver
+    //           lá em cima), então quem muda essa altura é o DPI da máquina.
+    //   vão   = o mesmo spacing.md que o Row do delegate usa. Repetido aqui em
+    //           vez de lido de Estilo.qml porque Estilo importa este arquivo, e
+    //           o caminho de volta fecharia um ciclo; a fórmula é a de lá.
+    // São quatro vãos: cinco itens na linha (três campos e dois botões).
     function gradePedido(larguraLinha) {
-        var campos = Math.max(270, larguraLinha - 100);
+        var vao = Math.round(10 * escalaEspaco);
+        var campos = Math.max(270, larguraLinha - (2 * alturaCampoPedido + 4 * vao));
         var pedido = Math.max(110, Math.round(campos * 0.41));
         var observacao = Math.max(90, Math.round(campos * 0.37));
         return {
