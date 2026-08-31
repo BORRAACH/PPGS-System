@@ -80,6 +80,12 @@ LARGURA_PAPEL_DOTS = texto.COLUNAS_PAPEL * LARGURA_CELULA_DOTS
 # faixas saem coladas uma na outra.
 FAIXA_MAX_LINHAS = 128
 
+# Espessura, em dots, do traço que separa um item do outro na lista de pedidos.
+# Um dot é a menor marca que o cabeçote térmico consegue fazer: fino o bastante
+# pra não disputar atenção com as linhas de "=" que cercam a tabela, e ainda
+# assim contínuo no papel.
+_ESPESSURA_SEPARADOR_DOTS = 1
+
 # ESC/POS "GS v 0" — imprime a imagem raster que vem logo depois.
 #
 # CUIDADO: NÃO é o "GS V 0" de printerService._COMANDO_CORTE, que corta o papel.
@@ -201,7 +207,7 @@ def _largura_celula(tamanho_px):
     return tamanho_px * LARGURA_CELULA_DOTS / ALTURA_LINHA_DOTS
 
 
-def _quebrar_em_linhas_fisicas(linhas_logicas, largura_dots):
+def _quebrar_em_linhas_fisicas(linhas_logicas, largura_dots, separadoras=()):
     """Transforma as linhas do cupom em linhas FÍSICAS de papel, quebrando o
     que não cabe na largura, e resolve a posição de cada caractere.
 
@@ -218,14 +224,19 @@ def _quebrar_em_linhas_fisicas(linhas_logicas, largura_dots):
     ocupa" deixa de ser um número inteiro. Em tamanho normal a conta dá no
     mesmo: 40 células de 12 dots.
 
-    Devolve uma lista de linhas físicas, cada uma uma lista de
-    (caractere, x, tamanho_px, negrito, sublinhado, reverso). Com as posições já
-    resolvidas, desenhar vira um laço burro — e a altura de cada linha pode ser
-    medida antes de existir imagem nenhuma, que é o que permite dimensionar o
-    QImage de uma vez só."""
-    fisicas = []
+    Devolve (linhas físicas, índices das que são divisa entre itens). Cada
+    linha física é uma lista de (caractere, x, tamanho_px, negrito, sublinhado,
+    reverso). Com as posições já resolvidas, desenhar vira um laço burro — e a
+    altura de cada linha pode ser medida antes de existir imagem nenhuma, que é
+    o que permite dimensionar o QImage de uma vez só.
 
-    for trechos in linhas_logicas:
+    `separadoras` traz índices de linhas LÓGICAS (ver _linhas_entre_itens); a
+    tradução pra índices FÍSICOS tem que acontecer aqui dentro, porque é só
+    aqui que se sabe quantas linhas de papel cada linha do cupom virou."""
+    fisicas = []
+    separadores = set()
+
+    for indice, trechos in enumerate(linhas_logicas):
         atual = []
         x = 0.0
         for conteudo, negrito, sublinhado, reverso, tamanho_px in trechos:
@@ -241,8 +252,12 @@ def _quebrar_em_linhas_fisicas(linhas_logicas, largura_dots):
         # entre seções (ver comandaEstiloService.linhas_espacamento_secoes), e
         # engoli-las grudaria as seções umas nas outras.
         fisicas.append(atual)
+        # A última linha física desta linha lógica — que numa divisa, sendo ela
+        # vazia, é também a única.
+        if indice in separadoras:
+            separadores.add(len(fisicas) - 1)
 
-    return fisicas
+    return fisicas, separadores
 
 
 def _altura_da_linha(glifos):
@@ -278,10 +293,26 @@ def _nova_imagem(largura_dots, altura_dots):
     return imagem, pintor
 
 
-def _pintar_linhas(pintor, fisicas, familia, topo):
+def _desenhar_separador(pintor, topo, altura, largura_dots):
+    """Um traço fino cortando o papel de ponta a ponta, centrado na faixa que
+    vai de `topo` a `topo + altura`.
+
+    Centrado, e não colado numa das bordas, porque a faixa é o respiro entre
+    dois itens: encostar o traço em cima ou embaixo o faria parecer sublinhado
+    de um dos dois em vez de divisa entre eles."""
+    y = int(topo + (altura - _ESPESSURA_SEPARADOR_DOTS) / 2)
+    pintor.fillRect(0, y, int(largura_dots), _ESPESSURA_SEPARADOR_DOTS, QColor(0, 0, 0))
+
+
+def _pintar_linhas(pintor, fisicas, familia, topo, largura_dots, separadores=()):
     """Pinta as linhas físicas de `fisicas` a partir de `topo` e devolve o topo
     logo abaixo da última — é o desenho em GRADE, usado pelo modelo clássico e
     também pelos trechos fora da tabela de itens no modelo rascunho.
+
+    As linhas cujo índice está em `separadores` saem como um traço de ponta a
+    ponta em vez de texto (ver _desenhar_separador): são as linhas em branco
+    que separam um item do outro, e o traço ocupa o espaço que já era delas —
+    a comanda não fica um dot mais comprida por causa dele.
 
     Cada caractere é centrado na sua célula da grade — é o que mantém a coluna
     "|" e o ljust da tabela de itens alinhados mesmo numa fonte proporcional
@@ -295,9 +326,14 @@ def _pintar_linhas(pintor, fisicas, familia, topo):
     # montada na primeira vez que aparece e reaproveitada daí em diante.
     fontes = {}
 
-    for glifos in fisicas:
+    for indice, glifos in enumerate(fisicas):
         altura = _altura_da_linha(glifos)
         base = topo + altura - max(1, altura // 8)
+
+        if indice in separadores:
+            _desenhar_separador(pintor, topo, altura, largura_dots)
+            topo += altura
+            continue
 
         for caractere, x, tamanho_px, negrito, sublinhado, reverso in glifos:
             chave = (tamanho_px, negrito, sublinhado)
@@ -332,17 +368,56 @@ def _pintar_linhas(pintor, fisicas, familia, topo):
     return topo
 
 
+def _texto_visivel(trechos):
+    """A linha como ela sai no papel: os trechos concatenados, já sem os
+    comandos de estilo (que _trechos_da_linha consumiu)."""
+    return "".join(conteudo for conteudo, *_atributos in trechos)
+
+
+def _linhas_entre_itens(logicas):
+    """Índices das linhas lógicas que separam um item do outro dentro da tabela
+    de itens — as que viram traço em vez de espaço em branco.
+
+    São as linhas em BRANCO entre os dois MARCADOR_ITENS: comandaTextoService.
+    formatar_tabela põe exatamente uma delas antes de cada grupo a partir do
+    segundo, e é justamente a divisa que se quer marcar. Procurar pelo branco,
+    em vez de contar itens, é o que dispensa reler a comanda com o parser —
+    e o que faz a conta continuar certa quando um item ocupa três linhas de
+    extras e o seguinte, nenhuma.
+
+    Fora da moldura da tabela não se marca nada: linha em branco também é o
+    espaçamento entre as seções do cabeçalho e do rodapé (ver comandaEstilo
+    Service.linhas_espacamento_secoes), e um traço ali cortaria o cupom no meio
+    do endereço. Sem as duas bordas — recibo de extra, de fechamento, comanda
+    antiga — não há tabela e não há divisa: devolve vazio."""
+    divisorias = [
+        indice for indice, trechos in enumerate(logicas)
+        if _texto_visivel(trechos) == texto.MARCADOR_ITENS
+    ]
+    if len(divisorias) < 2:
+        return set()
+
+    inicio, fim = divisorias[0], divisorias[1]
+    return {
+        indice for indice in range(inicio + 1, fim)
+        if not _texto_visivel(logicas[indice]).strip()
+    }
+
+
 def _desenhar_modelo_classico(conteudo, familia, largura_dots):
     """A comanda inteira na grade de células, que é o cupom de sempre com
     outras letras. Devolve o QImage, ou None se não sobrou nada a desenhar."""
-    fisicas = _quebrar_em_linhas_fisicas(_linhas_com_estilo(conteudo), largura_dots)
+    logicas = _linhas_com_estilo(conteudo)
+    fisicas, separadores = _quebrar_em_linhas_fisicas(
+        logicas, largura_dots, _linhas_entre_itens(logicas)
+    )
     altura = sum(_altura_da_linha(glifos) for glifos in fisicas)
     if altura <= 0:
         return None
 
     imagem, pintor = _nova_imagem(largura_dots, altura)
     try:
-        _pintar_linhas(pintor, fisicas, familia, 0)
+        _pintar_linhas(pintor, fisicas, familia, 0, largura_dots, separadores)
     finally:
         pintor.end()
 
@@ -614,9 +689,10 @@ def _largura_da_coluna_valor(itens, fonte_valor, fonte_cabecalho):
 
 
 def _bloco_tabela_rascunho(itens, familia, largura_dots):
-    """A tabela inteira como uma lista de faixas [(altura, [células])], já
-    medida. Quem chama soma as alturas pra dimensionar a imagem e depois pinta
-    faixa a faixa."""
+    """A tabela inteira como uma lista de faixas [(altura, [células],
+    divisa?)], já medida. Quem chama soma as alturas pra dimensionar a imagem e
+    depois pinta faixa a faixa — desenhando um traço nas faixas marcadas como
+    divisa, que são o respiro entre um item e o seguinte."""
     # O valor do item não tem campo de estilo próprio nem no cupom clássico
     # (ver comandaTextoService.formatar_tabela, que o concatena cru depois do
     # "|") — sai na fonte base, como lá.
@@ -637,7 +713,7 @@ def _bloco_tabela_rascunho(itens, familia, largura_dots):
         altas = [celula for celula in celulas if celula.texto]
         if not altas:
             return
-        faixas.append((max(celula.altura for celula in altas), altas))
+        faixas.append((max(celula.altura for celula in altas), altas, False))
 
     # Cabeçalho das colunas, uma vez só no topo da tabela — é ele que faz a
     # disposição se explicar sozinha pra quem pega o papel. Sem campo de estilo
@@ -652,7 +728,10 @@ def _bloco_tabela_rascunho(itens, familia, largura_dots):
     largura_extras = largura_dots - _RECUO_EXTRAS_DOTS
     for indice, item in enumerate(itens):
         if indice > 0:
-            faixas.append((_ESPACO_ENTRE_ITENS_DOTS, []))
+            # O respiro entre os itens, agora com o traço no meio dele: a
+            # divisa vem de graça em altura, e é o que impede que os extras
+            # recuados de um item pareçam pertencer ao próximo.
+            faixas.append((_ESPACO_ENTRE_ITENS_DOTS, [], True))
 
         pedido = (item.get("pedido") or "").strip()
         # O tamanho da pizza ("(BROTO)") sai junto do nome, no estilo do nome:
@@ -721,13 +800,15 @@ def _desenhar_modelo_rascunho(conteudo, familia, largura_dots):
     # As linhas de marcador ficam com os blocos em grade, uma de cada lado: são
     # a moldura da tabela, e a Consulta as procura de volta no arquivo (que não
     # muda) — no papel elas continuam sendo as duas linhas de "=" de sempre.
-    antes = _quebrar_em_linhas_fisicas(logicas[:inicio + 1], largura_dots)
-    depois = _quebrar_em_linhas_fisicas(logicas[fim:], largura_dots)
+    # Sem separadoras nos dois trechos: as divisas entre itens ficam todas
+    # dentro da tabela, que aqui é redesenhada em colunas e não passa por eles.
+    antes, _antes_sep = _quebrar_em_linhas_fisicas(logicas[:inicio + 1], largura_dots)
+    depois, _depois_sep = _quebrar_em_linhas_fisicas(logicas[fim:], largura_dots)
     tabela = _bloco_tabela_rascunho(itens, familia, largura_dots)
 
     altura = (
         sum(_altura_da_linha(glifos) for glifos in antes)
-        + sum(altura_faixa for altura_faixa, _celulas in tabela)
+        + sum(altura_faixa for altura_faixa, _celulas, _divisa in tabela)
         + sum(_altura_da_linha(glifos) for glifos in depois)
     )
     altura_total = int(math.ceil(altura))
@@ -736,12 +817,14 @@ def _desenhar_modelo_rascunho(conteudo, familia, largura_dots):
 
     imagem, pintor = _nova_imagem(largura_dots, altura_total)
     try:
-        topo = _pintar_linhas(pintor, antes, familia, 0)
-        for altura_faixa, celulas in tabela:
+        topo = _pintar_linhas(pintor, antes, familia, 0, largura_dots)
+        for altura_faixa, celulas, divisa in tabela:
+            if divisa:
+                _desenhar_separador(pintor, topo, altura_faixa, largura_dots)
             for celula in celulas:
                 celula.pintar(pintor, topo)
             topo += altura_faixa
-        _pintar_linhas(pintor, depois, familia, topo)
+        _pintar_linhas(pintor, depois, familia, topo, largura_dots)
     finally:
         pintor.end()
 
