@@ -60,18 +60,48 @@ from services import comandaTextoService as texto
 _ESC = "\x1b"
 _GS = "\x1d"
 
-# Largura de um caractere da Fonte A (12x24 dots), que é a que a impressora usa
-# hoje. A grade é montada em cima dela de propósito: assim a comanda em imagem
-# ocupa exatamente o mesmo espaço no papel que a comanda em texto, e a única
-# coisa que muda ao ligar a fonte é o desenho das letras. Facilita comparar os
-# dois cupons lado a lado, que é justamente o que se quer num teste.
+# A PROPORÇÃO de um caractere da Fonte A (12 dots de largura para 24 de
+# altura), que é a fonte da impressora no caminho de texto. Continua sendo a
+# referência de FORMATO da célula, e a unidade em que as medidas do modelo
+# rascunho estão escritas — mas não é mais a largura final de uma coluna, que
+# hoje sai de _LARGURA_COLUNA_DOTS, logo abaixo.
 LARGURA_CELULA_DOTS = 12
 ALTURA_LINHA_DOTS = 24
 
-# A mesma régua de 40 colunas de comandaTextoService, agora em dots. Precisa ser
-# múltiplo de 8: o raster manda 1 bit por pixel, então cada linha da imagem vira
-# um número inteiro de bytes.
-LARGURA_PAPEL_DOTS = texto.COLUNAS_PAPEL * LARGURA_CELULA_DOTS
+# Largura útil do cabeçote da Bematech MP-4200 TH (ver printerService): 72mm a
+# 203 dpi dão 576 dots, ou 48 colunas de Fonte A.
+#
+# A comanda, porém, é montada numa régua de 40 colunas (comandaTextoService.
+# COLUNAS_PAPEL) — e era daí que vinha a sobra à direita: 40 colunas de 12 dots
+# pintam 480, deixando 96 dots (uns 12mm) de papel em branco na beirada com o
+# texto todo empurrado pra esquerda. No cupom de TEXTO essa sobra também
+# existe, mas ali não há como mexer: quem escolhe a largura do caractere é a
+# impressora. Aqui, desenhando, dá — e é o que _LARGURA_COLUNA_DOTS faz.
+#
+# Múltiplo de 8 de propósito: o raster manda 1 bit por pixel, então cada linha
+# da imagem tem que virar um número inteiro de bytes (576 / 8 = 72).
+LARGURA_PAPEL_DOTS = 576
+
+# Margem lateral do CONTEÚDO, em dots, de cada lado. Só o texto a respeita: as
+# linhas divisórias atravessam o papel inteiro, de beirada a beirada (ver
+# _desenhar_separador) — é a divisa que precisa parecer um corte no papel, e
+# uma que parasse antes da borda pareceria um sublinhado comprido.
+_MARGEM_LATERAL_DOTS = 5
+
+# O que sobra pro conteúdo depois das duas margens.
+LARGURA_UTIL_DOTS = LARGURA_PAPEL_DOTS - 2 * _MARGEM_LATERAL_DOTS
+
+# A régua de 40 colunas esticada sobre a largura útil: uma coluna deixa de
+# medir 12 dots e passa a medir 14,15. É o que faz a comanda ocupar o papel
+# inteiro em vez de cinco sextos dele.
+#
+# A régua continua sendo de COLUNAS_PAPEL colunas, e é isso que importa: o
+# ljust da tabela de itens, a coluna "|" e as linhas de traço fecham porque
+# todas as colunas têm a MESMA largura, não porque essa largura seja 12. O que
+# muda no papel é só o espaçamento entre as letras, que ficam com um pouco mais
+# de folga dentro da célula — o corpo delas continua vindo do tamanho de fonte
+# configurado.
+_LARGURA_COLUNA_DOTS = LARGURA_UTIL_DOTS / texto.COLUNAS_PAPEL
 
 # Quantas linhas de imagem vão em cada comando de raster. A imagem inteira num
 # comando só depende de a impressora ter buffer pra ela — e uma comanda comprida
@@ -81,10 +111,11 @@ LARGURA_PAPEL_DOTS = texto.COLUNAS_PAPEL * LARGURA_CELULA_DOTS
 FAIXA_MAX_LINHAS = 128
 
 # Espessura, em dots, do traço que separa um item do outro na lista de pedidos.
-# Um dot é a menor marca que o cabeçote térmico consegue fazer: fino o bastante
-# pra não disputar atenção com as linhas de "=" que cercam a tabela, e ainda
-# assim contínuo no papel.
-_ESPESSURA_SEPARADOR_DOTS = 1
+# Três dots (uns 0,4mm no cabeçote de 203 dpi) é o que dá uma divisa que se
+# enxerga de longe, com a comanda na mão e a cozinha em movimento — um dot só
+# saía tênue demais no papel térmico. Continua cabendo dentro do espaço que a
+# divisa já ocupava, então não custa papel.
+_ESPESSURA_SEPARADOR_DOTS = 3
 
 # ESC/POS "GS v 0" — imprime a imagem raster que vem logo depois.
 #
@@ -200,11 +231,13 @@ def _linhas_com_estilo(conteudo):
 def _largura_celula(tamanho_px):
     """A largura da célula da grade para um texto de `tamanho_px` de altura.
 
-    Mantém a proporção da Fonte A (12 dots de largura para 24 de altura), que é
-    a régua em que a comanda foi montada — assim uma linha em tamanho normal
-    ocupa exatamente as COLUNAS_PAPEL colunas de sempre, e um campo maior
-    cresce nas duas direções junto, como cresceria na impressora."""
-    return tamanho_px * LARGURA_CELULA_DOTS / ALTURA_LINHA_DOTS
+    Uma linha em tamanho NORMAL ocupa exatamente as COLUNAS_PAPEL colunas de
+    sempre — só que agora essas colunas cobrem a largura útil do papel inteiro
+    (ver _LARGURA_COLUNA_DOTS) em vez dos 480 dots da Fonte A. Um campo maior
+    cresce nas duas direções junto, como cresceria na impressora, e é por isso
+    que a conta continua sendo uma proporção do tamanho e não um valor fixo:
+    uma linha em fonte dobrada segue cabendo em metade das colunas."""
+    return tamanho_px * _LARGURA_COLUNA_DOTS / ALTURA_LINHA_DOTS
 
 
 def _quebrar_em_linhas_fisicas(linhas_logicas, largura_dots, separadoras=()):
@@ -281,15 +314,27 @@ def _fonte(familia, tamanho_px, negrito, sublinhado):
 
 
 def _nova_imagem(largura_dots, altura_dots):
-    """Uma folha em branco do tamanho pedido, com o pintor já configurado.
+    """Uma folha em branco com `largura_dots` de conteúdo mais as duas margens
+    laterais, e o pintor já configurado.
 
     Fundo branco e tinta preta: o papel é branco, e o que for preto na imagem é
-    onde o cabeçote térmico queima."""
-    imagem = QImage(largura_dots, altura_dots, QImage.Format.Format_Grayscale8)
+    onde o cabeçote térmico queima.
+
+    A ORIGEM DO PINTOR FICA NA MARGEM, não na borda do papel. É o que permite
+    todo o resto do módulo continuar medindo e posicionando de 0 até a largura
+    ÚTIL, sem carregar um deslocamento em cada conta: quem desenha texto não
+    precisa saber que existe margem. Quem precisa atravessá-la é só o traço
+    divisório, que desenha a partir de x negativo (ver _desenhar_separador)."""
+    imagem = QImage(
+        int(largura_dots) + 2 * _MARGEM_LATERAL_DOTS,
+        altura_dots,
+        QImage.Format.Format_Grayscale8,
+    )
     imagem.fill(255)
 
     pintor = QPainter(imagem)
     pintor.setRenderHint(QPainter.RenderHint.TextAntialiasing, True)
+    pintor.translate(_MARGEM_LATERAL_DOTS, 0)
     return imagem, pintor
 
 
@@ -299,9 +344,21 @@ def _desenhar_separador(pintor, topo, altura, largura_dots):
 
     Centrado, e não colado numa das bordas, porque a faixa é o respiro entre
     dois itens: encostar o traço em cima ou embaixo o faria parecer sublinhado
-    de um dos dois em vez de divisa entre eles."""
+    de um dos dois em vez de divisa entre eles.
+
+    COMEÇA EM X NEGATIVO e mede a largura útil mais as duas margens: a origem
+    do pintor está na margem esquerda (ver _nova_imagem), então -_MARGEM_
+    LATERAL_DOTS é a beirada do papel. É a única coisa do desenho que sai de
+    dentro das margens, e de propósito — o traço tem que cortar a comanda de
+    ponta a ponta."""
     y = int(topo + (altura - _ESPESSURA_SEPARADOR_DOTS) / 2)
-    pintor.fillRect(0, y, int(largura_dots), _ESPESSURA_SEPARADOR_DOTS, QColor(0, 0, 0))
+    pintor.fillRect(
+        -_MARGEM_LATERAL_DOTS,
+        y,
+        int(largura_dots) + 2 * _MARGEM_LATERAL_DOTS,
+        _ESPESSURA_SEPARADOR_DOTS,
+        QColor(0, 0, 0),
+    )
 
 
 def _pintar_linhas(pintor, fisicas, familia, topo, largura_dots, separadores=()):
@@ -361,7 +418,14 @@ def _pintar_linhas(pintor, fisicas, familia, topo, largura_dots, separadores=())
                 pintor.setPen(QColor(0, 0, 0))
 
             folga = (largura_celula - metrica.horizontalAdvance(caractere)) / 2
-            pintor.drawText(int(round(x + folga)), int(base), caractere)
+            # Nunca à esquerda da margem: num campo configurado em fonte bem
+            # maior que a base, o caractere fica MAIS LARGO que a própria
+            # célula, a folga vira negativa e o glifo da primeira coluna
+            # invadiria a margem — encostando na beirada do papel. No meio da
+            # linha a folga negativa segue valendo (é o que faz os caracteres
+            # se sobreporem de leve, como já se sobrepunham); só a saída pela
+            # borda é que não pode acontecer.
+            pintor.drawText(max(0, int(round(x + folga))), int(base), caractere)
 
         topo += altura
 
@@ -476,7 +540,7 @@ _PROPORCAO_OBSERVACAO = 0.37
 # impedem os dois extremos — uma coluna estreita demais pra caber "R$ 0,00" e
 # uma que, por um valor absurdo, coma o nome do item.
 _LARGURA_VALOR_MINIMA_DOTS = 6 * LARGURA_CELULA_DOTS
-_LARGURA_VALOR_MAXIMA_DOTS = LARGURA_PAPEL_DOTS // 3
+_LARGURA_VALOR_MAXIMA_DOTS = LARGURA_UTIL_DOTS // 3
 
 # Folga depois do maior valor, pra ele não encostar na borda do papel.
 _FOLGA_VALOR_DOTS = LARGURA_CELULA_DOTS // 2
@@ -964,10 +1028,13 @@ def fonte_disponivel(familia):
     return bool(familia) and familia in familias_locais()
 
 
-def para_raster(conteudo_bytes, familia, largura_dots=LARGURA_PAPEL_DOTS):
+def para_raster(conteudo_bytes, familia, largura_dots=LARGURA_UTIL_DOTS):
     """Converte uma comanda em texto ESC/POS na mesma comanda em imagem
     ESC/POS, desenhada na fonte `familia` e na disposição escolhida em
     Configurações (ver _desenho_do_modelo).
+
+    `largura_dots` é a largura do CONTEÚDO; a imagem sai com as duas margens
+    laterais somadas a ela (ver _nova_imagem), ocupando o cabeçote inteiro.
 
     Devolve None quando não dá pra rasterizar — sem fonte escolhida, com uma
     fonte que não existe nesta máquina, sem QGuiApplication viva (o desenho de
