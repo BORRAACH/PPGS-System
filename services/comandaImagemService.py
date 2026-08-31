@@ -110,12 +110,23 @@ _LARGURA_COLUNA_DOTS = LARGURA_UTIL_DOTS / texto.COLUNAS_PAPEL
 # faixas saem coladas uma na outra.
 FAIXA_MAX_LINHAS = 128
 
-# Espessura, em dots, do traço que separa um item do outro na lista de pedidos.
-# Três dots (uns 0,4mm no cabeçote de 203 dpi) é o que dá uma divisa que se
-# enxerga de longe, com a comanda na mão e a cozinha em movimento — um dot só
-# saía tênue demais no papel térmico. Continua cabendo dentro do espaço que a
-# divisa já ocupava, então não custa papel.
-_ESPESSURA_SEPARADOR_DOTS = 3
+# Espessura, em dots, de cada traço horizontal da comanda. Os três desenham a
+# HIERARQUIA do cupom pela grossura: o marcador que cerca a tabela de itens é o
+# corte mais forte, a divisória entre campos vem depois, e a divisa entre dois
+# itens é a mais leve — está dentro da tabela, e não pode competir com a
+# moldura dela.
+#
+# Todos cabem dentro da altura da linha que substituem, então nenhum custa
+# papel: o cupom sai com o mesmo comprimento de antes.
+_ESPESSURA_MARCADOR_ITENS_DOTS = 7
+_ESPESSURA_SEPARADOR_CAMPOS_DOTS = 5
+_ESPESSURA_ENTRE_ITENS_DOTS = 3
+
+# A linha de traços que separa um campo do outro, como comandaTextoService a
+# monta ("-" * COLUNAS_PAPEL, ver montar_linhas_por_ordem). Comparada inteira,
+# e não por "só tem hífens", pra que um "---" digitado numa observação continue
+# saindo como texto — o que vira traço é a divisória que o app gerou.
+_LINHA_SEPARADORA_CAMPOS = "-" * texto.COLUNAS_PAPEL
 
 # ESC/POS "GS v 0" — imprime a imagem raster que vem logo depois.
 #
@@ -240,7 +251,7 @@ def _largura_celula(tamanho_px):
     return tamanho_px * _LARGURA_COLUNA_DOTS / ALTURA_LINHA_DOTS
 
 
-def _quebrar_em_linhas_fisicas(linhas_logicas, largura_dots, separadoras=()):
+def _quebrar_em_linhas_fisicas(linhas_logicas, largura_dots, tracos=None):
     """Transforma as linhas do cupom em linhas FÍSICAS de papel, quebrando o
     que não cabe na largura, e resolve a posição de cada caractere.
 
@@ -257,17 +268,18 @@ def _quebrar_em_linhas_fisicas(linhas_logicas, largura_dots, separadoras=()):
     ocupa" deixa de ser um número inteiro. Em tamanho normal a conta dá no
     mesmo: 40 células de 12 dots.
 
-    Devolve (linhas físicas, índices das que são divisa entre itens). Cada
-    linha física é uma lista de (caractere, x, tamanho_px, negrito, sublinhado,
+    Devolve (linhas físicas, {índice físico: espessura do traço}). Cada linha
+    física é uma lista de (caractere, x, tamanho_px, negrito, sublinhado,
     reverso). Com as posições já resolvidas, desenhar vira um laço burro — e a
     altura de cada linha pode ser medida antes de existir imagem nenhuma, que é
     o que permite dimensionar o QImage de uma vez só.
 
-    `separadoras` traz índices de linhas LÓGICAS (ver _linhas_entre_itens); a
-    tradução pra índices FÍSICOS tem que acontecer aqui dentro, porque é só
-    aqui que se sabe quantas linhas de papel cada linha do cupom virou."""
+    `tracos` chega indexado por linha LÓGICA (ver _tracos_de_texto); a tradução
+    pra índices FÍSICOS tem que acontecer aqui dentro, porque é só aqui que se
+    sabe quantas linhas de papel cada linha do cupom virou."""
     fisicas = []
-    separadores = set()
+    tracos = tracos or {}
+    tracos_fisicos = {}
 
     for indice, trechos in enumerate(linhas_logicas):
         atual = []
@@ -285,12 +297,12 @@ def _quebrar_em_linhas_fisicas(linhas_logicas, largura_dots, separadoras=()):
         # entre seções (ver comandaEstiloService.linhas_espacamento_secoes), e
         # engoli-las grudaria as seções umas nas outras.
         fisicas.append(atual)
-        # A última linha física desta linha lógica — que numa divisa, sendo ela
-        # vazia, é também a única.
-        if indice in separadoras:
-            separadores.add(len(fisicas) - 1)
+        # A última linha física desta linha lógica — que numa linha de traço,
+        # que nunca chega perto de quebrar, é também a única.
+        if indice in tracos:
+            tracos_fisicos[len(fisicas) - 1] = tracos[indice]
 
-    return fisicas, separadores
+    return fisicas, tracos_fisicos
 
 
 def _altura_da_linha(glifos):
@@ -338,9 +350,9 @@ def _nova_imagem(largura_dots, altura_dots):
     return imagem, pintor
 
 
-def _desenhar_separador(pintor, topo, altura, largura_dots):
-    """Um traço fino cortando o papel de ponta a ponta, centrado na faixa que
-    vai de `topo` a `topo + altura`.
+def _desenhar_separador(pintor, topo, altura, largura_dots, espessura):
+    """Um traço de `espessura` dots cortando o papel de ponta a ponta, centrado
+    na faixa que vai de `topo` a `topo + altura`.
 
     Centrado, e não colado numa das bordas, porque a faixa é o respiro entre
     dois itens: encostar o traço em cima ou embaixo o faria parecer sublinhado
@@ -351,25 +363,25 @@ def _desenhar_separador(pintor, topo, altura, largura_dots):
     LATERAL_DOTS é a beirada do papel. É a única coisa do desenho que sai de
     dentro das margens, e de propósito — o traço tem que cortar a comanda de
     ponta a ponta."""
-    y = int(topo + (altura - _ESPESSURA_SEPARADOR_DOTS) / 2)
+    y = int(topo + (altura - espessura) / 2)
     pintor.fillRect(
         -_MARGEM_LATERAL_DOTS,
         y,
         int(largura_dots) + 2 * _MARGEM_LATERAL_DOTS,
-        _ESPESSURA_SEPARADOR_DOTS,
+        espessura,
         QColor(0, 0, 0),
     )
 
 
-def _pintar_linhas(pintor, fisicas, familia, topo, largura_dots, separadores=()):
+def _pintar_linhas(pintor, fisicas, familia, topo, largura_dots, tracos=None):
     """Pinta as linhas físicas de `fisicas` a partir de `topo` e devolve o topo
     logo abaixo da última — é o desenho em GRADE, usado pelo modelo clássico e
     também pelos trechos fora da tabela de itens no modelo rascunho.
 
-    As linhas cujo índice está em `separadores` saem como um traço de ponta a
-    ponta em vez de texto (ver _desenhar_separador): são as linhas em branco
-    que separam um item do outro, e o traço ocupa o espaço que já era delas —
-    a comanda não fica um dot mais comprida por causa dele.
+    `tracos` diz quais linhas saem como um traço de ponta a ponta em vez de
+    texto, e com que espessura (ver _tracos_de_texto e _linhas_entre_itens). O
+    traço ocupa o espaço que já era da linha, então a comanda não fica um dot
+    mais comprida por causa dele.
 
     Cada caractere é centrado na sua célula da grade — é o que mantém a coluna
     "|" e o ljust da tabela de itens alinhados mesmo numa fonte proporcional
@@ -382,13 +394,15 @@ def _pintar_linhas(pintor, fisicas, familia, topo, largura_dots, separadores=())
     # comanda inteira costuma usar duas ou três combinações), então cada uma é
     # montada na primeira vez que aparece e reaproveitada daí em diante.
     fontes = {}
+    tracos = tracos or {}
 
     for indice, glifos in enumerate(fisicas):
         altura = _altura_da_linha(glifos)
         base = topo + altura - max(1, altura // 8)
 
-        if indice in separadores:
-            _desenhar_separador(pintor, topo, altura, largura_dots)
+        espessura = tracos.get(indice)
+        if espessura:
+            _desenhar_separador(pintor, topo, altura, largura_dots, espessura)
             topo += altura
             continue
 
@@ -436,6 +450,37 @@ def _texto_visivel(trechos):
     """A linha como ela sai no papel: os trechos concatenados, já sem os
     comandos de estilo (que _trechos_da_linha consumiu)."""
     return "".join(conteudo for conteudo, *_atributos in trechos)
+
+
+def _espessura_do_traco(visivel):
+    """A espessura do traço que substitui esta linha, ou None se ela é texto.
+
+    As duas linhas que o cupom monta com caracteres repetidos saem desenhadas:
+    o MARCADOR_ITENS ("=" * 40) que cerca a tabela e a divisória de campos
+    ("-" * 40). Desenhadas ficam contínuas e com a grossura escolhida; em
+    caracteres elas saíam com a falha entre um glifo e o outro, e o "=", que é
+    de dois riscos, saía como uma linha DUPLA — que é o que se via em cima do
+    primeiro item e embaixo do último."""
+    if visivel == texto.MARCADOR_ITENS:
+        return _ESPESSURA_MARCADOR_ITENS_DOTS
+    if visivel == _LINHA_SEPARADORA_CAMPOS:
+        return _ESPESSURA_SEPARADOR_CAMPOS_DOTS
+    return None
+
+
+def _tracos_de_texto(logicas):
+    """{índice: espessura} das linhas que o próprio texto do cupom já diz serem
+    traço (ver _espessura_do_traco).
+
+    Vale pra qualquer pedaço da comanda, porque cada linha se explica sozinha —
+    é o que permite chamá-la também sobre os recortes de antes e depois da
+    tabela no modelo rascunho."""
+    espessuras = {}
+    for indice, trechos in enumerate(logicas):
+        espessura = _espessura_do_traco(_texto_visivel(trechos).strip())
+        if espessura:
+            espessuras[indice] = espessura
+    return espessuras
 
 
 def _linhas_entre_itens(logicas):
@@ -492,12 +537,21 @@ def _linhas_entre_itens(logicas):
     return divisas
 
 
+def _tracos_da_comanda(logicas):
+    """{índice: espessura} de todos os traços do cupom — os que o texto já
+    trazia e as divisas entre itens."""
+    espessuras = _tracos_de_texto(logicas)
+    for indice in _linhas_entre_itens(logicas):
+        espessuras[indice] = _ESPESSURA_ENTRE_ITENS_DOTS
+    return espessuras
+
+
 def _desenhar_modelo_classico(conteudo, familia, largura_dots):
     """A comanda inteira na grade de células, que é o cupom de sempre com
     outras letras. Devolve o QImage, ou None se não sobrou nada a desenhar."""
     logicas = _linhas_com_estilo(conteudo)
-    fisicas, separadores = _quebrar_em_linhas_fisicas(
-        logicas, largura_dots, _linhas_entre_itens(logicas)
+    fisicas, tracos = _quebrar_em_linhas_fisicas(
+        logicas, largura_dots, _tracos_da_comanda(logicas)
     )
     altura = sum(_altura_da_linha(glifos) for glifos in fisicas)
     if altura <= 0:
@@ -505,7 +559,7 @@ def _desenhar_modelo_classico(conteudo, familia, largura_dots):
 
     imagem, pintor = _nova_imagem(largura_dots, altura)
     try:
-        _pintar_linhas(pintor, fisicas, familia, 0, largura_dots, separadores)
+        _pintar_linhas(pintor, fisicas, familia, 0, largura_dots, tracos)
     finally:
         pintor.end()
 
@@ -888,10 +942,18 @@ def _desenhar_modelo_rascunho(conteudo, familia, largura_dots):
     # As linhas de marcador ficam com os blocos em grade, uma de cada lado: são
     # a moldura da tabela, e a Consulta as procura de volta no arquivo (que não
     # muda) — no papel elas continuam sendo as duas linhas de "=" de sempre.
-    # Sem separadoras nos dois trechos: as divisas entre itens ficam todas
-    # dentro da tabela, que aqui é redesenhada em colunas e não passa por eles.
-    antes, _antes_sep = _quebrar_em_linhas_fisicas(logicas[:inicio + 1], largura_dots)
-    depois, _depois_sep = _quebrar_em_linhas_fisicas(logicas[fim:], largura_dots)
+    # Só _tracos_de_texto nos dois recortes: as divisas ENTRE ITENS ficam
+    # todas dentro da tabela, que aqui é redesenhada em colunas e não passa por
+    # eles — mas o marcador de cada ponta e as divisórias de campo do cabeçalho
+    # e do rodapé estão justamente aqui, e continuam saindo desenhados.
+    fatia_antes = logicas[:inicio + 1]
+    fatia_depois = logicas[fim:]
+    antes, tracos_antes = _quebrar_em_linhas_fisicas(
+        fatia_antes, largura_dots, _tracos_de_texto(fatia_antes)
+    )
+    depois, tracos_depois = _quebrar_em_linhas_fisicas(
+        fatia_depois, largura_dots, _tracos_de_texto(fatia_depois)
+    )
     tabela = _bloco_tabela_rascunho(itens, familia, largura_dots)
 
     altura = (
@@ -905,14 +967,16 @@ def _desenhar_modelo_rascunho(conteudo, familia, largura_dots):
 
     imagem, pintor = _nova_imagem(largura_dots, altura_total)
     try:
-        topo = _pintar_linhas(pintor, antes, familia, 0, largura_dots)
+        topo = _pintar_linhas(pintor, antes, familia, 0, largura_dots, tracos_antes)
         for altura_faixa, celulas, divisa in tabela:
             if divisa:
-                _desenhar_separador(pintor, topo, altura_faixa, largura_dots)
+                _desenhar_separador(
+                    pintor, topo, altura_faixa, largura_dots, _ESPESSURA_ENTRE_ITENS_DOTS
+                )
             for celula in celulas:
                 celula.pintar(pintor, topo)
             topo += altura_faixa
-        _pintar_linhas(pintor, depois, familia, topo, largura_dots)
+        _pintar_linhas(pintor, depois, familia, topo, largura_dots, tracos_depois)
     finally:
         pintor.end()
 
