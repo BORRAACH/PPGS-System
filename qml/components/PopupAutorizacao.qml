@@ -247,7 +247,13 @@ Popup {
                 echoMode: TextInput.Password
                 inputMethodHints: Qt.ImhDigitsOnly
                 validator: RegularExpressionValidator { regularExpression: /^\d{0,2}$/ }
-                Keys.onReturnPressed: popupAutorizacao._confirmar()
+                // onAccepted, e não Keys.onReturnPressed: aquele só pega a
+                // tecla Enter principal (Qt.Key_Return). O Enter do teclado
+                // NUMÉRICO é outra tecla (Qt.Key_Enter), e é justamente nele
+                // que a mão está — o código é digitado no numpad. O `accepted`
+                // do TextField é emitido pelas duas (testado), então um handler
+                // só cobre o teclado inteiro.
+                onAccepted: popupAutorizacao._confirmar()
             }
 
             Text {
