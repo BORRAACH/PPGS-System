@@ -473,7 +473,7 @@ def listar_da_categoria(chave_categoria, termo=""):
     ]
 
 
-def buscar(termo, limite=_LIMITE_PADRAO):
+def buscar(termo, limite=_LIMITE_PADRAO, chave_categoria=""):
     """Itens do cardápio que casam com `termo`, mais relevantes primeiro.
 
     Quatro faixas, nesta ordem: nome começando com o termo (busca binária),
@@ -483,12 +483,27 @@ def buscar(termo, limite=_LIMITE_PADRAO):
 
     Termo vazio devolve o cardápio inteiro em ordem alfabética, que é o que a
     tela mostra enquanto ninguém digitou nada.
+
+    `chave_categoria` estreita a busca a uma categoria só, ANTES de tudo: é a
+    etapa "outros sabores" do lançamento rápido procurando entre as pizzas
+    (ver qml/components/PopupLancamentoRapido.qml). Filtrar depois não daria no
+    mesmo — o `limite` cortaria a lista antes, e sobrariam menos pizzas do que
+    as que casam. As faixas continuam as mesmas, e a binária continua valendo:
+    o índice é alfabético e um recorte dele por categoria também é.
+
+    `limite` None tira o teto. Quem estreita por categoria costuma querer isso,
+    pelo mesmo motivo de listar_da_categoria: o teto existe pra um termo vazio
+    não despejar o cardápio inteiro (~180 itens) numa lista só, e a categoria
+    já é o recorte — as 74 pizzas são exatamente o que se quer poder rolar.
     """
     entradas = indice()
+    if chave_categoria:
+        entradas = [e for e in entradas if e["chaveCategoria"] == chave_categoria]
+
     alvo = normalizar(termo)
 
     if not alvo:
-        return [_sem_campos_internos(e) for e in entradas[:limite]]
+        return [_sem_campos_internos(e) for e in _limitar(entradas, limite)]
 
     palavras = alvo.split()
     if len(palavras) > 1:
@@ -507,7 +522,7 @@ def buscar(termo, limite=_LIMITE_PADRAO):
             elif all(p in entrada["_tudoNormalizado"] for p in palavras):
                 na_categoria.append(entrada)
         casam = no_nome + no_ingrediente + na_categoria
-        return [_sem_campos_internos(e) for e in casam[:limite]]
+        return [_sem_campos_internos(e) for e in _limitar(casam, limite)]
 
     chaves = [e["_nomeNormalizado"] for e in entradas]
     inicio, fim = _faixa_por_prefixo(chaves, alvo)
@@ -533,7 +548,12 @@ def buscar(termo, limite=_LIMITE_PADRAO):
     resultado.extend(no_nome)
     resultado.extend(no_ingrediente)
     resultado.extend(na_categoria)
-    return [_sem_campos_internos(e) for e in resultado[:limite]]
+    return [_sem_campos_internos(e) for e in _limitar(resultado, limite)]
+
+
+def _limitar(entradas, limite):
+    """As primeiras `limite` entradas, ou todas quando `limite` é None."""
+    return entradas if limite is None else entradas[:limite]
 
 
 def _sem_campos_internos(entrada):

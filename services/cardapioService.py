@@ -714,6 +714,21 @@ class CardapioController(QObject):
 
     @pyqtSlot(str, str, result="QVariantList")
     @protegido([])
+    def buscarNaCategoria(self, chave_categoria, termo):
+        """Como buscar(), mas só dentro de uma categoria e sem teto de
+        resultados — as mesmas faixas de relevância, o mesmo tratamento de
+        acento e de várias palavras.
+
+        É o que a etapa "outros sabores" do lançamento rápido usa pra filtrar
+        as pizzas (ver qml/components/PopupLancamentoRapido.qml): ali a busca
+        precisa ordenar por relevância como a barra do Ctrl+S, e não só
+        peneirar em ordem alfabética como listarDaCategoria."""
+        from services import buscaCardapio
+
+        return buscaCardapio.buscar(termo, limite=None, chave_categoria=chave_categoria)
+
+    @pyqtSlot(str, str, result="QVariantList")
+    @protegido([])
     def listarDaCategoria(self, chave_categoria, termo):
         """Os itens de uma categoria só, no mesmo formato de buscar() — com a
         promoção do dia já aplicada. Usado pelo lançamento rápido quando o
