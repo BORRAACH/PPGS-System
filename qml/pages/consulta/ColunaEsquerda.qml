@@ -210,6 +210,69 @@ Column {
         }
     }
 
+    // --- FILTRO POR USUÁRIO ---
+    // Quem lançou o pedido (a linha "Usuário:" do cupom). Fica junto do filtro
+    // de status porque faz a mesma coisa que ele: ESCONDE comanda, ao
+    // contrário da busca acima, que só reordena.
+    //
+    // Escondido quando não há usuário nenhum nas comandas carregadas — numa
+    // pizzaria que ainda não usa o cadastro de usuários, um seletor com uma
+    // opção só seria só um controle a mais pra ignorar.
+    FiltroUsuario {
+        id: filtroUsuario
+
+        // Nomeado pelo mesmo motivo dos popups das telas: alcançável de fora
+        // para inspeção e teste.
+        objectName: "filtroUsuarioConsulta"
+        width: parent.width
+        visible: colunaEsquerda.pagina && colunaEsquerda.pagina.usuariosConhecidos.length > 0
+        height: visible ? implicitHeight : 0
+        alturaCampo: 30
+        corDestaque: Estilo.screen.consulta.base
+        usuarios: colunaEsquerda.pagina ? colunaEsquerda.pagina.usuariosConhecidos : []
+        usuarioSelecionado: colunaEsquerda.pagina ? colunaEsquerda.pagina.filtroUsuario : ""
+        onSelecionou: function (usuario) {
+            if (!colunaEsquerda.pagina || colunaEsquerda.pagina.filtroUsuario === usuario)
+                return;
+
+            colunaEsquerda.pagina.filtroUsuario = usuario;
+            colunaEsquerda.pagina.aplicarFiltro();
+        }
+    }
+
+    // O que o filtro NÃO alcança sozinho, dito na hora em que ele é ligado —
+    // mesmo espírito do aviso da janela de busca acima.
+    //
+    // Um dia antigo ainda fechado é contado pelo NOME dos arquivos, sem abrir
+    // nenhum, e o nome não diz quem lançou (é o que faz abrir a Consulta
+    // custar dois dias de leitura em vez do acervo inteiro, ver
+    // Consulta.qml). Então a contagem dele é a do dia todo até alguém abrir a
+    // caixinha — e aí ela se corrige sozinha.
+    Row {
+        id: avisoFiltroUsuario
+
+        width: parent.width
+        visible: filtroUsuario.visible && colunaEsquerda.pagina && colunaEsquerda.pagina.filtroUsuario !== ""
+        height: visible ? implicitHeight : 0
+        spacing: Estilo.global.spacing.xs
+
+        Icone {
+            nome: "fa6s.circle-info"
+            cor: Estilo.global.textMuted
+            tamanho: 12
+            y: 2
+        }
+
+        Text {
+            width: avisoFiltroUsuario.width - 12 - avisoFiltroUsuario.spacing
+            text: "Dias anteriores ainda fechados contam o total do dia; abra um para ver só as comandas de "
+                + (colunaEsquerda.pagina ? colunaEsquerda.pagina.filtroUsuario : "") + "."
+            font.pixelSize: Estilo.global.fontSize.sm
+            color: Estilo.global.textMuted
+            wrapMode: Text.WordWrap
+        }
+    }
+
     // Única área de rolagem da coluna — hoje e os dias anteriores rolam
     // juntos, num scroll só (mesmo raciocínio do Flickable de "Mapeamento
     // por origem" em Fechamento.qml). As duas ListView internas abaixo não
@@ -223,7 +286,14 @@ Column {
         // O aviso da janela de busca entrou na conta junto com o espaçamento
         // que ele traz: sem isso a lista passaria da borda inferior da coluna,
         // e o que se perde no corte é o fim dos dias mais antigos.
-        height: parent.height - 30 - campoBusca.height - avisoJanela.height - linhaFiltroStatus.height - 3 * colunaEsquerda.spacing
+        //
+        // O filtro de usuário entra pela altura, e não por um número fixo: ele
+        // some quando nenhuma comanda tem usuário, e aí não gasta espaço nenhum
+        // (nem o espaçamento — Column ignora filho invisível).
+        height: parent.height - 30 - campoBusca.height - avisoJanela.height - linhaFiltroStatus.height
+            - (filtroUsuario.visible ? filtroUsuario.height + colunaEsquerda.spacing : 0)
+            - (avisoFiltroUsuario.visible ? avisoFiltroUsuario.height + colunaEsquerda.spacing : 0)
+            - 3 * colunaEsquerda.spacing
         clip: true
         contentWidth: width
         contentHeight: colunaListas.implicitHeight
@@ -401,7 +471,19 @@ Column {
                             Item { Layout.fillWidth: true }
 
                             Text {
-                                text: blocoDia.modelData.quantidade + (blocoDia.modelData.quantidade === 1 ? " comanda" : " comandas")
+                                // Depois de aberta, a contagem vem da lista de
+                                // verdade; antes, da estimativa que veio com o
+                                // dia. As duas só divergem com o filtro de
+                                // usuário ligado: a estimativa dos dias não
+                                // carregados sai do NOME dos arquivos (ver
+                                // Consulta.qml _quantidadeNoFiltro), e o nome
+                                // não diz quem lançou. Trocar pela contagem
+                                // real no momento em que ela existe é o que
+                                // impede a caixinha de continuar prometendo
+                                // comandas que ela não vai mostrar.
+                                readonly property int _contagem: blocoDia.preenchido ? modeloDia.count : blocoDia.modelData.quantidade
+
+                                text: _contagem + (_contagem === 1 ? " comanda" : " comandas")
                                 font.pixelSize: Estilo.global.fontSize.sm
                                 color: Estilo.global.textSecondary
                             }

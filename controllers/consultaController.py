@@ -431,6 +431,11 @@ class ConsultaController(QObject):
                     "tipo": tipo,
                     "conteudo": conteudo,
                     "cliente": cliente,
+                    # Quem lançou o pedido, pro filtro por usuário da tela (ver
+                    # ColunaEsquerda.qml). "" numa comanda sem a linha
+                    # "Usuário:" — comanda de teste, ou gravada antes de o
+                    # cadastro existir.
+                    "usuario": parser.extrair_campo(parser.PADRAO_USUARIO, conteudo),
                     "dataHora": parser.extrair_campo(parser.PADRAO_DATA, conteudo),
                     # O dia pelo NOME do arquivo ("" quando ele não segue o
                     # padrão). É por ele que a tela agrupa, e não pelo "Data:"

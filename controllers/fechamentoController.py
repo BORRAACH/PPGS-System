@@ -725,6 +725,10 @@ class FechamentoController(QObject):
             "tipo": tipo,
             "codigo": parser.codigo_comanda(nome_arquivo, conteudo),
             "cliente": cliente,
+            # Quem lançou o pedido — alimenta o filtro por usuário da tela e
+            # entra na busca (ver _texto_de_busca). "" quando o cupom não traz
+            # a linha "Usuário:".
+            "usuario": parser.extrair_campo(parser.PADRAO_USUARIO, conteudo),
             "valor": parser.extrair_valor_total(conteudo),
             "formaPagamento": forma_pagamento,
             "status": status,
@@ -751,8 +755,8 @@ class FechamentoController(QObject):
     @staticmethod
     def _texto_de_busca(dados, tipo, itens):
         """Uma linha só, normalizada, com tudo por onde a comanda pode ser
-        procurada na tela de Fechamento: modalidade, código, cliente, forma de
-        pagamento, status, os itens pedidos e o valor.
+        procurada na tela de Fechamento: modalidade, código, cliente, usuário
+        que lançou, forma de pagamento, status, os itens pedidos e o valor.
 
         Normalizar aqui (minúsculas, sem acento) e não na tela é de propósito:
         assim "Açaí" acha "acai" e "JOÃO" acha "joao" sem cada comparação ter
@@ -777,6 +781,7 @@ class FechamentoController(QObject):
             tipo,
             dados.get("codigo", ""),
             dados.get("cliente", ""),
+            dados.get("usuario", ""),
             dados.get("formaPagamento", ""),
             dados.get("status", ""),
             dados.get("dataHora", ""),
@@ -827,6 +832,7 @@ class FechamentoController(QObject):
             item = {
                 "arquivo": nome_arquivo,
                 "cliente": dados["cliente"],
+                "usuario": dados["usuario"],
                 "valor": valor,
                 "formaPagamento": dados["formaPagamento"],
                 "status": dados["status"],
@@ -949,13 +955,17 @@ class FechamentoController(QObject):
         cache — ficariam com a busca cega e sem produtos justamente onde mais
         se procura uma comanda e onde o envio ao pizzeria-server precisa dos
         números. Recalcular o dia é O(k) nas comandas daquele dia e grava o
-        cache novo, então isso acontece uma vez por dia antigo visitado."""
+        cache novo, então isso acontece uma vez por dia antigo visitado.
+
+        O campo "usuario" entra na mesma conferência: sem ele o filtro por
+        usuário da tela veria um dia antigo inteiro como "sem usuário", que é
+        pior que demorar um instante a mais na primeira visita ao dia."""
         if "produtos" not in resumo:
             return False
 
         for grupo in (resumo.get("porTipo") or {}).values():
             for comanda in grupo.get("comandas") or []:
-                if "busca" not in comanda:
+                if "busca" not in comanda or "usuario" not in comanda:
                     return False
         return True
 

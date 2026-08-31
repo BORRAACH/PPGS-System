@@ -85,6 +85,11 @@ PADRAO_ENDERECO = re.compile(r"^Endereço:[ \t]*(.*)$", re.MULTILINE)
 # que está no papel possa ser conferido entre as máquinas. Comandas
 # anteriores a ele simplesmente não têm a linha, e extrair_campo devolve "".
 PADRAO_ID_PEDIDO = re.compile(r"^ID:[ \t]*(.*)$", re.MULTILINE)
+# Quem lançou o pedido (ver PopupAutorizacao.qml e o campo "usuario" em
+# balcaoController/entregaController/salaoController._salvarComanda). Sai em
+# branco na comanda de teste e nas gravadas antes de o cadastro de usuários
+# existir — as telas tratam isso como "sem usuário" em vez de inventar um nome.
+PADRAO_USUARIO = re.compile(r"^Usuário:[ \t]*(.*)$", re.MULTILINE)
 
 # Campos exclusivos de Entrega (ver EntregaController._salvarComanda). Vieram
 # de consultaController.py junto com reconstruir_itens, pelo mesmo motivo: a

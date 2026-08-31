@@ -63,6 +63,35 @@ Page {
     // O que está digitado na barra de busca. Filtra as comandas de todos os
     // tipos ao mesmo tempo (ver comandasDoTipo).
     property string termoBusca: ""
+
+    // Nome de quem lançou a comanda; "" = todos. Junto com a busca por texto,
+    // é o que decide quais comandas o "Mapeamento por origem" mostra.
+    property string filtroUsuario: ""
+
+    // Os nomes que o seletor oferece: os que aparecem nas comandas COM BAIXA
+    // do dia, sem repetição e em ordem — as mesmas que o mapeamento lista, já
+    // que uma comanda ainda sem baixa não entra em porTipo (ver
+    // FechamentoController.calcularFechamento).
+    //
+    // Derivado do resumo, e não pedido ao Python: é a mesma lista que a tela
+    // filtra, então não há como os dois discordarem. Trocar de dia refaz a
+    // lista sozinho, e o seletor volta pra "Todos" quando o nome escolhido não
+    // lançou nada no dia novo (ver components/FiltroUsuario.qml).
+    readonly property var usuariosDoDia: {
+        var vistos = {};
+        for (var i = 0; i < telaFechamento.ordemTipos.length; i++) {
+            var comandas = telaFechamento.infoTipo(telaFechamento.ordemTipos[i]).comandas || [];
+            for (var j = 0; j < comandas.length; j++) {
+                // Resumo em cache de antes deste campo existir não tem o nome —
+                // ver FechamentoController._cache_atualizado, que manda
+                // recalcular justamente por isso.
+                var nome = ((comandas[j].usuario || "") + "").trim();
+                if (nome !== "")
+                    vistos[nome] = true;
+            }
+        }
+        return Object.keys(vistos).sort();
+    }
     // Normalizado uma vez por digitação, e não a cada comanda comparada: o
     // outro lado da comparação (o campo "busca" de cada comanda) já vem
     // normalizado do Python — ver FechamentoController._texto_de_busca.
@@ -251,23 +280,39 @@ Page {
     // centenas), refiltrado a cada tecla em menos de um milissegundo.
     function comandasDoTipo(tipo) {
         var todas = telaFechamento.infoTipo(tipo).comandas || [];
-        if (!telaFechamento.buscando)
+        if (!telaFechamento.buscando && telaFechamento.filtroUsuario === "")
             return todas;
 
         var termo = telaFechamento._termoNormalizado;
         var achadas = [];
         for (var i = 0; i < todas.length; i++) {
+            if (!telaFechamento._passaNoUsuario(todas[i]))
+                continue;
+
             // Comandas de um resumo gravado em cache antes desta busca
             // existir não têm o campo — caem fora em vez de derrubar a tela.
             var alvo = todas[i].busca || "";
-            if (alvo.indexOf(termo) >= 0)
+            if (!telaFechamento.buscando || alvo.indexOf(termo) >= 0)
                 achadas.push(todas[i]);
         }
         return achadas;
     }
 
+    // Quem lançou a comanda passa pelo seletor? "" = todos, inclusive as
+    // comandas sem usuário nenhum; um nome escolhido casa exato.
+    //
+    // Diferente da busca por texto ao lado, este filtro também mexe nos
+    // TOTAIS: totalDoTipo já soma o que comandasDoTipo devolve, então escolher
+    // um usuário passa a mostrar quanto ele lançou em cada modalidade — que é
+    // a pergunta que se faz ao filtrar o caixa por pessoa.
+    function _passaNoUsuario(item) {
+        if (telaFechamento.filtroUsuario === "")
+            return true;
+        return ((item.usuario || "") + "").trim() === telaFechamento.filtroUsuario;
+    }
+
     function totalDoTipo(tipo) {
-        if (!telaFechamento.buscando)
+        if (!telaFechamento.buscando && telaFechamento.filtroUsuario === "")
             return telaFechamento.infoTipo(tipo).total || 0;
 
         var achadas = telaFechamento.comandasDoTipo(tipo);
@@ -945,8 +990,38 @@ Page {
 
                         Item { Layout.fillWidth: true }
 
+                        // --- FILTRO POR USUÁRIO ---
+                        // Quem lançou o pedido. Fica aqui em cima, e não junto
+                        // da busca logo abaixo, porque não é a mesma coisa: a
+                        // busca procura UMA comanda, este recorta o dia inteiro
+                        // — inclusive os totais por modalidade (ver
+                        // _passaNoUsuario).
+                        //
+                        // Escondido num dia sem usuário nenhum nas comandas:
+                        // dia antigo, de antes do cadastro de usuários.
+                        FiltroUsuario {
+                            // Nomeado pelo mesmo motivo dos popups das telas:
+                            // alcançável de fora para inspeção e teste.
+                            objectName: "filtroUsuarioFechamento"
+                            visible: telaFechamento.usuariosDoDia.length > 0
+                            Layout.preferredWidth: 190
+                            alturaCampo: 30
+                            corDestaque: Estilo.screen.caixa.accent
+                            usuarios: telaFechamento.usuariosDoDia
+                            usuarioSelecionado: telaFechamento.filtroUsuario
+                            // A lista se refaz sozinha por binding
+                            // (comandasDoTipo lê filtroUsuario), então aqui
+                            // basta gravar.
+                            onSelecionou: function (usuario) {
+                                telaFechamento.filtroUsuario = usuario;
+                            }
+                        }
+
                         Text {
-                            visible: telaFechamento.buscando
+                            // Aparece também quando só o filtro de usuário está
+                            // ligado: nos dois casos há comanda escondida, e a
+                            // contagem é o que diz quanto sobrou.
+                            visible: telaFechamento.buscando || telaFechamento.filtroUsuario !== ""
                             text: {
                                 var n = telaFechamento.totalEncontrado();
                                 return n === 1 ? "1 comanda encontrada" : n + " comandas encontradas";

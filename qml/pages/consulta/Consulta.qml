@@ -110,6 +110,48 @@ Page {
     // motivo de buscaAtual: precisa sobreviver a um "Atualizar".
     property string filtroStatus: "todas"
 
+    // Nome de quem lançou a comanda; "" = todos. Mora aqui, e não no seletor,
+    // pelo mesmo motivo de filtroStatus: precisa sobreviver a um "Atualizar" e
+    // é consultado por _passaNosFiltros, que roda longe da coluna esquerda.
+    property string filtroUsuario: ""
+
+    // Os nomes que o seletor oferece: os que aparecem nas comandas já
+    // carregadas, sem repetição e em ordem.
+    //
+    // Não é um cadastro de usuários de propósito. Duas razões: um nome que não
+    // lançou nada no período só ofereceria um filtro que devolve lista vazia,
+    // e o cadastro nem alcançaria quem lançou e foi removido depois — enquanto
+    // as comandas dele continuam no acervo. Cresce ao abrir a caixinha de um
+    // dia antigo (ver carregarDia), que é quando aparecem usuários que não
+    // lançaram nada nos últimos dias.
+    property var usuariosConhecidos: []
+
+    // Junta `nomes` aos já conhecidos e reordena. Só reatribui quando algo
+    // mudou de verdade: escrever na property redesenha o seletor, e isso
+    // acontece a cada dia antigo aberto.
+    function _registrarUsuarios(nomes) {
+        var vistos = {};
+        var i;
+        for (i = 0; i < telaConsulta.usuariosConhecidos.length; i++)
+            vistos[telaConsulta.usuariosConhecidos[i]] = true;
+
+        var novos = false;
+        for (i = 0; i < nomes.length; i++) {
+            var nome = (nomes[i] || "").trim();
+            // Comanda sem a linha "Usuário:" não vira opção — ver
+            // components/FiltroUsuario.qml sobre por que não há "sem usuário".
+            if (nome === "" || vistos[nome])
+                continue;
+            vistos[nome] = true;
+            novos = true;
+        }
+
+        if (!novos)
+            return;
+
+        telaConsulta.usuariosConhecidos = Object.keys(vistos).sort();
+    }
+
     // Verdadeiro do pedido de carregamento até a última comanda entrar na
     // lista. ColunaEsquerda.qml mostra a caixa "Carregando..." enquanto
     // isso, e PainelDetalhe.qml segura a mensagem de lista vazia — que,
@@ -286,7 +328,14 @@ Page {
     // caixinha do dia é aberta — e só nela: o resultado fica no ListModel da
     // própria caixinha, então reabrir não relê nada.
     function carregarDia(chave) {
-        return consultaController.listarComandasDoDia(chave).filter(telaConsulta._passaNoStatus);
+        var doDia = consultaController.listarComandasDoDia(chave);
+        // O dia recém-aberto pode ter usuários que não lançaram nada nos
+        // últimos dias — sem isto, eles nunca apareceriam no seletor (ver
+        // usuariosConhecidos).
+        telaConsulta._registrarUsuarios(doDia.map(function (item) {
+            return item.usuario;
+        }));
+        return doDia.filter(telaConsulta._passaNosFiltros);
     }
 
     // Único caminho que preenche a lista exibida.
@@ -356,6 +405,22 @@ Page {
         return (item.fechada === true) === (telaConsulta.filtroStatus === "fechadas");
     }
 
+    // ...e pelo seletor de usuário? "" = todos, inclusive as comandas sem
+    // usuário nenhum; um nome escolhido casa exato.
+    function _passaNoUsuario(item) {
+        if (telaConsulta.filtroUsuario === "")
+            return true;
+        return (item.usuario || "").trim() === telaConsulta.filtroUsuario;
+    }
+
+    // Os dois filtros que de fato ESCONDEM comanda nesta tela (a busca ao lado
+    // só reordena, ver aplicarFiltro). Num lugar só porque os três caminhos que
+    // montam lista — aplicarFiltro, a busca e carregarDia — têm que aplicar
+    // exatamente o mesmo conjunto.
+    function _passaNosFiltros(item) {
+        return telaConsulta._passaNoStatus(item) && telaConsulta._passaNoUsuario(item);
+    }
+
     // Monta, de uma vez só, a janela pesquisável e o índice sobre ela.
     //
     // É PREGUIÇOSO de propósito (chamado só na primeira pesquisa depois de
@@ -411,14 +476,14 @@ Page {
         var busca = telaConsulta.buscaAtual.trim();
 
         if (busca === "") {
-            var lista = telaConsulta._todasComandas.filter(telaConsulta._passaNoStatus);
+            var lista = telaConsulta._todasComandas.filter(telaConsulta._passaNosFiltros);
             telaConsulta._agruparPorDia(lista);
             return;
         }
 
         telaConsulta._prepararIndiceBusca();
 
-        var ordenadas = BuscaComandas.ordenar(telaConsulta._indiceBusca, telaConsulta._comandasBuscaveis, busca, telaConsulta._passaNoStatus);
+        var ordenadas = BuscaComandas.ordenar(telaConsulta._indiceBusca, telaConsulta._comandasBuscaveis, busca, telaConsulta._passaNosFiltros);
 
         // Busca mostra tudo achatado, sem agrupar por dia — encontrar a
         // comanda certa não deveria exigir abrir a caixinha do dia certo
@@ -455,6 +520,14 @@ Page {
         // pedidos guardados.
         telaConsulta._todasComandas = consultaController.listarComandasRecentes(telaConsulta.janelaCargaDias);
         telaConsulta._diasNaoCarregados = consultaController.listarDiasAnteriores(telaConsulta.janelaCargaDias);
+        // Zerado antes de registrar de novo: um "Atualizar" relê o disco, e um
+        // usuário que só existia numa comanda apagada não deve continuar sendo
+        // oferecido. Os dias antigos já abertos voltam a somar os deles quando
+        // forem reabertos (a caixinha se remonta junto com a lista).
+        telaConsulta.usuariosConhecidos = [];
+        telaConsulta._registrarUsuarios(telaConsulta._todasComandas.map(function (item) {
+            return item.usuario;
+        }));
         // O disco mudou, então o índice de busca envelheceu junto — e com ele
         // a janela pesquisável. Voltam a vazio em vez de serem remontados
         // aqui: a remontagem é o passo caro, e ela relê o disco (a janela da
