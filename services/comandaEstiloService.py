@@ -1000,6 +1000,35 @@ _TIPO_EVENTO_ESTILO = "estilo_impressao_alterado"
 _CHAVE_DOMINIO_ESTILO = "estilo_impressao"
 
 
+# Marca impressa no topo e no rodapé da comanda de exemplo (ver
+# ComandaEstiloController.imprimirComandaExemplo). Mesmo texto e mesmo negrito
+# direto de balcaoController._MARCA_COMANDA_TESTE: é o aviso que a pizzaria já
+# conhece como "este papel não é pedido de ninguém", e inventar um segundo
+# jeito de dizer isso só criaria dúvida na hora de tirar o cupom da impressora.
+MARCA_COMANDA_TESTE = f"{NEGRITO_LIGA}*** COMANDA DE TESTE ***{NEGRITO_DESLIGA}"
+
+
+def _montar_linha_exemplo(trechos):
+    """Uma linha da comanda de exemplo, a partir dos trechos que a tela mandou
+    (ver ComandaEstiloController.imprimirComandaExemplo).
+
+    Trecho sem campo de estilo (`c` vazio) entra cru: são os rótulos fixos
+    ("Cliente: ") e os recuos, que no cupom de verdade também ficam fora do
+    formatar_campo — é o que faz o negrito de um campo pegar só o valor dele, e
+    não a linha inteira."""
+    if not isinstance(trechos, list):
+        return ""
+
+    partes = []
+    for trecho in trechos:
+        if not isinstance(trecho, dict):
+            continue
+        conteudo = trecho.get("t") or ""
+        campo = trecho.get("c") or ""
+        partes.append(formatar_campo(conteudo, campo) if campo else conteudo)
+    return "".join(partes)
+
+
 def _payload_estilo():
     """`_config` já é um dict serializável em JSON (campos/espaçamentos/
     idEvento) — mandado como está, tanto no gossip quanto na
@@ -1147,6 +1176,25 @@ class ComandaEstiloController(QObject):
         estejam nesta versão têm os mesmos."""
         return [dict(modelo) for modelo in MODELOS_IMPRESSAO]
 
+    @pyqtSlot(str, result=bool)
+    @protegido(False)
+    def fonteDisponivelAqui(self, familia):
+        """Se ESTA máquina tem a família `familia` instalada.
+
+        Diferente de listarFontes, que oferece as fontes da máquina que
+        IMPRIME: aqui a pergunta é sobre quem está desenhando a tela. A prévia
+        da comanda usa isto pra decidir se pode escrever na fonte escolhida ou
+        se cai na monoespaçada de medida — o Qt substituiria calado uma fonte
+        que só existe na outra máquina, e a prévia mostraria uma tipografia que
+        não é nem a da tela nem a do papel, sem avisar ninguém.
+
+        Import adiado pelo mesmo motivo de services.rede (ver o cabeçalho do
+        módulo): comandaImagemService importa este módulo, e um import no topo
+        fecharia o ciclo."""
+        from services import comandaImagemService
+
+        return comandaImagemService.fonte_disponivel(familia)
+
     @pyqtSlot(result="QVariantMap")
     @protegido({})
     def origemFontes(self):
@@ -1233,6 +1281,61 @@ class ComandaEstiloController(QObject):
         _salvar()
         self.configuracaoAlterada.emit()
         _publicar_estilo_atual()
+
+    @pyqtSlot("QVariantMap", result=bool)
+    @protegido(False)
+    def imprimirComandaExemplo(self, renderizadores):
+        """Imprime a comanda de exemplo da tela de Configurações, pra o dono
+        conferir no PAPEL o que a prévia mostra na tela.
+
+        POR QUE O CONTEÚDO VEM DA TELA: os textos de exemplo (o "João da
+        Silva", a pizza calabresa, os blocos do recibo de diária) moram no QML,
+        junto da prévia que os desenha — são material de tela, e mantê-los
+        aqui em cópia faria o papel e a prévia divergirem na primeira vez que
+        alguém mexesse num dos dois. O que a tela manda são só os TEXTOS, já
+        separados por campo: `{chave: [[{t, c}, ...], ...]}` — uma lista de
+        linhas por campo, cada linha uma lista de trechos com o texto (`t`) e o
+        campo de estilo (`c`, vazio para o que não é estilizável, como o rótulo
+        "Cliente: ").
+
+        E POR QUE A MONTAGEM É AQUI: estilo, ordem, divisórias e espaçamento
+        saem do MESMO caminho de uma comanda de verdade (formatar_campo +
+        comandaTextoService.montar_linhas_por_ordem), não de uma imitação. É o
+        que faz este papel ser um teste do que vai acontecer com o próximo
+        pedido, e não de um cupom parecido.
+
+        Usa a configuração GRAVADA, que é a que vale na hora de imprimir de
+        verdade — quem chama grava as alterações pendentes antes (ver
+        EstiloImpressora.imprimirExemplo).
+
+        Devolve True quando o pedido de impressão foi despachado; o resultado
+        em si chega depois, assíncrono, pelo sinal rede.impressaoResultado que
+        main.qml já escuta pra qualquer impressão do app."""
+        from services import comandaTextoService as texto
+        from services.rede import rede
+
+        montados = {}
+        for chave, linhas in (renderizadores or {}).items():
+            if not isinstance(linhas, list):
+                continue
+            montados[chave] = [_montar_linha_exemplo(linha) for linha in linhas]
+
+        if not montados:
+            print("[comandaEstiloService] Comanda de exemplo sem nenhum campo — nada a imprimir.")
+            return False
+
+        linhas_arquivo = [MARCA_COMANDA_TESTE]
+        linhas_arquivo.extend(linhas_espacamento_secoes())
+        linhas_arquivo.extend(texto.montar_linhas_por_ordem(ordem_secoes(), montados))
+        linhas_arquivo.extend(linhas_espacamento_secoes())
+        linhas_arquivo.append(MARCA_COMANDA_TESTE)
+
+        conteudo = "\n".join(linhas_arquivo) + "\n"
+        # Não grava em pedidos/ nem propaga pela malha, pelo mesmo motivo da
+        # comanda de teste do Balcão: é papel de conferência, não um pedido —
+        # não pode sobrar rastro nem aparecer na Consulta ou no Fechamento.
+        rede.solicitar_impressao(conteudo.encode(texto.CODEPAGE_IMPRESSORA, errors="replace"))
+        return True
 
     @pyqtSlot()
     @protegido()

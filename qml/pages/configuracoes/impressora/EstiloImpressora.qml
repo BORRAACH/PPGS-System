@@ -65,6 +65,19 @@ Column {
         "local": false,
         "conhecida": false
     })
+    // A família escolhida existe NESTA máquina? A lista oferecida é a da
+    // máquina que imprime (ver listarFontes), que pode ser outra — e o Qt
+    // substitui calado uma fonte que não tem. Sem esta checagem a prévia
+    // mostraria uma tipografia que não é nem a da tela nem a do papel.
+    // Reconsultada a cada troca de fonte, e não por binding: é uma chamada
+    // ao Python, não um valor que muda sozinho.
+    property bool fonteExisteAqui: false
+
+    // A família que a prévia usa de fato. Cai na monoespaçada quando não há
+    // fonte escolhida (aí quem desenha é a impressora, com a fonte dela) ou
+    // quando esta máquina não tem a escolhida.
+    readonly property string fontePrevia: raiz.fonteImpressao !== "" && raiz.fonteExisteAqui ? raiz.fonteImpressao : "monospace"
+
     // Disposição usada pra DESENHAR a comanda (ver
     // comandaEstiloService.MODELOS_IMPRESSAO). Só tem efeito quando há fonte
     // escolhida: sem ela quem desenha é a impressora, que só sabe empilhar
@@ -254,6 +267,11 @@ Column {
     onEspacamentoCorteChanged: raiz.marcarPendente()
     onFonteImpressaoChanged: {
         raiz.marcarPendente();
+        // Mesma guarda de salvarNoBackend: ao fechar o app o QML pode
+        // sobreviver um instante ao controller, e aqui isso viraria um
+        // TypeError no console bem na hora de sair.
+        raiz.fonteExisteAqui = !!comandaEstiloController && raiz.fonteImpressao !== ""
+            && comandaEstiloController.fonteDisponivelAqui(raiz.fonteImpressao);
         // Trocar a fonte muda a ESCALA de todo campo da prévia de uma vez (de
         // multiplicador inteiro para pixels livres, ou o contrário), e não o
         // estilo de um campo em particular — é exatamente o caso que
@@ -355,6 +373,57 @@ Column {
             "modelo_impressao": raiz.modeloImpressao
         });
         raiz.alteracoesPendentes = false;
+    }
+
+    // A comanda de exemplo repartida por campo, no formato que
+    // ComandaEstiloController.imprimirComandaExemplo espera:
+    // { chave: [ [{t, c}, ...], ... ] }.
+    //
+    // Só os campos que ESTE tipo de comanda imprime — os apagados na prévia
+    // (um telefone numa comanda de Balcão) não sairiam no papel de verdade, e
+    // um teste que imprime o que a comanda real não imprime não testa nada.
+    // Os campos dos outros documentos já ficaram de fora antes, em
+    // reconstruirModeloOrdem: o modelo só tem os do documento atual.
+    //
+    // A ORDEM não é montada aqui: quem a resolve, junto com as divisórias e o
+    // espaçamento, é comandaTextoService.montar_linhas_por_ordem no Python —
+    // o mesmo código que monta uma comanda de verdade. Daqui vai só o texto.
+    function renderizadoresExemplo() {
+        var mapa = {};
+        for (var i = 0; i < modeloOrdemSecoes.count; i++) {
+            var chave = modeloOrdemSecoes.get(i).chave;
+            if (!raiz.campoNoTipo(chave, raiz.tipoComanda))
+                continue;
+
+            // Sempre a tabela em texto, mesmo com o modelo em colunas
+            // escolhido: ver linhasItensClassicas.
+            var linhas = chave === "itens" ? raiz.linhasItensClassicas() : raiz.linhasDoCampo(chave);
+            if (!linhas.length)
+                continue;
+
+            var linhasDoPapel = [];
+            for (var j = 0; j < linhas.length; j++)
+                linhasDoPapel.push(linhas[j].segmentos);
+            mapa[chave] = linhasDoPapel;
+        }
+        return mapa;
+    }
+
+    // Manda a comanda de exemplo pra impressora da malha.
+    //
+    // GRAVA ANTES, quando há edição pendente: quem imprime é o Python, com a
+    // configuração que está em disco — sem gravar, o papel sairia com o estilo
+    // ANTERIOR ao que está na tela, que é o contrário do que um teste serve
+    // pra mostrar. É a mesma gravação do botão "Aplicar alterações", só
+    // antecipada.
+    function imprimirExemplo() {
+        if (!comandaEstiloController)
+            return;
+
+        if (raiz.alteracoesPendentes)
+            raiz.salvarNoBackend();
+
+        comandaEstiloController.imprimirComandaExemplo(raiz.renderizadoresExemplo());
     }
 
     // Só o catálogo de fontes, sem mexer no resto da configuração — usado ao
@@ -969,33 +1038,40 @@ Column {
         ];
     }
 
-    function linhasDoCampo(chave) {
-        if (chave === "itens") {
-            if (raiz.tabelaEmColunas)
-                return raiz.linhasItensEmColunas();
+    // A tabela de itens como ela é MONTADA EM TEXTO, que é o que vai parar no
+    // arquivo da comanda em qualquer modelo (ver comandaTextoService.
+    // formatar_tabela). O modelo em colunas não muda isto: ele redesenha esta
+    // mesma tabela na hora de imprimir (comandaImagemService), lendo os itens
+    // de volta daqui. Por isso a impressão de teste manda SEMPRE estas linhas,
+    // e nunca as de linhasItensEmColunas — que são a prévia de um DESENHO, e
+    // como texto no papel não seriam relidas como tabela nenhuma.
+    function linhasItensClassicas() {
+        return [
+            // O tamanho sai colado no nome do item, na mesma linha (ver
+            // comandaTextoService.formatar_coluna_pedido), entao ele e um
+            // SEGMENTO e nao uma sub-linha propria. "clique" e o que o
+            // torna alcancavel: sem ele o clique cairia na sub-linha
+            // inteira e selecionaria "pedido", e nao haveria como abrir o
+            // estilo do tamanho por lugar nenhum.
+            //
+            // BROTO, e nao GRANDE: o grande nao sai escrito no papel (ver
+            // comandaTextoService.TAMANHO_OMITIDO), e uma previa com
+            // "(GRANDE)" mostraria um campo que a comanda de verdade nunca
+            // imprime.
+            { "campoEstilo": "pedido", "segmentos": [
+                { "t": "- PIZZA CALABRESA ", "c": "pedido" },
+                { "t": "(BROTO)", "c": "pedido_tamanho", "clique": "pedido_tamanho" },
+                { "t": " | R$ 45,00", "c": "pedido" }
+            ] },
+            { "campoEstilo": "adicional_item", "segmentos": [{ "t": "  + BACON (R$ 5,00)", "c": "adicional_item" }] },
+            { "campoEstilo": "borda_item", "segmentos": [{ "t": "  * BORDA CATUPIRY (R$ 8,00)", "c": "borda_item" }] },
+            { "campoEstilo": "observacao_item", "segmentos": [{ "t": "  SEM CEBOLA", "c": "observacao_item" }] }
+        ];
+    }
 
-            return [
-                // O tamanho sai colado no nome do item, na mesma linha (ver
-                // comandaTextoService.formatar_coluna_pedido), entao ele e um
-                // SEGMENTO e nao uma sub-linha propria. "clique" e o que o
-                // torna alcancavel: sem ele o clique cairia na sub-linha
-                // inteira e selecionaria "pedido", e nao haveria como abrir o
-                // estilo do tamanho por lugar nenhum.
-                //
-                // BROTO, e nao GRANDE: o grande nao sai escrito no papel (ver
-                // comandaTextoService.TAMANHO_OMITIDO), e uma previa com
-                // "(GRANDE)" mostraria um campo que a comanda de verdade nunca
-                // imprime.
-                { "campoEstilo": "pedido", "segmentos": [
-                    { "t": "- PIZZA CALABRESA ", "c": "pedido" },
-                    { "t": "(BROTO)", "c": "pedido_tamanho", "clique": "pedido_tamanho" },
-                    { "t": " | R$ 45,00", "c": "pedido" }
-                ] },
-                { "campoEstilo": "adicional_item", "segmentos": [{ "t": "  + BACON (R$ 5,00)", "c": "adicional_item" }] },
-                { "campoEstilo": "borda_item", "segmentos": [{ "t": "  * BORDA CATUPIRY (R$ 8,00)", "c": "borda_item" }] },
-                { "campoEstilo": "observacao_item", "segmentos": [{ "t": "  SEM CEBOLA", "c": "observacao_item" }] }
-            ];
-        }
+    function linhasDoCampo(chave) {
+        if (chave === "itens")
+            return raiz.tabelaEmColunas ? raiz.linhasItensEmColunas() : raiz.linhasItensClassicas();
 
         if (chave === "divisao_conta") {
             // salaoController monta cada linha de divisão com o nome no
@@ -1164,7 +1240,12 @@ Column {
     TextMetrics {
         id: metricaPapel
 
-        font.family: "monospace"
+        // A MESMA família da prévia: é esta medida que define a largura do
+        // papel na tela (40 colunas) e a altura de uma linha em branco. Se ela
+        // continuasse na monoespaçada, o cartão do papel e as linhas de traço
+        // ficariam de larguras diferentes assim que a comanda passasse a ser
+        // escrita noutra fonte.
+        font.family: raiz.fontePrevia
         font.pixelSize: raiz.tamanhoBasePapel
         text: raiz.repetir("0")
     }
@@ -1481,6 +1562,7 @@ Column {
                                         linhasEmBranco: raiz.espacamentoSecoes
                                         alturaLinha: metricaPapel.height
                                         tamanhoFonte: raiz.tamanhoBasePapel
+                                        familia: raiz.fontePrevia
                                         traco: raiz.repetir("-")
                                         marcador: raiz.repetir("=")
                                     }
@@ -1601,7 +1683,7 @@ Column {
 
                                                             visible: segmento.modelData.c === ""
                                                             text: segmento.modelData.t
-                                                            font.family: "monospace"
+                                                            font.family: raiz.fontePrevia
                                                             font.pixelSize: raiz.tamanhoBasePapel
                                                             color: Estilo.printer.ink
                                                         }
@@ -1614,6 +1696,7 @@ Column {
                                                             campo: segmento.modelData.c
                                                             texto: segmento.modelData.t
                                                             tamanhoBase: raiz.tamanhoBasePapel
+                                                            familia: raiz.fontePrevia
                                                         }
 
                                                         // Só existe no segmento que
@@ -2315,11 +2398,26 @@ Column {
                             Text {
                                 width: 400
                                 wrapMode: Text.WordWrap
-                                text: raiz.fonteImpressao === "" ? "A impressora desenha as letras com a fonte que ela tem gravada. É o formato de sempre, e o mais rápido." : "A comanda é desenhada como imagem antes de ser impressa, o que deixa a impressão mais lenta. A prévia acima continua na fonte de medida: ela mostra o alinhamento das colunas, que é igual em qualquer fonte."
+                                text: raiz.fonteImpressao === "" ? "A impressora desenha as letras com a fonte que ela tem gravada. É o formato de sempre, e o mais rápido." : "A comanda é desenhada como imagem antes de ser impressa, o que deixa a impressão mais lenta."
                                 font.pixelSize: Estilo.global.fontSize.sm
                                 color: Estilo.global.textSecondary
                             }
 
+                            // O que esperar da prévia agora que ela é escrita
+                            // na fonte escolhida. São duas ressalvas
+                            // diferentes, e nenhuma delas se descobre
+                            // olhando: uma fonte que só existe na outra
+                            // máquina o Qt substituiria calado, e no modelo
+                            // clássico o papel alinha caractere a caractere,
+                            // coisa que o texto na tela não faz.
+                            Text {
+                                width: 400
+                                wrapMode: Text.WordWrap
+                                visible: raiz.fonteImpressao !== ""
+                                text: !raiz.fonteExisteAqui ? "A comanda de exemplo continua na fonte de medida: esta máquina não tem a fonte escolhida instalada, e escrever numa substituta mostraria uma tipografia que não é a do papel." : (raiz.modeloImpressao === "rascunho" ? "A comanda de exemplo está escrita nesta fonte." : "A comanda de exemplo está escrita nesta fonte. No papel, o modelo clássico ainda encaixa cada caractere numa coluna de largura fixa, então o alinhamento sai mais certo do que aparece aqui.")
+                                font.pixelSize: Estilo.global.fontSize.sm
+                                color: Estilo.global.textSecondary
+                            }
                         }
 
                         // Título próprio pelo mesmo motivo do bloco FONTE
@@ -2446,6 +2544,80 @@ Column {
                             }
                         }
 
+                        // Título próprio: a prévia responde "como vai ficar",
+                        // e daqui pra baixo é "como ficou de verdade" — o
+                        // papel na mão, que é o único juiz de fonte e
+                        // disposição numa impressora térmica.
+                        Text {
+                            text: "TESTE"
+                            font.pixelSize: Estilo.global.fontSize.xl
+                            font.bold: true
+                            color: raiz.corDestaque
+                        }
+
+                        Column {
+                            spacing: Estilo.global.spacing.md
+
+                            Text {
+                                width: 400
+                                wrapMode: Text.WordWrap
+                                text: "Imprime a comanda de exemplo acima, com a fonte, o modelo e os estilos escolhidos. Sai marcada como COMANDA DE TESTE, não é gravada e não aparece na Consulta."
+                                font.pixelSize: Estilo.global.fontSize.md
+                                color: Estilo.global.text
+                            }
+
+                            Button {
+                                id: btnImprimirExemplo
+
+                                // Nomeado pelo mesmo motivo dos combos acima:
+                                // deixa o botão alcançável de fora para
+                                // inspeção e teste.
+                                objectName: "botaoImprimirExemplo"
+                                padding: 8
+                                focusPolicy: Qt.NoFocus
+                                // Sem máquina eleita não há pra onde mandar, e
+                                // o clique só renderia a notificação de erro
+                                // que a malha devolve alguns instantes depois.
+                                enabled: raiz.origemFontes.conhecida
+                                opacity: enabled ? 1 : 0.5
+                                onClicked: raiz.imprimirExemplo()
+
+                                contentItem: Row {
+                                    spacing: Estilo.global.spacing.xs
+                                    Icone {
+                                        nome: "fa6s.print"
+                                        cor: Estilo.global.textOnAccent
+                                        tamanho: Estilo.global.fontSize.lg
+                                        anchors.verticalCenter: parent.verticalCenter
+                                    }
+                                    Text {
+                                        text: "Imprimir comanda de exemplo"
+                                        font.family: Estilo.global.fontFamily.title
+                                        color: Estilo.global.textOnAccent
+                                        anchors.verticalCenter: parent.verticalCenter
+                                    }
+                                }
+
+                                background: Rectangle {
+                                    radius: Estilo.global.radius.pill
+                                    color: btnImprimirExemplo.down ? Estilo.action.confirm.pressed : (btnImprimirExemplo.hovered ? Estilo.action.confirm.hover : Estilo.action.confirm.base)
+                                }
+                            }
+
+                            // Onde o papel vai sair, e o que o clique faz
+                            // antes de imprimir. As duas coisas surpreendem se
+                            // não estiverem escritas: a impressora costuma
+                            // estar em OUTRA máquina, e o teste grava as
+                            // alterações pendentes pra que o papel mostre o
+                            // que está na tela (ver imprimirExemplo).
+                            Text {
+                                width: 400
+                                wrapMode: Text.WordWrap
+                                text: !raiz.origemFontes.conhecida ? "Nenhuma máquina com impressora foi encontrada agora — não há pra onde mandar o teste." : (raiz.origemFontes.local ? "Sai na impressora desta máquina." : "Sai na impressora de " + raiz.origemFontes.maquina + ", que é a máquina que está imprimindo.") + (raiz.alteracoesPendentes ? " As alterações pendentes são gravadas antes, para o papel sair com o que está na tela." : "")
+                                font.pixelSize: Estilo.global.fontSize.sm
+                                color: Estilo.global.textSecondary
+                            }
+                        }
                     }
                 }
             }

@@ -21,6 +21,10 @@ Column {
     property int linhasEmBranco: 0
     property real alturaLinha: 0
     property int tamanhoFonte: 12
+    // A família em que o papel inteiro está sendo escrito (ver
+    // EstiloImpressora.fontePrevia). A divisória precisa da mesma: são 40
+    // caracteres, e a largura deles tem que bater com a das linhas de texto.
+    property string familia: "monospace"
     // Recebidas prontas em vez de montadas aqui: quem chama já tem a
     // largura da comanda em caracteres (colunasPapel) e repete o caractere
     // uma vez só, em vez de uma vez por linha da comanda.
@@ -45,7 +49,7 @@ Column {
 
         delegate: Text {
             text: raizSeparador.separador === "=" ? raizSeparador.marcador : raizSeparador.traco
-            font.family: "monospace"
+            font.family: raizSeparador.familia
             font.pixelSize: raizSeparador.tamanhoFonte
             color: Estilo.printer.ink
         }

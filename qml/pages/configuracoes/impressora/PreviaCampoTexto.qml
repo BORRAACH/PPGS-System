@@ -19,6 +19,9 @@ Rectangle {
     property var controlador
     property string campo: ""
     property string texto: ""
+    // Família em que a comanda de exemplo é escrita: a escolhida pra desenhar
+    // a comanda, quando esta máquina a tem (ver EstiloImpressora.fontePrevia).
+    property string familia: "monospace"
     property int tamanhoBase: 12
 
     // Estado do estilo deste campo, relido quando o controlador avisa que ESTE
@@ -85,7 +88,7 @@ Rectangle {
 
         anchors.centerIn: parent
         text: raizCampo.texto
-        font.family: "monospace"
+        font.family: raizCampo.familia
         font.bold: raizCampo._negrito
         font.underline: raizCampo._sublinhado
         font.pixelSize: Math.max(1, Math.round(raizCampo.tamanhoBase * raizCampo._escala))
