@@ -323,22 +323,11 @@ Page {
 
         property int indiceLinha: -1
 
-        function abrirPara(indice, modoPedido) {
-            var linha = modeloPedidos.get(indice);
-            if (!linha)
-                return;
-
-            var analise = cardapioController.analisarItemComanda(linha.pedido);
+        // A análise vem pronta do delegate, que a calculou depois de a linha
+        // já estar na tela — ver components/LinhaPedido.qml.
+        function abrirPara(indice, modoPedido, analise) {
             indiceLinha = indice;
-            nomeItem = linha.pedido;
-            modo = modoPedido;
-            chaveCategoria = analise.chaveCategoria;
-            sabores = analise.sabores;
-            categoriaBordas = analise.categoriaBordas;
-            categoriaAdicionais = analise.categoriaAdicionais;
-            bordaAtual = Extras.bordaDaLinha(modeloPedidos, indice);
-            adicionaisAtuais = Extras.adicionaisDaLinha(modeloPedidos, indice);
-            open();
+            abrirDaLinha(modeloPedidos, indice, modoPedido, analise);
         }
 
         onAplicado: function (borda, adicionais, delta) {
@@ -995,8 +984,8 @@ Page {
                                     telaBalcao.indicePedidoAtual = indice;
                                     popupSelecaoPedido.open();
                                 }
-                                onEditarExtras: function(indice, modo) {
-                                    popupExtrasItem.abrirPara(indice, modo);
+                                onEditarExtras: function(indice, modo, analise) {
+                                    popupExtrasItem.abrirPara(indice, modo, analise);
                                 }
                             }
 

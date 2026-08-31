@@ -42,17 +42,40 @@ Row {
     signal selecionarPedido(int indice)
 
     // Pedida a edição de borda/adicional deste item, pelo menu de botão
-    // direito. `modo` é "bordas" ou "adicionais". Quem instancia abre o popup
+    // direito. `modo` é "bordas" ou "adicionais"; `analise` é o que já se sabe
+    // do item (ver extrasDoItem), passada adiante para o popup não refazer a
+    // mesma consulta. Quem instancia abre o popup
     // (components/PopupExtrasItem.qml), pelo mesmo motivo de selecionarPedido:
     // o popup vive na página, fora do alcance deste delegate.
-    signal editarExtras(int indice, string modo)
+    signal editarExtras(int indice, string modo, var analise)
 
     // O que o item desta linha aceita receber, descoberto a partir do nome
-    // montado (ver services/buscaCardapio.analisar_item_comanda). Relido a
-    // cada abertura do menu, e não por binding em model.pedido: a consulta
-    // passa pelo Python e olha o cardápio em disco, o que não é coisa para
-    // rodar a cada tecla digitada numa das linhas.
+    // montado (ver services/buscaCardapio.analisar_item_comanda).
+    //
+    // Calculado DEPOIS que a linha já está na tela, e não no clique do botão
+    // direito: a consulta atravessa o QML/Python e é o único trabalho entre o
+    // clique e o menu aparecer. Feita adiantada, o clique só lê um valor que já
+    // está aqui, e o menu abre no mesmo quadro.
     property var extrasDoItem: null
+
+    // O nome do item numa property própria só para ter um sinal em que
+    // pendurar o recálculo: `model.pedido` muda quando se escolhe outro pedido
+    // nesta linha, e a análise de antes deixa de valer.
+    readonly property string pedidoDaLinha: model.pedido
+    onPedidoDaLinhaChanged: {
+        linhaDelegate.extrasDoItem = null;
+        cargaAnalise.agendar();
+    }
+
+    CargaDiferida {
+        id: cargaAnalise
+
+        tarefa: function () {
+            linhaDelegate.extrasDoItem = linhaDelegate.pedidoDaLinha ? cardapioController.analisarItemComanda(linhaDelegate.pedidoDaLinha) : null;
+        }
+    }
+
+    Component.onCompleted: cargaAnalise.agendar()
 
     // O índice desta linha, alcançável de dentro dos itens aninhados. `index` é
     // propriedade do contexto do delegate e some de vista dentro do Menu, que
@@ -64,16 +87,19 @@ Row {
     function abrirMenuExtras() {
         // Linha ainda em branco não tem o que receber, e um menu vazio
         // aparecendo no clique parece defeito.
-        if (!model.pedido) {
-            linhaDelegate.extrasDoItem = null;
+        if (!linhaDelegate.pedidoDaLinha)
             return;
-        }
 
-        linhaDelegate.extrasDoItem = cardapioController.analisarItemComanda(model.pedido);
-        if (!menuExtras.temAlgumaOpcao) {
-            linhaDelegate.extrasDoItem = null;
+        // O caminho normal é a análise já estar pronta (ver extrasDoItem). Ela
+        // só não está no intervalo entre escolher o pedido e o quadro seguinte,
+        // e aí vale mais pagar a consulta agora do que abrir um menu sem
+        // opção nenhuma — é rápida; o que não se quer é pagá-la SEMPRE.
+        if (!linhaDelegate.extrasDoItem)
+            cargaAnalise.executarAgora();
+
+        if (!menuExtras.temAlgumaOpcao)
             return;
-        }
+
         menuExtras.popup();
     }
 
@@ -237,14 +263,14 @@ Row {
                 // nem vai passar a ter, e a opção cinza só faria o atendente
                 // tentar de novo achando que errou o clique.
                 visible: menuExtras.temBordas
-                onTriggered: linhaDelegate.editarExtras(linhaDelegate.indiceLinha, "bordas")
+                onTriggered: linhaDelegate.editarExtras(linhaDelegate.indiceLinha, "bordas", linhaDelegate.extrasDoItem)
             }
 
             AcaoDoMenu {
                 text: "Adicionais"
                 icone: "fa6s.layer-group"
                 visible: menuExtras.temAdicionais
-                onTriggered: linhaDelegate.editarExtras(linhaDelegate.indiceLinha, "adicionais")
+                onTriggered: linhaDelegate.editarExtras(linhaDelegate.indiceLinha, "adicionais", linhaDelegate.extrasDoItem)
             }
         }
 

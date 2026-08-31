@@ -31,6 +31,27 @@ import "MontagemExtras.js" as Extras
 Popup {
     id: popupExtras
 
+    // Preenche a partir da linha da comanda e abre. `analise` vem pronta de
+    // quem chamou (ver components/LinhaPedido.qml, que a calcula adiantada):
+    // refazê-la aqui seria a segunda consulta idêntica no caminho de um clique
+    // só, e das duas nenhuma precisa estar ali.
+    function abrirDaLinha(modelo, indice, modoPedido, analise) {
+        var linha = modelo.get(indice);
+        if (!linha)
+            return;
+
+        var dados = analise || cardapioController.analisarItemComanda(linha.pedido);
+        nomeItem = linha.pedido;
+        modo = modoPedido;
+        chaveCategoria = dados.chaveCategoria;
+        sabores = dados.sabores;
+        categoriaBordas = dados.categoriaBordas;
+        categoriaAdicionais = dados.categoriaAdicionais;
+        bordaAtual = Extras.bordaDaLinha(modelo, indice);
+        adicionaisAtuais = Extras.adicionaisDaLinha(modelo, indice);
+        open();
+    }
+
     // --- Entrada: o que a linha da comanda tem hoje ---
     property string nomeItem: ""
     // "bordas" ou "adicionais" — qual das duas o menu pediu.
@@ -73,11 +94,25 @@ Popup {
     // tela — num popup modal isso deixaria o atendente sem saída além do Esc.
     height: Math.min(implicitHeight, Responsivo.alturaPopup(implicitHeight))
 
+    // Nada de consultar o cardápio aqui: o que roda em onOpened acontece antes
+    // de o popup aparecer, e é isso que fazia o clique no menu parecer travado
+    // — a lista de opções era montada, item a item, entre o clique e o primeiro
+    // pixel. Agora o popup aparece com o que já tem (o que o item recebeu até
+    // agora, que é o que se vem ver) e a lista de opções chega no quadro
+    // seguinte, invisível de todo jeito enquanto a etapa é "lista".
     onOpened: {
         etapa = "lista";
         itemEscolhido = null;
         quantidade = 1;
-        carregarOpcoes();
+        cargaOpcoes.agendar();
+    }
+
+    CargaDiferida {
+        id: cargaOpcoes
+
+        tarefa: function () {
+            popupExtras.carregarOpcoes();
+        }
     }
 
     Overlay.modal: Rectangle {
@@ -109,6 +144,12 @@ Popup {
                 "valor": Extras.precoDe(itens[i])
             });
         }
+    }
+
+    // Quantas opções do cardápio já foram carregadas — existe para o teste
+    // conseguir observar que a carga acontece DEPOIS da abertura, e não antes.
+    function contarOpcoes() {
+        return modeloOpcoes.count;
     }
 
     function titulo() {
@@ -463,8 +504,11 @@ Popup {
                     visible: popupExtras.etapa === "lista"
                     text: popupExtras.modo === "bordas" ? (popupExtras.bordaAtual ? "Trocar a borda" : "Escolher borda") : "Acrescentar adicional"
                     // Cardápio sem nenhuma opção da categoria: o botão fica
-                    // apagado em vez de abrir uma etapa vazia.
-                    enabled: modeloOpcoes.count > 0
+                    // apagado em vez de abrir uma etapa vazia. Enquanto a lista
+                    // ainda não chegou ele segue habilitado — ela chega no
+                    // quadro seguinte ao da abertura, e um botão que nasce
+                    // cinza e acende sozinho parece defeito.
+                    enabled: modeloOpcoes.count > 0 || cargaOpcoes.pendente
                     onClicked: popupExtras.etapa = "escolher"
 
                     contentItem: Text {
