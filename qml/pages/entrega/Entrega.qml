@@ -3,6 +3,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import "../pedidos"
 import "../../components"
+import "../../components/MontagemExtras.js" as Extras
 import "../../components/Texto.js" as Texto
 import "../../components/DestinoPedido.js" as Destino
 import estilo 1.0
@@ -309,6 +310,42 @@ Page {
                 modeloPedidos.remove(linhaParaRemover);
             else
                 modeloPedidos.remove(modeloPedidos.count - 1);
+        }
+    }
+
+
+    // --- POPUP DE BORDAS/ADICIONAIS DE UM ITEM JÁ NA COMANDA ---
+    // Aberto pelo menu de botão direito da linha (ver
+    // components/LinhaPedido.qml). Fica aqui, e não dentro do delegate, pelo
+    // mesmo motivo do popup de seleção de pedido: um popup por linha seria um
+    // popup a mais a cada item da comanda, e todos modais sobre a mesma tela.
+    PopupExtrasItem {
+        id: popupExtrasItem
+
+        objectName: "popupExtrasItem"
+
+        property int indiceLinha: -1
+
+        function abrirPara(indice, modoPedido) {
+            var linha = modeloPedidos.get(indice);
+            if (!linha)
+                return;
+
+            var analise = cardapioController.analisarItemComanda(linha.pedido);
+            indiceLinha = indice;
+            nomeItem = linha.pedido;
+            modo = modoPedido;
+            chaveCategoria = analise.chaveCategoria;
+            sabores = analise.sabores;
+            categoriaBordas = analise.categoriaBordas;
+            categoriaAdicionais = analise.categoriaAdicionais;
+            bordaAtual = Extras.bordaDaLinha(modeloPedidos, indice);
+            adicionaisAtuais = Extras.adicionaisDaLinha(modeloPedidos, indice);
+            open();
+        }
+
+        onAplicado: function (borda, adicionais, delta) {
+            Extras.gravarNaLinha(modeloPedidos, indiceLinha, borda, adicionais, delta);
         }
     }
 
@@ -1268,6 +1305,9 @@ Page {
                             onSelecionarPedido: function(indice) {
                                 telaEntrega.indicePedidoAtual = indice;
                                 popupSelecaoPedido.open();
+                            }
+                            onEditarExtras: function(indice, modo) {
+                                popupExtrasItem.abrirPara(indice, modo);
                             }
                         }
 

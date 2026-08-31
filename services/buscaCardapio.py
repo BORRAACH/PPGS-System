@@ -296,6 +296,100 @@ def invalidar():
     _assinatura_em_memoria = None
 
 
+# Nome do item base de um copo de açaí no cupom: montarAcai (ver
+# qml/pages/pedidos/MontagemItem.js) escreve "Açaí (500 ML)", enquanto no
+# cardápio os copos se chamam pelo tamanho ("500 ML"). É a única categoria em
+# que o nome impresso não é o nome de um item do cardápio, e por isso ela
+# precisa ser reconhecida pelo nome antes de qualquer consulta ao índice.
+_NOME_BASE_ACAI = "acai"
+
+# O que cada categoria de item aceita receber depois de já estar na comanda, e
+# de qual categoria do cardápio sai a lista. Vazio = não recebe.
+#
+# Espelha RoteiroLancamento.sequenciaDe do lado do QML, e pelo mesmo motivo que
+# lá: é regra de cardápio, não de tela. A diferença é o ponto de vista — lá é
+# "que perguntas fazer para montar este item", aqui é "o que ainda dá pra
+# atribuir a este item depois de montado".
+_EXTRAS_POR_CATEGORIA = {
+    "pizzas": {"bordas": "pizzaBordas", "adicionais": "pizzaAdicionais"},
+    "lanches": {"bordas": "", "adicionais": "lanchesAdicionais"},
+    "acaiTamanhos": {"bordas": "", "adicionais": "acaiAdicionais"},
+    "bebidas": {"bordas": "", "adicionais": ""},
+    "outros": {"bordas": "", "adicionais": ""},
+}
+
+
+def entrada_por_nome(nome):
+    """A entrada do índice cujo nome é exatamente `nome` (ignorando caixa e
+    acento), ou None. Diferente de buscar(), que casa por prefixo e devolve
+    vários: aqui quem pergunta já tem o nome inteiro, vindo de um item que está
+    na comanda, e um casamento parcial daria a categoria de outro item."""
+    alvo = normalizar(nome)
+    if not alvo:
+        return None
+
+    for entrada in indice():
+        if entrada["_nomeNormalizado"] == alvo:
+            return entrada
+    return None
+
+
+def analisar_item_comanda(nome_impresso):
+    """O que se sabe sobre um item que já está numa linha da comanda, a partir
+    só do nome montado que aparece nela.
+
+    Devolve {"chaveCategoria", "sabores", "tamanho", "categoriaBordas",
+    "categoriaAdicionais"} — tudo vazio quando o nome não corresponde a nada do
+    cardápio (linha em branco, item digitado à mão, item removido do cardápio
+    depois de vendido).
+
+    POR QUE PELO NOME, e não por uma categoria guardada na linha: a comanda
+    reaberta em Consulta > Editar vem do arquivo .txt, onde só o nome existe.
+    Uma categoria guardada no modelo estaria certa no pedido recém-montado e
+    ausente justamente na comanda antiga, que é quando mais se precisa
+    corrigir um adicional.
+
+    O nome é desmontado pelas mesmas regras que o montaram (ver
+    comandaTextoService.dividir_sabores, MontagemItem.js do outro lado): " / "
+    separa os sabores de uma meio a meio e o "(...)" final é o tamanho."""
+    from services.comandaTextoService import dividir_sabores
+
+    sabores, tamanho = dividir_sabores(str(nome_impresso or "").strip())
+    vazio = {
+        "chaveCategoria": "",
+        "sabores": [],
+        "tamanho": "",
+        "categoriaBordas": "",
+        "categoriaAdicionais": "",
+    }
+    if not sabores:
+        return vazio
+
+    # Dois ou mais sabores só acontece em pizza: é a única categoria que o
+    # cardápio deixa dividir, e o " / " do nome foi escrito por montarPizza.
+    if len(sabores) > 1:
+        chave = "pizzas"
+    elif normalizar(sabores[0]) == _NOME_BASE_ACAI:
+        chave = "acaiTamanhos"
+    else:
+        entrada = entrada_por_nome(sabores[0])
+        if entrada is None:
+            return vazio
+        chave = entrada["chaveCategoria"]
+
+    extras = _EXTRAS_POR_CATEGORIA.get(chave)
+    if extras is None:
+        return vazio
+
+    return {
+        "chaveCategoria": chave,
+        "sabores": sabores,
+        "tamanho": tamanho or "",
+        "categoriaBordas": extras["bordas"],
+        "categoriaAdicionais": extras["adicionais"],
+    }
+
+
 # ---------- Busca ----------
 
 

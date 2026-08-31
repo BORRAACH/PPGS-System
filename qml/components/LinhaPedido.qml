@@ -41,6 +41,42 @@ Row {
     // popupSelecaoPedido), fora do alcance deste componente.
     signal selecionarPedido(int indice)
 
+    // Pedida a edição de borda/adicional deste item, pelo menu de botão
+    // direito. `modo` é "bordas" ou "adicionais". Quem instancia abre o popup
+    // (components/PopupExtrasItem.qml), pelo mesmo motivo de selecionarPedido:
+    // o popup vive na página, fora do alcance deste delegate.
+    signal editarExtras(int indice, string modo)
+
+    // O que o item desta linha aceita receber, descoberto a partir do nome
+    // montado (ver services/buscaCardapio.analisar_item_comanda). Relido a
+    // cada abertura do menu, e não por binding em model.pedido: a consulta
+    // passa pelo Python e olha o cardápio em disco, o que não é coisa para
+    // rodar a cada tecla digitada numa das linhas.
+    property var extrasDoItem: null
+
+    // O índice desta linha, alcançável de dentro dos itens aninhados. `index` é
+    // propriedade do contexto do delegate e some de vista dentro do Menu, que
+    // o Qt Quick instancia num contexto próprio — o mesmo tipo de armadilha
+    // que o comentário do botão "+" descreve para a propriedade anexada
+    // ListView. Ler daqui é o que garante que o menu age sobre a linha certa.
+    readonly property int indiceLinha: index
+
+    function abrirMenuExtras() {
+        // Linha ainda em branco não tem o que receber, e um menu vazio
+        // aparecendo no clique parece defeito.
+        if (!model.pedido) {
+            linhaDelegate.extrasDoItem = null;
+            return;
+        }
+
+        linhaDelegate.extrasDoItem = cardapioController.analisarItemComanda(model.pedido);
+        if (!menuExtras.temAlgumaOpcao) {
+            linhaDelegate.extrasDoItem = null;
+            return;
+        }
+        menuExtras.popup();
+    }
+
     // Vizinhos dinâmicos: cada linha é uma instância separada deste
     // delegate, então não dá pra referenciar "a linha de baixo" por id —
     // o número de linhas muda em tempo de execução, daí o lookup por
@@ -110,7 +146,106 @@ Row {
             anchors.fill: parent
             cursorShape: Qt.PointingHandCursor
             hoverEnabled: true
-            onClicked: linhaDelegate.selecionarPedido(index)
+            acceptedButtons: Qt.LeftButton | Qt.RightButton
+            onClicked: function (mouse) {
+                if (mouse.button === Qt.RightButton)
+                    linhaDelegate.abrirMenuExtras();
+                else
+                    linhaDelegate.selecionarPedido(index);
+            }
+        }
+
+        // Menu de botão direito: borda e adicional de um item que já está na
+        // comanda. Até ele existir, os dois só podiam ser escolhidos no
+        // momento de montar o item, e lembrar depois obrigava a refazer a
+        // linha inteira pela seleção de pedido.
+        Menu {
+            id: menuExtras
+
+            readonly property var extras: linhaDelegate.extrasDoItem
+            readonly property bool temBordas: !!extras && extras.categoriaBordas !== ""
+            readonly property bool temAdicionais: !!extras && extras.categoriaAdicionais !== ""
+            readonly property bool temAlgumaOpcao: temBordas || temAdicionais
+
+            // Mesma estilização do menu de contexto da Consulta (ver
+            // pages/consulta/ItemComandaDelegate.qml) e, por tabela, da lista
+            // do seletor de forma de pagamento, que veio de lá: ícone à
+            // esquerda, fonte de título, realce com raio e fundo do app com
+            // borda própria. O MenuItem padrão do Qt Quick Controls sai de
+            // canto reto, fonte do sistema e com as cores da palette herdada —
+            // a mesma herança do tema do sistema que já deixou campos brancos
+            // no Windows.
+            component AcaoDoMenu: MenuItem {
+                id: acao
+
+                property string icone: ""
+
+                // Um item escondido não pode ocupar altura: sem isto, o menu de
+                // um lanche abriria com um buraco onde estaria "Bordas".
+                height: visible ? implicitHeight : 0
+                implicitHeight: 40
+                implicitWidth: Math.max(180, conteudoAcao.implicitWidth + Estilo.global.padding.lg * 2)
+
+                contentItem: Row {
+                    id: conteudoAcao
+
+                    anchors.verticalCenter: parent.verticalCenter
+                    anchors.left: parent.left
+                    anchors.leftMargin: Estilo.global.padding.lg
+                    spacing: Estilo.global.spacing.sm
+
+                    Icone {
+                        nome: acao.icone
+                        cor: Estilo.global.text
+                        tamanho: Estilo.global.fontSize.lg
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
+
+                    Text {
+                        text: acao.text
+                        font.pixelSize: Estilo.global.fontSize.md
+                        font.family: Estilo.global.fontFamily.title
+                        color: Estilo.global.text
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
+                }
+
+                background: Rectangle {
+                    anchors.fill: parent
+                    anchors.margins: Estilo.global.spacing.xs
+                    radius: Estilo.global.radius.md
+                    color: acao.down
+                        ? Estilo.global.surfacePressed
+                        : (acao.hovered ? Estilo.global.surfaceHover : "transparent")
+                }
+            }
+
+            // Mesmo raio dos painéis, e não o dos popups: um menu é menor e o
+            // raio de popup o deixaria com cara de balão.
+            background: Rectangle {
+                implicitWidth: 180
+                radius: Estilo.global.radius.lg
+                color: Estilo.global.background
+                border.color: Estilo.global.borderCard
+                border.width: Estilo.global.borderWidth.hairline
+            }
+
+            AcaoDoMenu {
+                text: "Bordas"
+                icone: "fa6s.bread-slice"
+                // Some, em vez de ficar desabilitado: um lanche não tem borda
+                // nem vai passar a ter, e a opção cinza só faria o atendente
+                // tentar de novo achando que errou o clique.
+                visible: menuExtras.temBordas
+                onTriggered: linhaDelegate.editarExtras(linhaDelegate.indiceLinha, "bordas")
+            }
+
+            AcaoDoMenu {
+                text: "Adicionais"
+                icone: "fa6s.layer-group"
+                visible: menuExtras.temAdicionais
+                onTriggered: linhaDelegate.editarExtras(linhaDelegate.indiceLinha, "adicionais")
+            }
         }
 
         background: Rectangle {

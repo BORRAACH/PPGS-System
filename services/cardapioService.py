@@ -682,6 +682,18 @@ class CardapioController(QObject):
 
         return buscaCardapio.buscar(termo)
 
+    @pyqtSlot(str, result="QVariantMap")
+    @protegido({})
+    def analisarItemComanda(self, nome_impresso):
+        """Categoria, sabores e tamanho de um item que já está na comanda —
+        ver services/buscaCardapio.analisar_item_comanda. Usado pelo menu de
+        botão direito da linha do pedido pra saber o que oferecer: borda e
+        adicional numa pizza, só adicional num lanche ou açaí, nada numa
+        bebida."""
+        from services import buscaCardapio
+
+        return buscaCardapio.analisar_item_comanda(nome_impresso)
+
     @pyqtSlot(str, str, result="QVariantList")
     @protegido([])
     def listarDaCategoria(self, chave_categoria, termo):
