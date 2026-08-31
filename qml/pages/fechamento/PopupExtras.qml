@@ -3,6 +3,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import estilo 1.0
 import "../../components"
+import "../../components/Texto.js" as Texto
 
 // Lançamento (ou edição de um lançamento) de pagamento de diária a um
 // funcionário — dinheiro que sai do caixa fora de qualquer venda (ver
@@ -170,6 +171,15 @@ Popup {
                     color: Estilo.global.textInput
                     placeholderTextColor: Estilo.global.textPlaceholder
                     placeholderText: "NOME DO FUNCIONÁRIO"
+                    // Mesma capitalização dos campos de nome de cliente do
+                    // Balcão e da Entrega, e pelo mesmo motivo: em
+                    // onTextChanged, não em onEditingFinished, para o nome já
+                    // sair formatado enquanto se digita e para o que vem
+                    // preenchido ao EDITAR um pagamento antigo entrar na regra
+                    // também. O campo passa a ter uma invariante simples — o
+                    // que está nele está sempre capitalizado —, que é o que faz
+                    // o recibo impresso nunca discordar da tela.
+                    onTextChanged: Texto.capitalizarCampo(inputNome)
                     topPadding: 10
                     bottomPadding: 10
                     leftPadding: 10
