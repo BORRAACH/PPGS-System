@@ -85,18 +85,18 @@ Row {
     readonly property int indiceLinha: index
 
     function abrirMenuExtras() {
-        // Linha ainda em branco não tem o que receber, e um menu vazio
-        // aparecendo no clique parece defeito.
-        if (!linhaDelegate.pedidoDaLinha)
-            return;
-
         // O caminho normal é a análise já estar pronta (ver extrasDoItem). Ela
         // só não está no intervalo entre escolher o pedido e o quadro seguinte,
-        // e aí vale mais pagar a consulta agora do que abrir um menu sem
-        // opção nenhuma — é rápida; o que não se quer é pagá-la SEMPRE.
-        if (!linhaDelegate.extrasDoItem)
+        // e aí vale mais pagar a consulta agora do que abrir um menu sem as
+        // opções de borda/adicional — é rápida; o que não se quer é pagá-la
+        // SEMPRE. Numa linha ainda em branco não há o que analisar: ela não
+        // tem item, mas continua tendo o "Excluir item".
+        if (linhaDelegate.pedidoDaLinha && !linhaDelegate.extrasDoItem)
             cargaAnalise.executarAgora();
 
+        // Um menu vazio aparecendo no clique parece defeito. Hoje isso só
+        // acontece na única linha da comanda quando ela ainda está em branco:
+        // não há extras a atribuir nem exclusão a oferecer.
         if (!menuExtras.temAlgumaOpcao)
             return;
 
@@ -188,10 +188,18 @@ Row {
         Menu {
             id: menuExtras
 
+            // Nomeado pelo mesmo motivo dos popups e combos das telas: deixa o
+            // menu alcançável de fora para inspeção e teste.
+            objectName: "menuExtrasItem"
+
             readonly property var extras: linhaDelegate.extrasDoItem
             readonly property bool temBordas: !!extras && extras.categoriaBordas !== ""
             readonly property bool temAdicionais: !!extras && extras.categoriaAdicionais !== ""
-            readonly property bool temAlgumaOpcao: temBordas || temAdicionais
+            // Mesma regra do botão "-" ao lado da linha: a última linha que
+            // sobrou não se apaga, senão a comanda fica sem lugar nenhum onde
+            // lançar um item.
+            readonly property bool podeExcluir: linhaDelegate.ListView.view.count > 1
+            readonly property bool temAlgumaOpcao: temBordas || temAdicionais || podeExcluir
 
             // Mesma estilização do menu de contexto da Consulta (ver
             // pages/consulta/ItemComandaDelegate.qml) e, por tabela, da lista
@@ -205,6 +213,10 @@ Row {
                 id: acao
 
                 property string icone: ""
+                // A cor que diz o que a ação FAZ, igual à do menu da Consulta:
+                // as que mexem no item saem na cor do texto, a que o perde sai
+                // em vermelho.
+                property color corTexto: Estilo.global.text
 
                 // Um item escondido não pode ocupar altura: sem isto, o menu de
                 // um lanche abriria com um buraco onde estaria "Bordas".
@@ -222,7 +234,7 @@ Row {
 
                     Icone {
                         nome: acao.icone
-                        cor: Estilo.global.text
+                        cor: acao.corTexto
                         tamanho: Estilo.global.fontSize.lg
                         anchors.verticalCenter: parent.verticalCenter
                     }
@@ -231,7 +243,7 @@ Row {
                         text: acao.text
                         font.pixelSize: Estilo.global.fontSize.md
                         font.family: Estilo.global.fontFamily.title
-                        color: Estilo.global.text
+                        color: acao.corTexto
                         anchors.verticalCenter: parent.verticalCenter
                     }
                 }
@@ -271,6 +283,37 @@ Row {
                 icone: "fa6s.layer-group"
                 visible: menuExtras.temAdicionais
                 onTriggered: linhaDelegate.editarExtras(linhaDelegate.indiceLinha, "adicionais", linhaDelegate.extrasDoItem)
+            }
+
+            // Separa o que MEXE no item do que o PERDE. Só aparece quando há
+            // algo acima dele — num refrigerante, que não tem borda nem
+            // adicional, o menu é só a exclusão e um traço no topo sobraria.
+            MenuSeparator {
+                visible: menuExtras.temBordas || menuExtras.temAdicionais
+                height: visible ? implicitHeight : 0
+                padding: 0
+                topPadding: Estilo.global.spacing.xs
+                bottomPadding: Estilo.global.spacing.xs
+
+                contentItem: Rectangle {
+                    implicitHeight: Estilo.global.borderWidth.hairline
+                    color: Estilo.global.borderCard
+                }
+            }
+
+            AcaoDoMenu {
+                // Vermelha pelo mesmo motivo da exclusão da Consulta: é a única
+                // do menu que não tem desfazer, e a cor é o que separa "mexer"
+                // de "perder".
+                text: "Excluir item"
+                icone: "fa6s.trash-can"
+                corTexto: Estilo.action.danger.base
+                visible: menuExtras.podeExcluir
+                // Mesma remoção do botão "-" ao lado da linha, e mesmo motivo
+                // para os dois qualificadores: `index` some dentro do Menu e a
+                // propriedade anexada ListView vem vazia aqui (ver indiceLinha
+                // e o comentário do botão "+").
+                onTriggered: linhaDelegate.ListView.view.model.remove(linhaDelegate.indiceLinha)
             }
         }
 
