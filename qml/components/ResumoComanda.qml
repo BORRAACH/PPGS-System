@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import estilo 1.0
+import "ResumoExtras.js" as ResumoExtras
 
 // Painel de resumo mostrado ao lado dos formulários de Balcão/Entrega —
 // espelha as informações que vão para a comanda impressa (ver
@@ -38,9 +39,8 @@ Rectangle {
     property string observacaoGeral: ""
 
     // Mesmo separador que services/comandaTextoService.py usa pra montar e
-    // desmontar pizzas meio a meio (SEPARADOR_SABORES). Tem espaço dos dois
-    // lados de propósito, o que o distingue de nomes como "Atum c/ Cebola".
-    readonly property string separadorSabores: " / "
+    // desmontar pizzas meio a meio (SEPARADOR_SABORES).
+    readonly property string separadorSabores: ResumoExtras.SEPARADOR_SABORES
 
     // Uma linha rótulo/valor do bloco de dados do cliente. Some sozinha
     // quando o campo está vazio — Balcão não tem telefone/endereço/bairro, e
@@ -94,131 +94,43 @@ Rectangle {
         return "R$ " + valor.toFixed(2).replace(".", ",");
     }
 
-    // "borda" e "adicionais" chegam como STRING JSON quando a origem é o
-    // ListModel de Balcao.qml/Entrega.qml (um array atribuído a um role vira
-    // um list-model aninhado, por isso a convenção — ver o comentário longo
-    // em Balcao.qml), mas como objeto/array de verdade quando vêm direto de
-    // um QVariantMap do Python. Aceitar os dois evita obrigar cada chamador a
-    // converter antes.
+    // A FORMATAÇÃO DOS EXTRAS MORA EM ResumoExtras.js, e não aqui: o painel
+    // de resumo do Salão (pages/salao/Salao.qml) é montado à parte — não
+    // mostra forma de pagamento nem status — e precisa escrever borda e
+    // adicionais exatamente como este aqui escreve. Enquanto as funções
+    // estavam presas dentro deste componente, ele não tinha como chamá-las e
+    // simplesmente não mostrava os extras.
+    //
+    // O que fica: as funções abaixo, que só repassam. Existem pra que os
+    // bindings continuem lendo "root._algumaCoisa" como sempre leram, e pra
+    // que quem já usa este componente não precise saber que a conta mudou de
+    // arquivo.
     function _comoObjeto(valor, padrao) {
-        if (valor === undefined || valor === null || valor === "")
-            return padrao;
-
-        if (typeof valor !== "string")
-            return valor;
-
-        try {
-            var lido = JSON.parse(valor);
-            return lido === null || lido === undefined ? padrao : lido;
-        } catch (erro) {
-            return padrao;
-        }
+        return ResumoExtras.comoObjeto(valor, padrao);
     }
 
-    // Adicionais atribuídos a um sabor específico, já formatados. Mesma
-    // comparação sem diferenciar caixa de comandaTextoService._extras_adicionais:
-    // o nome do sabor pode vir em caixa alta (reconstruído de uma comanda já
-    // impressa) enquanto o adicional guardou o nome como veio de Pizzas.qml.
     function _extrasDoSabor(adicionais, sabor) {
-        var alvo = (sabor || "").trim().toUpperCase();
-        var extras = [];
-        for (var i = 0; i < adicionais.length; i++) {
-            var adicional = adicionais[i];
-            if (!adicional || (adicional.sabor || "").trim().toUpperCase() !== alvo)
-                continue;
-
-            extras.push(root._textoAdicional(adicional));
-        }
-        return extras;
+        return ResumoExtras.extrasDoSabor(adicionais, sabor);
     }
 
-    // Prefixo "+" igual ao do cupom (PREFIXO_ADICIONAL).
     function _textoAdicional(adicional) {
-        var valor = adicional.valor || "";
-        return "+ " + (adicional.nome || "") + (valor ? " (" + valor + ")" : "");
+        return ResumoExtras.textoAdicional(adicional);
     }
 
-    // Os sabores de um item, e o tamanho entre parênteses no fim quando
-    // houver. Mesma leitura que comandaTextoService.dividir_sabores faz do
-    // outro lado.
     function _saboresDe(pedido) {
-        var corpo = pedido;
-        var tamanho = "";
-
-        var casou = /^(.*)\s\(([^)]+)\)$/.exec(pedido);
-        if (casou) {
-            corpo = casou[1];
-            tamanho = casou[2];
-        }
-
-        return {
-            "sabores": corpo.split(root.separadorSabores).filter(function (s) {
-                return s.trim() !== "";
-            }),
-            "tamanho": tamanho
-        };
+        return ResumoExtras.saboresDe(pedido);
     }
 
-    // Todos os adicionais do item numa lista só, sem separar por fração — é o
-    // que o modo compacto mostra, já que ali o item ocupa uma linha só e não
-    // há fração a que pendurar cada um. Numa pizza dividida o sabor vai junto,
-    // senão "+ Bacon" não diria em qual metade ele entra.
     function _extrasDoItem(pedido, adicionaisBrutos) {
-        var adicionais = _comoObjeto(adicionaisBrutos, []);
-        var varios = root._saboresDe(pedido).sabores.length > 1;
-        var extras = [];
-
-        for (var i = 0; i < adicionais.length; i++) {
-            var adicional = adicionais[i];
-            if (!adicional)
-                continue;
-
-            var texto = root._textoAdicional(adicional);
-            var sabor = (adicional.sabor || "").trim();
-            extras.push(varios && sabor ? texto + " — " + sabor : texto);
-        }
-        return extras;
+        return ResumoExtras.extrasDoItem(pedido, adicionaisBrutos);
     }
 
-    // Desmonta um item nas linhas que ele ocupa, do mesmo jeito que
-    // comandaTextoService.montar_grupos monta pro papel: uma pizza meio a
-    // meio (ou em mais partes) vira uma linha "1/N - Sabor" por sabor, com o
-    // tamanho junto só na primeira, e cada adicional aparece logo abaixo da
-    // fração a que pertence. Item comum vira uma linha só.
     function _linhasDoItem(pedido, adicionaisBrutos) {
-        var adicionais = _comoObjeto(adicionaisBrutos, []);
-        var partes = root._saboresDe(pedido);
-        var sabores = partes.sabores;
-        var tamanho = partes.tamanho;
-
-        if (sabores.length <= 1)
-            return [{
-                "texto": pedido,
-                "extras": root._extrasDoSabor(adicionais, sabores.length ? sabores[0] : pedido)
-            }];
-
-        var linhas = [];
-        for (var i = 0; i < sabores.length; i++) {
-            var nome = i === 0 && tamanho ? sabores[i] + " (" + tamanho + ")" : sabores[i];
-            // "1/N" em todas, não "1/N, 2/N, ...": é a fração da pizza que
-            // aquele sabor ocupa, não a posição dele na lista — mesma leitura
-            // do cupom (comandaTextoService.montar_grupos).
-            linhas.push({
-                "texto": "1/" + sabores.length + " - " + nome,
-                "extras": root._extrasDoSabor(adicionais, sabores[i])
-            });
-        }
-        return linhas;
+        return ResumoExtras.linhasDoItem(pedido, adicionaisBrutos);
     }
 
-    // Borda da pizza (nível do item inteiro, não de um sabor) — "" quando não
-    // houver. Prefixo "*" igual ao do cupom (PREFIXO_BORDA).
     function _linhaBorda(bordaBruta) {
-        var borda = _comoObjeto(bordaBruta, null);
-        if (!borda || !borda.nome)
-            return "";
-
-        return "* " + borda.nome + (borda.valor ? " (" + borda.valor + ")" : "");
+        return ResumoExtras.linhaBorda(bordaBruta);
     }
 
     readonly property int quantidadeItens: {

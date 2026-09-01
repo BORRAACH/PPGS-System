@@ -6,6 +6,7 @@ import "../../components"
 import "../../components/MontagemExtras.js" as Extras
 import "../../components/Texto.js" as Texto
 import "../../components/DestinoPedido.js" as Destino
+import "../../components/ResumoExtras.js" as ResumoExtras
 import estilo 1.0
 
 // Atendimento no salão (mesas) — diferente de Balcão/Entrega, uma comanda de
@@ -876,30 +877,83 @@ Page {
                             Repeater {
                                 model: modeloPedidos
 
-                                delegate: Item {
+                                delegate: Column {
+                                    id: grupoItemMesa
+
+                                    // Os campos do item ficam presos aqui, e
+                                    // não lidos de "model" lá dentro: no
+                                    // Repeater dos adicionais "model" já é o
+                                    // contexto DELE, não o deste item — mesma
+                                    // armadilha documentada em
+                                    // components/ResumoComanda.qml.
+                                    readonly property string nomeItem: model.pedido || ""
+                                    readonly property string valorItem: model.valor || ""
+                                    // Borda e adicionais escritos como o cupom
+                                    // os escreve, pelas mesmas funções que
+                                    // Balcão e Entrega usam (ResumoExtras.js).
+                                    // Eles entram no preço do item, então um
+                                    // resumo que os esconde mostra um TOTAL que
+                                    // não bate com o que está listado.
+                                    readonly property var extrasItem: ResumoExtras.extrasDoItem(nomeItem, model.adicionais)
+                                    readonly property string textoBorda: ResumoExtras.linhaBorda(model.borda)
+
                                     width: colunaResumoMesa.width
-                                    height: visible ? Math.max(textoNomeItemMesa.implicitHeight, textoValorItemMesa.implicitHeight) : 0
-                                    visible: model.pedido !== ""
+                                    visible: nomeItem !== ""
+                                    spacing: 2
 
-                                    Text {
-                                        id: textoNomeItemMesa
+                                    Item {
+                                        width: parent.width
+                                        height: Math.max(textoNomeItemMesa.implicitHeight, textoValorItemMesa.implicitHeight)
 
-                                        anchors.left: parent.left
-                                        anchors.right: textoValorItemMesa.left
-                                        anchors.rightMargin: 8
-                                        text: "• " + model.pedido
-                                        font.pixelSize: Estilo.global.fontSize.md
-                                        color: Estilo.global.text
-                                        elide: Text.ElideRight
+                                        Text {
+                                            id: textoNomeItemMesa
+
+                                            anchors.left: parent.left
+                                            anchors.right: textoValorItemMesa.left
+                                            anchors.rightMargin: 8
+                                            text: "• " + grupoItemMesa.nomeItem
+                                            font.pixelSize: Estilo.global.fontSize.md
+                                            color: Estilo.global.text
+                                            elide: Text.ElideRight
+                                        }
+
+                                        Text {
+                                            id: textoValorItemMesa
+
+                                            anchors.right: parent.right
+                                            text: grupoItemMesa.valorItem || "R$ 0,00"
+                                            font.pixelSize: Estilo.global.fontSize.md
+                                            color: Estilo.global.textSecondary
+                                        }
                                     }
 
-                                    Text {
-                                        id: textoValorItemMesa
+                                    // Recuados sob o item, como no cupom e nos
+                                    // resumos de Balcão e Entrega.
+                                    Repeater {
+                                        model: grupoItemMesa.extrasItem
 
-                                        anchors.right: parent.right
-                                        text: model.valor || "R$ 0,00"
-                                        font.pixelSize: Estilo.global.fontSize.md
+                                        delegate: Text {
+                                            required property string modelData
+
+                                            width: grupoItemMesa.width - 20
+                                            x: 20
+                                            text: modelData
+                                            font.pixelSize: Estilo.global.fontSize.sm
+                                            color: Estilo.global.textSecondary
+                                            wrapMode: Text.WordWrap
+                                        }
+                                    }
+
+                                    // A borda vem depois dos adicionais, nunca
+                                    // no meio deles — mesma ordem do cupom.
+                                    Text {
+                                        width: parent.width - 20
+                                        x: 20
+                                        visible: grupoItemMesa.textoBorda !== ""
+                                        text: grupoItemMesa.textoBorda
+                                        font.pixelSize: Estilo.global.fontSize.sm
                                         color: Estilo.global.textSecondary
+                                        wrapMode: Text.WordWrap
                                     }
                                 }
                             }
