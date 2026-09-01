@@ -154,12 +154,22 @@ _PADRAO_FORMA_PAGAMENTO = re.compile(r"^Forma de pagamento:\s*(.+?)\s*$")
 # Vão entre o fim da palavra e o ícone, como fração da altura do texto — assim
 # ele acompanha o tamanho de fonte configurado pro campo em vez de encostar na
 # palavra num tamanho e ficar perdido no outro.
+#
+# É um vão PREFERIDO, não fixo: quem manda na linha é o ícone, que sai sempre
+# do tamanho do texto (ver _desenhar_icone), e o vão cede o que for preciso pra
+# ele caber. Numa linha folgada vale este valor inteiro.
 _FOLGA_ICONE = 0.35
 
-# Menor tamanho, em dots, que o ícone pode assumir pra caber no que sobrou da
-# linha. Abaixo disso ele vira um borrão no papel térmico e não diz mais nada —
-# aí é melhor não sair.
-_TAMANHO_ICONE_MINIMO_DOTS = 16
+# O vão mínimo, em dots, abaixo do qual o ícone estaria encostado na palavra —
+# aí ele parece parte dela em vez de um símbolo ao lado. Quando nem isto cabe,
+# a linha sai sem ícone.
+#
+# Três dots parece pouco e não é: o vão VISÍVEL é maior, porque a última letra
+# não preenche a célula dela até a borda (a grade dá a cada caractere a largura
+# de uma coluna, e a maioria dos glifos ocupa menos). É este valor que faz
+# caber a linha mais cheia desta comanda — "Forma de pagamento: Dinheiro" com o
+# campo em 50px, onde sobram 3,2 dots depois do ícone.
+_FOLGA_MINIMA_ICONE_DOTS = 3
 
 # {forma de pagamento: (família da fonte, caractere do glifo)}, preenchido pelo
 # aquecimento (ver aquecer_icones_pagamento). Vazio = sem ícone nenhum, e a
@@ -423,7 +433,7 @@ def _desenhar_separador(pintor, topo, altura, largura_dots, espessura):
     )
 
 
-def _desenhar_icone(pintor, glifos, topo, base, largura_dots, icone):
+def _desenhar_icone(pintor, glifos, base, largura_dots, familia, icone):
     """Desenha `icone` logo depois do último caractere da linha, no tamanho do
     texto dele.
 
@@ -436,12 +446,27 @@ def _desenhar_icone(pintor, glifos, topo, base, largura_dots, icone):
     a linha de base como qualquer caractere, então usar a base da linha é o que
     o deixa assentado junto da palavra em vez de flutuando.
 
-    ENCOLHE PRA CABER quando o tamanho do texto não cabe no que sobrou da
-    linha, e não é caso raro: com a forma de pagamento configurada em 50px,
-    "Forma de pagamento: Dinheiro" já ocupa quase a régua inteira, e um ícone
-    de 50px ao lado passaria da borda. Desenhado no tamanho que couber, ele
-    aparece; descartado, o recurso simplesmente não existiria nessa
-    configuração. Só desiste quando nem o tamanho mínimo cabe."""
+    O TAMANHO É SEMPRE O DO TEXTO. Quem cede pra ele caber é o VÃO até a
+    palavra, e não o ícone: um ícone menor que a palavra ao lado sai como uma
+    nota de rodapé do campo, quando ele é o próprio campo dito em desenho.
+    Numa linha folgada o vão vale _FOLGA_ICONE inteiro; numa linha apertada
+    encolhe até _FOLGA_MINIMA_ICONE_DOTS, e é isso que faz caber a linha mais
+    cheia que esta comanda tem — "Forma de pagamento: Dinheiro" com o campo em
+    50px ocupa quase a régua toda.
+
+    E QUANDO NEM ASSIM CABE, o ícone avança sobre a margem lateral — só ele, e
+    só o quanto precisar. É uma exceção deliberada à margem de
+    _MARGEM_LATERAL_DOTS, e existe porque sem ela o recurso quase não
+    apareceria: medido nas comandas gravadas, "Forma de pagamento: Dinheiro"
+    com o campo em 48px (que é a configuração desta casa, e 278 das 300 últimas
+    comandas) fica 2 dots mais larga que a área de conteúdo. Perder o ícone em
+    93% dos cupons pra preservar 2 dots de margem é o troco errado.
+
+    Nesse caso o vão fica no mínimo, e não no preferido: assim o ícone avança o
+    mínimo possível e sobra o máximo de papel depois dele.
+
+    Passando da borda do PAPEL, aí sim a linha sai sem ícone — melhor perdê-lo
+    do que imprimi-lo cortado."""
     ultimo = None
     for glifo in glifos:
         if glifo[0].strip():
@@ -450,30 +475,36 @@ def _desenhar_icone(pintor, glifos, topo, base, largura_dots, icone):
     if ultimo is None:
         return
 
-    _caractere, x, tamanho_px, _negrito, _sublinhado, _reverso = ultimo
-    esquerda = x + _largura_celula(tamanho_px) + tamanho_px * _FOLGA_ICONE
+    caractere, x, tamanho_px, negrito, sublinhado, _reverso = ultimo
 
-    disponivel = largura_dots - esquerda
-    if disponivel < _TAMANHO_ICONE_MINIMO_DOTS:
-        return
+    # O fim do DESENHO da última letra, não o fim da célula dela. A grade dá a
+    # cada caractere a largura de uma coluna e o desenha centrado (ver
+    # _pintar_linhas), então entre o fim do traço da letra e a borda da célula
+    # sempre sobra um pedaço — medir da borda contaria esse pedaço duas vezes e
+    # afastaria o ícone mais do que o pedido, além de gastar largura que numa
+    # linha cheia faz falta.
+    metrica_texto = QFontMetricsF(_fonte(familia, tamanho_px, negrito, sublinhado))
+    largura_celula = _largura_celula(tamanho_px)
+    fim_do_texto = x + (largura_celula + metrica_texto.horizontalAdvance(caractere)) / 2
 
     familia_icone, caractere_icone = icone
     fonte_icone = QFont(familia_icone)
     fonte_icone.setPixelSize(tamanho_px)
     avanco = QFontMetricsF(fonte_icone).horizontalAdvance(caractere_icone)
 
-    if avanco > disponivel:
-        # Proporcional: a largura do glifo cresce junto com o corpo da fonte,
-        # então a regra de três dá direto o tamanho que cabe. Confere de novo
-        # depois de aplicar, porque o arredondamento das métricas pode devolver
-        # um dot a mais do que a conta previu.
-        tamanho_px = int(tamanho_px * disponivel / avanco)
-        if tamanho_px < _TAMANHO_ICONE_MINIMO_DOTS:
+    sobra_util = largura_dots - fim_do_texto
+    if sobra_util >= avanco + _FOLGA_MINIMA_ICONE_DOTS:
+        folga = min(tamanho_px * _FOLGA_ICONE, sobra_util - avanco)
+    else:
+        # A margem direita, em coordenadas do pintor: a origem dele está na
+        # margem esquerda (ver _nova_imagem), então a borda do papel fica em
+        # largura útil + uma margem.
+        sobra_papel = largura_dots + _MARGEM_LATERAL_DOTS - fim_do_texto
+        if sobra_papel < avanco + _FOLGA_MINIMA_ICONE_DOTS:
             return
+        folga = _FOLGA_MINIMA_ICONE_DOTS
 
-        fonte_icone.setPixelSize(tamanho_px)
-        if QFontMetricsF(fonte_icone).horizontalAdvance(caractere_icone) > disponivel:
-            return
+    esquerda = fim_do_texto + folga
 
     pintor.setFont(fonte_icone)
     pintor.setPen(QColor(0, 0, 0))
@@ -556,7 +587,7 @@ def _pintar_linhas(pintor, fisicas, familia, topo, largura_dots, tracos=None, ic
 
         icone = icones.get(indice)
         if icone:
-            _desenhar_icone(pintor, glifos, topo, base, largura_dots, icone)
+            _desenhar_icone(pintor, glifos, base, largura_dots, familia, icone)
 
         topo += altura
 
