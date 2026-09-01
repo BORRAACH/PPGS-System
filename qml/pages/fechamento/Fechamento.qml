@@ -155,10 +155,13 @@ Page {
     // que saiu dela para pagar diária e despesa.
     //
     // Somar pagamento a uma contagem de gaveta parece errado à primeira vista,
-    // e é o contrário: sem isso, esse dinheiro aparece como falta em
-    // diferencaCaixa — a gaveta acusa sumiço de um dinheiro cujo destino se
-    // sabe exatamente qual foi, e quem confere fica caçando um buraco que não
-    // existe.
+    // e é o contrário: sem isso, esse dinheiro aparece como FALTA na sobra do
+    // caixa — a gaveta acusa sumiço de um dinheiro cujo destino se sabe
+    // exatamente qual foi, e quem confere fica caçando um buraco que não
+    // existe. Essa conta hoje sai só no cupom de fechamento (ver
+    // FechamentoController._montar_recibo_fechamento, que a refaz do zero),
+    // mas a regra é a mesma dos dois lados, e é aqui que ela está escrita:
+    // este número é o que a tela mostra somado à cédula contada.
     //
     // O campo digitado NÃO é alterado por isto, de propósito: ele é gravado em
     // disco e replicado na malha (ver contagemCaixa.py), então escrever a soma
@@ -167,48 +170,6 @@ Page {
     // soma é derivada.
     readonly property real dinheiroComSaidas: (telaFechamento.contagemAtual.dinheiro || 0)
         + telaFechamento.totalSaidasEmDinheiro
-
-    readonly property real totalContagem: (telaFechamento.contagemAtual.cartao || 0)
-        + telaFechamento.dinheiroComSaidas
-        + (telaFechamento.contagemAtual.pix || 0)
-
-    // Confere o caixa: o que foi contado à mão (Cartão+Dinheiro+Pix)
-    // comparado com o que as comandas do dia dizem que foi vendido.
-    // Positivo, sobrou dinheiro no caixa; negativo, faltou.
-    //
-    // Diária e despesa NÃO aparecem mais aqui como falta: elas já entraram na
-    // contagem (ver dinheiroComSaidas). Antes apareciam, e o argumento era que
-    // isso era o que se queria enxergar — mas na prática obrigava quem confere
-    // a fazer a conta de cabeça toda vez para descontar o que ele mesmo tinha
-    // acabado de lançar na tela.
-    //
-    // Cuidado ao ler o resultado: resumoAtual.total só conta comandas que
-    // receberam baixa (ver FechamentoController._calcular_resumo_dia), então
-    // comanda em aberto puxa isto pro lado de "sobrou" — o aviso de
-    // "N comandas em aberto · R$ X fora do caixa", lá no total do dia, é
-    // quem explica a diferença nesse caso.
-    readonly property real diferencaCaixa: telaFechamento.totalContagem - (telaFechamento.resumoAtual.total || 0)
-    // Empate conta como sobra: um caixa que bate exato não é falta.
-    readonly property bool caixaSobrou: telaFechamento.diferencaCaixa >= 0
-
-    // Lucro do dia: o que entrou na gaveta menos o que saiu dela em diária.
-    // Conta diferente da de cima e independente dela — aqui o bruto não
-    // entra, porque venda que ainda não virou dinheiro contado não é lucro
-    // nenhum; o bruto serve pra conferir a gaveta (diferencaCaixa), não pra
-    // dizer quanto sobrou no fim do dia.
-    // O que entrou na gaveta menos o que saiu dela. Como as saídas agora entram
-    // em totalContagem (ver dinheiroComSaidas) e são subtraídas aqui, elas se
-    // anulam — e o lucro acaba sendo, exatamente, o dinheiro que sobrou:
-    // cartão + dinheiro contado + pix.
-    //
-    // ISTO CORRIGE UM DESCONTO EM DOBRO que existia antes. A diária saía da
-    // gaveta (logo, a contagem já era menor por causa dela) e ainda era
-    // subtraída aqui — uma diária de R$ 80 tirava R$ 160 do lucro do dia. O
-    // número que esta tela mostra ficou MAIOR por isso, e o valor novo é o
-    // certo.
-    readonly property real lucro: telaFechamento.totalContagem
-        - telaFechamento.totalExtras
-        - telaFechamento.totalDespesas
 
     readonly property var ordemTipos: ["Balcão", "Entrega", "Mesa"]
     readonly property var coresTipo: ({
@@ -545,8 +506,8 @@ Page {
         // placeholder. Escrever o zero de verdade enchia os três campos de
         // "R$ 0,00" logo ao abrir a tela — e aí contar a gaveta começava por
         // apagar o que estava escrito, com o risco de sobrar um dígito do
-        // valor antigo colado no novo. Vazio e zero contam a mesma coisa aqui
-        // (totalContagem soma 0 nos dois casos), então não se perde nada.
+        // valor antigo colado no novo. Vazio e zero contam a mesma coisa em
+        // qualquer soma feita sobre a contagem, então não se perde nada.
         campo.text = valor ? Moeda.formatar(String(valor)) : "";
     }
 
@@ -1743,92 +1704,6 @@ Page {
                                     radius: Estilo.global.radius.pill
                                     color: btnSalvarContagem.down ? Estilo.screen.caixa.pressed : (btnSalvarContagem.hovered ? Estilo.screen.caixa.hover : Estilo.screen.caixa.base)
                                 }
-                            }
-                        }
-                    }
-
-                    // --- SOBROU / FALTOU (ver diferencaCaixa) ---
-                    Rectangle {
-                        Layout.fillWidth: true
-                        Layout.fillHeight: true
-                        radius: Estilo.global.radius.md
-                        color: telaFechamento.caixaSobrou ? Estilo.status.success.background : Estilo.status.error.background
-                        border.color: telaFechamento.caixaSobrou ? Estilo.status.success.border : Estilo.status.error.border
-                        border.width: Estilo.global.borderWidth.hairline
-
-                        ColumnLayout {
-                            anchors.centerIn: parent
-                            spacing: 4
-
-                            // O rótulo é colorido junto com o valor, ao
-                            // contrário dos outros cartões desta tela: aqui ele
-                            // não nomeia um campo fixo, é metade da resposta.
-                            Text {
-                                Layout.alignment: Qt.AlignHCenter
-                                text: telaFechamento.caixaSobrou ? "SOBROU" : "FALTOU"
-                                font.pixelSize: Estilo.global.fontSize.md
-                                font.bold: true
-                                color: telaFechamento.caixaSobrou ? Estilo.finance.positive : Estilo.finance.negative
-                            }
-
-                            // Sem sinal: quem diz a direção é o rótulo acima —
-                            // "FALTOU R$ -100,00" se leria como o contrário.
-                            Text {
-                                Layout.alignment: Qt.AlignHCenter
-                                text: "R$ " + Math.abs(telaFechamento.diferencaCaixa).toFixed(2).replace(".", ",")
-                                font.pixelSize: Estilo.global.fontSize.display
-                                font.bold: true
-                                color: telaFechamento.caixaSobrou ? Estilo.finance.positive : Estilo.finance.negative
-                            }
-                        }
-                    }
-
-                    // --- LUCRO (ver telaFechamento.lucro) ---
-                    //
-                    // Cartão neutro, ao contrário do de sobra/falta acima: o
-                    // verde/vermelho de lá é um veredito sobre a gaveta ("está
-                    // certa ou não"), e repetir a mesma moldura aqui faria dois
-                    // julgamentos onde só existe um. Aqui só o número muda de
-                    // cor, e só quando o dia de fato fecha no vermelho.
-                    //
-                    // Altura pelo conteúdo (implicitHeight, como o cartão da
-                    // contagem): quem estica pra ocupar a sobra da coluna
-                    // continua sendo um só, o de sobra/falta.
-                    Rectangle {
-                        Layout.fillWidth: true
-                        implicitHeight: colunaLucro.implicitHeight + 20
-                        radius: Estilo.global.radius.md
-                        color: Estilo.global.surface
-                        border.color: Estilo.global.borderCard
-                        border.width: Estilo.global.borderWidth.hairline
-
-                        ColumnLayout {
-                            id: colunaLucro
-
-                            anchors.centerIn: parent
-                            spacing: 4
-
-                            Text {
-                                Layout.alignment: Qt.AlignHCenter
-                                text: "LUCRO"
-                                font.pixelSize: Estilo.global.fontSize.md
-                                font.bold: true
-                                color: Estilo.global.textSecondary
-                            }
-
-                            Text {
-                                Layout.alignment: Qt.AlignHCenter
-                                text: "R$ " + telaFechamento.lucro.toFixed(2).replace(".", ",")
-                                font.pixelSize: Estilo.global.fontSize.display
-                                font.bold: true
-                                color: telaFechamento.lucro >= 0 ? Estilo.finance.positive : Estilo.finance.negative
-                            }
-
-                            Text {
-                                Layout.alignment: Qt.AlignHCenter
-                                text: "contagem - diárias - despesas"
-                                font.pixelSize: Estilo.global.fontSize.sm
-                                color: Estilo.global.textSecondary
                             }
                         }
                     }

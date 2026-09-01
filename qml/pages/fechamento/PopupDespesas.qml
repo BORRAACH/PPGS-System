@@ -10,7 +10,7 @@ import "../../components"
 //
 // Decalque de PopupExtras.qml, e as duas telas são quase idênticas de
 // propósito: quem já sabe lançar uma diária sabe lançar uma despesa. O que
-// muda é o destino do valor — ver o comentário de totalContagem em
+// muda é o destino do valor — ver o comentário de dinheiroComSaidas em
 // Fechamento.qml e o topo de services/rede/despesasCaixa.py.
 //
 // Sem a pergunta de impressão que o popup de extras tem no fim: recibo é

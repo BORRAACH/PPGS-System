@@ -893,11 +893,12 @@ class FechamentoController(QObject):
             "abertas": {"quantidade": quantidade_aberta, "total": total_aberto},
             "extras": {"quantidade": len(extras), "total": total_extras, "itens": extras},
             # Despesas do dia. Entram na conta pelo lado OPOSTO ao dos
-            # extras: a tela soma este total à contagem de
-            # Cartão/Dinheiro/Pix, para a gaveta parar de acusar falta por
-            # dinheiro que se sabe onde foi parar (ver Fechamento.qml,
-            # totalContagem). A chave não existe em resumos gravados em
-            # cache antes disto, e a tela trata a ausência.
+            # extras: soma-se este total à contagem de Cartão/Dinheiro/Pix,
+            # para a gaveta parar de acusar falta por dinheiro que se sabe
+            # onde foi parar (ver dinheiroComSaidas em Fechamento.qml, e
+            # _montar_recibo_fechamento, que refaz a mesma soma pro cupom). A
+            # chave não existe em resumos gravados em cache antes disto, e a
+            # tela trata a ausência.
             "despesas": {"quantidade": len(despesas), "total": total_despesas, "itens": despesas},
             # Do mais vendido pro menos vendido, com desempate pelo nome —
             # ordem estável, que é o que permite comparar dois resumos com
@@ -1089,8 +1090,13 @@ class FechamentoController(QObject):
         diária), o total de cada origem já dividido por forma de
         pagamento, os pagamentos de diária do dia, a sobra/falta do caixa
         (a contagem manual comparada com o bruto) e o lucro (a contagem
-        menos as diárias) — as mesmas duas contas que Fechamento.qml mostra
-        na tela, ver telaFechamento.diferencaCaixa e telaFechamento.lucro.
+        menos as diárias).
+
+        ESSAS DUAS ÚLTIMAS CONTAS SÓ EXISTEM AQUI. A tela de Fechamento
+        mostrava as duas em cartões ao lado da contagem e não mostra mais: o
+        veredito sobre o dia é do cupom, e a tela ficou com o que se digita e
+        se confere. Quem mexer nas contas abaixo não tem outro lugar pra
+        conferir contra — este é o único que as faz.
 
         Sai também o bloco "ALTERAÇÕES APÓS A BAIXA" — as comandas já
         fechadas que alguém corrigiu ou apagou depois, com o nome de quem
@@ -1131,15 +1137,31 @@ class FechamentoController(QObject):
             + saidas_em_dinheiro
             + contagem.get("pix", 0)
         )
-        # Sobra (positivo) ou falta (negativo) do caixa. Comparação
-        # literal contagem x bruto, sem as diárias no meio — ver o
-        # comentário de diferencaCaixa em Fechamento.qml.
+        # Sobra (positivo) ou falta (negativo) do caixa: o que foi contado à
+        # mão comparado com o que as comandas do dia dizem que foi vendido.
+        #
+        # Diária e despesa NÃO aparecem aqui como falta — elas já entraram em
+        # total_contagem, logo acima. Antes apareciam, e o argumento era que
+        # era isso que se queria enxergar; na prática obrigava quem confere a
+        # fazer a conta de cabeça toda vez pra descontar o que ele mesmo tinha
+        # acabado de lançar.
+        #
+        # CUIDADO AO LER: o bruto só conta comandas que receberam baixa (ver
+        # _calcular_resumo_dia), então comanda em aberto puxa isto pro lado de
+        # "SOBROU" sem que tenha sobrado nada.
         diferenca = total_contagem - bruto
         # O lucro do dia é outra conta, e não passa pelo bruto: o que entrou na
-        # gaveta menos o que saiu dela em diária e em despesa. Como as saídas
-        # entram em total_contagem logo acima, elas se anulam aqui e o lucro é
-        # o dinheiro que sobrou de fato — ver o comentário de telaFechamento.lucro,
-        # que explica o desconto em dobro que isto corrigiu.
+        # gaveta menos o que saiu dela em diária e em despesa. O bruto serve
+        # pra conferir a gaveta (a diferença acima), não pra dizer quanto
+        # sobrou no fim do dia — venda que ainda não virou dinheiro contado
+        # não é lucro nenhum.
+        #
+        # Como as saídas entram em total_contagem logo acima e são subtraídas
+        # aqui, elas se anulam, e o lucro acaba sendo exatamente o dinheiro que
+        # sobrou: cartão + dinheiro contado + pix. ISSO CORRIGIU UM DESCONTO EM
+        # DOBRO: a diária saía da gaveta (logo, a contagem já era menor por
+        # causa dela) e ainda era subtraída aqui — uma diária de R$ 80 tirava
+        # R$ 160 do lucro do dia.
         lucro = total_contagem - total_extras - total_despesas
 
         linhas_origem = [estilo.formatar_campo("POR ORIGEM", "fech_origem_titulo")]
