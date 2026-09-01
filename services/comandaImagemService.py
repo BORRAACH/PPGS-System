@@ -128,6 +128,44 @@ _ESPESSURA_ENTRE_ITENS_DOTS = 3
 # saindo como texto — o que vira traço é a divisória que o app gerou.
 _LINHA_SEPARADORA_CAMPOS = "-" * texto.COLUNAS_PAPEL
 
+# O ícone de cada forma de pagamento, pelo nome do qtawesome. É a MESMA lista
+# de qml/components/ComboBoxPagamento.qml (iconesPagamento), e de propósito: o
+# ícone que a pessoa escolheu na tela é o que ela espera reencontrar no papel.
+# Mudar lá sem mudar aqui não quebra nada — só afasta os dois, e aí o cupom
+# passa a mostrar um desenho que não é o do botão que foi clicado.
+#
+# Uma forma fora da lista (opção nova, comanda antiga) simplesmente não ganha
+# ícone. O combo da tela cai num "fa6s.receipt" genérico nesse caso, porque lá
+# a linha ficaria torta sem nenhum; no papel um ícone que não diz nada é só
+# tinta, e a palavra ao lado já diz tudo.
+_ICONES_PAGAMENTO = {
+    "Pix": "fa6b.pix",
+    "Crédito": "fa6s.credit-card",
+    "Débito": "fa6s.money-check-dollar",
+    "Dinheiro": "fa6s.money-bill-wave",
+}
+
+# A linha do cupom que leva o ícone: a ESCOLHA da forma de pagamento, como
+# balcaoController e entregaController a montam. O mesmo texto que
+# comandaParserService.PADRAO_FORMA_PAGAMENTO lê de volta — e que continua
+# intacto, porque o ícone é desenhado ao lado, sem tocar num byte do cupom.
+_PADRAO_FORMA_PAGAMENTO = re.compile(r"^Forma de pagamento:\s*(.+?)\s*$")
+
+# Vão entre o fim da palavra e o ícone, como fração da altura do texto — assim
+# ele acompanha o tamanho de fonte configurado pro campo em vez de encostar na
+# palavra num tamanho e ficar perdido no outro.
+_FOLGA_ICONE = 0.35
+
+# Menor tamanho, em dots, que o ícone pode assumir pra caber no que sobrou da
+# linha. Abaixo disso ele vira um borrão no papel térmico e não diz mais nada —
+# aí é melhor não sair.
+_TAMANHO_ICONE_MINIMO_DOTS = 16
+
+# {forma de pagamento: (família da fonte, caractere do glifo)}, preenchido pelo
+# aquecimento (ver aquecer_icones_pagamento). Vazio = sem ícone nenhum, e a
+# comanda sai como sempre saiu.
+_icones_pagamento = {}
+
 # ESC/POS "GS v 0" — imprime a imagem raster que vem logo depois.
 #
 # CUIDADO: NÃO é o "GS V 0" de printerService._COMANDO_CORTE, que corta o papel.
@@ -251,7 +289,7 @@ def _largura_celula(tamanho_px):
     return tamanho_px * _LARGURA_COLUNA_DOTS / ALTURA_LINHA_DOTS
 
 
-def _quebrar_em_linhas_fisicas(linhas_logicas, largura_dots, tracos=None):
+def _quebrar_em_linhas_fisicas(linhas_logicas, largura_dots):
     """Transforma as linhas do cupom em linhas FÍSICAS de papel, quebrando o
     que não cabe na largura, e resolve a posição de cada caractere.
 
@@ -274,12 +312,12 @@ def _quebrar_em_linhas_fisicas(linhas_logicas, largura_dots, tracos=None):
     altura de cada linha pode ser medida antes de existir imagem nenhuma, que é
     o que permite dimensionar o QImage de uma vez só.
 
-    `tracos` chega indexado por linha LÓGICA (ver _tracos_de_texto); a tradução
-    pra índices FÍSICOS tem que acontecer aqui dentro, porque é só aqui que se
-    sabe quantas linhas de papel cada linha do cupom virou."""
+    Devolve junto o mapa {índice lógico: índice da ÚLTIMA linha física dele},
+    que é o que permite traduzir qualquer marcação feita sobre o texto do cupom
+    (traços, ícones) para a linha de papel correspondente — só aqui se sabe em
+    quantas linhas cada linha do cupom se quebrou. Ver _por_linha_fisica."""
     fisicas = []
-    tracos = tracos or {}
-    tracos_fisicos = {}
+    ultima_fisica = {}
 
     for indice, trechos in enumerate(linhas_logicas):
         atual = []
@@ -297,12 +335,24 @@ def _quebrar_em_linhas_fisicas(linhas_logicas, largura_dots, tracos=None):
         # entre seções (ver comandaEstiloService.linhas_espacamento_secoes), e
         # engoli-las grudaria as seções umas nas outras.
         fisicas.append(atual)
-        # A última linha física desta linha lógica — que numa linha de traço,
-        # que nunca chega perto de quebrar, é também a única.
-        if indice in tracos:
-            tracos_fisicos[len(fisicas) - 1] = tracos[indice]
+        # A ÚLTIMA das linhas físicas desta linha lógica. É a que interessa às
+        # duas marcações: uma linha de traço nunca chega perto de quebrar (é
+        # sempre a única), e o ícone vai depois do fim do texto, que é onde a
+        # última linha acaba.
+        ultima_fisica[indice] = len(fisicas) - 1
 
-    return fisicas, tracos_fisicos
+    return fisicas, ultima_fisica
+
+
+def _por_linha_fisica(marcas, ultima_fisica):
+    """As marcas de _tracos_da_comanda/_icones_da_comanda, que vêm indexadas
+    por linha LÓGICA, reindexadas por linha FÍSICA (ver
+    _quebrar_em_linhas_fisicas)."""
+    return {
+        ultima_fisica[indice]: marca
+        for indice, marca in marcas.items()
+        if indice in ultima_fisica
+    }
 
 
 def _altura_da_linha(glifos):
@@ -373,7 +423,64 @@ def _desenhar_separador(pintor, topo, altura, largura_dots, espessura):
     )
 
 
-def _pintar_linhas(pintor, fisicas, familia, topo, largura_dots, tracos=None):
+def _desenhar_icone(pintor, glifos, topo, base, largura_dots, icone):
+    """Desenha `icone` logo depois do último caractere da linha, no tamanho do
+    texto dele.
+
+    NO TAMANHO DO TEXTO, e não num tamanho fixo: o dono configura o corpo da
+    forma de pagamento (pode estar em 50px), e um ícone de tamanho fixo ao lado
+    de uma palavra dessas ficaria uma miniatura perdida. Assim ele acompanha a
+    palavra em qualquer configuração.
+
+    Na mesma BASE das letras, também: o glifo do Font Awesome é desenhado sobre
+    a linha de base como qualquer caractere, então usar a base da linha é o que
+    o deixa assentado junto da palavra em vez de flutuando.
+
+    ENCOLHE PRA CABER quando o tamanho do texto não cabe no que sobrou da
+    linha, e não é caso raro: com a forma de pagamento configurada em 50px,
+    "Forma de pagamento: Dinheiro" já ocupa quase a régua inteira, e um ícone
+    de 50px ao lado passaria da borda. Desenhado no tamanho que couber, ele
+    aparece; descartado, o recurso simplesmente não existiria nessa
+    configuração. Só desiste quando nem o tamanho mínimo cabe."""
+    ultimo = None
+    for glifo in glifos:
+        if glifo[0].strip():
+            ultimo = glifo
+
+    if ultimo is None:
+        return
+
+    _caractere, x, tamanho_px, _negrito, _sublinhado, _reverso = ultimo
+    esquerda = x + _largura_celula(tamanho_px) + tamanho_px * _FOLGA_ICONE
+
+    disponivel = largura_dots - esquerda
+    if disponivel < _TAMANHO_ICONE_MINIMO_DOTS:
+        return
+
+    familia_icone, caractere_icone = icone
+    fonte_icone = QFont(familia_icone)
+    fonte_icone.setPixelSize(tamanho_px)
+    avanco = QFontMetricsF(fonte_icone).horizontalAdvance(caractere_icone)
+
+    if avanco > disponivel:
+        # Proporcional: a largura do glifo cresce junto com o corpo da fonte,
+        # então a regra de três dá direto o tamanho que cabe. Confere de novo
+        # depois de aplicar, porque o arredondamento das métricas pode devolver
+        # um dot a mais do que a conta previu.
+        tamanho_px = int(tamanho_px * disponivel / avanco)
+        if tamanho_px < _TAMANHO_ICONE_MINIMO_DOTS:
+            return
+
+        fonte_icone.setPixelSize(tamanho_px)
+        if QFontMetricsF(fonte_icone).horizontalAdvance(caractere_icone) > disponivel:
+            return
+
+    pintor.setFont(fonte_icone)
+    pintor.setPen(QColor(0, 0, 0))
+    pintor.drawText(int(round(esquerda)), int(base), caractere_icone)
+
+
+def _pintar_linhas(pintor, fisicas, familia, topo, largura_dots, tracos=None, icones=None):
     """Pinta as linhas físicas de `fisicas` a partir de `topo` e devolve o topo
     logo abaixo da última — é o desenho em GRADE, usado pelo modelo clássico e
     também pelos trechos fora da tabela de itens no modelo rascunho.
@@ -382,6 +489,10 @@ def _pintar_linhas(pintor, fisicas, familia, topo, largura_dots, tracos=None):
     texto, e com que espessura (ver _tracos_de_texto e _linhas_entre_itens). O
     traço ocupa o espaço que já era da linha, então a comanda não fica um dot
     mais comprida por causa dele.
+
+    `icones` diz quais linhas ganham um ícone depois do texto (ver
+    _icones_da_comanda). Os dois mapas são indexados por linha FÍSICA, já
+    traduzidos por quem chama.
 
     Cada caractere é centrado na sua célula da grade — é o que mantém a coluna
     "|" e o ljust da tabela de itens alinhados mesmo numa fonte proporcional
@@ -395,6 +506,7 @@ def _pintar_linhas(pintor, fisicas, familia, topo, largura_dots, tracos=None):
     # montada na primeira vez que aparece e reaproveitada daí em diante.
     fontes = {}
     tracos = tracos or {}
+    icones = icones or {}
 
     for indice, glifos in enumerate(fisicas):
         altura = _altura_da_linha(glifos)
@@ -432,6 +544,7 @@ def _pintar_linhas(pintor, fisicas, familia, topo, largura_dots, tracos=None):
                 pintor.setPen(QColor(0, 0, 0))
 
             folga = (largura_celula - metrica.horizontalAdvance(caractere)) / 2
+
             # Nunca à esquerda da margem: num campo configurado em fonte bem
             # maior que a base, o caractere fica MAIS LARGO que a própria
             # célula, a folga vira negativa e o glifo da primeira coluna
@@ -440,6 +553,10 @@ def _pintar_linhas(pintor, fisicas, familia, topo, largura_dots, tracos=None):
             # se sobreporem de leve, como já se sobrepunham); só a saída pela
             # borda é que não pode acontecer.
             pintor.drawText(max(0, int(round(x + folga))), int(base), caractere)
+
+        icone = icones.get(indice)
+        if icone:
+            _desenhar_icone(pintor, glifos, topo, base, largura_dots, icone)
 
         topo += altura
 
@@ -537,6 +654,28 @@ def _linhas_entre_itens(logicas):
     return divisas
 
 
+def _icones_da_comanda(logicas):
+    """{índice: (família, caractere)} das linhas que levam um ícone ao lado.
+
+    Hoje é uma só: a linha da forma de pagamento escolhida (ver
+    _PADRAO_FORMA_PAGAMENTO). Uma forma sem ícone no mapa não entra, e a linha
+    sai como sempre saiu."""
+    marcas = {}
+    if not _icones_pagamento:
+        return marcas
+
+    for indice, trechos in enumerate(logicas):
+        casou = _PADRAO_FORMA_PAGAMENTO.match(_texto_visivel(trechos).strip())
+        if not casou:
+            continue
+
+        icone = _icones_pagamento.get(casou.group(1).strip())
+        if icone:
+            marcas[indice] = icone
+
+    return marcas
+
+
 def _tracos_da_comanda(logicas):
     """{índice: espessura} de todos os traços do cupom — os que o texto já
     trazia e as divisas entre itens."""
@@ -550,16 +689,16 @@ def _desenhar_modelo_classico(conteudo, familia, largura_dots):
     """A comanda inteira na grade de células, que é o cupom de sempre com
     outras letras. Devolve o QImage, ou None se não sobrou nada a desenhar."""
     logicas = _linhas_com_estilo(conteudo)
-    fisicas, tracos = _quebrar_em_linhas_fisicas(
-        logicas, largura_dots, _tracos_da_comanda(logicas)
-    )
+    fisicas, ultima_fisica = _quebrar_em_linhas_fisicas(logicas, largura_dots)
+    tracos = _por_linha_fisica(_tracos_da_comanda(logicas), ultima_fisica)
+    icones = _por_linha_fisica(_icones_da_comanda(logicas), ultima_fisica)
     altura = sum(_altura_da_linha(glifos) for glifos in fisicas)
     if altura <= 0:
         return None
 
     imagem, pintor = _nova_imagem(largura_dots, altura)
     try:
-        _pintar_linhas(pintor, fisicas, familia, 0, largura_dots, tracos)
+        _pintar_linhas(pintor, fisicas, familia, 0, largura_dots, tracos, icones)
     finally:
         pintor.end()
 
@@ -948,12 +1087,16 @@ def _desenhar_modelo_rascunho(conteudo, familia, largura_dots):
     # e do rodapé estão justamente aqui, e continuam saindo desenhados.
     fatia_antes = logicas[:inicio + 1]
     fatia_depois = logicas[fim:]
-    antes, tracos_antes = _quebrar_em_linhas_fisicas(
-        fatia_antes, largura_dots, _tracos_de_texto(fatia_antes)
-    )
-    depois, tracos_depois = _quebrar_em_linhas_fisicas(
-        fatia_depois, largura_dots, _tracos_de_texto(fatia_depois)
-    )
+    antes, ultima_antes = _quebrar_em_linhas_fisicas(fatia_antes, largura_dots)
+    depois, ultima_depois = _quebrar_em_linhas_fisicas(fatia_depois, largura_dots)
+    tracos_antes = _por_linha_fisica(_tracos_de_texto(fatia_antes), ultima_antes)
+    tracos_depois = _por_linha_fisica(_tracos_de_texto(fatia_depois), ultima_depois)
+    # A forma de pagamento sai no rodapé, então na prática o ícone cai sempre
+    # no recorte de depois — mas os dois passam pela mesma regra, que é o que
+    # mantém isto valendo se a ordem das seções mudar (ela é configurável, ver
+    # comandaEstiloService.ordem_secoes).
+    icones_antes = _por_linha_fisica(_icones_da_comanda(fatia_antes), ultima_antes)
+    icones_depois = _por_linha_fisica(_icones_da_comanda(fatia_depois), ultima_depois)
     tabela = _bloco_tabela_rascunho(itens, familia, largura_dots)
 
     altura = (
@@ -967,7 +1110,7 @@ def _desenhar_modelo_rascunho(conteudo, familia, largura_dots):
 
     imagem, pintor = _nova_imagem(largura_dots, altura_total)
     try:
-        topo = _pintar_linhas(pintor, antes, familia, 0, largura_dots, tracos_antes)
+        topo = _pintar_linhas(pintor, antes, familia, 0, largura_dots, tracos_antes, icones_antes)
         for altura_faixa, celulas, divisa in tabela:
             if divisa:
                 _desenhar_separador(
@@ -976,7 +1119,7 @@ def _desenhar_modelo_rascunho(conteudo, familia, largura_dots):
             for celula in celulas:
                 celula.pintar(pintor, topo)
             topo += altura_faixa
-        _pintar_linhas(pintor, depois, familia, topo, largura_dots, tracos_depois)
+        _pintar_linhas(pintor, depois, familia, topo, largura_dots, tracos_depois, icones_depois)
     finally:
         pintor.end()
 
@@ -1095,13 +1238,55 @@ def familias_locais():
     return _familias_locais or []
 
 
+def aquecer_icones_pagamento():
+    """Resolve, AGORA e na thread da interface, a fonte e o caractere de cada
+    ícone de forma de pagamento (ver _ICONES_PAGAMENTO), pra que a thread de
+    impressão só precise montar um QFont depois.
+
+    POR QUE AQUI, E NÃO NA HORA DE DESENHAR: o qtawesome carrega os arquivos de
+    fonte na primeira vez que é chamado, e mexer na QFontDatabase fora da
+    thread da interface tem o mesmo problema documentado em familias_locais —
+    com o agravante de que este módulo desenha dentro da thread de impressão.
+    Resolvido uma vez na subida, o que sobra pro desenho é (família,
+    caractere), que são só dados.
+
+    O ÍCONE VIRA UM GLIFO DE TEXTO, e não uma imagem: qta.icon() devolveria um
+    QIcon, e dele sai QPixmap — que não é seguro fora da thread da GUI, a mesma
+    restrição que fez este módulo inteiro ser QImage/QPainter (ver
+    para_raster). Desenhado como caractere de uma fonte, o ícone passa pelo
+    mesmo QPainter das letras e some o problema.
+
+    Melhor esforço: sem qtawesome instalado, ou sem interface viva, o cupom sai
+    sem ícone — que é exatamente como ele saía antes disto existir."""
+    global _icones_pagamento
+
+    try:
+        import qtawesome as qta
+
+        icones = {}
+        for forma, nome in _ICONES_PAGAMENTO.items():
+            prefixo = nome.split(".")[0]
+            icones[forma] = (qta.font(prefixo, 24).family(), qta.charmap(nome))
+        _icones_pagamento = icones
+    except Exception as erro:
+        print(f"[comandaImagemService] Sem ícones de forma de pagamento no cupom: {erro}")
+        return {}
+
+    print(f"[comandaImagemService] {len(_icones_pagamento)} ícone(s) de forma de pagamento prontos pro cupom.")
+    return _icones_pagamento
+
+
 def aquecer_familias():
     """Lê a lista de fontes agora, pra que as threads de detecção e de
     impressão a encontrem pronta depois (ver familias_locais). Chamado na
     subida do app, na thread da interface, depois de Config/fontes.aplicar —
-    que é o que põe a Figtree embarcada dentro da QFontDatabase."""
+    que é o que põe a Figtree embarcada dentro da QFontDatabase.
+
+    Aproveita e resolve os ícones de forma de pagamento, que precisam da mesma
+    thread e do mesmo momento (ver aquecer_icones_pagamento)."""
     familias = familias_locais()
     print(f"[comandaImagemService] {len(familias)} família(s) de fonte disponíveis pra desenhar a comanda.")
+    aquecer_icones_pagamento()
     return familias
 
 
