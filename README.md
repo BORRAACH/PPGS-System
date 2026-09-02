@@ -145,6 +145,38 @@ fazer nada ao ser clicado.
 Só é preciso gerar o `.exe` de novo se `launcher/iniciar.py` mudar: as
 atualizações do sistema continuam chegando por git, sem tocar no executável.
 
+### Servidor central: quem hospeda, e como ele sobe sozinho
+
+Uma única máquina da malha hospeda o `ppgs_server` (o backend em Rust que
+guarda os endereços de cliente e o resumo de cada fechamento de caixa). Quem é
+ela se escolhe na tela **Rede**, no botão "Rodar nesta máquina" — só essa
+máquina baixa e compila o servidor; as outras chegam nele pela malha, já dentro
+da sessão autenticada e cifrada, sem IP nem porta para configurar.
+
+Nessa máquina, marque também **"Iniciar com o Windows"** no mesmo cartão. Isso
+cria um atalho na pasta Inicializar do Windows, e a partir daí uma queda de
+energia ou um reinício noturno não deixam a pizzaria sem servidor: o Windows
+abre o sistema, e o sistema sobe o servidor. É preciso ser o sistema quem sobe,
+e não o servidor sozinho: as outras máquinas falam com ele *pela malha*, que só
+existe com o app aberto.
+
+O servidor **não cai quando o sistema é fechado**. Ele sobe destacado do app e,
+na abertura seguinte, é adotado como está em vez de reiniciado — o que acaba
+com a janela de alguns segundos (ou minutos, quando havia compilação) sem
+servidor a cada fechar/abrir. Quem o derruba de propósito é o botão "Parar" da
+tela Rede.
+
+**Nada se perde quando o servidor está fora do ar.** Endereços de cliente e
+fechamentos de caixa vão primeiro para uma fila em disco
+(`pedidos/.sync/envios_servidor.json`) e só saem dela quando o servidor
+confirma a gravação — então o balcão continua perguntando "salvar o endereço
+deste cliente?" com a máquina hospedeira desligada, e o cadastro sobe sozinho
+quando ela voltar, inclusive depois de o sistema ter sido fechado no meio.
+
+O banco é copiado uma vez por dia para
+`%LOCALAPPDATA%\PPGS\dados\backups\pizzeria-AAAA-MM-DD.db`, guardando as
+últimas 14 cópias.
+
 ### Rodando em mais de uma máquina
 
 Basta abrir o app normalmente em cada computador da mesma rede local — elas
