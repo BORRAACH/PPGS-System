@@ -33,6 +33,7 @@ outras é a fila em disco de services/rede/enviosPendentes.py.
 
 import os
 import signal
+import sqlite3
 import subprocess
 import threading
 import time
@@ -65,6 +66,12 @@ _INTERVALO_VIGIA_MS = 15000
 _ESPERA_REINICIO_S = 5
 _ESPERA_REINICIO_MAXIMA_S = 300
 _TIMEOUT_HTTP_MS = 10000
+
+# Cópias diárias do banco guardadas em pasta_dados()/backups (ver
+# _fazer_backup_diario). Duas semanas cobre com folga o intervalo entre alguém
+# notar um estrago e ir atrás da cópia, sem virar um diretório que cresce pra
+# sempre numa máquina de pizzaria.
+_BACKUPS_A_MANTER = 14
 
 
 class ServidorLocalService(QObject):
@@ -372,6 +379,64 @@ class ServidorLocalService(QObject):
         self._definir(RODANDO, "No ar", f"Servidor rodando nesta máquina ({_ENDERECO}).")
         # start() precisa acontecer na thread dona do QTimer.
         QTimer.singleShot(0, lambda: self._timer_vigia.start(_INTERVALO_VIGIA_MS))
+        self._fazer_backup_diario()
+
+    # ---------- Backup do banco ----------
+
+    def _fazer_backup_diario(self):
+        """Uma cópia por dia do pizzeria.db, com retenção.
+
+        Usa o backup ONLINE do sqlite3 da stdlib, e não uma cópia de arquivo: o
+        banco está em WAL e aberto pelo servidor, então copiar o `.db` no
+        sistema de arquivos pegaria um arquivo sem as transações que ainda estão
+        no `-wal` — um backup silenciosamente incompleto, que é pior que nenhum
+        porque parece existir. O próprio servidor documenta essa armadilha em
+        src/database/migrations.rs (fazer_backup, que resolve com VACUUM INTO).
+
+        O conteúdo já sai cifrado do cofre do servidor, então a cópia não
+        afrouxa nada: as chaves continuam existindo só em memória (ver
+        _ambiente_do_servidor)."""
+        origem = os.path.join(preparo.pasta_dados(), "pizzeria.db")
+        if not os.path.isfile(origem):
+            return
+
+        pasta = os.path.join(preparo.pasta_dados(), "backups")
+        destino = os.path.join(pasta, f"pizzeria-{time.strftime('%Y-%m-%d')}.db")
+        if os.path.isfile(destino):
+            return
+
+        try:
+            os.makedirs(pasta, exist_ok=True)
+            # Parcial com nome próprio: se o processo morrer no meio, o que
+            # sobra não é confundido com o backup do dia (o `isfile` acima
+            # devolveria True para um arquivo pela metade, e o dia inteiro
+            # ficaria sem cópia boa).
+            parcial = f"{destino}.parcial"
+            with sqlite3.connect(origem) as fonte, sqlite3.connect(parcial) as copia:
+                fonte.backup(copia)
+            os.replace(parcial, destino)
+            print(f"[servidorLocal] Backup do banco salvo em {destino}")
+        except (sqlite3.Error, OSError) as erro:
+            # Nunca fatal: ficar sem a cópia de hoje é ruim, tirar o servidor do
+            # ar por causa dela seria muito pior.
+            print(f"[servidorLocal] Não foi possível fazer o backup do banco: {erro}")
+            return
+
+        self._limpar_backups_antigos(pasta)
+
+    def _limpar_backups_antigos(self, pasta):
+        try:
+            copias = sorted(nome for nome in os.listdir(pasta) if nome.startswith("pizzeria-") and nome.endswith(".db"))
+        except OSError:
+            return
+        # Ordem alfabética = ordem cronológica: o nome carrega a data em
+        # AAAA-MM-DD justamente pra isso.
+        for nome in copias[:-_BACKUPS_A_MANTER]:
+            try:
+                os.remove(os.path.join(pasta, nome))
+                print(f"[servidorLocal] Backup antigo removido: {nome}")
+            except OSError:
+                pass
 
     def _rebaixar_prioridade_da_thread(self):
         """Além dos subprocessos (que já nascem ociosos, ver preparo.rodar),
