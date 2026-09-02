@@ -109,6 +109,30 @@ def _flags_de_prioridade() -> dict:
     return {"creationflags": flags} if flags else {}
 
 
+def flags_de_processo_destacado() -> dict:
+    """Como o ppgs_server é lançado: sem janela, mas SEM a prioridade ociosa e
+    desligado do ciclo de vida do app.
+
+    Duas diferenças de `_flags_de_prioridade`, e as duas importam:
+
+    - Nada de IDLE_PRIORITY_CLASS. Aquilo é certo para git/cargo, que precisam
+      sair da frente da interface; para o servidor seria errado — ele atende as
+      requisições do balcão, e recebê-las em prioridade ociosa é justamente o
+      contrário do que se quer.
+    - DETACHED_PROCESS/start_new_session desligam o servidor do grupo de
+      processos do app. Sem isso, fechar o sistema (ou um Ctrl+C no terminal
+      durante o desenvolvimento) levaria o servidor junto, que é o
+      comportamento de que este projeto acabou de sair."""
+    if not eh_windows():
+        # Sessão própria: o servidor não recebe o SIGINT/SIGHUP que chega ao
+        # grupo do terminal onde o app foi aberto.
+        return {"start_new_session": True}
+    flags = 0
+    for nome in ("DETACHED_PROCESS", "CREATE_NEW_PROCESS_GROUP", "CREATE_NO_WINDOW"):
+        flags |= getattr(subprocess, nome, 0)
+    return {"creationflags": flags} if flags else {}
+
+
 # Subprocesso pesado em andamento (git, cargo, rustup, winget), pra que o
 # botão "Cancelar" da tela Rede consiga interrompê-lo de verdade. É estado de
 # módulo porque só existe um preparo por vez — `ServidorLocalService._preparando`

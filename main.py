@@ -268,8 +268,10 @@ if __name__ == "__main__":
     # justamente `conectado` que decide se ela pergunta ou não sobre salvar o
     # endereço do cliente.
     servidor_local.estadoMudou.connect(pizzeria_server.verificarConexao)
-    # Sem isto o processo do servidor sobreviveria ao fechamento do sistema e
-    # a porta 8080 continuaria ocupada na abertura seguinte.
+    # O servidor sobrevive de propósito ao fechamento do sistema (ver o
+    # docstring de ServidorLocalService.encerrar): na abertura seguinte ele é
+    # adotado em vez de reiniciado, o que acaba com a janela sem servidor a cada
+    # fechar/abrir. Isto aqui só fecha o arquivo de log do lado de cá.
     app.aboutToQuit.connect(servidor_local.encerrar)
 
     engine.addImportPath(qml_dir)
