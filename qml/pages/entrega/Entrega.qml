@@ -794,17 +794,20 @@ Page {
             // telefone/endereço suficiente não faz sentido perguntar — segue
             // direto.
             //
-            // Com o servidor fora do ar também não se pergunta: a única coisa
-            // que a resposta comanda é uma gravação no servidor, então a
-            // pergunta seria sobre algo que não pode acontecer. Pior, ela
-            // cobra uma decisão no meio do fechamento de um pedido e depois
-            // falha em silêncio — o caixa clicaria "Salvar" achando que
-            // guardou o endereço do cliente. Sem servidor, o pedido segue
-            // direto para impressão/lançamento, que é o que importa.
+            // O estado do servidor NÃO entra mais nesta decisão. Ele entrava
+            // enquanto uma gravação sem servidor de pé era impossível: a
+            // pergunta seria sobre algo que não podia acontecer, e o caixa
+            // clicaria "Salvar" achando que guardou o endereço do cliente.
+            // Agora o salvamento vai para uma fila em disco
+            // (services/rede/enviosPendentes.py) e sobe sozinho quando o
+            // servidor voltar, então perguntar com o servidor fora do ar
+            // guarda o cadastro de verdade. Manter o gate antigo é que passou
+            // a ser a perda de dado: todo endereço tomado com a máquina
+            // hospedeira desligada sumia sem nunca ter sido oferecido.
             function confirmarSalvarEnderecoEProsseguir(acao, dadosPedido) {
                 var temTelefone = dadosPedido.telefone.replace(/\D/g, "").length >= 10;
                 var temEndereco = dadosPedido.endereco.trim() !== "" || dadosPedido.numero !== "" || dadosPedido.bairro.trim() !== "";
-                if (pizzeriaServerController.conectado && temTelefone && temEndereco) {
+                if (temTelefone && temEndereco) {
                     popupSalvarEndereco.abrirPara(acao, dadosPedido, telaEntrega.enderecoEncontradoNoServidor);
                     return ;
                 }
@@ -1554,14 +1557,15 @@ Page {
                 id: popupSalvarEndereco
 
                 onRespondido: function(salvar) {
-                    // Reconferido aqui, e não só na hora de abrir: o popup
-                    // fica na tela esperando uma decisão, e o servidor pode
-                    // cair nesse intervalo (a máquina que o hospeda é um
-                    // balcão como qualquer outro, e pode ser desligada).
-                    if (salvar && pizzeriaServerController.conectado)
+                    // Sem reconferir o servidor: o popup fica na tela
+                    // esperando uma decisão e a hospedeira pode cair nesse
+                    // intervalo, mas isso deixou de importar — salvarEndereco
+                    // enfileira antes de tentar subir, então a resposta "Salvar"
+                    // vale igual com ou sem servidor no ar. Quem conta o que
+                    // aconteceu é o onEnderecoSalvo, que distingue "salvo no
+                    // servidor" de "guardado para subir depois".
+                    if (salvar)
                         pizzeriaServerController.salvarEndereco(dados);
-                    else if (salvar)
-                        telaEntrega.mostrarNotificacao("Servidor central fora do ar — o endereço não foi salvo.", false);
 
                     if (acaoPendente === "imprimir")
                         prosseguirImprimir(dados);

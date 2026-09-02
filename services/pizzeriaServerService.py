@@ -16,13 +16,21 @@ exatamente "quem tem a chave da malha".
 Continua tudo assíncrono, só que o resultado agora chega pelo sinal
 `respostaServidor` do RedeService em vez do `finished` do
 QNetworkAccessManager — daí o `_pendentes`, que casa cada id de requisição com
-o que fazer quando a resposta dela voltar."""
+o que fazer quando a resposta dela voltar.
+
+TODA ESCRITA passa antes por uma fila em disco (services/rede/enviosPendentes.py)
+e só sai dela quando o servidor confirma. Antes, um endereço digitado com o
+servidor fora do ar não era gravado em lugar nenhum: a Entrega nem chegava a
+oferecer o salvamento, e o que já estava a caminho vivia numa fila em memória
+que morria junto com o app. O POST imediato daqui virou, portanto, só o caminho
+rápido — o que garante a gravação é a fila, não ele."""
 
 import json
 
 from PyQt6.QtCore import QObject, QTimer, pyqtProperty, pyqtSignal, pyqtSlot
 
 from Config.logConfig import protegido
+from services.rede import enviosPendentes
 from services.rede.redeService import rede
 
 # Mesma ordem de grandeza da checagem de impressora da malha local (ver
@@ -31,14 +39,26 @@ from services.rede.redeService import rede
 # tráfego numa rede que já tem o gossip da malha rodando.
 _INTERVALO_VERIFICACAO_CONEXAO_MS = 30000
 
-# Espera antes de reenviar um fechamento que não subiu (ver
-# _agendar_reenvio). Tem que ser confortavelmente maior que o intervalo
-# mínimo do rate limiter do pizzeria-server (RATE_LIMIT_MIN_INTERVAL, 200ms
-# por IP em src/main.rs): o gatilho natural do reenvio é a resposta da
-# verificação periódica de conexão, e disparar o POST ali na hora significaria
-# duas requisições do mesmo IP no mesmo milissegundo — o servidor recusaria a
-# segunda com 429 e a retentativa nunca sairia do lugar.
-_INTERVALO_REENVIO_FECHAMENTO_MS = 5000
+# Enquanto NÃO há conexão, a mesma checagem acontece bem mais de perto. Os dois
+# estados não custam a mesma coisa nem valem a mesma coisa: confirmar pela
+# milésima vez um servidor que está de pé há horas não informa nada, enquanto
+# reencontrar um que acabou de voltar libera de imediato o autofill da Entrega e
+# a drenagem da fila de envios. Meio minuto parado nesse segundo caso é uma
+# eternidade no balcão.
+_INTERVALO_VERIFICACAO_SEM_CONEXAO_MS = 5000
+
+# Espera entre um item da fila e o próximo (ver _agendar_reenvio). Tem que ser
+# confortavelmente maior que o intervalo mínimo do rate limiter do
+# pizzeria-server (RATE_LIMIT_MIN_INTERVAL, 200ms por IP em src/main.rs): o
+# gatilho natural do reenvio é a resposta da verificação periódica de conexão, e
+# disparar o POST ali na hora significaria duas requisições do mesmo IP no mesmo
+# milissegundo — o servidor recusaria a segunda com 429.
+#
+# Deliberadamente NÃO é 5000 nem 30000, os dois intervalos da verificação de
+# conexão. Com os três valores iguais (ou múltiplos), os timers batiam juntos e o
+# 429 deixava de ser azar para virar regra: o reenvio saía sempre no mesmo
+# milissegundo de uma verificação, e a fila não andava nunca.
+_INTERVALO_REENVIO_MS = 1500
 
 
 def _normalizar_telefone(telefone):
@@ -80,22 +100,26 @@ class PizzeriaServerService(QObject):
         # None até a primeira resposta chegar — diferente de False, que já
         # afirmaria "desconectado" antes de qualquer tentativa real.
         self._conectado = None
-        # Resumos de fechamento que o servidor ainda não confirmou, por data —
-        # só o mais recente de cada dia, porque é ele que predomina lá (ver
-        # enviarFechamento). Fica só em memória de propósito: o caso que isto
-        # cobre é "a máquina Alpine estava fora do ar por alguns minutos", não
-        # "o balcão foi desligado" — nesse segundo caso o dono fecha o caixa
-        # de novo, que é o gesto que reenvia tudo mesmo.
-        self._fechamentos_pendentes = {}
 
         self._timer_reenvio = QTimer(self)
         self._timer_reenvio.setSingleShot(True)
-        self._timer_reenvio.timeout.connect(self._reenviar_fechamentos_pendentes)
+        self._timer_reenvio.timeout.connect(self._reenviar_pendentes)
 
         self._timer_conexao = QTimer(self)
         self._timer_conexao.timeout.connect(self.verificarConexao)
-        self._timer_conexao.start(_INTERVALO_VERIFICACAO_CONEXAO_MS)
+        # Começa no ritmo apertado: até a primeira resposta, este balcão está
+        # justamente no estado "não sei se há servidor" que o intervalo curto
+        # existe para encurtar.
+        self._timer_conexao.start(_INTERVALO_VERIFICACAO_SEM_CONEXAO_MS)
         self.verificarConexao()
+
+        # O que sobrou da sessão anterior não precisa de gatilho próprio: a
+        # verificação de conexão acima já vai chamar o reenvio assim que
+        # confirmar que há servidor. Registrar em log, porém, vale — é a única
+        # pista de que existe cadastro esperando para subir.
+        pendentes = enviosPendentes.quantidade()
+        if pendentes:
+            print(f"[pizzeriaServerService] {pendentes} envio(s) pendente(s) da sessão anterior — serão reenviados quando houver servidor.")
 
     @pyqtProperty(bool, notify=conexaoMudou)
     def conectado(self):
@@ -167,12 +191,20 @@ class PizzeriaServerService(QObject):
         # entre dois ticks sem que este balcão tenha notado a queda, e é a
         # confirmação de que ele está de pé que dá a deixa pra reenviar o que
         # ficou pendente.
-        if novo_estado and self._fechamentos_pendentes:
+        if novo_estado and enviosPendentes.quantidade():
             self._agendar_reenvio()
 
         if novo_estado == self._conectado:
             return
         self._conectado = novo_estado
+        # O ritmo da verificação acompanha o estado: apertado enquanto não há
+        # servidor (é quando reencontrá-lo vale alguma coisa), folgado depois de
+        # confirmado. Trocar o intervalo aqui, e não em outro lugar, é o que
+        # mantém isto num ponto só — este método já é o único que decide se há
+        # ou não conexão.
+        self._timer_conexao.start(
+            _INTERVALO_VERIFICACAO_CONEXAO_MS if novo_estado else _INTERVALO_VERIFICACAO_SEM_CONEXAO_MS
+        )
         self.conexaoMudou.emit(self._conectado)
 
     @pyqtSlot(str)
@@ -211,10 +243,15 @@ class PizzeriaServerService(QObject):
     def salvarEndereco(self, dados):
         """Cadastra/atualiza (upsert por telefone) o endereço no servidor.
         Espera as mesmas chaves de coletarDadosPedido() em Entrega.qml
-        (cliente, telefone, endereco, numero, bairro, observacaoGeral)."""
+        (cliente, telefone, endereco, numero, bairro, observacaoGeral).
+
+        Não depende de haver servidor agora. O endereço vai primeiro para a
+        fila em disco e só sai dela quando o servidor confirmar — a tela pode
+        oferecer o salvamento sempre, e o caixa que clica "Salvar" com a
+        hospedeira desligada não perde o cadastro do cliente."""
         digitos = _normalizar_telefone(dados.get("telefone", ""))
         if len(digitos) < 10:
-            self.enderecoSalvo.emit(False, "Telefone invalido para salvar o endereco.")
+            self.enderecoSalvo.emit(False, "Telefone inválido para salvar o endereço.")
             return
 
         payload = {
@@ -228,15 +265,35 @@ class PizzeriaServerService(QObject):
             "nome": dados.get("cliente") or None,
         }
 
-        self._pedir("POST", "/enderecos", json.dumps(payload).encode("utf-8"), self._tratar_salvamento)
+        self._postar_enfileirado(
+            enviosPendentes.chave_endereco(digitos),
+            "/enderecos",
+            json.dumps(payload),
+            self._tratar_salvamento,
+        )
 
-    def _tratar_salvamento(self, status, _corpo):
+    def _tratar_salvamento(self, chave, corpo_enviado, status, _corpo):
         if status != 201:
-            print(f"[pizzeriaServerService] Falha ao salvar endereco: HTTP {status}")
-            self.enderecoSalvo.emit(False, "Nao foi possivel salvar o endereco no servidor.")
+            print(f"[pizzeriaServerService] Endereço não subiu agora (HTTP {status}) — fica na fila.")
+            self._agendar_reenvio()
+            # `True` de propósito, e não a notificação vermelha de antes: do
+            # ponto de vista de quem clicou, o endereço FOI guardado — está no
+            # disco desta máquina e sobe sozinho. Pintar isso de erro ensinaria
+            # o caixa a redigitar um cadastro que já existe.
+            #
+            # Status 0 é "não houve com quem falar"; qualquer outro (429 do rate
+            # limiter, um 5xx passageiro) veio de um servidor que está lá, e
+            # dizer "assim que ele voltar" ali seria mentira — a fila vai
+            # resolver em segundos.
+            self.enderecoSalvo.emit(True, (
+                "Sem servidor agora — o endereço foi guardado e será salvo assim que ele voltar."
+                if status == 0 else
+                "O endereço foi guardado e será salvo no servidor em instantes."
+            ))
             return
 
-        self.enderecoSalvo.emit(True, "Endereco salvo no servidor.")
+        enviosPendentes.remover(chave, corpo_enviado)
+        self.enderecoSalvo.emit(True, "Endereço salvo no servidor.")
 
     # ---------- Resumo do dia, enviado ao fechar o caixa ----------
 
@@ -257,56 +314,108 @@ class PizzeriaServerService(QObject):
             self.fechamentoEnviado.emit(False, "Fechamento sem data — nada enviado ao servidor.")
             return
 
-        # Guardado ANTES de tentar: se a tentativa falhar, o retry da
-        # verificação periódica de conexão já encontra o payload aqui. Como a
-        # chave é a data, um segundo fechamento do mesmo dia substitui o
-        # pendente do primeiro — mandar o antigo depois só desperdiçaria uma
-        # requisição que o servidor descartaria pelo id_evento.
-        self._fechamentos_pendentes[data] = payload
-        self._postar_fechamento(payload)
-
-    def _agendar_reenvio(self):
-        """Marca uma nova tentativa dos fechamentos pendentes. Não faz nada se
-        já houver uma marcada — o timer é único e de disparo único, então
-        várias chamadas seguidas (uma por tick de conexão, uma por falha)
-        continuam valendo uma tentativa só."""
-        if not self._timer_reenvio.isActive():
-            self._timer_reenvio.start(_INTERVALO_REENVIO_FECHAMENTO_MS)
-
-    def _reenviar_fechamentos_pendentes(self):
-        for payload in list(self._fechamentos_pendentes.values()):
-            self._postar_fechamento(payload)
-
-    def _postar_fechamento(self, payload):
-        self._pedir(
-            "POST",
+        self._postar_enfileirado(
+            enviosPendentes.chave_fechamento(data),
             "/fechamentos",
-            json.dumps(payload).encode("utf-8"),
-            lambda status, corpo: self._tratar_envio_fechamento(status, payload),
+            json.dumps(payload),
+            self._tratar_envio_fechamento,
         )
 
-    def _tratar_envio_fechamento(self, status, payload):
-        data = payload.get("data") or ""
-
+    def _tratar_envio_fechamento(self, chave, corpo_enviado, status, _corpo):
         if status != 200:
-            print(f"[pizzeriaServerService] Falha ao enviar fechamento de {data}: HTTP {status}")
+            print(f"[pizzeriaServerService] Fechamento não subiu agora (HTTP {status}) — fica na fila.")
             self._agendar_reenvio()
             self.fechamentoEnviado.emit(
                 False,
-                "Não foi possível enviar o fechamento ao servidor central — será reenviado automaticamente.",
+                "Sem servidor agora — o fechamento ficou guardado e será enviado assim que ele voltar.",
             )
             return
 
-        # Só sai da fila o payload que de fato foi confirmado: entre o post e
-        # esta resposta o caixa pode ter sido fechado de novo, e aí o pendente
-        # daquela data já é outro (mais novo), que ainda precisa subir.
-        if self._fechamentos_pendentes.get(data) is payload:
-            del self._fechamentos_pendentes[data]
-
+        enviosPendentes.remover(chave, corpo_enviado)
         # 200 com "aplicado": false significa que o servidor já tinha um
         # fechamento mais recente deste dia (outra máquina fechou depois). Pra
         # quem mandou, o resultado é o mesmo: o servidor está em dia.
         self.fechamentoEnviado.emit(True, "Fechamento enviado ao servidor central.")
+
+    # ---------- Fila de envios (ver services/rede/enviosPendentes.py) ----------
+
+    def _postar_enfileirado(self, chave, caminho, corpo, tratador):
+        """Grava na fila e tenta subir na hora. A ordem importa: enfileirar
+        DEPOIS do POST deixaria uma janela em que uma queda do app entre os dois
+        perderia a escrita — exatamente o buraco que esta fila existe pra
+        fechar."""
+        enviosPendentes.enfileirar(chave, "POST", caminho, corpo)
+        self._pedir(
+            "POST",
+            caminho,
+            corpo.encode("utf-8"),
+            lambda status, resposta: tratador(chave, corpo, status, resposta),
+        )
+
+    def _agendar_reenvio(self):
+        """Marca uma nova tentativa da fila. Não faz nada se já houver uma
+        marcada — o timer é único e de disparo único, então várias chamadas
+        seguidas (uma por tick de conexão, uma por falha) continuam valendo uma
+        tentativa só."""
+        if not self._timer_reenvio.isActive():
+            self._timer_reenvio.start(_INTERVALO_REENVIO_MS)
+
+    def _reenviar_pendentes(self):
+        """Manda UM item da fila. O próximo sai quando a resposta deste chegar
+        (ver _tratar_reenvio), e assim por diante até a fila esvaziar.
+
+        Um por vez, e não a fila inteira de uma vez, por causa do rate limiter
+        do pizzeria-server: ele recusa com 429 duas requisições do mesmo IP em
+        menos de 200ms (RATE_LIMIT_MIN_INTERVAL, src/main.rs). Disparando a fila
+        em rajada, o primeiro item subia e TODOS os outros voltavam 429 —
+        ficavam na fila, e a rajada seguinte repetia o mesmo resultado. Uma fila
+        de dez endereços nunca chegaria ao fim.
+
+        Reenvio é silencioso de propósito: o tratador aqui não emite
+        `enderecoSalvo`/`fechamentoEnviado`. Aqueles sinais respondem a um
+        gesto do usuário ("cliquei em Salvar", "fechei o caixa"), e disparar uma
+        notificação minutos depois, sem ninguém ter pedido nada, encheria a tela
+        de avisos sobre coisas que o caixa já esqueceu."""
+        itens = enviosPendentes.itens()
+        if not itens:
+            return
+        chave, metodo, caminho, corpo = itens[0]
+        print(f"[pizzeriaServerService] Reenviando '{chave}' ({len(itens)} na fila).")
+        self._pedir(
+            metodo,
+            caminho,
+            corpo.encode("utf-8"),
+            lambda status, _resposta: self._tratar_reenvio(chave, corpo, int(status)),
+        )
+
+    def _tratar_reenvio(self, chave, corpo_enviado, status):
+        # Os dois sucessos possíveis das rotas enfileiradas: 201 (endereço
+        # criado/atualizado) e 200 (fechamento aplicado ou preterido por um mais
+        # novo — nos dois casos o servidor está em dia sobre aquele dia).
+        if status in (200, 201):
+            enviosPendentes.remover(chave, corpo_enviado)
+            self._agendar_reenvio()
+            return
+        # 422 e 400 são o único caso em que insistir não adianta: o corpo está
+        # errado e vai continuar errado a cada tentativa. Sair da fila aqui
+        # evita um item imortal que reenvia para sempre.
+        if status in (400, 422):
+            print(f"[pizzeriaServerService] '{chave}' recusado pelo servidor (HTTP {status}) — descartado da fila.")
+            enviosPendentes.remover(chave, corpo_enviado)
+            self._agendar_reenvio()
+            return
+        # 429 é o servidor dizendo "devagar", não "não". Ele só acontece com o
+        # servidor de pé e alcançável, então tentar de novo daqui a pouco é a
+        # resposta certa — e não fecha laço nenhum, porque a fila anda a cada
+        # item aceito.
+        if status == 429:
+            self._agendar_reenvio()
+            return
+        # Sobrou o que significa "não há servidor" (status 0, 5xx): NÃO reagenda
+        # daqui. Quem marca a próxima tentativa é a verificação periódica de
+        # conexão, e só quando ela confirma 200 (ver _tratar_verificacao_conexao).
+        # Reagendar aqui fecharia um laço que, com o servidor fora do ar a noite
+        # toda, tentaria milhares de vezes sem nunca poder dar certo.
 
 
 # Singleton de módulo — mesmo padrão usado pelos demais services do projeto
