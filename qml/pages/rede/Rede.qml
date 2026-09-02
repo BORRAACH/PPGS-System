@@ -593,6 +593,64 @@ Page {
                         }
                     }
 
+                    // Só faz sentido na máquina que hospeda: é ela que precisa
+                    // estar de pé quando o expediente começa. Numa máquina que
+                    // não hospeda, abrir sozinha com o Windows não coloca
+                    // servidor nenhum no ar.
+                    RowLayout {
+                        Layout.fillWidth: true
+                        visible: redeController.servidorAqui && servidorLocalController.autostartDisponivel
+                        spacing: Estilo.global.spacing.sm
+
+                        CheckBox {
+                            id: chkIniciarComWindows
+
+                            padding: 0
+                            implicitWidth: 22
+                            implicitHeight: 22
+                            checked: servidorLocalController.iniciarComWindows
+                            onClicked: servidorLocalController.definirIniciarComWindows(checked)
+
+                            contentItem: Item {}
+                            indicator: Rectangle {
+                                implicitWidth: 22
+                                implicitHeight: 22
+                                radius: Estilo.global.radius.xs
+                                border.color: chkIniciarComWindows.checked ? Estilo.screen.rede.base : Estilo.global.borderStrong
+                                border.width: Estilo.global.borderWidth.thick
+                                color: chkIniciarComWindows.checked ? Estilo.screen.rede.base : "transparent"
+
+                                Icone {
+                                    nome: "fa6s.check"
+                                    cor: Estilo.global.textOnAccent
+                                    tamanho: 13
+                                    anchors.centerIn: parent
+                                    visible: chkIniciarComWindows.checked
+                                }
+                            }
+                        }
+
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 0
+
+                            Text {
+                                text: "Iniciar com o Windows"
+                                font.pixelSize: Estilo.global.fontSize.sm
+                                font.bold: true
+                                color: Estilo.global.text
+                            }
+
+                            Text {
+                                Layout.fillWidth: true
+                                text: "O sistema abre sozinho quando esta máquina liga, e sobe o servidor central junto."
+                                font.pixelSize: Estilo.global.fontSize.xs
+                                color: Estilo.global.textSecondary
+                                wrapMode: Text.WordWrap
+                            }
+                        }
+                    }
+
                     RowLayout {
                         Layout.fillWidth: true
                         visible: redeController.servidorAqui

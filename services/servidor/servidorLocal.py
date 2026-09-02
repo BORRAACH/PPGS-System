@@ -28,7 +28,8 @@ O que isso NÃO resolve, e é bom estar escrito: com o app desta máquina fechad
 o servidor continua de pé mas as OUTRAS máquinas não o alcançam — o transporte
 delas é a malha, e a malha morre com o app. O ganho aqui é local (fim do churn,
 reabertura instantânea, zero janela sem servidor nesta máquina); quem cobre as
-outras é a fila em disco de services/rede/enviosPendentes.py.
+outras é a fila em disco de services/rede/enviosPendentes.py somada ao atalho de
+inicialização do Windows (services/servidor/autostart.py).
 """
 
 import os
@@ -45,7 +46,7 @@ from Config.logConfig import protegido
 from services.rede import seguranca
 from services.rede.redeService import rede
 from services.statusInicializacaoService import status
-from services.servidor import preparo
+from services.servidor import autostart, preparo
 
 # Estados possíveis, expostos ao QML como string.
 PARADO = "parado"
@@ -131,6 +132,30 @@ class ServidorLocalService(QObject):
     @pyqtProperty(bool, notify=estadoMudou)
     def hospedandoAqui(self) -> bool:
         return rede.servidorAqui
+
+    @pyqtProperty(bool, notify=estadoMudou)
+    def autostartDisponivel(self) -> bool:
+        """Se dá pra oferecer o "iniciar junto com o Windows" nesta máquina —
+        hoje, se ela é Windows (ver services/servidor/autostart.py)."""
+        return autostart.disponivel()
+
+    @pyqtProperty(bool, notify=estadoMudou)
+    def iniciarComWindows(self) -> bool:
+        return autostart.ativo()
+
+    @pyqtSlot(bool)
+    @protegido(None)
+    def definirIniciarComWindows(self, ligar: bool):
+        """Liga/desliga o atalho na pasta Inicializar do Windows. É o que faz o
+        servidor subir sozinho depois de uma queda de energia ou do reinício
+        noturno da máquina: o Windows abre o sistema, e o sistema sobe o
+        servidor."""
+        ok, mensagem = autostart.ativar() if ligar else autostart.desativar()
+        print(f"[servidorLocal] {mensagem}")
+        if not ok:
+            self._definir(self._estado, self._etapa, mensagem)
+            return
+        self.estadoMudou.emit()
 
     @pyqtSlot()
     @protegido(None)
