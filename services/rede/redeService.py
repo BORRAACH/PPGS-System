@@ -698,6 +698,17 @@ class RedeService(QObject):
                 # Se a máquina que caiu era a eleita pra imprimir, reeleger
                 # (ou ficar sem impressora) na hora, sem esperar nada.
                 self._recalcular_maquina_impressora()
+                # E se era a que hospeda o ppgs_server, dizer isso agora.
+                # O espelho disto na ENTRADA já existia (o handshake avisa
+                # "servidor no ar" a quem acaba de conectar), mas a saída não
+                # avisava nada: o balcão continuava marcando "Servidor central
+                # conectado" com a hospedeira desligada, até o próximo tique de
+                # verificação. Nessa janela a Entrega oferecia salvar endereço
+                # apontando para uma máquina que não existe mais — e é
+                # exatamente o instante em que um cadastro se perdia.
+                if nome and nome == self._nome_servidor:
+                    print(f"[RedeService] A máquina que hospeda o servidor ('{nome}') saiu da malha.")
+                    self.servidorNoArMudou.emit(nome, False)
         except RuntimeError:
             pass
 
