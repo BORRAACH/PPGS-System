@@ -14,9 +14,11 @@ import "../../components"
 // para uma terceira ação sem espremer mais um ícone de 32px na linha. O menu
 // pertence à comanda em que se clicou, e cresce sem apertar nada.
 //
-// Comanda já fechada não mostra Editar nem Excluir — corrigi-la é só pelo botão
-// "Editar caixa" em Fechamento.qml, que sabe lidar com a baixa já dada.
-// Reimprimir aparece sempre: não grava nada.
+// Comanda já fechada não mostra Editar nem Excluir: uma vez baixada ela já
+// conta no caixa do dia, e nem esta tela nem a de Fechamento corrigem o que
+// já foi fechado — quando o lançamento está errado mesmo, o caminho é apagar
+// pela tela de Fechamento (PopupFechamentoRapido.qml), que registra a
+// exclusão no histórico do dia. Reimprimir aparece sempre: não grava nada.
 Rectangle {
     id: itemComanda
 

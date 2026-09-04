@@ -1331,32 +1331,6 @@ class FechamentoController(QObject):
 
         return abertas
 
-    @pyqtSlot(str, result="QVariantList")
-    @protegido([])
-    def listarComandasFechadas(self, data_iso):
-        """Comandas de `data_iso` que já receberam baixa, no mesmo formato e
-        ordem de listarComandasAbertas — alimenta a fila do botão "Editar
-        caixa" em Fechamento.qml, simétrico ao "Fechamento rápido" só que do
-        lado oposto (fechadas em vez de abertas)."""
-        baixas = baixaComandas.carregar()
-
-        arquivos = sorted(
-            self._listar_arquivos_do_dia(data_iso),
-            key=parser.carimbo_arquivo,
-            reverse=True,
-        )
-
-        fechadas = []
-        for nome_arquivo in arquivos:
-            if nome_arquivo not in baixas:
-                continue
-            dados = self._ler_comanda(nome_arquivo)
-            if dados is not None:
-                dados["fechada"] = True
-                fechadas.append(dados)
-
-        return fechadas
-
     @pyqtSlot(str, result="QVariantMap")
     @protegido({})
     def obterComanda(self, nome_arquivo):
@@ -1497,10 +1471,12 @@ class FechamentoController(QObject):
             cliente,
             valor_antes,
             valor_depois,
-            # Uma correção que NÃO devolve a baixa tira a venda do caixa (ver
-            # qml/pages/fechamento/PopupManterBaixa.qml): o dia perde o valor
-            # inteiro, e o cupom precisa dizer isso — senão a linha mostraria
-            # uma troca de valores enquanto o total do dia caiu tudo.
+            # Uma correção que NÃO devolve a baixa tira a venda do caixa: o
+            # dia perde o valor inteiro, e o cupom precisa dizer isso — senão
+            # a linha mostraria uma troca de valores enquanto o total do dia
+            # caiu tudo. Hoje só chega False por exclusão, já que comanda
+            # baixada não se edita mais; o campo continua aqui porque os
+            # registros antigos gravados com True precisam seguir legíveis.
             no_caixa=bool(manteve_baixa),
             arquivo_novo=arquivo_novo,
         )

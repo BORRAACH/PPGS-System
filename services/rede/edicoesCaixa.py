@@ -127,9 +127,9 @@ def registrar(data_iso, acao, usuario, data_hora, codigo="", cliente="",
         "valorAntes": valor_antes,
         "valorDepois": valor_depois,
         # Se o que sobrou da alteração AINDA conta no caixa do dia. False
-        # numa exclusão (não sobrou nada) e também numa correção em que a
-        # baixa não foi devolvida (ver qml/pages/fechamento/PopupManterBaixa.qml):
-        # nos dois casos o dia perdeu "valorAntes" inteiro, e é essa
+        # numa exclusão (não sobrou nada) e também numa correção antiga em
+        # que a baixa não foi devolvida (comanda já baixada não se edita
+        # mais): nos dois casos o dia perdeu "valorAntes" inteiro, e é essa
         # diferença que quem confere o caixa está procurando. Separado de
         # "valorDepois" porque uma comanda pode legitimamente valer R$ 0,00 —
         # usar o zero como sinal confundiria os dois casos.
