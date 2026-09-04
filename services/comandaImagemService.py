@@ -162,14 +162,25 @@ _FOLGA_ICONE = 0.35
 
 # O vão mínimo, em dots, abaixo do qual o ícone estaria encostado na palavra —
 # aí ele parece parte dela em vez de um símbolo ao lado. Quando nem isto cabe,
-# a linha sai sem ícone.
+# o ícone encolhe (ver _ENCOLHIMENTO_MINIMO_ICONE).
 #
 # Três dots parece pouco e não é: o vão VISÍVEL é maior, porque a última letra
 # não preenche a célula dela até a borda (a grade dá a cada caractere a largura
-# de uma coluna, e a maioria dos glifos ocupa menos). É este valor que faz
-# caber a linha mais cheia desta comanda — "Forma de pagamento: Dinheiro" com o
-# campo em 50px, onde sobram 3,2 dots depois do ícone.
+# de uma coluna, e a maioria dos glifos ocupa menos).
 _FOLGA_MINIMA_ICONE_DOTS = 3
+
+# O tamanho do ícone encolhido, como fração do tamanho do texto, para quando
+# nem avançando sobre a margem ele caberia inteiro. Se nem assim couber, a
+# linha sai sem ícone.
+#
+# 0,7 vem da altura, não da largura. O glifo do Font Awesome desenhado em N
+# pixels tem quase N de tinta, enquanto uma letra em N pixels tem bem menos:
+# num campo de 50px a maiúscula mede 35 dots de caixa alta e a minúscula, 25 —
+# e o ícone, 46. Ele já nasce mais alto que a palavra inteira. Em 70% ele mede
+# 32: ainda acima do corpo das minúsculas e quase na altura das maiúsculas, que
+# é onde ele para de crescer sobre a palavra sem virar a nota de rodapé que
+# _desenhar_icone existe para evitar.
+_ENCOLHIMENTO_MINIMO_ICONE = 0.7
 
 # {forma de pagamento: (família da fonte, caractere do glifo)}, preenchido pelo
 # aquecimento (ver aquecer_icones_pagamento). Vazio = sem ícone nenhum, e a
@@ -465,8 +476,23 @@ def _desenhar_icone(pintor, glifos, base, largura_dots, familia, icone):
     Nesse caso o vão fica no mínimo, e não no preferido: assim o ícone avança o
     mínimo possível e sobra o máximo de papel depois dele.
 
-    Passando da borda do PAPEL, aí sim a linha sai sem ícone — melhor perdê-lo
-    do que imprimi-lo cortado."""
+    E QUANDO NEM A MARGEM RESOLVE, o ícone encolhe — é ele quem cede agora,
+    porque vão não sobrou nenhum para ceder. Este degrau existe porque a régua
+    acima é apertada demais para o campo crescer: "Forma de pagamento:
+    Dinheiro" cabia com 3,7 dots de sobra em 48px e passa 7 dots da borda do
+    papel em 50px, que é justamente o corpo configurado nesta casa. A palavra
+    mais comprida das quatro com o ícone mais largo dos quatro cai fora
+    primeiro, então "Dinheiro" era o único que sumia do cupom enquanto Pix,
+    Crédito e Débito continuavam saindo. Um recurso que some sozinho quando o
+    dono mexe no corpo da fonte é pior que um recurso que não existe.
+
+    Encolher só ELE, e não o texto: a palavra é o dado, o ícone é o eco dela.
+    E encolhido ele volta a respeitar a margem, que o degrau de cima gasta —
+    pagar em tamanho E em margem deixaria o desenho colado na beirada do papel,
+    que é o cortado logo abaixo com passos a mais.
+
+    NÃO CABENDO NEM ENCOLHIDO, a linha sai sem ícone — melhor perdê-lo do que
+    imprimi-lo cortado."""
     ultimo = None
     for glifo in glifos:
         if glifo[0].strip():
@@ -493,16 +519,34 @@ def _desenhar_icone(pintor, glifos, base, largura_dots, familia, icone):
     avanco = QFontMetricsF(fonte_icone).horizontalAdvance(caractere_icone)
 
     sobra_util = largura_dots - fim_do_texto
+    # A margem direita, em coordenadas do pintor: a origem dele está na margem
+    # esquerda (ver _nova_imagem), então a borda do papel fica em largura útil
+    # mais uma margem.
+    sobra_papel = largura_dots + _MARGEM_LATERAL_DOTS - fim_do_texto
+
     if sobra_util >= avanco + _FOLGA_MINIMA_ICONE_DOTS:
         folga = min(tamanho_px * _FOLGA_ICONE, sobra_util - avanco)
-    else:
-        # A margem direita, em coordenadas do pintor: a origem dele está na
-        # margem esquerda (ver _nova_imagem), então a borda do papel fica em
-        # largura útil + uma margem.
-        sobra_papel = largura_dots + _MARGEM_LATERAL_DOTS - fim_do_texto
-        if sobra_papel < avanco + _FOLGA_MINIMA_ICONE_DOTS:
-            return
+    elif sobra_papel >= avanco + _FOLGA_MINIMA_ICONE_DOTS:
         folga = _FOLGA_MINIMA_ICONE_DOTS
+    else:
+        # Direto pro tamanho encolhido, e não o maior que ainda passaria:
+        # chegar aqui já significa que a linha está cheia, e o que sobra depois
+        # do ícone é o vão. Encolher o mínimo devolveria os dots todos ao ícone
+        # e o deixaria encostado na palavra — o mesmo defeito que o vão mínimo
+        # descreve, só que de graça, porque aqui o ícone tinha para onde ceder
+        # e não cedeu.
+        fonte_icone.setPixelSize(max(1, int(tamanho_px * _ENCOLHIMENTO_MINIMO_ICONE)))
+        avanco = QFontMetricsF(fonte_icone).horizontalAdvance(caractere_icone)
+
+        # Contra a sobra ÚTIL, e não contra a do papel: o degrau de cima gasta
+        # a margem para salvar o ícone em tamanho cheio, mas aqui já se está
+        # pagando em tamanho, e o troco de gastar as duas coisas é um desenho
+        # colado na beirada — que é o "cortado" de que o degrau seguinte fala.
+        # Encolhido e dentro da margem sai melhor que inteiro e na guilhotina.
+        if sobra_util < avanco + _FOLGA_MINIMA_ICONE_DOTS:
+            return
+
+        folga = min(fonte_icone.pixelSize() * _FOLGA_ICONE, sobra_util - avanco)
 
     esquerda = fim_do_texto + folga
 
