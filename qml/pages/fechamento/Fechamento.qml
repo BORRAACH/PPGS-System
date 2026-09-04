@@ -393,29 +393,6 @@ Page {
         popupDespesas.abrirPara(telaFechamento.dataSelecionada);
     }
 
-    // Correção de uma comanda já fechada — único caminho pra isso agora
-    // (ver ItemComandaDelegate.qml, que escondeu lápis/lixeira de comandas
-    // fechadas na Consulta). Fila espelhada da de "Fechamento rápido", só
-    // que sobre as que já têm baixa.
-    function abrirEditarCaixa() {
-        // O código é pedido AQUI, na porta, e não a cada "Editar" lá dentro:
-        // abrir esta fila é assumir a intenção de mexer no caixa já fechado, e
-        // quem corrige três comandas seguidas não precisa se identificar três
-        // vezes. A fila aberta por este caminho já entra autorizada — ver
-        // PopupFechamentoRapido.abrirParaFechadas.
-        //
-        // A contrapartida, registrada aqui para não ser descoberta depois: a
-        // linha do histórico passa a dizer o DIA que foi aberto para edição,
-        // não qual comanda foi corrigida. Os outros dois caminhos até a mesma
-        // edição (Fechamento rápido e o clique numa comanda da lista do dia)
-        // continuam pedindo o código por comanda, porque neles não houve porta
-        // nenhuma antes.
-        popupAutorizacao.solicitar("Editar caixa", telaFechamento.dataSelecionada, function () {
-            if (!popupFechamentoRapido.abrirParaFechadas(telaFechamento.dataSelecionada))
-                telaFechamento.mostrarNotificacao("Nenhuma comanda fechada em " + telaFechamento.formatarDataExibicao(telaFechamento.dataSelecionada) + ".", true);
-        });
-    }
-
     // Conexão declarativa, não um .connect() solto em Component.onCompleted
     // — mesmo motivo documentado em Balcao.qml/Rede.qml: fechamentoController
     // é global e vive pra sempre, então a conexão precisa estar presa ao
@@ -593,7 +570,7 @@ Page {
 
                 // Largura que os controles pediriam numa linha só. Medida a
                 // partir dos filhos do Flow, e não chutada por um número
-                // fixo: são seis blocos (navegação de data + cinco botões)
+                // fixo: são cinco blocos (navegação de data + quatro botões)
                 // cujo tamanho depende da fonte e da escala do tema, e um
                 // limiar cravado aqui erraria assim que qualquer um deles
                 // mudasse de texto.
@@ -643,7 +620,7 @@ Page {
                     id: fluxoControles
 
                     // Numa linha própria ocupa a largura toda (é o que dá
-                    // espaço para os cinco botões ficarem lado a lado);
+                    // espaço para os quatro botões ficarem lado a lado);
                     // dividindo a linha com o título, fica encostado à
                     // direita, como sempre foi.
                     Layout.fillWidth: cabecalhoFechamento.columns === 1
@@ -712,38 +689,6 @@ Page {
                             opacity: parent.enabled ? 1 : Estilo.global.opacity.disabled
                             color: parent.down ? Estilo.screen.caixa.pressed : (parent.hovered ? Estilo.screen.caixa.hover : Estilo.screen.caixa.base)
                         }
-                    }
-                }
-
-                Button {
-                    id: btnEditarCaixa
-
-                    padding: Estilo.global.padding.md
-                    focusPolicy: Qt.StrongFocus
-                    enabled: telaFechamento.resumoAtual.quantidade > 0
-                    onClicked: telaFechamento.abrirEditarCaixa()
-
-                    contentItem: Row {
-                        spacing: Estilo.global.spacing.xs
-                        anchors.centerIn: parent
-                        Icone { nome: "fa6s.pen-to-square"; cor: Estilo.global.textOnAccent; tamanho: Estilo.global.fontSize.lg; anchors.verticalCenter: parent.verticalCenter }
-                        Text {
-                            text: "Editar caixa"
-                            font.family: Estilo.global.fontFamily.title
-                            color: Estilo.global.textOnAccent
-                            anchors.verticalCenter: parent.verticalCenter
-                        }
-                    }
-
-                    background: Rectangle {
-                        radius: Estilo.global.radius.pill
-                        color: {
-                            if (!btnEditarCaixa.enabled)
-                                return Estilo.global.border;
-                            return btnEditarCaixa.down ? Estilo.action.save.pressed : (btnEditarCaixa.hovered ? Estilo.action.save.hover : Estilo.action.save.base);
-                        }
-                        border.color: btnEditarCaixa.activeFocus ? Estilo.global.text : "transparent"
-                        border.width: btnEditarCaixa.activeFocus ? Estilo.global.borderWidth.focus : Estilo.global.borderWidth.hairline
                     }
                 }
 
@@ -1754,11 +1699,6 @@ Page {
         pilhaPrincipal: telaFechamento.StackView.view
 
         onConcluido: telaFechamento.carregarDia(telaFechamento.dataSelecionada)
-    }
-
-    // Guarda do botão "Editar caixa" (ver abrirEditarCaixa).
-    PopupAutorizacao {
-        id: popupAutorizacao
     }
 
     PopupExtras {

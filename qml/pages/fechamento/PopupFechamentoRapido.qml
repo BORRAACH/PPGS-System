@@ -11,7 +11,14 @@ import "../consulta"
 // caixa), Editar (corrige valores/nome/pedidos), Reimprimir, Excluir
 // (apaga de vez, com a mesma confirmação da Consulta) e Sair.
 //
-// Três modos de abertura, com a mesma moldura:
+// Comanda já baixada é INTOCÁVEL por aqui: o caixa fechado não se corrige
+// mais pela tela de Fechamento. Ela continua abrindo — para conferir e
+// reimprimir —, mas sem "Baixa" (não há o que baixar) e sem "Editar".
+// Quando um lançamento já baixado estiver errado de verdade, o caminho é
+// "Excluir" e lançar de novo, que deixa rastro no histórico do dia em vez
+// de reescrever a comanda por baixo do caixa.
+//
+// Dois modos de abertura, com a mesma moldura:
 //
 // - abrirPara(iso) — a FILA das comandas em aberto do dia, da mais recente
 //   para a mais antiga (ver FechamentoController.listarComandasAbertas). As
@@ -19,16 +26,9 @@ import "../consulta"
 //   depois sem sair da fila — dar baixa não pode ser a única forma de
 //   avançar, senão conferir a quinta comanda exigiria fechar as quatro
 //   anteriores. Botão "Fechamento rápido" em Fechamento.qml.
-// - abrirParaFechadas(iso) — o mesmo, mas a FILA das comandas que JÁ
-//   receberam baixa (ver FechamentoController.listarComandasFechadas).
-//   Simétrico ao anterior, pro botão "Editar caixa": toda comanda da fila já
-//   chega com fechada=true, então "Baixa" fica oculto e "Editar" abre o popup
-//   de manter/reconferir a baixa (PopupManterBaixa.qml, ver editarAtual()).
 // - abrirComanda(arquivo, iso) — UMA comanda específica, clicada na lista do
-//   dia em Fechamento.qml. Aqui entram também as que já receberam baixa, que
-//   por definição não aparecem na fila de abertas — e são justamente elas
-//   que costumam precisar de correção (uma comanda suspeita só é listada
-//   como suspeita depois de baixada).
+//   dia em Fechamento.qml. Aqui entram também as que já receberam baixa —
+//   essas chegam só para leitura, pelo motivo acima.
 Popup {
     id: popupFechamentoRapido
 
@@ -60,37 +60,10 @@ Popup {
     // Emitido quando alguma baixa foi dada — a página recarrega o dia.
     signal concluido
 
-    // Verdadeira quando quem abriu esta fila já pediu o código do usuário na
-    // porta — hoje só o botão "Editar caixa" de Fechamento.qml faz isso (ver
-    // abrirEditarCaixa). Nesse caso o "Editar" de cada comanda não pergunta de
-    // novo: seria o mesmo código, digitado três vezes para corrigir três
-    // comandas da mesma fila.
-    //
-    // Nos outros dois caminhos até aqui — "Fechamento rápido" e o clique numa
-    // comanda da lista do dia — não houve porta nenhuma antes, então continua
-    // valendo pedir por comanda. É por isso que isto é uma propriedade e não
-    // uma decisão fixa: o guarda pertence à ENTRADA do fluxo, e as três
-    // entradas são diferentes.
-    property bool jaAutorizado: false
-
     function abrirPara(iso) {
         popupFechamentoRapido.dataIso = iso;
         popupFechamentoRapido.comandas = fechamentoController.listarComandasAbertas(iso);
         popupFechamentoRapido.indice = 0;
-        popupFechamentoRapido.jaAutorizado = false;
-        if (popupFechamentoRapido.comandas.length === 0)
-            return false;
-
-        open();
-        return true;
-    }
-
-    function abrirParaFechadas(iso) {
-        popupFechamentoRapido.dataIso = iso;
-        popupFechamentoRapido.comandas = fechamentoController.listarComandasFechadas(iso);
-        popupFechamentoRapido.indice = 0;
-        // Só o botão "Editar caixa" chama isto, e ele já pediu o código.
-        popupFechamentoRapido.jaAutorizado = true;
         if (popupFechamentoRapido.comandas.length === 0)
             return false;
 
@@ -106,7 +79,6 @@ Popup {
         popupFechamentoRapido.dataIso = iso;
         popupFechamentoRapido.comandas = [dados];
         popupFechamentoRapido.indice = 0;
-        popupFechamentoRapido.jaAutorizado = false;
         open();
         return true;
     }
@@ -142,40 +114,24 @@ Popup {
         if (!comanda)
             return;
 
-        // Editar é apagar a comanda antiga e gravar uma nova (ver
-        // components/EdicaoComanda.js): destrutivo, esteja a comanda conferida
-        // ou ainda aberta. Por isso o código vale para os dois casos — um
-        // botão "Editar" que às vezes pede e às vezes não seria impossível de
-        // prever no balcão.
-        //
-        // A exceção é a fila que já entrou autorizada na porta (ver
-        // jaAutorizado, lá em cima): aí o código já foi dado uma vez e vale
-        // para esta fila inteira.
-        if (popupFechamentoRapido.jaAutorizado) {
-            popupFechamentoRapido._seguirParaEdicao(comanda);
+        // Guarda de fato, não só o botão escondido: o "Editar" já fica
+        // invisível para comanda baixada (ver btnEditar), mas esta função é
+        // alcançável de fora (objectName, teste) e editar é destrutivo —
+        // apaga a comanda antiga e grava outra (ver
+        // components/EdicaoComanda.js). Numa comanda já contada no caixa
+        // isso mexeria no fechado; a resposta é não, aqui também.
+        if (comanda.fechada)
             return;
-        }
 
-        var rotulo = comanda.fechada ? "Editar comanda fechada" : "Editar comanda";
-        popupAutorizacao.solicitar(rotulo, comanda.arquivo, function () {
-            popupFechamentoRapido._seguirParaEdicao(comanda);
+        // Editar continua pedindo o código mesmo com a comanda em aberto:
+        // destrutivo é destrutivo, e um botão que às vezes pergunta e às
+        // vezes não seria impossível de prever no balcão.
+        popupAutorizacao.solicitar("Editar comanda", comanda.arquivo, function () {
+            popupFechamentoRapido._abrirEdicao();
         });
     }
 
-    // O que acontece depois de a edição estar liberada, venha a liberação da
-    // porta ou do código pedido agora.
-    function _seguirParaEdicao(comanda) {
-        // Comanda ainda em aberto não tem baixa pra decidir — segue direto
-        // pro formulário.
-        if (!comanda.fechada) {
-            popupFechamentoRapido._abrirEdicao(false);
-            return;
-        }
-
-        popupManterBaixa.open();
-    }
-
-    function _abrirEdicao(manterBaixa) {
+    function _abrirEdicao() {
         var comanda = popupFechamentoRapido.comandaAtual;
         if (!comanda)
             return;
@@ -185,7 +141,9 @@ Popup {
         // components/EdicaoComanda.js), e deixar o popup aberto por baixo
         // faria ele reaparecer sobre o formulário de Balcão/Entrega.
         popupFechamentoRapido.close();
-        EdicaoComanda.abrir(popupFechamentoRapido.pilhaPrincipal, comanda.arquivo, manterBaixa);
+        // Sempre sem manter a baixa: só comanda em aberto chega aqui, e ela
+        // não tem baixa a manter.
+        EdicaoComanda.abrir(popupFechamentoRapido.pilhaPrincipal, comanda.arquivo, false);
     }
 
     function reimprimirAtual() {
@@ -229,20 +187,10 @@ Popup {
         onComandaApagada: popupFechamentoRapido._aoApagarAtual()
     }
 
-    // Guarda da edição de comanda fechada (ver editarAtual). A exclusão daqui
-    // já é guardada dentro do próprio PopupConfirmarExclusao acima.
+    // Guarda da edição (ver editarAtual). A exclusão daqui já é guardada
+    // dentro do próprio PopupConfirmarExclusao acima.
     PopupAutorizacao {
         id: popupAutorizacao
-    }
-
-    // O que fazer com a conferência ao corrigir uma comanda já baixada —
-    // aberto por editarAtual() depois que o código do usuário passa.
-    PopupManterBaixa {
-        id: popupManterBaixa
-
-        onEscolhido: function (manterBaixa) {
-            popupFechamentoRapido._abrirEdicao(manterBaixa);
-        }
     }
 
     // Preenche o ListModel que alimenta o ResumoComanda a partir da comanda
@@ -521,11 +469,10 @@ Popup {
                     color: Estilo.global.textSecondary
                 }
 
-                // Agora que comandas já baixadas também chegam aqui (pela
-                // lista do dia, não só pela fila de abertas), o popup precisa
+                // Comandas já baixadas também chegam aqui (pela lista do
+                // dia, não só pela fila de abertas), então o popup precisa
                 // dizer em qual das duas situações esta está — é o que decide
-                // se aparece o botão Baixa e se a correção vai perguntar
-                // sobre a conferência.
+                // se aparecem os botões Baixa e Editar.
                 Rectangle {
                     visible: popupFechamentoRapido.comandaAtual !== null
                     implicitWidth: textoConferida.implicitWidth + 16
@@ -648,9 +595,13 @@ Popup {
         // uma comanda de ontem a mudaria de dia — tiraria do caixa de ontem e
         // somaria no de hoje. Em vez de deixar isso acontecer em silêncio, a
         // correção fica presa ao dia corrente e o motivo aparece na tela.
+        //
+        // Só faz sentido junto do botão que ele explica: numa comanda já
+        // baixada não há "Editar" nenhum, e o aviso viraria uma promessa
+        // falsa de que amanhã, em outro dia, daria.
         Text {
             Layout.fillWidth: true
-            visible: !popupFechamentoRapido.ehHoje
+            visible: btnEditar.visible && !popupFechamentoRapido.ehHoje
             text: "Só dá para corrigir comandas do dia de hoje: a comanda corrigida é gravada de novo com a data de agora, e sairia do caixa deste dia."
             font.pixelSize: Estilo.global.fontSize.sm
             color: Estilo.status.warning.content
@@ -699,10 +650,18 @@ Popup {
                 id: btnEditar
 
                 padding: Estilo.global.padding.md
-                // Comanda de Mesa não reabre num formulário: a divisão da
-                // conta já impressa não volta pra Balcao.qml/Entrega.qml —
-                // mesma regra de ItemComandaDelegate.qml na Consulta.
-                visible: popupFechamentoRapido.comandaAtual !== null && popupFechamentoRapido.comandaAtual.tipo !== "Mesa"
+                // Some em dois casos:
+                //
+                // - comanda já baixada: o caixa fechado não se corrige mais
+                //   por aqui (ver o cabeçalho do arquivo). O botão não fica
+                //   desabilitado, some — desabilitado promete "dá, mas não
+                //   agora", e aqui não dá mais.
+                // - comanda de Mesa: não reabre num formulário, a divisão da
+                //   conta já impressa não volta pra Balcao.qml/Entrega.qml —
+                //   mesma regra de ItemComandaDelegate.qml na Consulta.
+                visible: popupFechamentoRapido.comandaAtual !== null
+                    && !popupFechamentoRapido.comandaAtual.fechada
+                    && popupFechamentoRapido.comandaAtual.tipo !== "Mesa"
                 enabled: popupFechamentoRapido.ehHoje
                 onClicked: popupFechamentoRapido.editarAtual()
 
