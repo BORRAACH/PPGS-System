@@ -25,8 +25,9 @@ Rectangle {
     // Fechamento já faz em PopupFechamentoRapido.qml — reconstrói a comanda a
     // partir do .txt e entrega ao resumo no modo detalhado, onde nada fica de
     // fora (dados do cliente, frações de pizza, adicionais, borda e
-    // observações). O cupom cru sobra só como reserva, quando não há o que
-    // estruturar.
+    // observações) — inclusive a divisão da conta das comandas de Mesa, uma
+    // linha por pessoa. O cupom cru sobra só como reserva, quando não há o
+    // que estruturar.
     property var detalhe: ({})
     readonly property bool temDetalhe: modeloItens.count > 0
 
@@ -43,12 +44,6 @@ Rectangle {
         // encerramento do app as context properties são destruídas antes das
         // telas, e um binding que rode nesse intervalo encontra null.
         if (!c || !consultaController)
-            return;
-
-        // Comanda de Mesa traz a divisão da conta, que reconstruir_itens não
-        // modela — cai no cupom, igual ao Fechamento e ao botão Editar, que
-        // também a recusam.
-        if (c.tipo === "Mesa")
             return;
 
         var dados = consultaController.reconstruirComanda(c.arquivo);
@@ -559,6 +554,11 @@ Rectangle {
                 endereco: painelDetalhe._enderecoCompleto()
                 bairro: painelDetalhe.detalhe.bairro || ""
                 observacaoGeral: painelDetalhe.detalhe.observacaoGeral || ""
+                // Só as comandas de Mesa trazem estes dois; nas outras vêm
+                // vazios e o resumo segue mostrando a forma de pagamento e o
+                // status únicos, como em Balcão e Entrega.
+                mesa: painelDetalhe.detalhe.mesa || ""
+                divisoes: painelDetalhe.detalhe.divisoes || []
                 formaPagamento: painelDetalhe.detalhe.formaPagamento || ""
                 troco: painelDetalhe.detalhe.troco || ""
                 pago: painelDetalhe.detalhe.statusPagamento === "PG"
@@ -568,8 +568,8 @@ Rectangle {
         }
 
         // --- CUPOM INTEIRO (reserva) ---
-        // Só quando não há o que estruturar: comanda de Mesa, que traz a
-        // divisão da conta, ou reconstrução que voltou vazia. Fonte
+        // Só quando não há o que estruturar: comanda cuja reconstrução voltou
+        // vazia (formato antigo, arquivo truncado, tabela ilegível). Fonte
         // monoespaçada e sem quebra de linha automática, para as colunas com
         // "|" ficarem alinhadas exatamente como saem na impressora. Rola nos
         // dois eixos quando o texto não cabe no painel.

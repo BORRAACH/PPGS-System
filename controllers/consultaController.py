@@ -523,7 +523,10 @@ class ConsultaController(QObject):
     def reconstruirComanda(self, nome_arquivo):
         """Lê uma comanda já salva e desfaz a formatação de impressão,
         devolvendo os campos prontos para preencher de novo o formulário de
-        Balcão ou Entrega (usado pela opção "Editar" da Consulta)."""
+        Balcão ou Entrega (usado pela opção "Editar" da Consulta) — e, hoje,
+        também para MOSTRAR a comanda em linguagem de tela, no mesmo painel
+        de resumo de Balcão/Entrega (ver qml/pages/consulta/PainelDetalhe.qml
+        e qml/components/ResumoComanda.qml)."""
         nome_arquivo = os.path.basename(nome_arquivo)
         caminho = os.path.join(self.pasta_pedidos, nome_arquivo)
 
@@ -549,6 +552,12 @@ class ConsultaController(QObject):
             "arquivo": nome_arquivo,
             "tipo": parser.tipo_comanda(nome_arquivo),
             "cliente": parser.extrair_campo(parser.PADRAO_CLIENTE, conteudo),
+            # Só o cupom final de Mesa tem estes dois (ver
+            # SalaoController._montarCupomFinal). Saem vazios nas outras, e
+            # é isso que faz o resumo na tela mostrar o bloco por pessoa
+            # apenas nas comandas que realmente dividiram a conta.
+            "mesa": parser.extrair_campo(parser.PADRAO_MESA, conteudo),
+            "divisoes": parser.extrair_divisoes_mesa(conteudo),
             "telefone": parser.extrair_campo(parser.PADRAO_TELEFONE, conteudo),
             "endereco": endereco,
             "numero": numero,

@@ -37,6 +37,24 @@ Rectangle {
     property string endereco: ""
     property string bairro: ""
     property string observacaoGeral: ""
+    // Número da mesa — só as comandas de Mesa têm (ver
+    // SalaoController._montarCupomFinal).
+    property string mesa: ""
+
+    // --- DIVISÃO DA CONTA (comanda de Mesa) ---
+    // Numa Mesa cada pessoa tem a SUA forma de pagamento e o SEU status, e
+    // por isso a comanda não traz um "Forma de pagamento"/"Status" único no
+    // cabeçalho — traz a seção "DIVISÃO DA CONTA" com uma linha por pessoa
+    // (ver salaoController._montarCupomFinal e
+    // comandaParserService.extrair_divisoes_mesa). Quando esta lista vem
+    // cheia, as três linhas únicas dão lugar a um bloco por pessoa, escrito
+    // como o painel de fechamento do Salão já escreve
+    // (pages/salao/ResumoFechamento.qml); vazia, nada muda para Balcão e
+    // Entrega.
+    //
+    // Formato: [{nome, valorTexto, formaPagamento, status}, ...]
+    property var divisoes: []
+    readonly property bool temDivisoes: divisoes !== undefined && divisoes !== null && divisoes.length > 0
 
     // Mesmo separador que services/comandaTextoService.py usa pra montar e
     // desmontar pizzas meio a meio (SEPARADOR_SABORES).
@@ -152,7 +170,7 @@ Rectangle {
         }
         return soma;
     }
-    readonly property bool temDadosCliente: detalhado && (cliente !== "" || telefone !== "" || endereco !== "" || bairro !== "" || observacaoGeral !== "")
+    readonly property bool temDadosCliente: detalhado && (cliente !== "" || telefone !== "" || endereco !== "" || bairro !== "" || observacaoGeral !== "" || mesa !== "")
     readonly property real valorTaxa: mostrarTaxaEntrega ? _valorNumero(taxaEntrega) : 0
     readonly property real valorTotal: valorItens + valorTaxa
     readonly property bool ehDinheiro: formaPagamento === "Dinheiro" && troco !== ""
@@ -211,6 +229,11 @@ Rectangle {
             width: parent.width
             spacing: 4
             visible: root.temDadosCliente
+
+            LinhaDetalhe {
+                rotulo: "Mesa"
+                valor: root.mesa
+            }
 
             LinhaDetalhe {
                 rotulo: "Cliente"
@@ -469,9 +492,12 @@ Rectangle {
         }
 
         // --- Forma de pagamento ---
+        // Escondida na Mesa: lá a forma é de cada pessoa, e uma linha só no
+        // cabeçalho teria de escolher uma delas — ou mentir com um "—".
         Item {
             width: parent.width
             height: textoFormaLabel.implicitHeight
+            visible: !root.temDivisoes
 
             Text {
                 id: textoFormaLabel
@@ -496,7 +522,7 @@ Rectangle {
         Item {
             width: parent.width
             height: root.ehDinheiro ? colunaTroco.implicitHeight : 0
-            visible: root.ehDinheiro
+            visible: root.ehDinheiro && !root.temDivisoes
             clip: true
 
             Column {
@@ -558,6 +584,7 @@ Rectangle {
         Item {
             width: parent.width
             height: chipStatus.height
+            visible: !root.temDivisoes
 
             Text {
                 anchors.left: parent.left
@@ -573,6 +600,93 @@ Rectangle {
                 anchors.right: parent.right
                 texto: root.pago ? "PAGO" : "NÃO PAGO"
                 tom: root.pago ? Estilo.action.confirm : Estilo.action.danger
+            }
+
+        }
+
+        // --- Divisão da conta (uma linha por pessoa) ---
+        // Ocupa o lugar das três linhas acima nas comandas de Mesa. Cada
+        // pessoa traz o próprio valor, a própria forma de pagamento e o
+        // próprio status, escritos como o cupom os escreveu — reformatar o
+        // valor aqui seria reescrever na tela um número que já está no papel.
+        Text {
+            visible: root.temDivisoes
+            text: "DIVISÃO DA CONTA"
+            font.pixelSize: Estilo.global.fontSize.sm
+            font.bold: true
+            color: Estilo.global.textSecondary
+        }
+
+        Column {
+            width: parent.width
+            visible: root.temDivisoes
+            spacing: Estilo.global.spacing.md
+
+            Repeater {
+                model: root.temDivisoes ? root.divisoes : []
+
+                delegate: Column {
+                    id: linhaDivisao
+
+                    required property var modelData
+
+                    width: colunaResumo.width
+                    spacing: 2
+
+                    Item {
+                        width: parent.width
+                        height: Math.max(textoNomeDivisao.implicitHeight, chipStatusDivisao.height)
+
+                        Text {
+                            id: textoNomeDivisao
+
+                            anchors.left: parent.left
+                            anchors.right: chipStatusDivisao.left
+                            anchors.rightMargin: 8
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: linhaDivisao.modelData.nome || ""
+                            font.pixelSize: Estilo.global.fontSize.md
+                            font.bold: true
+                            color: Estilo.global.text
+                            elide: Text.ElideRight
+                        }
+
+                        Rotulo {
+                            id: chipStatusDivisao
+
+                            anchors.right: parent.right
+                            anchors.verticalCenter: parent.verticalCenter
+                            texto: linhaDivisao.modelData.status === "PG" ? "PAGO" : "NÃO PAGO"
+                            tom: linhaDivisao.modelData.status === "PG" ? Estilo.action.confirm : Estilo.action.danger
+                        }
+
+                    }
+
+                    Item {
+                        width: parent.width
+                        height: textoFormaDivisao.implicitHeight
+
+                        Text {
+                            id: textoFormaDivisao
+
+                            anchors.left: parent.left
+                            text: linhaDivisao.modelData.formaPagamento || "—"
+                            font.pixelSize: Estilo.global.fontSize.sm
+                            color: Estilo.global.textSecondary
+                        }
+
+                        Text {
+                            anchors.right: parent.right
+                            text: linhaDivisao.modelData.valorTexto || ""
+                            font.pixelSize: Estilo.global.fontSize.md
+                            font.bold: true
+                            color: Estilo.global.text
+                        }
+
+                    }
+
+                }
+
             }
 
         }

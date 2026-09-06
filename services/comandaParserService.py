@@ -231,16 +231,24 @@ def eh_suspeita(tipo, cliente, forma_pagamento, status, endereco=""):
 
 def extrair_divisoes_mesa(texto):
     """Cada linha da seção "DIVISÃO DA CONTA" de uma comanda de Mesa como
-    {"nome", "valor", "formaPagamento", "status"} — usado pra saber quanto
-    de uma Mesa foi pago em dinheiro/Pix/cartão no cupom de "Fechar Caixa"
-    (ver FechamentoController._somar_por_forma_pagamento). [] para
-    comandas sem essa seção (Balcão/Entrega, ou Mesa fechada sem
-    divisão)."""
+    {"nome", "valor", "valorTexto", "formaPagamento", "status"} — usado pra
+    saber quanto de uma Mesa foi pago em dinheiro/Pix/cartão no cupom de
+    "Fechar Caixa" (ver FechamentoController._somar_por_forma_pagamento) e
+    pra mostrar a divisão na tela (ver ConsultaController.reconstruirComanda).
+    [] para comandas sem essa seção (Balcão/Entrega, ou Mesa fechada sem
+    divisão).
+
+    O valor sai nos dois formatos de propósito: quem soma precisa do float,
+    e quem exibe precisa do texto COMO FOI IMPRESSO — reformatar o float na
+    tela seria reescrever um valor que já está no papel, e qualquer
+    diferença de arredondamento apareceria como divergência entre a comanda
+    e a conferência."""
     resultado = []
     for correspondencia in _PADRAO_DIVISAO_MESA.finditer(texto):
         resultado.append({
             "nome": correspondencia.group(1).strip(),
             "valor": valor_para_float(correspondencia.group(2)),
+            "valorTexto": correspondencia.group(2).strip(),
             "formaPagamento": correspondencia.group(3),
             "status": correspondencia.group(4),
         })
