@@ -160,6 +160,51 @@ Page {
         selecionados = lista;
     }
 
+    // Há o que confirmar. Vale tanto para o botão quanto para o Ctrl+Enter, e
+    // por isso mora aqui e não no "enabled" do botão — duas cópias
+    // divergiriam, e o atalho passaria a lançar um pedido que o botão recusa.
+    readonly property bool podeConfirmar: totalItens > 0
+
+    // Envia sempre um array de itens — uma linha de pedido por unidade — para
+    // que Balcao/Entrega tratem qualquer quantidade da mesma forma. A montagem
+    // do nome/valor mora em ../MontagemItem.js (ver o comentário equivalente
+    // em pizzas/Pizzas.qml).
+    //
+    // Chamada pelo botão Confirmar e pelo Ctrl+Enter.
+    function confirmarPedido() {
+        if (totalItens === 0)
+            return;
+
+        var itens = [];
+        for (var i = 0; i < selecionados.length; i++) {
+            var item = selecionados[i];
+            for (var q = 0; q < item.quantidade; q++)
+                itens.push(Montagem.montarSimples(item));
+        }
+        if (typeof onPedidoSelecionado === "function")
+            onPedidoSelecionado(itens);
+        pilha.pop(null);
+    }
+
+    // --- CTRL+ENTER: CONFIRMAR ---
+    // Um Shortcut, e não o Keys.onPressed abaixo: o foco quase sempre está
+    // dentro da barra de busca (é para lá que qualquer tecla imprimível o
+    // manda), e daí o evento nunca chegaria à página. O atalho vale enquanto
+    // esta página está na tela — "visible" cai sozinho quando a pilha empurra
+    // outra página por cima ou quando o Balcão/Entrega/Salão sai de cena.
+    //
+    // autoRepeat desligado porque isto é irreversível: pop(null) é animado,
+    // então a página continua visível por alguns quadros, e a repetição do
+    // teclado lançaria o mesmo pedido duas vezes.
+    Shortcut {
+        // "Ctrl+Enter" é o Enter do teclado numérico; "Ctrl+Return", o da
+        // tecla grande. Quem digita valores usa o numérico o tempo todo.
+        sequences: ["Ctrl+Return", "Ctrl+Enter"]
+        autoRepeat: false
+        enabled: telaBebidas.visible && telaBebidas.podeConfirmar
+        onActivated: telaBebidas.confirmarPedido()
+    }
+
     // Permite digitar direto na tela para pesquisar, sem precisar clicar
     // antes na barra de busca — qualquer tecla "imprimível" (letras,
     // números, acentos) foca a barra e já entra com o caractere digitado.
@@ -617,27 +662,10 @@ Page {
 
                         width: (parent.width - parent.spacing) / 2
                         height: 46
-                        enabled: totalItens > 0
-                        onClicked: {
-                            if (totalItens === 0)
-                                return ;
-
-                            // Envia sempre um array de itens — uma linha de
-                            // pedido por unidade — para que Balcao/Entrega tratem
-                            // qualquer quantidade da mesma forma.
-                            var itens = [];
-                            for (var i = 0; i < selecionados.length; i++) {
-                                var item = selecionados[i];
-                                // A montagem do nome/valor mora em
-                                // ../MontagemItem.js (ver o comentário
-                                // equivalente em pizzas/Pizzas.qml).
-                                for (var q = 0; q < item.quantidade; q++)
-                                    itens.push(Montagem.montarSimples(item));
-                            }
-                            if (typeof onPedidoSelecionado === "function")
-                                onPedidoSelecionado(itens);
-                            pilha.pop(null);
-                        }
+                        enabled: telaBebidas.podeConfirmar
+                        // O que ele faz mora em telaBebidas.confirmarPedido(),
+                        // porque o Ctrl+Enter chama exatamente a mesma coisa.
+                        onClicked: telaBebidas.confirmarPedido()
 
                         contentItem: Text {
                             text: "Confirmar"

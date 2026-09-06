@@ -55,6 +55,38 @@ Page {
         return soma + valorAtualMaior;
     }
 
+    // Há o que confirmar: pizzas já fechadas, ou a que está em montagem.
+    // Vale tanto para o botão quanto para o Ctrl+Enter, e por isso mora aqui
+    // e não no "enabled" do botão — duas cópias divergiriam, e o atalho
+    // passaria a lançar um pedido que o botão recusa.
+    readonly property bool podeConfirmar: pizzasMontadas.length > 0 || selecionados.length > 0
+
+    // Junta as pizzas já adicionadas com a pizza em andamento (se houver) e
+    // envia tudo de uma vez. Chamada pelo botão Confirmar e pelo Ctrl+Enter.
+    function confirmarPedido() {
+        var listaFinal = pizzasMontadas.slice();
+        if (selecionados.length > 0) {
+            listaFinal.push({
+                "sabores": selecionados.slice(),
+                "tamanho": tamanhoSelecionado,
+                "valorNum": valorAtualMaior,
+                "borda": null,
+                "adicionais": []
+            });
+        }
+        if (listaFinal.length === 0)
+            return;
+
+        // A montagem do nome/valor mora em ../MontagemItem.js, não aqui: é
+        // contrato com o Python (dividir_sabores reparseia o " / " e o
+        // tamanho entre parênteses) e o lançamento rápido do Ctrl+S monta o
+        // mesmo item por outro caminho. Duas cópias divergiriam em silêncio.
+        var itens = listaFinal.map(Montagem.montarPizza);
+        if (typeof onPedidoSelecionado === "function")
+            onPedidoSelecionado(itens);
+        pilha.pop(null);
+    }
+
     // Fecha a pizza em andamento (sabores + tamanho atuais) e a guarda em
     // pizzasMontadas, liberando a seleção de sabores para montar a próxima
     // pizza sem precisar reabrir esta tela.
@@ -306,6 +338,29 @@ Page {
         return selecionados.some(function (item) {
             return item.nome === nome;
         });
+    }
+
+    // --- CTRL+ENTER: CONFIRMAR ---
+    // Um Shortcut, e não o Keys.onPressed abaixo: o foco quase sempre está
+    // dentro da barra de busca (é para lá que qualquer tecla imprimível o
+    // manda), e daí o evento nunca chegaria à página. O atalho vale enquanto
+    // esta página está na tela — "visible" cai sozinho quando a pilha empurra
+    // outra página por cima ou quando o Balcão/Entrega/Salão sai de cena.
+    //
+    // Com um popup de adicionais/bordas aberto ele fica quieto: ali o
+    // atendente está no meio de outra escolha, e confirmar levaria a pizza
+    // embora sem os extras que ele estava justamente escolhendo.
+    //
+    // autoRepeat desligado porque isto é irreversível: pop(null) é animado,
+    // então a página continua visível por alguns quadros, e a repetição do
+    // teclado lançaria o mesmo pedido duas vezes.
+    Shortcut {
+        // "Ctrl+Enter" é o Enter do teclado numérico; "Ctrl+Return", o da
+        // tecla grande. Quem digita valores usa o numérico o tempo todo.
+        sequences: ["Ctrl+Return", "Ctrl+Enter"]
+        autoRepeat: false
+        enabled: telaPizzas.visible && telaPizzas.podeConfirmar && !popupAdicionaisBordas.visible
+        onActivated: telaPizzas.confirmarPedido()
     }
 
     // Permite digitar direto na tela para pesquisar, sem precisar clicar
@@ -1163,33 +1218,10 @@ Page {
 
                         width: (parent.width - parent.spacing) / 2
                         height: 46
-                        enabled: pizzasMontadas.length > 0 || selecionados.length > 0
-                        // BOTÃO CONFIRMAR: junta as pizzas já adicionadas com a
-                        // pizza em andamento (se houver) e envia tudo de uma vez.
-                        onClicked: {
-                            var listaFinal = pizzasMontadas.slice();
-                            if (selecionados.length > 0) {
-                                listaFinal.push({
-                                    "sabores": selecionados.slice(),
-                                    "tamanho": tamanhoSelecionado,
-                                    "valorNum": valorAtualMaior,
-                                    "borda": null,
-                                    "adicionais": []
-                                });
-                            }
-                            if (listaFinal.length === 0)
-                                return;
-
-                            // A montagem do nome/valor mora em ../MontagemItem.js,
-                            // não aqui: é contrato com o Python (dividir_sabores
-                            // reparseia o " / " e o tamanho entre parênteses) e o
-                            // lançamento rápido do Ctrl+S monta o mesmo item por
-                            // outro caminho. Duas cópias divergiriam em silêncio.
-                            var itens = listaFinal.map(Montagem.montarPizza);
-                            if (typeof onPedidoSelecionado === "function")
-                                onPedidoSelecionado(itens);
-                            pilha.pop(null);
-                        }
+                        enabled: telaPizzas.podeConfirmar
+                        // O que ele faz mora em telaPizzas.confirmarPedido(),
+                        // porque o Ctrl+Enter chama exatamente a mesma coisa.
+                        onClicked: telaPizzas.confirmarPedido()
 
                         contentItem: Text {
                             text: "Confirmar"

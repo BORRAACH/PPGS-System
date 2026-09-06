@@ -255,6 +255,62 @@ Page {
         selecionados = lista;
     }
 
+    // Há o que confirmar. Vale tanto para o botão quanto para o Ctrl+Enter, e
+    // por isso mora aqui e não no "enabled" do botão — duas cópias
+    // divergiriam, e o atalho passaria a lançar um pedido que o botão recusa.
+    readonly property bool podeConfirmar: selecionados.length > 0
+
+    // Envia sempre um array de itens — mesmo com 1 lanche selecionado — para
+    // que Balcao/Entrega tratem todos os casos (1 ou mais lanches) da mesma
+    // forma. O pão escolhido vai anexado ao nome do pedido (ex: "Hambúrguer
+    // ( frances )"), não na observação. O pão de hambúrguer é o padrão e não
+    // aparece no nome.
+    //
+    // A montagem do nome/valor mora em ../MontagemItem.js (ver o comentário
+    // equivalente em pizzas/Pizzas.qml). A tradução do tipo de pão para o
+    // sufixo do nome fica aqui porque a tabela `tiposPao` é local desta tela.
+    //
+    // Chamada pelo botão Confirmar e pelo Ctrl+Enter.
+    function confirmarPedido() {
+        if (selecionados.length === 0)
+            return;
+
+        var itens = selecionados.map(function (item) {
+            return Montagem.montarLanche({
+                "nome": item.nome,
+                "resumoPao": resumoPao(item.paoTipo),
+                "valorNum": item.valorNum,
+                "adicionais": item.adicionais || []
+            });
+        });
+        if (typeof onPedidoSelecionado === "function")
+            onPedidoSelecionado(itens);
+        pilha.pop(null);
+    }
+
+    // --- CTRL+ENTER: CONFIRMAR ---
+    // Um Shortcut, e não o Keys.onPressed abaixo: o foco quase sempre está
+    // dentro da barra de busca (é para lá que qualquer tecla imprimível o
+    // manda), e daí o evento nunca chegaria à página. O atalho vale enquanto
+    // esta página está na tela — "visible" cai sozinho quando a pilha empurra
+    // outra página por cima ou quando o Balcão/Entrega/Salão sai de cena.
+    //
+    // Com o popup do pão ou o de adicionais aberto ele fica quieto: ali o
+    // atendente está no meio de outra escolha, e confirmar levaria o lanche
+    // embora sem o que ele estava justamente escolhendo.
+    //
+    // autoRepeat desligado porque isto é irreversível: pop(null) é animado,
+    // então a página continua visível por alguns quadros, e a repetição do
+    // teclado lançaria o mesmo pedido duas vezes.
+    Shortcut {
+        // "Ctrl+Enter" é o Enter do teclado numérico; "Ctrl+Return", o da
+        // tecla grande. Quem digita valores usa o numérico o tempo todo.
+        sequences: ["Ctrl+Return", "Ctrl+Enter"]
+        autoRepeat: false
+        enabled: telaLanches.visible && telaLanches.podeConfirmar && !popupPao.visible && !popupAdicionaisLanches.visible
+        onActivated: telaLanches.confirmarPedido()
+    }
+
     // Permite digitar direto na tela para pesquisar, sem precisar clicar
     // antes na barra de busca — qualquer tecla "imprimível" (letras,
     // números, acentos) foca a barra e já entra com o caractere digitado.
@@ -915,34 +971,10 @@ Page {
 
                         width: (parent.width - parent.spacing) / 2
                         height: 46
-                        enabled: selecionados.length > 0
-                        onClicked: {
-                            if (selecionados.length === 0)
-                                return ;
-
-                            // Envia sempre um array de itens — mesmo com 1 lanche
-                            // selecionado — para que Balcao/Entrega tratem todos
-                            // os casos (1 ou mais lanches) da mesma forma. O pão
-                            // escolhido vai anexado ao nome do pedido (ex:
-                            // "Hambúrguer ( frances )"), não na observação. O pão
-                            // de hambúrguer é o padrão e não aparece no nome.
-                            // A montagem do nome/valor mora em ../MontagemItem.js
-                            // (ver o comentário equivalente em pizzas/Pizzas.qml).
-                            // A tradução do tipo de pão para o sufixo do nome
-                            // fica aqui porque a tabela `tiposPao` é local desta
-                            // tela.
-                            var itens = selecionados.map(function (item) {
-                                return Montagem.montarLanche({
-                                    "nome": item.nome,
-                                    "resumoPao": resumoPao(item.paoTipo),
-                                    "valorNum": item.valorNum,
-                                    "adicionais": item.adicionais || []
-                                });
-                            });
-                            if (typeof onPedidoSelecionado === "function")
-                                onPedidoSelecionado(itens);
-                            pilha.pop(null);
-                        }
+                        enabled: telaLanches.podeConfirmar
+                        // O que ele faz mora em telaLanches.confirmarPedido(),
+                        // porque o Ctrl+Enter chama exatamente a mesma coisa.
+                        onClicked: telaLanches.confirmarPedido()
 
                         contentItem: Text {
                             text: "Confirmar"
