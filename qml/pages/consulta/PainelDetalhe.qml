@@ -534,7 +534,15 @@ Rectangle {
             ResumoComanda {
                 id: resumoDetalhado
 
-                width: parent.width
+                // Largura presa a uma coluna de leitura, e não à do painel:
+                // cada linha do resumo é um par rótulo-à-esquerda/valor-à-
+                // direita, então esticar o painel esticaria o vão entre os
+                // dois — "Endereço" num canto da tela e a rua no outro. Em
+                // Balcão/Entrega o resumo tem ~300px ao lado do formulário e
+                // isso nunca aparece; aqui ele é a tela inteira. O limite
+                // mantém a mesma proporção que essas páginas mostram.
+                width: Math.min(parent.width, 460)
+                anchors.horizontalCenter: parent.horizontalCenter
                 detalhado: true
                 itens: modeloItens
                 // Mesma cor que o crachá do tipo lá em cima, pra o resumo e o
