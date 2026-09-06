@@ -17,6 +17,94 @@ Rectangle {
     // caminho de volta não haveria como escolher outra comanda.
     property bool mostrarVoltarParaLista: false
 
+    // --- A COMANDA EM LINGUAGEM DE TELA ---
+    // A comanda selecionada aparece na mesma linguagem visual do "Resumo da
+    // comanda" de Balcão/Entrega/Salão (components/ResumoComanda.qml), e não
+    // como o cupom da impressora: conferir uma comanda não deveria exigir ler
+    // ESC/POS formatado em colunas na tela. É o mesmo caminho que o
+    // Fechamento já faz em PopupFechamentoRapido.qml — reconstrói a comanda a
+    // partir do .txt e entrega ao resumo no modo detalhado, onde nada fica de
+    // fora (dados do cliente, frações de pizza, adicionais, borda e
+    // observações). O cupom cru sobra só como reserva, quando não há o que
+    // estruturar.
+    property var detalhe: ({})
+    readonly property bool temDetalhe: modeloItens.count > 0
+
+    // "borda" e "adicionais" entram como STRING JSON, seguindo a mesma
+    // convenção de Balcao.qml/Entrega.qml: um objeto/array atribuído a um role
+    // de ListModel vira um list-model aninhado em vez de continuar sendo
+    // objeto/array.
+    function recarregarDetalhe() {
+        modeloItens.clear();
+        detalhe = ({});
+
+        var c = pagina ? pagina.comandaSelecionada : null;
+        // A checagem do controller é a mesma da faixa de conflito abaixo: no
+        // encerramento do app as context properties são destruídas antes das
+        // telas, e um binding que rode nesse intervalo encontra null.
+        if (!c || !consultaController)
+            return;
+
+        // Comanda de Mesa traz a divisão da conta, que reconstruir_itens não
+        // modela — cai no cupom, igual ao Fechamento e ao botão Editar, que
+        // também a recusam.
+        if (c.tipo === "Mesa")
+            return;
+
+        var dados = consultaController.reconstruirComanda(c.arquivo);
+        if (!dados || !dados.itens || dados.itens.length === 0)
+            return;
+
+        for (var i = 0; i < dados.itens.length; i++) {
+            var item = dados.itens[i];
+            modeloItens.append({
+                "pedido": item.pedido || "",
+                "observacao": item.observacao || "",
+                "valor": item.valor || "",
+                "borda": JSON.stringify(item.borda || null),
+                "adicionais": JSON.stringify(item.adicionais || [])
+            });
+        }
+        detalhe = dados;
+    }
+
+    // Endereço e número saem separados da reconstrução (ver
+    // comandaParserService.dividir_endereco_numero), mas o que se confere é a
+    // linha inteira, do jeito que ela foi impressa.
+    function _enderecoCompleto() {
+        var rua = detalhe.endereco || "";
+        var numero = detalhe.numero || "";
+        if (rua === "" || numero === "")
+            return rua;
+        return rua + ", " + numero;
+    }
+
+    ListModel {
+        id: modeloItens
+
+        // Todos os roles precisam existir já no primeiro elemento, senão
+        // append() com objeto/null não os cria — mesmo motivo documentado em
+        // Balcao.qml. O elemento em branco sai no clear() de
+        // recarregarDetalhe antes do primeiro uso.
+        ListElement {
+            pedido: ""
+            observacao: ""
+            valor: ""
+            borda: "null"
+            adicionais: "[]"
+        }
+    }
+
+    Connections {
+        target: painelDetalhe.pagina
+
+        function onComandaSelecionadaChanged() {
+            painelDetalhe.recarregarDetalhe();
+        }
+    }
+
+    Component.onCompleted: recarregarDetalhe()
+
     radius: Estilo.global.radius.lg
     color: Estilo.global.surface
     border.color: Estilo.global.borderCard
@@ -427,13 +515,60 @@ Rectangle {
             color: Estilo.global.divider
         }
 
-        // Área do conteúdo do cupom: fonte monoespaçada e sem quebra
-        // de linha automática, para as colunas com "|" ficarem
-        // alinhadas exatamente como saem na impressora. Rola nos
+        // --- A COMANDA ---
+        // Mesmo painel de resumo de Balcão/Entrega/Salão, no modo detalhado
+        // (ver a nota no topo deste arquivo).
+        Flickable {
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            visible: painelDetalhe.temDetalhe
+            clip: true
+            contentWidth: width
+            contentHeight: resumoDetalhado.implicitHeight
+            boundsBehavior: Flickable.StopAtBounds
+
+            ScrollBar.vertical: ScrollBar {
+                policy: ScrollBar.AsNeeded
+            }
+
+            ResumoComanda {
+                id: resumoDetalhado
+
+                width: parent.width
+                detalhado: true
+                itens: modeloItens
+                // Mesma cor que o crachá do tipo lá em cima, pra o resumo e o
+                // cabeçalho falarem da mesma comanda.
+                corDestaque: {
+                    var c = painelDetalhe.pagina.comandaSelecionada;
+                    if (!c)
+                        return Estilo.action.confirm.base;
+
+                    return c.tipo === "Entrega" ? Estilo.orderType.entrega.base : (c.tipo === "Mesa" ? Estilo.orderType.mesa.base : Estilo.orderType.balcao.base);
+                }
+                cliente: painelDetalhe.detalhe.cliente || ""
+                telefone: painelDetalhe.detalhe.telefone || ""
+                endereco: painelDetalhe._enderecoCompleto()
+                bairro: painelDetalhe.detalhe.bairro || ""
+                observacaoGeral: painelDetalhe.detalhe.observacaoGeral || ""
+                formaPagamento: painelDetalhe.detalhe.formaPagamento || ""
+                troco: painelDetalhe.detalhe.troco || ""
+                pago: painelDetalhe.detalhe.statusPagamento === "PG"
+                taxaEntrega: painelDetalhe.detalhe.taxaEntrega || ""
+                mostrarTaxaEntrega: painelDetalhe.pagina.comandaSelecionada !== null && painelDetalhe.pagina.comandaSelecionada.tipo === "Entrega"
+            }
+        }
+
+        // --- CUPOM INTEIRO (reserva) ---
+        // Só quando não há o que estruturar: comanda de Mesa, que traz a
+        // divisão da conta, ou reconstrução que voltou vazia. Fonte
+        // monoespaçada e sem quebra de linha automática, para as colunas com
+        // "|" ficarem alinhadas exatamente como saem na impressora. Rola nos
         // dois eixos quando o texto não cabe no painel.
         Flickable {
             Layout.fillWidth: true
             Layout.fillHeight: true
+            visible: !painelDetalhe.temDetalhe
             clip: true
             contentWidth: Math.max(width, textoConteudo.implicitWidth)
             contentHeight: Math.max(height, textoConteudo.implicitHeight)
