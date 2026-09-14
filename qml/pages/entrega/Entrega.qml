@@ -883,10 +883,59 @@ Page {
             // ainda for sobre o que está digitado agora.
             property string termoEnderecoEmConsulta: ""
             property string termoBairroEmConsulta: ""
+            // Último bairro que o autocomplete do Endereço escreveu no campo
+            // Bairro. Distingue "posto pela sugestão" (pode ser trocado quando
+            // o atendente escolhe outra rua) de "digitado à mão" (fica).
+            property string bairroAutopreenchido: ""
+            // Ligado enquanto a escolha de uma sugestão escreve no campo: a
+            // escrita dispara onTextChanged com o foco no campo, e sem isto a
+            // lista reabriria sugerindo a rua que acabou de ser escolhida.
+            property bool aplicandoSugestao: false
 
-            // Debounce: a busca sai ~300ms depois da ÚLTIMA tecla, não a
-            // cada uma — digitar "Avenida" não pode custar sete idas ao
-            // servidor (e, no caso do endereço, sete consultas ao Photon).
+            // Chamadas a cada tecla (onTextChanged dos campos). O que está
+            // salvo nesta máquina — histórico e índice de ruas — aparece na
+            // hora, desde a primeira letra: a consulta é local e custa
+            // frações de milissegundo. Só quando nada salvo casa, e com 3
+            // letras ou mais, entra o debounce que leva a busca ao Photon.
+            function sugerirEndereco() {
+                if (aplicandoSugestao)
+                    return;
+                debounceEndereco.stop();
+                var termo = inputEndereco.text.trim();
+                var locais = termo ? sugestoesEnderecoController.sugerirEnderecosLocais(termo, inputBairro.text.trim()) : [];
+                if (locais.length > 0) {
+                    conteudoEntrega.termoEnderecoEmConsulta = termo;
+                    sugestoesEndereco.mostrar(locais);
+                    return;
+                }
+                // Lista do termo anterior fora da frente: ela não casa mais
+                // com o que está digitado.
+                sugestoesEndereco.close();
+                if (termo.length >= 3)
+                    debounceEndereco.restart();
+            }
+
+            function sugerirBairro() {
+                if (aplicandoSugestao)
+                    return;
+                debounceBairro.stop();
+                var termo = inputBairro.text.trim();
+                var locais = termo ? sugestoesEnderecoController.sugerirBairrosLocais(termo) : [];
+                if (locais.length > 0) {
+                    conteudoEntrega.termoBairroEmConsulta = termo;
+                    sugestoesBairro.mostrar(locais);
+                    return;
+                }
+                sugestoesBairro.close();
+                if (termo.length >= 3)
+                    debounceBairro.restart();
+            }
+
+            // Debounce da busca no Photon — só para o que NÃO está salvo
+            // localmente (ver sugerirEndereco): a consulta sai ~100ms depois
+            // da ÚLTIMA tecla, não a cada uma, para uma palavra digitada de
+            // corrido sair numa consulta só. A que ficar para trás é abortada
+            // (ver _consultar_photon).
             // Um timer por campo, e não um só: os dois campos podem estar
             // em consulta ao mesmo tempo (Tab rápido entre eles).
             //
@@ -897,7 +946,7 @@ Page {
             Timer {
                 id: debounceEndereco
 
-                interval: 300
+                interval: 100
                 onTriggered: {
                     var termo = inputEndereco.text.trim();
                     if (termo.length < 3 || !inputEndereco.activeFocus) {
@@ -905,14 +954,16 @@ Page {
                         return;
                     }
                     conteudoEntrega.termoEnderecoEmConsulta = termo;
-                    pizzeriaServerController.buscarEnderecos(termo);
+                    // O bairro já digitado vai junto: as ruas dele sobem para
+                    // o topo da lista (ver ordenar_enderecos).
+                    sugestoesEnderecoController.buscarEnderecos(termo, inputBairro.text.trim());
                 }
             }
 
             Timer {
                 id: debounceBairro
 
-                interval: 300
+                interval: 100
                 onTriggered: {
                     var termo = inputBairro.text.trim();
                     if (termo.length < 3 || !inputBairro.activeFocus) {
@@ -920,17 +971,19 @@ Page {
                         return;
                     }
                     conteudoEntrega.termoBairroEmConsulta = termo;
-                    pizzeriaServerController.buscarBairros(termo);
+                    sugestoesEnderecoController.buscarBairros(termo);
                 }
             }
 
             // Dentro do Component, e não junto do Connections de autofill da
             // Page: os campos e as listas só existem nesta árvore. A falha
-            // silenciosa pedida está no lado Python (_tratar_sugestoes):
-            // sem servidor/Photon o sinal chega com lista vazia, mostrar()
-            // fecha a lista e o campo segue sendo um campo de texto comum.
+            // silenciosa está no lado Python (services/sugestoesEndereco.py):
+            // sem internet vem só o histórico; sem histórico, lista vazia —
+            // mostrar() fecha a lista e o campo segue sendo um campo comum.
+            // Com histórico o sinal chega duas vezes para o mesmo termo (o
+            // histórico na hora, a lista completa quando o Photon responder).
             Connections {
-                target: pizzeriaServerController
+                target: sugestoesEnderecoController
 
                 function onEnderecosSugeridos(termo, sugestoes) {
                     // Resposta atrasada (o atendente já digitou mais, ou já
@@ -1159,14 +1212,14 @@ Page {
                                 //
                                 // A capitalizacao reescreve o texto e reentra
                                 // aqui (mesmo caso do "reformatando" do
-                                // telefone) — o restart repetido do debounce
-                                // no mesmo tique e inofensivo. O gate de
-                                // activeFocus deixa de fora as escritas
-                                // programaticas: autofill, rascunho, limpeza.
+                                // telefone) — a consulta local repetida no
+                                // mesmo tique e barata. O gate de activeFocus
+                                // deixa de fora as escritas programaticas:
+                                // autofill, rascunho, limpeza.
                                 onTextChanged: {
                                     Texto.capitalizarCampo(inputEndereco);
                                     if (activeFocus)
-                                        debounceEndereco.restart();
+                                        conteudoEntrega.sugerirEndereco();
                                 }
                                 width: Math.round((conteudoEntrega.larguraCampos - Estilo.global.spacing.md) * 0.78)
                                 topPadding: 10
@@ -1221,15 +1274,34 @@ Page {
 
                                 campo: inputEndereco
 
-                                onEscolhida: function (texto) {
+                                onEscolhida: function (texto, detalhe) {
                                     // A atribuição dispara onTextChanged (com
                                     // o foco ainda no campo), que rearma o
                                     // debounce — o stop logo depois cancela,
-                                    // senão a lista reabriria em 300ms
+                                    // senão a lista reabriria em 100ms
                                     // sugerindo o que acabou de ser escolhido.
+                                    conteudoEntrega.aplicandoSugestao = true;
                                     inputEndereco.text = texto;
+                                    conteudoEntrega.aplicandoSugestao = false;
                                     debounceEndereco.stop();
                                     inputEndereco.cursorPosition = inputEndereco.text.length;
+
+                                    // Autofill do bairro da rua escolhida — só
+                                    // com o campo vazio ou com um bairro que o
+                                    // próprio autocomplete pôs ali. Um bairro
+                                    // digitado à mão fica: é o nome que a
+                                    // equipe usa, e o do mapa nem sempre é
+                                    // ("Areão" no OSM, "Jardim Garcês" na
+                                    // comanda). A escrita com o foco no
+                                    // Endereço não abre a lista do Bairro (ver
+                                    // o gate de activeFocus lá).
+                                    var bairroAtual = inputBairro.text.trim();
+                                    if (detalhe && (bairroAtual === "" || bairroAtual === conteudoEntrega.bairroAutopreenchido)) {
+                                        inputBairro.text = detalhe;
+                                        // Guardado depois da capitalização que
+                                        // o onTextChanged do Bairro aplica.
+                                        conteudoEntrega.bairroAutopreenchido = inputBairro.text.trim();
+                                    }
                                 }
                             }
                         }
@@ -1297,12 +1369,12 @@ Page {
                             // Mesma capitalizacao do nome do cliente logo acima.
                             //
                             // Debounce/gate iguais aos de inputEndereco — ver
-                            // os comentários lá; a diferença é só o destino
-                            // da busca (tabela local de bairros, sem Photon).
+                            // os comentários lá; a diferença é só a camada
+                            // pedida ao Photon (bairros, não ruas).
                             onTextChanged: {
                                 Texto.capitalizarCampo(inputBairro);
                                 if (activeFocus)
-                                    debounceBairro.restart();
+                                    conteudoEntrega.sugerirBairro();
                             }
                             width: conteudoEntrega.larguraCampos
                             topPadding: 10
@@ -1347,7 +1419,9 @@ Page {
 
                             onEscolhida: function (texto) {
                                 // Ver o comentário homônimo em sugestoesEndereco.
+                                conteudoEntrega.aplicandoSugestao = true;
                                 inputBairro.text = texto;
+                                conteudoEntrega.aplicandoSugestao = false;
                                 debounceBairro.stop();
                                 inputBairro.cursorPosition = inputBairro.text.length;
                             }

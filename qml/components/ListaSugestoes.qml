@@ -25,16 +25,27 @@ Popup {
     required property Item campo
     // Array JS puro, nunca ListModel — mesma armadilha documentada em
     // PopupBuscaCardapio.qml: array serve de model direto pra ListView.
+    // Cada item é um texto ("Jardim Garcês") ou {nome, bairro}: aí o bairro
+    // aparece menor, embaixo do nome (sugestões de rua do Endereço).
     property var sugestoes: []
     // -1 = nada destacado ainda: Enter sem seta antes segue o fluxo normal
     // do campo (ir pro próximo), em vez de aceitar uma sugestão que o
     // atendente talvez nem tenha olhado.
     property int indiceSelecionado: -1
 
-    // Emitido com o texto da sugestão aceita (clique ou Enter). Quem escuta
-    // preenche o campo — o popup não escreve em campo.text sozinho, senão o
-    // dono não teria onde cancelar o debounce que a escrita re-dispara.
-    signal escolhida(string texto)
+    // Emitido com o texto da sugestão aceita (clique ou Enter) e o detalhe
+    // dela ("" quando a sugestão é só texto). Quem escuta preenche o campo — o
+    // popup não escreve em campo.text sozinho, senão o dono não teria onde
+    // cancelar o debounce que a escrita re-dispara.
+    signal escolhida(string texto, string detalhe)
+
+    function textoDe(item) {
+        return typeof item === "string" ? item : (item && item.nome) || "";
+    }
+
+    function detalheDe(item) {
+        return typeof item === "string" ? "" : (item && item.bairro) || "";
+    }
 
     parent: campo
     y: campo.height + Estilo.global.spacing.xs
@@ -82,7 +93,8 @@ Popup {
         if (lista.indiceSelecionado < 0 || lista.indiceSelecionado >= lista.sugestoes.length)
             return false;
 
-        lista.escolhida(lista.sugestoes[lista.indiceSelecionado]);
+        var item = lista.sugestoes[lista.indiceSelecionado];
+        lista.escolhida(lista.textoDe(item), lista.detalheDe(item));
         lista.close();
         return true;
     }
@@ -109,24 +121,42 @@ Popup {
             required property var modelData
 
             readonly property bool selecionada: index === lista.indiceSelecionado
+            readonly property string detalhe: lista.detalheDe(modelData)
 
             width: ListView.view.width
-            height: textoSugestao.implicitHeight + Estilo.global.padding.sm * 2
+            height: colunaSugestao.implicitHeight + Estilo.global.padding.sm * 2
             radius: Estilo.global.radius.md
             color: selecionada ? Estilo.global.surfacePressed : (areaSugestao.containsMouse ? Estilo.global.surfaceHover : "transparent")
 
-            Text {
-                id: textoSugestao
+            Column {
+                id: colunaSugestao
 
                 anchors.verticalCenter: parent.verticalCenter
                 anchors.left: parent.left
                 anchors.right: parent.right
                 anchors.leftMargin: Estilo.global.padding.sm
                 anchors.rightMargin: Estilo.global.padding.sm
-                text: linhaSugestao.modelData
-                font.pixelSize: Estilo.global.fontSize.md
-                color: Estilo.global.text
-                elide: Text.ElideRight
+                spacing: 1
+
+                Text {
+                    width: parent.width
+                    text: lista.textoDe(linhaSugestao.modelData)
+                    font.pixelSize: Estilo.global.fontSize.md
+                    color: Estilo.global.text
+                    elide: Text.ElideRight
+                }
+
+                // O bairro da rua, menor e apagado: é o que separa duas
+                // sugestões de mesmo nome (a avenida que atravessa dois
+                // bairros) e o que vai para o campo Bairro ao escolher.
+                Text {
+                    width: parent.width
+                    visible: linhaSugestao.detalhe.length > 0
+                    text: linhaSugestao.detalhe
+                    font.pixelSize: Estilo.global.fontSize.xs
+                    color: Estilo.global.textSecondary
+                    elide: Text.ElideRight
+                }
             }
 
             MouseArea {

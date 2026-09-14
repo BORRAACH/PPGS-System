@@ -694,6 +694,156 @@ Page {
                 }
             }
 
+            // --- LOCALIZAÇÃO DA PIZZARIA ---
+            // Centro da região a que as sugestões de rua/bairro da Entrega se
+            // limitam (ver services/sugestoesEndereco.py). Quem define é a
+            // máquina do servidor — ou qualquer uma, enquanto nenhuma foi
+            // escolhida —, e a escolha viaja pela malha até as outras (ver
+            // RedeService._aplicar_localizacao). Sem nada digitado aqui, a
+            // hospedeira detecta a cidade pela conexão de internet.
+            Rectangle {
+                id: cartaoLocalizacao
+
+                readonly property var localizacao: redeController.localizacaoServidor
+                readonly property bool definida: localizacao && localizacao.lat !== undefined
+                readonly property bool podeDefinir: redeController.servidorAqui || !redeController.maquinaServidor
+                property bool buscando: false
+                property string mensagem: ""
+
+                function buscar() {
+                    var texto = inputLocalizacao.text.trim();
+                    if (!texto || buscando)
+                        return;
+                    buscando = true;
+                    mensagem = "";
+                    sugestoesEnderecoController.definirLocalizacaoPorEndereco(texto);
+                }
+
+                Layout.fillWidth: true
+                implicitHeight: colunaLocalizacao.implicitHeight + 20
+                radius: Estilo.global.radius.md
+                color: Estilo.global.surface
+                border.color: Estilo.global.borderCard
+                border.width: Estilo.global.borderWidth.hairline
+
+                Connections {
+                    target: sugestoesEnderecoController
+
+                    function onLocalizacaoDefinida(ok, mensagem) {
+                        cartaoLocalizacao.buscando = false;
+                        cartaoLocalizacao.mensagem = ok ? "Localização atualizada em todas as máquinas." : mensagem;
+                        if (ok)
+                            inputLocalizacao.text = "";
+                    }
+                }
+
+                ColumnLayout {
+                    id: colunaLocalizacao
+                    anchors.fill: parent
+                    anchors.margins: 10
+                    spacing: Estilo.global.spacing.sm
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: Estilo.global.spacing.md
+
+                        Icone { nome: "fa6s.location-dot"; cor: Estilo.screen.rede.accent; tamanho: Estilo.global.fontSize.title }
+
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 2
+
+                            Text {
+                                text: "Localização da pizzaria"
+                                font.bold: true
+                                font.pixelSize: Estilo.global.fontSize.lg
+                                color: Estilo.global.text
+                            }
+
+                            Text {
+                                Layout.fillWidth: true
+                                text: {
+                                    var loc = cartaoLocalizacao.localizacao;
+                                    if (!cartaoLocalizacao.definida)
+                                        return "Ainda não definida — as sugestões de endereço na Entrega buscam no país inteiro até definir.";
+                                    var lugar = loc.descricao || loc.cidade || (loc.lat + ", " + loc.lon);
+                                    return "Sugerindo endereços perto de: " + lugar
+                                           + (loc.origem === "ip" ? " (detectada pela conexão de internet)" : "");
+                                }
+                                font.pixelSize: Estilo.global.fontSize.xs
+                                color: Estilo.global.textSecondary
+                                wrapMode: Text.WordWrap
+                            }
+                        }
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        visible: cartaoLocalizacao.podeDefinir
+                        spacing: Estilo.global.spacing.sm
+
+                        TextField {
+                            id: inputLocalizacao
+
+                            Layout.fillWidth: true
+                            color: Estilo.global.textInput
+                            placeholderTextColor: Estilo.global.textPlaceholder
+                            placeholderText: "ENDEREÇO DA PIZZARIA (EX: AV. DOS BOMBEIROS, 375, TAUBATÉ - SP)"
+                            topPadding: 10
+                            bottomPadding: 10
+                            leftPadding: 10
+                            rightPadding: 10
+                            onAccepted: cartaoLocalizacao.buscar()
+
+                            background: Rectangle {
+                                radius: Estilo.global.radius.pill
+                                color: Estilo.global.inputBackground
+                                border.color: inputLocalizacao.activeFocus ? Estilo.screen.rede.accent : Estilo.global.border
+                                border.width: Estilo.global.borderWidth.hairline
+                            }
+                        }
+
+                        Botao {
+                            text: cartaoLocalizacao.buscando ? "Buscando..." : "Definir"
+                            variante: "primario"
+                            nomeIcone: "fa6s.magnifying-glass"
+                            tom: Estilo.screen.rede
+                            enabled: !cartaoLocalizacao.buscando && inputLocalizacao.text.trim().length > 0
+                            onClicked: cartaoLocalizacao.buscar()
+                        }
+                    }
+
+                    Text {
+                        Layout.fillWidth: true
+                        visible: !cartaoLocalizacao.podeDefinir
+                        text: "Definida pela máquina do servidor ('" + redeController.maquinaServidor + "')."
+                        font.pixelSize: Estilo.global.fontSize.xs
+                        color: Estilo.global.textSecondary
+                        wrapMode: Text.WordWrap
+                    }
+
+                    Text {
+                        Layout.fillWidth: true
+                        visible: cartaoLocalizacao.mensagem.length > 0
+                        text: cartaoLocalizacao.mensagem
+                        font.pixelSize: Estilo.global.fontSize.xs
+                        color: Estilo.global.textSecondary
+                        wrapMode: Text.WordWrap
+                    }
+
+                    // Andamento do índice de ruas da cidade, que é montado em
+                    // segundo plano pela máquina que define a localização e
+                    // chega às outras pela malha.
+                    Text {
+                        Layout.fillWidth: true
+                        text: sugestoesEnderecoController.statusIndice
+                        font.pixelSize: Estilo.global.fontSize.xs
+                        color: Estilo.global.textSecondary
+                        wrapMode: Text.WordWrap
+                    }
+                }
+            }
+
             // --- MÁQUINAS CONECTADAS (esquerda) + IMPRESSORA DESTA MÁQUINA (direita) ---
             // Máquinas/histórico e impressora lado a lado enquanto couberem;
             // empilhados quando não couberem.

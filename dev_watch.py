@@ -56,6 +56,10 @@ ARQUIVOS_IGNORADOS = {
     # Sem esta linha, mandar o servidor subir reiniciava o app inteiro no mesmo
     # instante, e o preparo que acabara de começar era morto junto.
     os.path.join("Config", "servidor_designado.json"),
+    # Onde fica a pizzaria (ver services/rede/localizacaoServidor.py) — gravado
+    # ao clicar "Definir" na tela Rede, na detecção pela internet e quando um
+    # peer anuncia a dele. Mesmo motivo das duas linhas acima.
+    os.path.join("Config", "localizacao_servidor.json"),
 }
 # Pastas inteiras de dados que o app grava em tempo de execução. Diferente de
 # IGNORAR_DIRS, que casa por NOME de pasta em qualquer nível, aqui o casamento

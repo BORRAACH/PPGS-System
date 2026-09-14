@@ -15,7 +15,7 @@ from PyQt6.QtNetwork import QHostAddress, QTcpServer, QTcpSocket
 from Config.logConfig import protegido
 from services import comandaImagemService
 from services.printerService import PrinterService
-from services.rede import caminhos, historicoEventos, impressoraFixada, indicePedidos, relogio, seguranca, sequenciaComandas, servidorDesignado, tombstones
+from services.rede import caminhos, historicoEventos, impressoraFixada, indicePedidos, localizacaoServidor, relogio, seguranca, sequenciaComandas, servidorDesignado, tombstones
 from services.rede.descoberta import criar_descoberta
 from services.rede.eventos import BarramentoEventos
 
@@ -25,6 +25,9 @@ _EVENTO_COMANDA_NUMERADA = "comanda_numerada"
 # Anuncia à malha qual máquina passa a hospedar o ppgs_server (ver
 # designarServidor/services/rede/servidorDesignado.py).
 _EVENTO_SERVIDOR_DESIGNADO = "servidor_designado"
+# Anuncia onde fica a pizzaria — a região das sugestões de endereço da Entrega
+# (ver services/rede/localizacaoServidor.py e services/sugestoesEndereco.py).
+_EVENTO_LOCALIZACAO_SERVIDOR = "localizacao_servidor"
 
 _INTERVALO_CHECAGEM_IMPRESSORA_MS = 30000
 _TIMEOUT_IMPRESSAO_MS = 10000
@@ -129,6 +132,8 @@ class RedeService(QObject):
     # A máquina que hospeda o ppgs_server mudou (ou o preparo dela mudou de
     # estado) — a tela Rede e o cliente HTTP reagem a isto.
     servidorDesignadoMudou = pyqtSignal()
+    # A localização da pizzaria mudou (definida aqui ou aprendida de um peer).
+    localizacaoServidorMudou = pyqtSignal()
     # (nome da máquina hospedeira, servidor no ar nela) — o aviso DIRETO que a
     # hospedeira manda no instante em que o ppgs_server dela sobe ou cai, mais
     # o que ela conta de si mesma no handshake. Existe porque o único jeito de
@@ -236,6 +241,10 @@ class RedeService(QObject):
         # aqui pra uma máquina que liga sozinha já saber que é ela;
         # atualizado depois por gossip.
         self._nome_servidor, self._id_evento_servidor = servidorDesignado.carregar()
+        # Onde fica a pizzaria ({} enquanto ninguém definiu) — mesmo ciclo da
+        # designação logo acima: do disco agora, por gossip e handshake depois
+        # (ver _aplicar_localizacao).
+        self._localizacao_servidor = localizacaoServidor.carregar()
         # Preenchido pelo ServidorLocalService desta máquina quando ela é a
         # hospedeira — encaminhar requisições exige o token, e só ele sabe
         # se o processo já subiu.
@@ -264,6 +273,7 @@ class RedeService(QObject):
         self._eventos.registrar("impressora_fixada", self._ao_receber_evento_impressora_fixada)
         self._eventos.registrar(_EVENTO_COMANDA_NUMERADA, self._ao_receber_evento_comanda_numerada)
         self._eventos.registrar(_EVENTO_SERVIDOR_DESIGNADO, self._ao_receber_evento_servidor_designado)
+        self._eventos.registrar(_EVENTO_LOCALIZACAO_SERVIDOR, self._ao_receber_evento_localizacao)
         self._servidorRespostaLocal.connect(self._responder_servidor_ao_peer)
         self._servidorLocalNoAr.connect(self._ao_mudar_servidor_local)
 
@@ -584,6 +594,9 @@ class RedeService(QObject):
             # designações em disputa (ver _aplicar_designacao).
             "nomeMaquinaServidor": self._nome_servidor,
             "idEventoServidor": self._id_evento_servidor,
+            # Pelo mesmo motivo da designação: o evento de gossip só alcança
+            # quem estava conectado quando a localização foi definida.
+            "localizacaoServidor": self._localizacao_servidor,
         }
 
     def _preparar_socket(self, socket: QTcpSocket, destino: str = "", id_remoto: str = ""):
@@ -857,6 +870,7 @@ class RedeService(QObject):
                 mensagem.get("nomeMaquinaServidor") or "",
                 mensagem.get("idEventoServidor") or "",
             )
+            self._aplicar_localizacao(mensagem.get("localizacaoServidor") or {})
             # O peer pode estar com o servidor no ar há horas: para quem
             # acabou de entrar na malha, o handshake é o "aviso de que o
             # servidor subiu" — e é aqui que ele passa a valer.
@@ -1780,6 +1794,46 @@ class RedeService(QObject):
     @pyqtProperty(bool, notify=servidorDesignadoMudou)
     def servidorAqui(self) -> bool:
         return bool(self._nome_servidor) and self._nome_servidor == self._nome_local
+
+    # ---------- Localização da pizzaria ----------
+
+    @pyqtProperty("QVariantMap", notify=localizacaoServidorMudou)
+    def localizacaoServidor(self) -> dict:
+        """{"endereco", "descricao", "cidade", "lat", "lon", "origem",
+        "idEvento"}, ou {} enquanto ninguém definiu — ver
+        services/rede/localizacaoServidor.py."""
+        return dict(self._localizacao_servidor)
+
+    def definir_localizacao_servidor(self, dados: dict) -> bool:
+        """Adota `dados` como a localização da pizzaria e anuncia à malha.
+        Quem decide SE esta máquina pode definir é o chamador (ver
+        SugestoesEnderecoService._pode_definir_localizacao); aqui só se carimba
+        o idEvento que arbitra a escolha. False se as coordenadas não servirem."""
+        registro = localizacaoServidor.normalizar_registro(dict(dados or {}, idEvento=relogio.novo_id()))
+        if not registro:
+            return False
+        self._aplicar_localizacao(registro)
+        self._eventos.publicar(_EVENTO_LOCALIZACAO_SERVIDOR, registro)
+        return True
+
+    def _ao_receber_evento_localizacao(self, payload: dict, _socket=None):
+        self._aplicar_localizacao(payload or {})
+
+    def _aplicar_localizacao(self, dados: dict):
+        """Última decisão vence, pelo relógio lógico — mesma regra (e mesmo
+        motivo) de _aplicar_designacao: uma localização antiga chegando
+        atrasada pelo handshake não pode desfazer uma recente."""
+        registro = localizacaoServidor.normalizar_registro(dados)
+        if not registro:
+            return
+        relogio.observar(registro["idEvento"])
+        if not relogio.mais_novo(registro["idEvento"], self._localizacao_servidor.get("idEvento", "")):
+            return
+        self._localizacao_servidor = registro
+        localizacaoServidor.salvar(registro)
+        print(f"[RedeService] Localização da pizzaria: {registro['descricao'] or registro['cidade']} "
+              f"({registro['lat']}, {registro['lon']}, origem {registro['origem']}).")
+        self.localizacaoServidorMudou.emit()
 
     @pyqtSlot(result="QVariantList")
     @protegido([])

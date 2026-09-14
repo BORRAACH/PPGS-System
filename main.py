@@ -54,6 +54,7 @@ try:
     from services.rede import rede
     from services.pizzeriaServerService import pizzeria_server
     from services.servidor import servidor_local
+    from services.sugestoesEndereco import sugestoes_endereco
     from services.iconProvider import IconProvider
     from services.comandaEstiloService import ComandaEstiloController
     from services import comandaImagemService
@@ -261,6 +262,9 @@ if __name__ == "__main__":
     engine.rootContext().setContextProperty("statusController", status)
     engine.rootContext().setContextProperty("pizzeriaServerController", pizzeria_server)
     engine.rootContext().setContextProperty("servidorLocalController", servidor_local)
+    # Sugestões de rua/bairro da Entrega, direto do Photon e do histórico da
+    # malha — sem passar pelo ppgs_server (ver services/sugestoesEndereco.py).
+    engine.rootContext().setContextProperty("sugestoesEnderecoController", sugestoes_endereco)
     # O estado de conexão é reconferido a cada 30s, o que é barato mas lento
     # demais para o instante que mais importa: o servidor desta máquina acaba
     # de subir e o caixa já está lançando o primeiro pedido do dia. Sem isto,
@@ -301,6 +305,16 @@ if __name__ == "__main__":
     QTimer.singleShot(0, _mostrar_resultado_da_atualizacao)
     QTimer.singleShot(0, _iniciar_rede)
     QTimer.singleShot(0, _iniciar_servidor_local)
+    # Sem localização da pizzaria conhecida, a máquina que a define a detecta
+    # pela internet — uma chamada só, e nunca por cima de uma já definida.
+    QTimer.singleShot(0, sugestoes_endereco.garantirLocalizacao)
+    # Índice de ruas da cidade: baixado/completado numa thread (ver
+    # SugestoesEnderecoService.garantirIndice). Com a localização ainda por
+    # detectar, ele sai sozinho quando ela chegar (localizacaoServidorMudou).
+    # A leitura do índice do disco vai para uma thread, e é ela que chama
+    # garantirIndice quando termina.
+    QTimer.singleShot(0, sugestoes_endereco.aquecerIndice)
+    app.aboutToQuit.connect(sugestoes_endereco.encerrar)
 
     # Em thread porque é I/O bloqueante puro (PowerShell/CUPS) e não toca
     # objeto Qt nenhum.

@@ -9,6 +9,7 @@ from services import comandaEstiloService as estilo
 from services import comandaSequencialService as sequencial
 from services import comandaTextoService as texto
 from services.rede import rede
+from services.sugestoesEndereco import sugestoes_endereco
 
 CODEPAGE_IMPRESSORA = texto.CODEPAGE_IMPRESSORA
 
@@ -181,6 +182,7 @@ class EntregaController(QObject):
         # estiver com a impressora conectada — pode ser esta ou outra.
         for _ in range(max(1, copias)):
             rede.solicitar_impressao(conteudo_bytes)
+        self._aprenderEndereco(dados)
         return True
 
     @pyqtSlot("QVariantMap", result=bool)
@@ -189,4 +191,18 @@ class EntregaController(QObject):
         """Igual a enviarPedido, mas nunca tenta imprimir — usado pelo botão
         'Lançar', que só grava o .txt e propaga para a rede local."""
         sucesso, _conteudo_bytes = self._salvarComanda(dados)
+        if sucesso:
+            self._aprenderEndereco(dados)
         return sucesso
+
+    def _aprenderEndereco(self, dados):
+        """Conta o endereço da comanda no histórico que alimenta as sugestões
+        da Entrega (ver services/sugestoesEndereco.py). Comanda de teste não
+        ensina nada — costuma levar endereço inventado.
+
+        registrarUso é @protegido: uma falha ali fica no log e não chega a
+        virar o False que faria a tela acusar erro numa comanda já salva — e o
+        atendente lançar o pedido de novo."""
+        if dados.get("teste"):
+            return
+        sugestoes_endereco.registrarUso(dados.get("endereco", ""), dados.get("bairro", ""))
