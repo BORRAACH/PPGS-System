@@ -17,11 +17,11 @@
   },
   {
     "nome": "Bala",
-    "valor": "1,00"
+    "valor": "0,25"
   },
   {
     "nome": "Pirulito",
-    "valor": "2,50"
+    "valor": "1,00"
   },
   {
     "nome": "Sobremesa Pudim",
@@ -38,5 +38,45 @@
   {
     "nome": "carne",
     "valor": "3,00"
+  },
+  {
+    "nome": "AMENDOIM",
+    "valor": "6,00"
+  },
+  {
+    "nome": "HALLS",
+    "valor": "2,50"
+  },
+  {
+    "nome": "TRIDENT",
+    "valor": "2,50"
+  },
+  {
+    "nome": "BROWNIE",
+    "valor": "9,90"
+  },
+  {
+    "nome": "BATON",
+    "valor": "2,50"
+  },
+  {
+    "nome": "PRESTIGIO",
+    "valor": "4,00"
+  },
+  {
+    "nome": "CHARGE",
+    "valor": "4,00"
+  },
+  {
+    "nome": "KIT KAT",
+    "valor": "5,00"
+  },
+  {
+    "nome": "SONHO DE VALSA",
+    "valor": "3,00"
+  },
+  {
+    "nome": "CASADINHO",
+    "valor": "9,00"
   }
 ]
