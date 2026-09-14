@@ -876,6 +876,80 @@ Page {
                 spinnerCopias.value = 2;
             }
 
+            // --- AUTOCOMPLETE DE ENDEREÇO E BAIRRO ---
+            // Termo da última busca de sugestão disparada por cada campo —
+            // mesmo papel de telaEntrega.telefoneEmConsulta no autofill: a
+            // resposta chega assíncrona com o termo ecoado, e só vale se
+            // ainda for sobre o que está digitado agora.
+            property string termoEnderecoEmConsulta: ""
+            property string termoBairroEmConsulta: ""
+
+            // Debounce: a busca sai ~300ms depois da ÚLTIMA tecla, não a
+            // cada uma — digitar "Avenida" não pode custar sete idas ao
+            // servidor (e, no caso do endereço, sete consultas ao Photon).
+            // Um timer por campo, e não um só: os dois campos podem estar
+            // em consulta ao mesmo tempo (Tab rápido entre eles).
+            //
+            // O gate de activeFocus (aqui e no onTextChanged dos campos)
+            // é o que impede o preenchimento programático de abrir lista:
+            // o autofill por telefone e o aplicarRascunho escrevem nos
+            // campos com o foco em outro lugar.
+            Timer {
+                id: debounceEndereco
+
+                interval: 300
+                onTriggered: {
+                    var termo = inputEndereco.text.trim();
+                    if (termo.length < 3 || !inputEndereco.activeFocus) {
+                        sugestoesEndereco.close();
+                        return;
+                    }
+                    conteudoEntrega.termoEnderecoEmConsulta = termo;
+                    pizzeriaServerController.buscarEnderecos(termo);
+                }
+            }
+
+            Timer {
+                id: debounceBairro
+
+                interval: 300
+                onTriggered: {
+                    var termo = inputBairro.text.trim();
+                    if (termo.length < 3 || !inputBairro.activeFocus) {
+                        sugestoesBairro.close();
+                        return;
+                    }
+                    conteudoEntrega.termoBairroEmConsulta = termo;
+                    pizzeriaServerController.buscarBairros(termo);
+                }
+            }
+
+            // Dentro do Component, e não junto do Connections de autofill da
+            // Page: os campos e as listas só existem nesta árvore. A falha
+            // silenciosa pedida está no lado Python (_tratar_sugestoes):
+            // sem servidor/Photon o sinal chega com lista vazia, mostrar()
+            // fecha a lista e o campo segue sendo um campo de texto comum.
+            Connections {
+                target: pizzeriaServerController
+
+                function onEnderecosSugeridos(termo, sugestoes) {
+                    // Resposta atrasada (o atendente já digitou mais, ou já
+                    // saiu do campo): descarta — a consulta do texto atual,
+                    // se houver, traz a lista certa.
+                    if (!inputEndereco.activeFocus || termo !== inputEndereco.text.trim())
+                        return;
+
+                    sugestoesEndereco.mostrar(sugestoes);
+                }
+
+                function onBairrosSugeridos(termo, sugestoes) {
+                    if (!inputBairro.activeFocus || termo !== inputBairro.text.trim())
+                        return;
+
+                    sugestoesBairro.mostrar(sugestoes);
+                }
+            }
+
             // Rola verticalmente quando a lista de pedidos cresce (ou a
             // janela é pequena) o suficiente pra empurrar o conteúdo pra
             // fora da área visível — mesmo padrão de Flickable+ScrollBar
@@ -1082,7 +1156,18 @@ Page {
                                 // Vale tambem para o endereco que chega preenchido do servidor
                                 // (ver onEnderecoEncontrado): a rua cadastrada em minusculo por
                                 // outra maquina sai formatada aqui do mesmo jeito.
-                                onTextChanged: Texto.capitalizarCampo(inputEndereco)
+                                //
+                                // A capitalizacao reescreve o texto e reentra
+                                // aqui (mesmo caso do "reformatando" do
+                                // telefone) — o restart repetido do debounce
+                                // no mesmo tique e inofensivo. O gate de
+                                // activeFocus deixa de fora as escritas
+                                // programaticas: autofill, rascunho, limpeza.
+                                onTextChanged: {
+                                    Texto.capitalizarCampo(inputEndereco);
+                                    if (activeFocus)
+                                        debounceEndereco.restart();
+                                }
                                 width: Math.round((conteudoEntrega.larguraCampos - Estilo.global.spacing.md) * 0.78)
                                 topPadding: 10
                                 bottomPadding: 10
@@ -1091,7 +1176,36 @@ Page {
                                 text: enderecoInicial
                                 KeyNavigation.tab: inputNumero
                                 KeyNavigation.backtab: inputNomeCliente
-                                Keys.onReturnPressed: inputNumero.forceActiveFocus()
+                                // Setas navegam a lista de sugestões sem tirar
+                                // o foco do campo, como em PopupBuscaCardapio.
+                                Keys.onDownPressed: sugestoesEndereco.mover(1)
+                                Keys.onUpPressed: sugestoesEndereco.mover(-1)
+                                // Enter aceita a sugestão destacada, se houver
+                                // — senão segue o fluxo de sempre (próximo
+                                // campo). Os dois handlers porque o Enter do
+                                // teclado numérico é outra tecla.
+                                Keys.onReturnPressed: {
+                                    if (!(sugestoesEndereco.opened && sugestoesEndereco.confirmar()))
+                                        inputNumero.forceActiveFocus();
+                                }
+                                Keys.onEnterPressed: {
+                                    if (!(sugestoesEndereco.opened && sugestoesEndereco.confirmar()))
+                                        inputNumero.forceActiveFocus();
+                                }
+                                // Esc no campo, porque o popup não tem foco
+                                // pra receber o CloseOnEscape sozinho. Só é
+                                // consumido com a lista aberta — fechado, o
+                                // Esc segue pra quem mais o trate.
+                                Keys.onEscapePressed: function (evento) {
+                                    evento.accepted = sugestoesEndereco.opened;
+                                    sugestoesEndereco.close();
+                                }
+                                // Saiu do campo (Tab, clique noutro lugar): a
+                                // lista não tem mais a quem sugerir.
+                                onActiveFocusChanged: {
+                                    if (!activeFocus)
+                                        sugestoesEndereco.close();
+                                }
 
                                 background: Rectangle {
                                     radius: Estilo.global.radius.pill
@@ -1100,6 +1214,23 @@ Page {
                                     border.width: Estilo.global.borderWidth.hairline
                                 }
 
+                            }
+
+                            ListaSugestoes {
+                                id: sugestoesEndereco
+
+                                campo: inputEndereco
+
+                                onEscolhida: function (texto) {
+                                    // A atribuição dispara onTextChanged (com
+                                    // o foco ainda no campo), que rearma o
+                                    // debounce — o stop logo depois cancela,
+                                    // senão a lista reabriria em 300ms
+                                    // sugerindo o que acabou de ser escolhido.
+                                    inputEndereco.text = texto;
+                                    debounceEndereco.stop();
+                                    inputEndereco.cursorPosition = inputEndereco.text.length;
+                                }
                             }
                         }
 
@@ -1164,7 +1295,15 @@ Page {
                             placeholderTextColor: Estilo.global.textPlaceholder
                             placeholderText: "BAIRRO"
                             // Mesma capitalizacao do nome do cliente logo acima.
-                            onTextChanged: Texto.capitalizarCampo(inputBairro)
+                            //
+                            // Debounce/gate iguais aos de inputEndereco — ver
+                            // os comentários lá; a diferença é só o destino
+                            // da busca (tabela local de bairros, sem Photon).
+                            onTextChanged: {
+                                Texto.capitalizarCampo(inputBairro);
+                                if (activeFocus)
+                                    debounceBairro.restart();
+                            }
                             width: conteudoEntrega.larguraCampos
                             topPadding: 10
                             bottomPadding: 10
@@ -1173,7 +1312,24 @@ Page {
                             text: bairroInicial
                             KeyNavigation.tab: inputObservacao
                             KeyNavigation.backtab: inputNumero
-                            Keys.onReturnPressed: inputObservacao.forceActiveFocus()
+                            Keys.onDownPressed: sugestoesBairro.mover(1)
+                            Keys.onUpPressed: sugestoesBairro.mover(-1)
+                            Keys.onReturnPressed: {
+                                if (!(sugestoesBairro.opened && sugestoesBairro.confirmar()))
+                                    inputObservacao.forceActiveFocus();
+                            }
+                            Keys.onEnterPressed: {
+                                if (!(sugestoesBairro.opened && sugestoesBairro.confirmar()))
+                                    inputObservacao.forceActiveFocus();
+                            }
+                            Keys.onEscapePressed: function (evento) {
+                                evento.accepted = sugestoesBairro.opened;
+                                sugestoesBairro.close();
+                            }
+                            onActiveFocusChanged: {
+                                if (!activeFocus)
+                                    sugestoesBairro.close();
+                            }
 
                             background: Rectangle {
                                 radius: Estilo.global.radius.pill
@@ -1182,6 +1338,19 @@ Page {
                                 border.width: Estilo.global.borderWidth.hairline
                             }
 
+                        }
+
+                        ListaSugestoes {
+                            id: sugestoesBairro
+
+                            campo: inputBairro
+
+                            onEscolhida: function (texto) {
+                                // Ver o comentário homônimo em sugestoesEndereco.
+                                inputBairro.text = texto;
+                                debounceBairro.stop();
+                                inputBairro.cursorPosition = inputBairro.text.length;
+                            }
                         }
                     }
 

@@ -26,6 +26,7 @@ que morria junto com o app. O POST imediato daqui virou, portanto, só o caminho
 rápido — o que garante a gravação é a fila, não ele."""
 
 import json
+from urllib.parse import quote
 
 from PyQt6.QtCore import QObject, QTimer, pyqtProperty, pyqtSignal, pyqtSlot
 
@@ -72,6 +73,12 @@ class PizzeriaServerService(QObject):
     enderecoEncontrado = pyqtSignal("QVariantMap")
     enderecoNaoEncontrado = pyqtSignal()
     enderecoSalvo = pyqtSignal(bool, str)
+    # Autocomplete da Entrega.qml: (termo consultado, lista de nomes). O termo
+    # volta junto pelo mesmo motivo do telefoneEmConsulta do autofill — a
+    # consulta é assíncrona, e a QML precisa descartar uma resposta que chegue
+    # depois de o atendente já ter digitado outra coisa.
+    bairrosSugeridos = pyqtSignal(str, "QVariantList")
+    enderecosSugeridos = pyqtSignal(str, "QVariantList")
     # Emitido só quando o estado de fato muda (ver _tratar_verificacao_conexao)
     # — Rede.qml usa isso pra mostrar se este balcão está ou não enxergando o
     # ppgs_server rodando na máquina designada da malha.
@@ -237,6 +244,62 @@ class PizzeriaServerService(QObject):
             return
 
         self.enderecoEncontrado.emit(dados)
+
+    # ---------- Autocomplete de endereço/bairro (Entrega.qml) ----------
+
+    # O mínimo de caracteres é o mesmo dos endpoints do servidor
+    # (MINIMO_CARACTERES_BUSCA em ppgs_server/src/handlers.rs): checar aqui
+    # também poupa uma volta pela malha que voltaria 400 de qualquer jeito.
+    _MINIMO_CARACTERES_BUSCA = 3
+
+    @pyqtSlot(str)
+    @protegido(None)
+    def buscarBairros(self, prefixo):
+        """Sugestões de bairro que começam com o prefixo digitado, da tabela
+        de referência local do servidor (sem API externa). Emite
+        bairrosSugeridos(termo, lista) quando a resposta chegar — lista vazia
+        em qualquer falha: sem servidor, o campo é só um campo de texto."""
+        self._buscar_sugestoes("/bairros/busca", prefixo, self.bairrosSugeridos)
+
+    @pyqtSlot(str)
+    @protegido(None)
+    def buscarEnderecos(self, prefixo):
+        """Sugestões de rua para o prefixo digitado, vindas do Photon via o
+        servidor (que mantém o cache — ver ppgs_server/src/photon.rs). Emite
+        enderecosSugeridos(termo, lista); mesma política de falha silenciosa
+        de buscarBairros."""
+        self._buscar_sugestoes("/enderecos/busca", prefixo, self.enderecosSugeridos)
+
+    def _buscar_sugestoes(self, caminho_base, prefixo, sinal):
+        termo = (prefixo or "").strip()
+        if len(termo) < self._MINIMO_CARACTERES_BUSCA:
+            # Emite vazio em vez de sumir: é o que faz a lista aberta na tela
+            # se fechar quando o atendente apaga até sobrar pouco texto.
+            sinal.emit(termo, [])
+            return
+
+        # quote() porque o termo vira caminho de requisição HTTP dentro da
+        # máquina hospedeira — acento/espaço em claro quebraria a request
+        # line. O servidor desfaz (ver decodificar_percentual em routes.rs).
+        caminho = f"{caminho_base}?q={quote(termo)}"
+        self._pedir("GET", caminho, b"",
+                    lambda status, corpo: self._tratar_sugestoes(sinal, termo, status, corpo))
+
+    def _tratar_sugestoes(self, sinal, termo, status, corpo):
+        """Qualquer coisa que não seja um 200 com uma lista JSON vira lista
+        vazia, sem notificação: sugestão é conveniência, e um popup de erro
+        no meio da digitação de um endereço atrapalharia mais que a falta
+        dela. (status 0 = sem servidor/timeout da malha; 429 = duas máquinas
+        digitando junto esbarraram no rate limiter; 502 = Photon fora.)"""
+        sugestoes = []
+        if status == 200:
+            try:
+                dados = json.loads(corpo.decode("utf-8", errors="replace"))
+                if isinstance(dados, list):
+                    sugestoes = [str(nome) for nome in dados]
+            except json.JSONDecodeError:
+                print(f"[pizzeriaServerService] Resposta de sugestões inválida: {corpo[:120]!r}")
+        sinal.emit(termo, sugestoes)
 
     @pyqtSlot("QVariantMap")
     @protegido(None)
