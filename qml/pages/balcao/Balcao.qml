@@ -103,6 +103,13 @@ Page {
     // digitado e ainda não confirmado entra no rascunho no tique seguinte à
     // saída do campo, e a saída da página confirma de qualquer jeito.
     function salvarRascunho(confirmarEdicao) {
+        // A tela está saindo por troca de modalidade, e o rascunho já foi
+        // gravado com o tipo NOVO (ver trocarModalidade). Gravar de novo aqui
+        // — onDeactivated, onDestruction e o relógio ainda disparam — o
+        // devolveria para "Balcão".
+        if (telaBalcao._saiuPorTrocaDeModalidade)
+            return telaBalcao.rascunhoId;
+
         var formulario = telaBalcao._formulario();
         if (!formulario || !formulario.estadoDoRascunho)
             return "";
@@ -147,6 +154,77 @@ Page {
 
             formulario.aplicarRascunho(rascunho);
         });
+    }
+
+    // --- TROCA DE MODALIDADE (ver components/SeletorModalidade.qml) ---
+    // Ligada só quando a página sai por uma troca de modalidade: dali em
+    // diante quem cuida do rascunho é a tela de destino (ver salvarRascunho).
+    property bool _saiuPorTrocaDeModalidade: false
+    // Telefone, endereço e afins de um rascunho que veio da Entrega. O Balcão
+    // não tem esses campos, mas devolvê-los no rascunho faz uma troca feita por
+    // engano (Entrega -> Balcão -> Entrega) não apagar o endereço digitado.
+    // Nunca vão para a comanda: ficam fora de coletarDadosPedido().
+    property var camposEntregaGuardados: ({})
+
+    // Leva o pedido em andamento para outra modalidade.
+    //
+    // Para a Entrega vai pelo mesmo caminho da faixa de rascunhos: o rascunho é
+    // gravado já com o tipo novo e a Entrega o abre por rascunhoIdInicial —
+    // cliente, itens, pagamento e a edição em curso (arquivoOriginal) seguem
+    // juntos.
+    //
+    // Para o Salão vão só cliente e itens (mesa não tem pagamento até fechar a
+    // conta). O rascunho continua na faixa como rede de segurança e só sai
+    // quando a mesa é salva (ver Salao.qml:salvarMesaAtual).
+    function trocarModalidade(tipo) {
+        if (tipo === "Balcão" || telaBalcao._saiuPorTrocaDeModalidade)
+            return;
+
+        var formulario = telaBalcao._formulario();
+        var pilha = telaBalcao.StackView.view;
+        if (!formulario || !pilha)
+            return;
+
+        formulario.confirmarEdicaoPendente();
+        var pagina = raizProjeto + Destino.paginaDoTipo(tipo);
+
+        if (tipo === "Salão") {
+            // Salvar a mesa não apagaria a comanda original, e a venda sairia
+            // duplicada no caixa do dia.
+            if (telaBalcao.arquivoOriginal !== "") {
+                telaBalcao.mostrarNotificacao("Uma comanda já salva não pode virar mesa.", false);
+                return;
+            }
+
+            var dados = formulario.coletarDadosPedido();
+            var idOrigem = telaBalcao.salvarRascunho(false);
+            telaBalcao._saiuPorTrocaDeModalidade = true;
+            pilha.replace(null, pagina, {
+                "clienteInicial": dados.cliente,
+                "itensLancamento": Destino.paraItensLancamento(dados.itens),
+                "rascunhoOrigemId": idOrigem
+            }, StackView.Immediate);
+            return;
+        }
+
+        var estado = formulario.estadoDoRascunho();
+        if (!telaBalcao._temConteudo(estado)) {
+            telaBalcao._saiuPorTrocaDeModalidade = true;
+            pilha.replace(null, pagina, {}, StackView.Immediate);
+            return;
+        }
+
+        estado.id = telaBalcao.rascunhoId;
+        estado.tipo = tipo;
+        estado.copias = Destino.copiasPadrao(tipo);
+        var id = rascunhosController.salvarRascunho(estado);
+        if (id === "") {
+            telaBalcao.mostrarNotificacao("Não foi possível levar o pedido para " + tipo + ".", false);
+            return;
+        }
+
+        telaBalcao._saiuPorTrocaDeModalidade = true;
+        pilha.replace(null, pagina, { "rascunhoIdInicial": id }, StackView.Immediate);
     }
 
     function mostrarNotificacao(mensagem, sucesso) {
@@ -581,8 +659,13 @@ Page {
             // confirmarEdicaoPendente() ANTES — e só quem pode se dar ao luxo
             // de mexer no foco faz isso (ver salvarRascunho na Page).
             function estadoDoRascunho() {
+                var dados = coletarDadosPedido();
+                var guardados = telaBalcao.camposEntregaGuardados;
+                for (var campo in guardados)
+                    dados[campo] = guardados[campo];
+
                 return {
-                    "dados": coletarDadosPedido(),
+                    "dados": dados,
                     "copias": spinnerCopias.value,
                     // Um rascunho pode ser a EDIÇÃO de uma comanda já salva
                     // (ver components/EdicaoComanda.js). Sem estes dois,
@@ -619,6 +702,14 @@ Page {
                 var dados = rascunho.dados;
                 telaBalcao.arquivoOriginal = rascunho.arquivoOriginal || "";
                 telaBalcao.manterBaixaAoSalvar = rascunho.manterBaixaAoSalvar === true;
+                telaBalcao.camposEntregaGuardados = {
+                    "telefone": dados.telefone || "",
+                    "endereco": dados.endereco || "",
+                    "numero": dados.numero || "",
+                    "bairro": dados.bairro || "",
+                    "observacaoGeral": dados.observacaoGeral || "",
+                    "taxaEntrega": dados.taxaEntrega || ""
+                };
 
                 inputNomeCliente.text = dados.cliente || "";
 
@@ -781,6 +872,7 @@ Page {
             // novo criado depois.
             function zerarCampos() {
                 telaBalcao.manterBaixaAoSalvar = false;
+                telaBalcao.camposEntregaGuardados = ({});
                 inputNomeCliente.text = "";
                 modeloPedidos.clear();
                 modeloPedidos.append({
@@ -848,6 +940,14 @@ Page {
                                 anchors.verticalCenter: parent.verticalCenter
                             }
 
+                        }
+
+                        SeletorModalidade {
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            modalidadeAtual: "Balcão"
+                            onTrocar: function (tipo) {
+                                telaBalcao.trocarModalidade(tipo);
+                            }
                         }
 
                         // Campo Nome do Cliente

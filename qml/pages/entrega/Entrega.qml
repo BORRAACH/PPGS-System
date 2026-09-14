@@ -105,6 +105,13 @@ Page {
     // digitado e ainda não confirmado entra no rascunho no tique seguinte à
     // saída do campo, e a saída da página confirma de qualquer jeito.
     function salvarRascunho(confirmarEdicao) {
+        // A tela está saindo por troca de modalidade, e o rascunho já foi
+        // gravado com o tipo NOVO (ver trocarModalidade). Gravar de novo aqui
+        // — onDeactivated, onDestruction e o relógio ainda disparam — o
+        // devolveria para "Entrega".
+        if (telaEntrega._saiuPorTrocaDeModalidade)
+            return telaEntrega.rascunhoId;
+
         var formulario = telaEntrega._formulario();
         if (!formulario || !formulario.estadoDoRascunho)
             return "";
@@ -159,6 +166,66 @@ Page {
 
     // API do lançamento rápido pelo Ctrl+S — ver o comentário equivalente em
     // balcao/Balcao.qml.
+    // --- TROCA DE MODALIDADE (ver components/SeletorModalidade.qml) ---
+    // Ligada só quando a página sai por uma troca de modalidade: dali em
+    // diante quem cuida do rascunho é a tela de destino (ver salvarRascunho).
+    property bool _saiuPorTrocaDeModalidade: false
+
+    // Leva o pedido em andamento para outra modalidade — mesmo desenho de
+    // Balcao.qml:trocarModalidade, que explica os dois caminhos. Para o Balcão
+    // o rascunho leva também telefone e endereço, que o Balcão guarda sem
+    // mostrar: voltar para cá os traz de volta.
+    function trocarModalidade(tipo) {
+        if (tipo === "Entrega" || telaEntrega._saiuPorTrocaDeModalidade)
+            return;
+
+        var formulario = telaEntrega._formulario();
+        var pilha = telaEntrega.StackView.view;
+        if (!formulario || !pilha)
+            return;
+
+        formulario.confirmarEdicaoPendente();
+        var pagina = raizProjeto + Destino.paginaDoTipo(tipo);
+
+        if (tipo === "Salão") {
+            // Salvar a mesa não apagaria a comanda original, e a venda sairia
+            // duplicada no caixa do dia.
+            if (telaEntrega.arquivoOriginal !== "") {
+                telaEntrega.mostrarNotificacao("Uma comanda já salva não pode virar mesa.", false);
+                return;
+            }
+
+            var dados = formulario.coletarDadosPedido();
+            var idOrigem = telaEntrega.salvarRascunho(false);
+            telaEntrega._saiuPorTrocaDeModalidade = true;
+            pilha.replace(null, pagina, {
+                "clienteInicial": dados.cliente,
+                "itensLancamento": Destino.paraItensLancamento(dados.itens),
+                "rascunhoOrigemId": idOrigem
+            }, StackView.Immediate);
+            return;
+        }
+
+        var estado = formulario.estadoDoRascunho();
+        if (!telaEntrega._temConteudo(estado)) {
+            telaEntrega._saiuPorTrocaDeModalidade = true;
+            pilha.replace(null, pagina, {}, StackView.Immediate);
+            return;
+        }
+
+        estado.id = telaEntrega.rascunhoId;
+        estado.tipo = tipo;
+        estado.copias = Destino.copiasPadrao(tipo);
+        var id = rascunhosController.salvarRascunho(estado);
+        if (id === "") {
+            telaEntrega.mostrarNotificacao("Não foi possível levar o pedido para " + tipo + ".", false);
+            return;
+        }
+
+        telaEntrega._saiuPorTrocaDeModalidade = true;
+        pilha.replace(null, pagina, { "rascunhoIdInicial": id }, StackView.Immediate);
+    }
+
     function acrescentarItens(itens) {
         return Destino.acrescentarAoModelo(modeloPedidos, itens);
     }
@@ -1047,6 +1114,14 @@ Page {
                             font.family: Estilo.global.fontFamily.title
                             color: Estilo.screen.entrega.accent
                             anchors.verticalCenter: parent.verticalCenter
+                        }
+                    }
+
+                    SeletorModalidade {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        modalidadeAtual: "Entrega"
+                        onTrocar: function (tipo) {
+                            telaEntrega.trocarModalidade(tipo);
                         }
                     }
 

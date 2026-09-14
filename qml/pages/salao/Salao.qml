@@ -48,6 +48,14 @@ Page {
     property var itensLancamento: []
     property bool _lancamentoPendente: false
 
+    // --- Troca de modalidade (ver components/SeletorModalidade.qml) ---
+    // Nome do cliente que veio junto com os itens de Balcão/Entrega.
+    property string clienteInicial: ""
+    // Rascunho de Balcão/Entrega de onde este pedido saiu. Fica na faixa de
+    // lá como rede de segurança até a mesa ser salva (ver salvarMesaAtual) —
+    // sair do Salão sem salvar não perde o pedido.
+    property string rascunhoOrigemId: ""
+
     function mostrarNotificacao(mensagem, sucesso) {
         filaNotificacoes.notificar(mensagem, sucesso);
     }
@@ -75,6 +83,80 @@ Page {
             stackViewLocal.currentItem.limparFormularioMesa();
 
         telaSalao.acrescentarItens(itens);
+    }
+
+    // Leva a mesa em andamento para Balcão ou Entrega, como rascunho do tipo
+    // escolhido — a tela de destino o abre por rascunhoIdInicial, o mesmo
+    // caminho da faixa de rascunhos. Vão cliente e itens; o que está no
+    // formulário e ainda não foi salvo na mesa vai junto.
+    //
+    // Mesa já salva sai da lista de mesas abertas (e da malha) na hora, depois
+    // de confirmar. A ordem dentro de executar() importa: o rascunho é gravado
+    // ANTES de apagar a mesa, para uma falha de gravação não perder o pedido.
+    function trocarModalidade(tipo) {
+        if (tipo === "Salão")
+            return;
+
+        var formulario = stackViewLocal.get(0);
+        var pilha = telaSalao.StackView.view;
+        if (!formulario || !pilha)
+            return;
+
+        // Confirma o valor digitado e ainda não gravado no modelo (ver
+        // confirmarEdicaoPendente em Balcao.qml).
+        formulario.forceActiveFocus();
+
+        var dados = formulario.coletarDadosMesa();
+        var itens = dados.itens.filter(function (item) {
+            return (item.pedido || "").trim() !== "";
+        });
+        var temConteudo = dados.cliente.trim() !== "" || itens.length > 0;
+        var mesaId = telaSalao.mesaAtualId;
+        var pagina = raizProjeto + Destino.paginaDoTipo(tipo);
+
+        var executar = function () {
+            var props = {};
+            if (temConteudo) {
+                // Reaproveita o rascunho de origem, se houver: senão o pedido
+                // que veio do Balcão ficaria duas vezes na faixa.
+                var id = rascunhosController.salvarRascunho({
+                    "id": telaSalao.rascunhoOrigemId,
+                    "tipo": tipo,
+                    "dados": { "cliente": dados.cliente, "itens": itens },
+                    "copias": Destino.copiasPadrao(tipo)
+                });
+                if (id === "") {
+                    telaSalao.mostrarNotificacao("Não foi possível levar o pedido para " + tipo + ".", false);
+                    return;
+                }
+                props = { "rascunhoIdInicial": id };
+            }
+
+            if (mesaId !== "" && !salaoController.apagarMesa(mesaId)) {
+                // Sem isto o pedido existiria duas vezes: como rascunho e
+                // como mesa aberta.
+                if (props.rascunhoIdInicial && telaSalao.rascunhoOrigemId === "")
+                    rascunhosController.excluirRascunho(props.rascunhoIdInicial);
+                telaSalao.mostrarNotificacao("Não foi possível remover a mesa aberta.", false);
+                return;
+            }
+
+            pilha.replace(null, pagina, props, StackView.Immediate);
+        };
+
+        if (mesaId === "") {
+            if (temConteudo || telaSalao.rascunhoOrigemId !== "")
+                executar();
+            else
+                pilha.replace(null, pagina, {}, StackView.Immediate);
+            return;
+        }
+
+        popupConfirmarExclusaoMesa.textoTitulo = "Mudar esta mesa para " + tipo + "?";
+        popupConfirmarExclusaoMesa.textoCorpo = "A mesa sai da lista de mesas abertas e o pedido segue para " + tipo + " com o cliente e os itens.";
+        popupConfirmarExclusaoMesa.textoConfirmar = "Mudar para " + tipo;
+        popupConfirmarExclusaoMesa.aoConfirmar = executar;
+        popupConfirmarExclusaoMesa.abrirPara(mesaId, "Mesa " + dados.mesa + (dados.cliente.trim() !== "" ? " — " + dados.cliente : ""));
     }
 
     function carregarMesasAbertas() {
@@ -134,7 +216,8 @@ Page {
         carga.agendar();
         // Só arma a flag: quem executa o lançamento é o StackView.onActivated
         // abaixo, que roda depois e com o formulário já instanciado.
-        if (telaSalao.itensLancamento && telaSalao.itensLancamento.length > 0)
+        if ((telaSalao.itensLancamento && telaSalao.itensLancamento.length > 0)
+                || telaSalao.clienteInicial !== "" || telaSalao.rascunhoOrigemId !== "")
             telaSalao._lancamentoPendente = true;
     }
 
@@ -148,7 +231,13 @@ Page {
 
         if (telaSalao._lancamentoPendente) {
             telaSalao._lancamentoPendente = false;
+            // Guardado antes: numa mesa nova, aplicarLancamentoRapido limpa o
+            // formulário, e limparFormularioMesa zera rascunhoOrigemId.
+            var rascunhoOrigem = telaSalao.rascunhoOrigemId;
             telaSalao.aplicarLancamentoRapido(telaSalao.mesaInicialId, telaSalao.itensLancamento);
+            telaSalao.rascunhoOrigemId = rascunhoOrigem;
+            if (telaSalao.clienteInicial !== "" && stackViewLocal.currentItem)
+                stackViewLocal.currentItem.inputNomeCliente.text = telaSalao.clienteInicial;
         }
     }
 
@@ -400,6 +489,10 @@ Page {
 
             function limparFormularioMesa() {
                 telaSalao.mesaAtualId = "";
+                // O formulário deixa de ser o pedido que veio de Balcão/Entrega;
+                // o rascunho de lá continua na faixa, só não é mais apagado
+                // quando esta mesa for salva.
+                telaSalao.rascunhoOrigemId = "";
                 inputNomeCliente.text = "";
                 inputMesa.value = 1;
                 modeloPedidos.clear();
@@ -419,6 +512,7 @@ Page {
                     return ;
 
                 telaSalao.mesaAtualId = mesa.id;
+                telaSalao.rascunhoOrigemId = "";
                 inputNomeCliente.text = mesa.cliente || "";
                 inputMesa.value = mesa.mesa || 1;
                 modeloPedidos.clear();
@@ -459,6 +553,12 @@ Page {
                     return null;
                 }
                 telaSalao.mesaAtualId = resultado.id;
+                // O pedido que veio de Balcão/Entrega virou mesa: o rascunho
+                // de lá cumpriu o papel dele.
+                if (telaSalao.rascunhoOrigemId !== "") {
+                    rascunhosController.excluirRascunho(telaSalao.rascunhoOrigemId);
+                    telaSalao.rascunhoOrigemId = "";
+                }
                 return resultado;
             }
 
@@ -504,6 +604,14 @@ Page {
                                 font.family: Estilo.global.fontFamily.title
                                 color: Estilo.screen.salao.accent
                                 anchors.verticalCenter: parent.verticalCenter
+                            }
+                        }
+
+                        SeletorModalidade {
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            modalidadeAtual: "Salão"
+                            onTrocar: function (tipo) {
+                                telaSalao.trocarModalidade(tipo);
                             }
                         }
 

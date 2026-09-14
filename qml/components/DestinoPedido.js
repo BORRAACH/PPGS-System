@@ -139,3 +139,29 @@ function paraItensIniciais(itens) {
         };
     });
 }
+
+// {pedido, ...} -> {nome, ...}: o inverso de paraItensIniciais, para a
+// propriedade `itensLancamento` do Salão — é o caminho da troca de modalidade
+// (ver SeletorModalidade.qml), que parte do que coletarDadosPedido() devolve.
+// Linhas sem pedido ficam de fora: acrescentarAoModelo() reaproveita a linha
+// em branco da mesa, e uma linha vazia vinda de lá só ocuparia espaço.
+function paraItensLancamento(itens) {
+    return (itens || []).filter(function (item) {
+        return (item.pedido || "").trim() !== "";
+    }).map(function (item) {
+        return {
+            "nome": item.pedido,
+            "observacao": item.observacao || "",
+            "valor": item.valor || "",
+            "borda": item.borda || null,
+            "adicionais": item.adicionais || []
+        };
+    });
+}
+
+// Quantas cópias cada tela imprime por padrão (ver o spinnerCopias de
+// Balcao.qml e Entrega.qml). Na troca de modalidade o rascunho chega ao
+// destino com o padrão DELE — a Entrega sai em duas vias, o Balcão em uma.
+function copiasPadrao(tipo) {
+    return tipo === "Entrega" ? 2 : 1;
+}

@@ -14,12 +14,32 @@ Popup {
     property string mesaIdAlvo: ""
     property string tituloAlvo: ""
 
+    // Textos da pergunta. Os padrões são os da exclusão pelo card; a troca de
+    // modalidade (ver Salao.qml:trocarModalidade) reaproveita o popup com
+    // outros, porque ali a mesa também sai — só que o pedido segue adiante.
+    property string textoTitulo: "Excluir esta mesa?"
+    property string textoCorpo: "Todos os itens lançados nela serão perdidos — nenhum cupom é impresso."
+    property string textoConfirmar: "Excluir"
+    // Quando definido, o Confirmar entrega a decisão a quem abriu o popup em
+    // vez de apagar a mesa aqui: a troca de modalidade precisa gravar o
+    // rascunho ANTES de apagar, senão uma falha de gravação perderia o pedido.
+    property var aoConfirmar: null
+
     signal mesaApagada(string mesaId)
 
     function abrirPara(mesaId, titulo) {
         mesaIdAlvo = mesaId;
         tituloAlvo = titulo;
         open();
+    }
+
+    // Volta aos textos e ao comportamento de exclusão: o popup é um só para a
+    // tela inteira, e o próximo clique no × de um card não pode herdar a troca.
+    onClosed: {
+        textoTitulo = "Excluir esta mesa?";
+        textoCorpo = "Todos os itens lançados nela serão perdidos — nenhum cupom é impresso.";
+        textoConfirmar = "Excluir";
+        aoConfirmar = null;
     }
 
     modal: true
@@ -46,7 +66,7 @@ Popup {
             spacing: Estilo.global.spacing.sm
             Icone { nome: "fa6s.trash-can"; cor: Estilo.global.text; tamanho: 17; anchors.verticalCenter: parent.verticalCenter }
             Text {
-                text: "Excluir esta mesa?"
+                text: popupConfirmarExclusaoMesa.textoTitulo
                 font.pixelSize: Estilo.global.fontSize.xl
                 font.bold: true
                 color: Estilo.global.text
@@ -55,7 +75,7 @@ Popup {
         }
 
         Text {
-            text: popupConfirmarExclusaoMesa.tituloAlvo + "\nTodos os itens lançados nela serão perdidos — nenhum cupom é impresso."
+            text: popupConfirmarExclusaoMesa.tituloAlvo + "\n" + popupConfirmarExclusaoMesa.textoCorpo
             font.pixelSize: Estilo.global.fontSize.md
             color: Estilo.global.textSecondary
             width: Responsivo.larguraPopup(320)
@@ -93,6 +113,14 @@ Popup {
                 padding: Estilo.global.padding.md
                 onClicked: {
                     var mesaId = popupConfirmarExclusaoMesa.mesaIdAlvo;
+                    // Guardada antes do close(): onClosed zera aoConfirmar.
+                    var acao = popupConfirmarExclusaoMesa.aoConfirmar;
+                    if (acao) {
+                        popupConfirmarExclusaoMesa.close();
+                        acao();
+                        return;
+                    }
+
                     salaoController.apagarMesa(mesaId);
                     popupConfirmarExclusaoMesa.close();
                     popupConfirmarExclusaoMesa.mesaApagada(mesaId);
@@ -103,7 +131,7 @@ Popup {
                     anchors.centerIn: parent
                     Icone { nome: "fa6s.trash-can"; cor: Estilo.global.textOnAccent; tamanho: Estilo.global.fontSize.lg; anchors.verticalCenter: parent.verticalCenter }
                     Text {
-                        text: "Excluir"
+                        text: popupConfirmarExclusaoMesa.textoConfirmar
                         font.family: Estilo.global.fontFamily.title
                         color: Estilo.global.textOnAccent
                         anchors.verticalCenter: parent.verticalCenter
