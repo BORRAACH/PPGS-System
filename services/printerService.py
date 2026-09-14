@@ -96,7 +96,7 @@ class PrinterService:
         interpretar bytes de TEXTO, e num raster não há nenhum."""
         familia = estilo.fonte_impressao()
         if not familia:
-            return _COMANDO_CODEPAGE_CP850 + self._sem_marcadores(conteudo)
+            return self._em_texto(conteudo)
 
         raster = comandaImagemService.para_raster(conteudo, familia)
         if raster is None:
@@ -106,10 +106,21 @@ class PrinterService:
             # Cupom na fonte errada é contratempo; cupom que não sai é pedido
             # perdido.
             print(f"[PrinterService] Não foi possível desenhar a comanda em '{familia}' — imprimindo em texto.")
-            return _COMANDO_CODEPAGE_CP850 + self._sem_marcadores(conteudo)
+            return self._em_texto(conteudo)
 
         print(f"[PrinterService] Comanda desenhada em '{familia}': {len(conteudo)} bytes de texto viraram {len(raster)} bytes de imagem.")
         return raster
+
+    def _em_texto(self, conteudo: bytes) -> bytes:
+        """O caminho de texto, com uma exceção: o título da modalidade sai como
+        imagem, com o ícone à esquerda da palavra (ver
+        comandaImagemService.titulo_em_raster) — em texto puro não há como
+        imprimir o ícone. Comanda sem título sai toda em texto, como sempre."""
+        hibrido = comandaImagemService.titulo_em_raster(conteudo)
+        if hibrido is None:
+            return _COMANDO_CODEPAGE_CP850 + self._sem_marcadores(conteudo)
+        imagem_titulo, resto = hibrido
+        return imagem_titulo + _COMANDO_CODEPAGE_CP850 + self._sem_marcadores(resto)
 
     @staticmethod
     def _sem_marcadores(conteudo: bytes) -> bytes:

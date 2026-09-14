@@ -861,7 +861,13 @@ def formatar_campo(texto, campo):
     configuração atual de `campo`. Ordem fixa de aninhamento (fundo preto >
     tamanho de fonte > sublinhado > negrito), sempre desligando na ordem
     inversa — evita depender da ordem de inserção de um dict."""
-    atributos = _config["campos"].get(campo, {})
+    return formatar_com_atributos(texto, _config["campos"].get(campo, {}))
+
+
+def formatar_com_atributos(texto, atributos):
+    """O mesmo embrulho de formatar_campo, com os atributos passados direto —
+    para texto de estilo FIXO, que não tem campo na tela de Configurações (o
+    título da modalidade, ver comandaTextoService.linhas_modalidade)."""
     prefixo = ""
     sufixo = ""
 
@@ -1027,6 +1033,23 @@ def _montar_linha_exemplo(trechos):
         campo = trecho.get("c") or ""
         partes.append(formatar_campo(conteudo, campo) if campo else conteudo)
     return "".join(partes)
+
+
+def _modalidade_do_exemplo(chaves):
+    """A modalidade da comanda de exemplo, deduzida dos campos que a prévia
+    mandou — que são só os do tipo escolhido na tela (ver
+    EstiloImpressora.renderizadoresExemplo e TIPOS_POR_CAMPO): telefone,
+    endereço e bairro só existem na Entrega, mesa e divisão da conta só na
+    Mesa, e uma comanda de venda sem nenhum deles é de Balcão. Sem tabela de
+    itens não é pedido (recibo de extra, cupom de fechamento) e não leva
+    título."""
+    if "itens" not in chaves:
+        return ""
+    if "mesa" in chaves or "divisao_conta" in chaves:
+        return "Mesa"
+    if "endereco" in chaves or "bairro" in chaves or "telefone" in chaves:
+        return "Entrega"
+    return "Balcão"
 
 
 def _payload_estilo():
@@ -1324,7 +1347,11 @@ class ComandaEstiloController(QObject):
             print("[comandaEstiloService] Comanda de exemplo sem nenhum campo — nada a imprimir.")
             return False
 
-        linhas_arquivo = [MARCA_COMANDA_TESTE]
+        # O título da modalidade, como na comanda de verdade (ver
+        # comandaTextoService.linhas_modalidade).
+        modalidade = _modalidade_do_exemplo(montados)
+        linhas_arquivo = texto.linhas_modalidade(modalidade) if modalidade else []
+        linhas_arquivo.append(MARCA_COMANDA_TESTE)
         linhas_arquivo.extend(linhas_espacamento_secoes())
         linhas_arquivo.extend(texto.montar_linhas_por_ordem(ordem_secoes(), montados))
         linhas_arquivo.extend(linhas_espacamento_secoes())

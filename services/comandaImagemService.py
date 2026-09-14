@@ -187,6 +187,21 @@ _ENCOLHIMENTO_MINIMO_ICONE = 0.7
 # comanda sai como sempre saiu.
 _icones_pagamento = {}
 
+# O ícone de cada modalidade no título da comanda (ver _titulo_da_comanda) —
+# os MESMOS de qml/components/LateralBar.qml e pages/inicio/Inicio.qml, pelo
+# motivo da lista de pagamento acima: o desenho do botão que abre a tela é o
+# que a pessoa reconhece no papel. Chave em maiúsculas, como o título sai.
+_ICONES_MODALIDADE = {
+    "BALCÃO": "fa6s.bag-shopping",
+    "ENTREGA": "fa6s.motorcycle",
+    "MESA": "fa6s.utensils",
+}
+
+# {título: (família da fonte, caractere do glifo)}, preenchido junto dos de
+# pagamento (ver aquecer_icones_pagamento). Vazio = título sem ícone, ainda
+# centralizado.
+_icones_modalidade = {}
+
 # ESC/POS "GS v 0" — imprime a imagem raster que vem logo depois.
 #
 # CUIDADO: NÃO é o "GS V 0" de printerService._COMANDO_CORTE, que corta o papel.
@@ -555,7 +570,7 @@ def _desenhar_icone(pintor, glifos, base, largura_dots, familia, icone):
     pintor.drawText(int(round(esquerda)), int(base), caractere_icone)
 
 
-def _pintar_linhas(pintor, fisicas, familia, topo, largura_dots, tracos=None, icones=None):
+def _pintar_linhas(pintor, fisicas, familia, topo, largura_dots, tracos=None, icones=None, titulos=None):
     """Pinta as linhas físicas de `fisicas` a partir de `topo` e devolve o topo
     logo abaixo da última — é o desenho em GRADE, usado pelo modelo clássico e
     também pelos trechos fora da tabela de itens no modelo rascunho.
@@ -582,6 +597,9 @@ def _pintar_linhas(pintor, fisicas, familia, topo, largura_dots, tracos=None, ic
     fontes = {}
     tracos = tracos or {}
     icones = icones or {}
+    # `titulos`: {linha física: ícone ou None} da linha de título da
+    # modalidade, desenhada centralizada e fora da grade (ver _desenhar_titulo).
+    titulos = titulos or {}
 
     for indice, glifos in enumerate(fisicas):
         altura = _altura_da_linha(glifos)
@@ -590,6 +608,11 @@ def _pintar_linhas(pintor, fisicas, familia, topo, largura_dots, tracos=None, ic
         espessura = tracos.get(indice)
         if espessura:
             _desenhar_separador(pintor, topo, altura, largura_dots, espessura)
+            topo += altura
+            continue
+
+        if indice in titulos:
+            _desenhar_titulo(pintor, glifos, base, largura_dots, familia, titulos[indice])
             topo += altura
             continue
 
@@ -751,6 +774,70 @@ def _icones_da_comanda(logicas):
     return marcas
 
 
+def _titulo_da_comanda(logicas):
+    """{índice: ícone ou None} da linha de título da modalidade (ver
+    comandaTextoService.linhas_modalidade): a PRIMEIRA linha com texto do
+    cupom, e só se ela for exatamente uma modalidade.
+
+    Só a primeira, de propósito: um item chamado "Entrega" no meio da tabela
+    não pode virar título. Comanda gravada antes do título existir devolve {}
+    e sai como sempre saiu."""
+    rotulos = {modalidade.upper() for modalidade in texto.MODALIDADES}
+    for indice, trechos in enumerate(logicas):
+        visivel = _texto_visivel(trechos).strip()
+        if not visivel:
+            continue
+        if visivel in rotulos:
+            return {indice: _icones_modalidade.get(visivel)}
+        return {}
+    return {}
+
+
+def _desenhar_titulo(pintor, glifos, base, largura_dots, familia, icone):
+    """Desenha o título da modalidade centralizado de verdade, com o ícone à
+    esquerda da palavra — fora da grade, ao contrário do resto do cupom.
+
+    Fora da grade porque ela existe para alinhar colunas ENTRE linhas (a
+    tabela de itens, os rótulos), e um título sozinho na linha não se alinha
+    com nada. E porque o recuo em espaços que o texto traz só conta a
+    palavra: com o ícone ao lado, o conjunto sairia meia largura de ícone
+    torto para a direita.
+
+    O ícone sai do tamanho da letra e com o mesmo vão do ícone da forma de
+    pagamento (ver _desenhar_icone). Se o conjunto não couber na largura — só
+    com uma fonte absurda —, sai a palavra centralizada, sem ícone."""
+    visiveis = [glifo for glifo in glifos if glifo[0].strip()]
+    if not visiveis:
+        return
+    palavra = "".join(glifo[0] for glifo in glifos).strip()
+    _caractere, _x, tamanho_px, negrito, sublinhado, _reverso = visiveis[0]
+    fonte = _fonte(familia, tamanho_px, negrito, sublinhado)
+    largura_palavra = QFontMetricsF(fonte).horizontalAdvance(palavra)
+
+    fonte_icone = None
+    largura_icone = folga = 0.0
+    if icone:
+        fonte_icone = QFont(icone[0])
+        fonte_icone.setPixelSize(tamanho_px)
+        largura_icone = QFontMetricsF(fonte_icone).horizontalAdvance(icone[1])
+        folga = tamanho_px * _FOLGA_ICONE
+        if largura_icone + folga + largura_palavra > largura_dots:
+            fonte_icone = None
+            largura_icone = folga = 0.0
+
+    esquerda = max(0.0, (largura_dots - (largura_icone + folga + largura_palavra)) / 2)
+    pintor.setPen(QColor(0, 0, 0))
+    if fonte_icone is not None:
+        pintor.setFont(fonte_icone)
+        pintor.drawText(int(round(esquerda)), int(base), icone[1])
+    pintor.setFont(fonte)
+    pintor.drawText(int(round(esquerda + largura_icone + folga)), int(base), palavra)
+    # No log da máquina que IMPRIME — é ela quem desenha, e é lá que se confere
+    # se o título saiu com o ícone (sem ícone = ícones não carregados na subida,
+    # ver aquecer_icones_pagamento).
+    print(f"[comandaImagemService] Título '{palavra}' desenhado {'com' if fonte_icone is not None else 'SEM'} ícone.")
+
+
 def _tracos_da_comanda(logicas):
     """{índice: espessura} de todos os traços do cupom — os que o texto já
     trazia e as divisas entre itens."""
@@ -767,13 +854,14 @@ def _desenhar_modelo_classico(conteudo, familia, largura_dots):
     fisicas, ultima_fisica = _quebrar_em_linhas_fisicas(logicas, largura_dots)
     tracos = _por_linha_fisica(_tracos_da_comanda(logicas), ultima_fisica)
     icones = _por_linha_fisica(_icones_da_comanda(logicas), ultima_fisica)
+    titulos = _por_linha_fisica(_titulo_da_comanda(logicas), ultima_fisica)
     altura = sum(_altura_da_linha(glifos) for glifos in fisicas)
     if altura <= 0:
         return None
 
     imagem, pintor = _nova_imagem(largura_dots, altura)
     try:
-        _pintar_linhas(pintor, fisicas, familia, 0, largura_dots, tracos, icones)
+        _pintar_linhas(pintor, fisicas, familia, 0, largura_dots, tracos, icones, titulos)
     finally:
         pintor.end()
 
@@ -1172,6 +1260,8 @@ def _desenhar_modelo_rascunho(conteudo, familia, largura_dots):
     # comandaEstiloService.ordem_secoes).
     icones_antes = _por_linha_fisica(_icones_da_comanda(fatia_antes), ultima_antes)
     icones_depois = _por_linha_fisica(_icones_da_comanda(fatia_depois), ultima_depois)
+    # O título é a primeira linha do cupom: sempre no recorte de antes.
+    titulos_antes = _por_linha_fisica(_titulo_da_comanda(fatia_antes), ultima_antes)
     tabela = _bloco_tabela_rascunho(itens, familia, largura_dots)
 
     altura = (
@@ -1185,7 +1275,7 @@ def _desenhar_modelo_rascunho(conteudo, familia, largura_dots):
 
     imagem, pintor = _nova_imagem(largura_dots, altura_total)
     try:
-        topo = _pintar_linhas(pintor, antes, familia, 0, largura_dots, tracos_antes, icones_antes)
+        topo = _pintar_linhas(pintor, antes, familia, 0, largura_dots, tracos_antes, icones_antes, titulos_antes)
         for altura_faixa, celulas, divisa in tabela:
             if divisa:
                 _desenhar_separador(
@@ -1331,23 +1421,31 @@ def aquecer_icones_pagamento():
     para_raster). Desenhado como caractere de uma fonte, o ícone passa pelo
     mesmo QPainter das letras e some o problema.
 
+    Resolve junto os ícones de modalidade do título da comanda (ver
+    _ICONES_MODALIDADE), pelo mesmo motivo e na mesma hora.
+
     Melhor esforço: sem qtawesome instalado, ou sem interface viva, o cupom sai
     sem ícone — que é exatamente como ele saía antes disto existir."""
-    global _icones_pagamento
+    global _icones_pagamento, _icones_modalidade
 
     try:
         import qtawesome as qta
 
-        icones = {}
-        for forma, nome in _ICONES_PAGAMENTO.items():
-            prefixo = nome.split(".")[0]
-            icones[forma] = (qta.font(prefixo, 24).family(), qta.charmap(nome))
+        def glifo(nome):
+            return qta.font(nome.split(".")[0], 24).family(), qta.charmap(nome)
+
+        icones = {forma: glifo(nome) for forma, nome in _ICONES_PAGAMENTO.items()}
+        modalidades = {titulo: glifo(nome) for titulo, nome in _ICONES_MODALIDADE.items()}
         _icones_pagamento = icones
+        _icones_modalidade = modalidades
     except Exception as erro:
-        print(f"[comandaImagemService] Sem ícones de forma de pagamento no cupom: {erro}")
+        print(f"[comandaImagemService] Sem ícones de forma de pagamento/modalidade no cupom: {erro}")
         return {}
 
-    print(f"[comandaImagemService] {len(_icones_pagamento)} ícone(s) de forma de pagamento prontos pro cupom.")
+    print(
+        f"[comandaImagemService] {len(_icones_pagamento)} ícone(s) de forma de pagamento e "
+        f"{len(_icones_modalidade)} de modalidade prontos pro cupom."
+    )
     return _icones_pagamento
 
 
@@ -1374,6 +1472,58 @@ def fonte_disponivel(familia):
     comanda sairia numa tipografia que ninguém escolheu — melhor cair no texto
     de sempre."""
     return bool(familia) and familia in familias_locais()
+
+
+# Família do título da modalidade quando a comanda vai ao papel em TEXTO (ver
+# titulo_em_raster). A Figtree vem embarcada no app (ver Config/fontes.py),
+# então existe em toda máquina que roda o sistema — ao contrário da fonte
+# escolhida em Configurações, que pode faltar justo na máquina que imprime.
+_FAMILIA_TITULO_EM_TEXTO = "Figtree"
+
+
+def titulo_em_raster(conteudo_bytes, largura_dots=LARGURA_UTIL_DOTS):
+    """(imagem ESC/POS do título, resto da comanda em bytes de texto), para
+    uma comanda que vai ao papel em TEXTO — ou None quando ela não abre com o
+    título da modalidade (comanda antiga, recibo) ou não dá para desenhar.
+
+    POR QUE EXISTE: em modo texto a impressora só conhece os caracteres da
+    tabela cp850, e o ícone não é um deles — o título saía só com a palavra em
+    toda máquina que imprime em texto (a que não tem a fonte escolhida em
+    Configurações, ou todas, quando nenhuma foi escolhida). Agora só a linha
+    do título vira imagem, "ícone ENTREGA" centralizado (ver
+    _desenhar_titulo), e o resto segue em texto como sempre: a impressora
+    aceita imagem e texto no mesmo envio.
+
+    As linhas em branco antes do título (não há, hoje) vão embora junto; o
+    espaçamento DEPOIS dele continua no resto, intacto."""
+    if not fonte_disponivel(_FAMILIA_TITULO_EM_TEXTO):
+        return None
+
+    try:
+        conteudo = conteudo_bytes.decode(texto.CODEPAGE_IMPRESSORA, errors="replace")
+        logicas = _linhas_com_estilo(conteudo)
+        titulo = _titulo_da_comanda(logicas)
+        if not titulo:
+            return None
+        indice, icone = next(iter(titulo.items()))
+
+        fisicas, _ultima = _quebrar_em_linhas_fisicas([logicas[indice]], largura_dots)
+        glifos = [glifo for linha in fisicas for glifo in linha]
+        altura = _altura_da_linha(glifos)
+        imagem, pintor = _nova_imagem(largura_dots, altura)
+        try:
+            _desenhar_titulo(pintor, glifos, altura - max(1, altura // 8), largura_dots, _FAMILIA_TITULO_EM_TEXTO, icone)
+        finally:
+            pintor.end()
+
+        empacotado, bytes_por_linha = _empacotar(imagem)
+        raster = _comandos_raster(empacotado, bytes_por_linha, imagem.height())
+        resto = "\n".join(conteudo.split("\n")[indice + 1:])
+        return raster, resto.encode(texto.CODEPAGE_IMPRESSORA, errors="replace")
+    except Exception as erro:
+        # Mesma política de para_raster: na dúvida, o cupom sai em texto.
+        print(f"[comandaImagemService] Falha ao desenhar o título da comanda: {erro}")
+        return None
 
 
 def para_raster(conteudo_bytes, familia, largura_dots=LARGURA_UTIL_DOTS):

@@ -110,7 +110,8 @@ class EntregaController(QObject):
             "valor_total": [f"Valor do pedido: {estilo.formatar_campo(valor_total_formatado, 'valor_total')}"],
             "troco_a_dar": [f"Troco a dar: {estilo.formatar_campo(troco_a_dar_formatado, 'troco_a_dar')}"] if dinheiro_com_troco else None,
         }
-        linhas_arquivo = []
+        # O título da modalidade abre a comanda, antes até da marca de teste.
+        linhas_arquivo = texto.linhas_modalidade("Entrega")
         if teste:
             linhas_arquivo.append(_MARCA_COMANDA_TESTE)
             linhas_arquivo.extend(estilo.linhas_espacamento_secoes())

@@ -396,7 +396,7 @@ class SalaoController(QObject):
         agora = datetime.now()
         grupos = texto.montar_grupos([_item_sem_precos(item) for item in itens])
 
-        linhas = [_MARCA_COMANDA_COZINHA]
+        linhas = texto.linhas_modalidade("Mesa") + [_MARCA_COMANDA_COZINHA]
         linhas.extend(estilo.linhas_espacamento_secoes())
         linhas.append(f"Mesa: {estilo.formatar_campo(str(mesa.get('mesa', '')), 'mesa')}")
 
@@ -501,7 +501,7 @@ class SalaoController(QObject):
             "valor_total": [f"Valor do pedido: {estilo.formatar_campo(valor_total_formatado, 'valor_total')}"],
             "divisao_conta": divisao_linhas,
         }
-        linhas_arquivo = texto.montar_linhas_por_ordem(estilo.ordem_secoes(), renderizadores)
+        linhas_arquivo = texto.linhas_modalidade("Mesa") + texto.montar_linhas_por_ordem(estilo.ordem_secoes(), renderizadores)
 
         conteudo = "\n".join(linhas_arquivo) + "\n"
         return conteudo.encode(texto.CODEPAGE_IMPRESSORA, errors="replace")

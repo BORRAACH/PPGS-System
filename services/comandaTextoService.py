@@ -37,8 +37,35 @@ COLUNAS_PAPEL = 40
 
 MARCADOR_ITENS = "=" * COLUNAS_PAPEL
 
+# As modalidades de pedido que abrem a comanda com um título (ver
+# linhas_modalidade). Os mesmos nomes de comandaEstiloService.TIPOS_COMANDA —
+# Extras e Fechamento ficam de fora porque não são pedido.
+MODALIDADES = ("Balcão", "Entrega", "Mesa")
+
+# Estilo FIXO do título: negrito e o dobro do tamanho base. Grande o bastante
+# para ser a primeira coisa lida no papel, perto dos campos principais, e
+# pequeno o bastante para "ENTREGA" com o ícone caber folgado na largura.
+_ATRIBUTOS_MODALIDADE = {"negrito": True, "tamanho_fonte": 48}
+
 # O que separa a coluna do pedido da coluna do valor em formatar_tabela.
 _SEPARADOR_COLUNA = " | "
+
+
+def linhas_modalidade(modalidade):
+    """O título que abre a comanda de pedido ("ENTREGA", centralizado) e o
+    espaçamento de seção logo abaixo dele.
+
+    Centralizado com ESPAÇOS, e não com o comando de alinhamento da
+    impressora, porque o mesmo arquivo tem três leitores: a impressora em
+    modo texto (sem fonte escolhida), a Consulta, que mostra o texto limpo, e
+    o desenho em imagem — que reconhece esta linha e a redesenha centralizada
+    de verdade, com o ícone da modalidade ao lado (ver
+    comandaImagemService._titulo_da_comanda). O recuo conta cada letra pelo
+    tamanho ampliado: em 48 px, uma letra ocupa duas colunas."""
+    rotulo = str(modalidade).upper()
+    colunas = len(rotulo) * _ATRIBUTOS_MODALIDADE["tamanho_fonte"] / estilo.TAMANHO_FONTE_BASE_PX
+    recuo = " " * max(0, int((COLUNAS_PAPEL - colunas) // 2))
+    return [recuo + estilo.formatar_com_atributos(rotulo, _ATRIBUTOS_MODALIDADE)] + estilo.linhas_espacamento_secoes()
 
 
 def montar_linhas_por_ordem(ordem, renderizadores):
