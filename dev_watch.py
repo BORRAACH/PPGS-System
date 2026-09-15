@@ -50,15 +50,15 @@ ARQUIVOS_IGNORADOS = {
     # um peer entra na rede anunciando uma fixação — ou seja, o app se
     # reiniciava sozinho, no meio do uso, sem ninguém ter tocado em código.
     os.path.join("Config", "impressora_fixada.json"),
-    # Qual máquina hospeda o ppgs_server (ver services/rede/servidorDesignado.py).
-    # É gravado ao clicar "Rodar nesta máquina"/"Iniciar servidor" na tela Rede
-    # — e também sozinho, quando outra máquina da malha anuncia a escolha dela.
-    # Sem esta linha, mandar o servidor subir reiniciava o app inteiro no mesmo
-    # instante, e o preparo que acabara de começar era morto junto.
-    os.path.join("Config", "servidor_designado.json"),
+    # Chave da malha e chave local (ver services/rede/seguranca.py e
+    # services/cofreLocal.py) — gravadas ao criar a rede ou ao ser aprovada
+    # nela, pela tela Rede. Sem estas linhas, entrar na rede reiniciava o app
+    # no mesmo instante, derrubando o pareamento que acabara de concluir.
+    os.path.join("Config", "chave_malha.json"),
+    os.path.join("Config", "chave_local.bin"),
     # Onde fica a pizzaria (ver services/rede/localizacaoServidor.py) — gravado
     # ao clicar "Definir" na tela Rede, na detecção pela internet e quando um
-    # peer anuncia a dele. Mesmo motivo das duas linhas acima.
+    # peer anuncia a dele. Mesmo motivo das linhas acima.
     os.path.join("Config", "localizacao_servidor.json"),
 }
 # Pastas inteiras de dados que o app grava em tempo de execução. Diferente de

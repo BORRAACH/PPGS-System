@@ -32,9 +32,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# Instala o PyQt6 no build da imagem — preConfig.garantir_dependencias() só
-# confirma que já está instalado e não tenta baixar nada em runtime.
-RUN pip install --no-cache-dir PyQt6
+# Instala no build da imagem o que a malha usa. Os scripts de docker/ não
+# passam pelo preConfig.garantir_dependencias(), e sem a cryptography a malha
+# nem sobe (ver services/rede/seguranca.py).
+RUN pip install --no-cache-dir PyQt6 cryptography zeroconf certifi segno
 
 COPY . /app
 

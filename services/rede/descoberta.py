@@ -159,7 +159,13 @@ class Descoberta(QObject):
     # endereço fosse o de uma bridge do Docker/VirtualBox ou de uma VPN
     # ficava inalcançável mesmo anunciando o endereço bom logo em seguida.
     # Quem recebe tenta todos (ver RedeService._tentar_conectar_a_peer).
-    peerDescoberto = pyqtSignal(str, list, int)
+    #
+    # Os dois últimos: o nome da máquina e se ela já está numa rede. Uma
+    # máquina sem chave usa os dois para listar a quem pode pedir entrada, e
+    # as pareadas para não discarem para quem ainda não tem chave (ver
+    # RedeService._ao_descobrir_peer). Anúncio de versão anterior ao
+    # pareamento chega sem nome e contado como pareado.
+    peerDescoberto = pyqtSignal(str, list, int, str, bool)
 
     # A descoberta terminou de subir (True) ou desistiu (False). Existe porque
     # a estratégia zeroconf leva ~1,6s e passou a fazer isso numa thread, com
@@ -172,9 +178,11 @@ class Descoberta(QObject):
         super().__init__(parent)
         self._id_local = ""
         self._porta_tcp = 0
+        self._nome_local = ""
+        self._pareada = False
         self._iniciado = False
 
-    def iniciar(self, id_local: str, porta_tcp: int) -> None:
+    def iniciar(self, id_local: str, porta_tcp: int, nome_local: str = "", pareada: bool = False) -> None:
         """Começa a anunciar esta instância e a procurar as outras.
         `porta_tcp` é a porta onde a malha aceita conexões — é o que os
         peers precisam saber pra discar de volta."""
@@ -183,6 +191,8 @@ class Descoberta(QObject):
 
         self._id_local = id_local
         self._porta_tcp = porta_tcp
+        self._nome_local = nome_local
+        self._pareada = bool(pareada)
         self._iniciado = True
 
         # Anúncio na rede precisa ser retirado ao sair, senão as outras
@@ -201,8 +211,28 @@ class Descoberta(QObject):
         self._iniciado = False
         self._parar()
 
+    def definir_pareada(self, pareada: bool) -> None:
+        """A máquina entrou numa rede: o anúncio passa a dizer isso, para as
+        pareadas começarem a discar para ela."""
+        if bool(pareada) == self._pareada:
+            return
+        self._pareada = bool(pareada)
+        if self._iniciado:
+            self._reanunciar()
+
+    def _propriedades(self) -> dict:
+        return {
+            "assinatura": _ASSINATURA,
+            "id": self._id_local,
+            "nome": self._nome_local,
+            "pareada": "1" if self._pareada else "0",
+        }
+
     def _iniciar(self) -> None:
         raise NotImplementedError
+
+    def _reanunciar(self) -> None:
+        pass
 
     def _parar(self) -> None:
         pass
@@ -217,6 +247,16 @@ class DescobertaZeroconf(Descoberta):
         self._zeroconf = None
         self._info_servico = None
         self._browser = None
+        self._enderecos = []
+        # O anúncio muda depois do registro inicial (a máquina entra numa rede,
+        # ver definir_pareada), e as duas coisas acontecem em threads
+        # diferentes. Sem esta trava a atualização corria no meio do
+        # register_service: o zeroconf recusava o registro, a thread dele
+        # morria com uma exceção, e a máquina podia ficar sem anúncio nenhum.
+        # Acontecia com quem criasse a rede no primeiro segundo do app aberto.
+        self._trava_anuncio = threading.Lock()
+        self._registrado = False
+        self._propriedades_anunciadas = None
 
     def _iniciar(self) -> None:
         # Numa thread porque construir o Zeroconf() e registrar o serviço leva
@@ -251,14 +291,10 @@ class DescobertaZeroconf(Descoberta):
         # zeroconf — o hostname da máquina — faria uma sobrescrever o anúncio
         # da outra. O id da instância já é um uuid, então serve para os dois.
         enderecos = enderecos_para_anunciar()
-        self._info_servico = ServiceInfo(
-            _TIPO_SERVICO,
-            f"{self._id_local}.{_TIPO_SERVICO}",
-            addresses=[socket.inet_aton(endereco) for endereco in enderecos],
-            port=self._porta_tcp,
-            properties={"assinatura": _ASSINATURA, "id": self._id_local},
-            server=f"{self._id_local}.local.",
-        )
+        with self._trava_anuncio:
+            self._enderecos = enderecos
+            self._propriedades_anunciadas = self._propriedades()
+            self._info_servico = self._montar_info(self._propriedades_anunciadas)
 
         # Segunda checagem: construir o Zeroconf() acima é justamente a parte
         # demorada, e o app pode ter sido fechado nesse meio-tempo.
@@ -268,9 +304,13 @@ class DescobertaZeroconf(Descoberta):
             return
 
         try:
-            self._zeroconf.register_service(self._info_servico)
-        except OSError as erro:
-            print(f"[descoberta] Falha ao anunciar esta máquina via zeroconf: {erro}")
+            with self._trava_anuncio:
+                self._zeroconf.register_service(self._info_servico)
+                self._registrado = True
+        except Exception as erro:
+            # OSError de rede e as exceções do próprio zeroconf (nome repetido,
+            # laço de eventos ocupado): nenhuma pode matar esta thread calada.
+            print(f"[descoberta] Falha ao anunciar esta máquina via zeroconf: {erro!r}")
 
         self._browser = ServiceBrowser(self._zeroconf, _TIPO_SERVICO, handlers=[self._ao_mudar_servico])
         # O endereço anunciado entra no log de propósito: quando a malha não
@@ -281,6 +321,41 @@ class DescobertaZeroconf(Descoberta):
             f"na porta {self._porta_tcp} e procurando outras máquinas."
         )
         self.iniciada.emit(True)
+        # A máquina pode ter entrado numa rede enquanto o registro acontecia.
+        self._atualizar_anuncio()
+
+    def _montar_info(self, propriedades):
+        return ServiceInfo(
+            _TIPO_SERVICO,
+            f"{self._id_local}.{_TIPO_SERVICO}",
+            addresses=[socket.inet_aton(endereco) for endereco in self._enderecos],
+            port=self._porta_tcp,
+            properties=propriedades,
+            server=f"{self._id_local}.local.",
+        )
+
+    def _reanunciar(self) -> None:
+        # Numa thread pelo mesmo motivo de _iniciar: é I/O de rede do zeroconf.
+        threading.Thread(target=self._atualizar_anuncio, daemon=True).start()
+
+    def _atualizar_anuncio(self) -> None:
+        """Republica o anúncio se o que ele diz (nome, pareada) mudou. Antes de
+        o registro inicial terminar não faz nada: o fim do registro chama isto
+        de novo."""
+        with self._trava_anuncio:
+            if self._zeroconf is None or not self._registrado:
+                return
+            propriedades = self._propriedades()
+            if propriedades == self._propriedades_anunciadas:
+                return
+            info = self._montar_info(propriedades)
+            try:
+                self._zeroconf.update_service(info)
+            except Exception as erro:
+                print(f"[descoberta] Falha ao atualizar o anúncio desta máquina: {erro!r}")
+                return
+            self._info_servico = info
+            self._propriedades_anunciadas = propriedades
 
     def _ao_mudar_servico(self, zeroconf, service_type, name, state_change) -> None:
         if state_change not in (ServiceStateChange.Added, ServiceStateChange.Updated):
@@ -312,11 +387,13 @@ class DescobertaZeroconf(Descoberta):
         enderecos = info.parsed_addresses()
         if not id_remoto or not enderecos or not info.port:
             return
+        nome = (propriedades.get(b"nome") or b"").decode("utf-8", "ignore")
+        pareada = propriedades.get(b"pareada") != b"0"
 
         # Emitido de dentro desta thread; como o objeto vive na thread
         # principal, o Qt entrega o sinal lá (conexão em fila), então quem
         # recebe pode mexer nos sockets sem se preocupar com thread.
-        self.peerDescoberto.emit(id_remoto, list(enderecos), info.port)
+        self.peerDescoberto.emit(id_remoto, list(enderecos), info.port, nome, pareada)
 
     def _parar(self) -> None:
         if self._zeroconf is None:
@@ -359,12 +436,11 @@ class DescobertaBroadcast(Descoberta):
         # escuta não deve precisar saber qual estratégia está em uso.
         self.iniciada.emit(True)
 
+    def _reanunciar(self) -> None:
+        self._anunciar()
+
     def _anunciar(self) -> None:
-        mensagem = json.dumps({
-            "assinatura": _ASSINATURA,
-            "id": self._id_local,
-            "porta_tcp": self._porta_tcp,
-        }).encode("utf-8")
+        mensagem = json.dumps(dict(self._propriedades(), porta_tcp=self._porta_tcp)).encode("utf-8")
         self._udp.writeDatagram(
             mensagem,
             QHostAddress(QHostAddress.SpecialAddress.Broadcast),
@@ -390,7 +466,10 @@ class DescobertaBroadcast(Descoberta):
             # Aqui só existe um endereço mesmo — o de origem do datagrama —,
             # mas o sinal é uma lista pra ter a mesma forma nas duas
             # estratégias de descoberta.
-            self.peerDescoberto.emit(id_remoto, [endereco.toString()], int(porta_tcp))
+            self.peerDescoberto.emit(
+                id_remoto, [endereco.toString()], int(porta_tcp),
+                str(dados.get("nome") or ""), dados.get("pareada") != "0",
+            )
 
     def _parar(self) -> None:
         if self._timer is not None:

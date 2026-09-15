@@ -145,43 +145,46 @@ fazer nada ao ser clicado.
 Só é preciso gerar o `.exe` de novo se `launcher/iniciar.py` mudar: as
 atualizações do sistema continuam chegando por git, sem tocar no executável.
 
-### Servidor central: quem hospeda, e como ele sobe sozinho
+### Rede protegida: como cada máquina entra
 
-Uma única máquina da malha hospeda o `ppgs_server` (o backend em Rust que
-guarda os endereços de cliente e o resumo de cada fechamento de caixa). Quem é
-ela se escolhe na tela **Rede**, no botão "Rodar nesta máquina" — só essa
-máquina baixa e compila o servidor; as outras chegam nele pela malha, já dentro
-da sessão autenticada e cifrada, sem IP nem porta para configurar.
+Só máquinas aprovadas trocam comandas, caixa e o cadastro de clientes. Cada
+instalação tem a sua cópia da chave da rede, e ninguém digita chave nenhuma:
 
-Nessa máquina, marque também **"Iniciar com o Windows"** no mesmo cartão. Isso
-cria um atalho na pasta Inicializar do Windows, e a partir daí uma queda de
-energia ou um reinício noturno não deixam a pizzaria sem servidor: o Windows
-abre o sistema, e o sistema sobe o servidor. É preciso ser o sistema quem sobe,
-e não o servidor sozinho: as outras máquinas falam com ele *pela malha*, que só
-existe com o app aberto.
+1. **Na primeira máquina**, abra a tela **Rede** e clique em **Criar rede nesta
+   máquina**. Faça isso uma vez só na pizzaria.
+2. **Em cada outra máquina**, abra a tela **Rede**: as máquinas já na rede
+   aparecem na lista. Clique em **Pedir para entrar**; a tela mostra um código
+   de 6 dígitos.
+3. **Numa máquina que já está na rede** aparece, em qualquer tela, o pedido com
+   um código. Confira se é o **mesmo código** da máquina nova e clique em
+   aceitar (com o código de usuário, se houver usuários cadastrados). Se os
+   códigos forem diferentes, recuse.
 
-O servidor **não cai quando o sistema é fechado**. Ele sobe destacado do app e,
-na abertura seguinte, é adotado como está em vez de reiniciado — o que acaba
-com a janela de alguns segundos (ou minutos, quando havia compilação) sem
-servidor a cada fechar/abrir. Quem o derruba de propósito é o botão "Parar" da
-tela Rede.
+Enquanto uma máquina não entra na rede ela salva e imprime comandas
+normalmente, só não compartilha nada; ao entrar, recebe tudo o que perdeu.
+Máquina reinstalada, ou com o Windows trocado, pede para entrar de novo.
 
-**Nada se perde quando o servidor está fora do ar.** Endereços de cliente e
-fechamentos de caixa vão primeiro para uma fila em disco
-(`pedidos/.sync/envios_servidor.json`) e só saem dela quando o servidor
-confirma a gravação — então o balcão continua perguntando "salvar o endereço
-deste cliente?" com a máquina hospedeira desligada, e o cadastro sobe sozinho
-quando ela voltar, inclusive depois de o sistema ter sido fechado no meio.
+**Clientes da Entrega.** O telefone, o nome e o endereço de cada cliente ficam
+nas próprias máquinas, replicados pela rede — com qualquer máquina desligada,
+as outras continuam fazendo o autofill por telefone. Em disco o cadastro vai
+cifrado (`pedidos/.sync/clientes.bin`), com uma chave que o Windows protege
+para aquela conta e aquela máquina: copiar a pasta do sistema não entrega os
+dados.
 
-O banco é copiado uma vez por dia para
-`%LOCALAPPDATA%\PPGS\dados\backups\pizzeria-AAAA-MM-DD.db`, guardando as
-últimas 14 cópias.
+O que isso não cobre: as comandas (`pedidos/*.txt`) continuam em texto no disco,
+e tirar uma máquina da rede (uma máquina roubada, por exemplo) ainda não é
+possível sem trocar a chave de todas.
+
+Não existe mais servidor separado: o `ppgs_server` saiu. Na máquina que o
+hospedava, a primeira abertura da versão nova encerra o processo antigo; o
+banco dele (`%LOCALAPPDATA%\PPGS\dados\pizzeria.db`) fica onde está, sem ser
+lido nem apagado.
 
 ### Rodando em mais de uma máquina
 
-Basta abrir o app normalmente em cada computador da mesma rede local — elas
-se encontram sozinhas. Não é necessário configurar IP, servidor ou nada
-manual; acompanhe pela tela **Rede** quantas máquinas estão conectadas.
+Basta abrir o app em cada computador da mesma rede local e aprovar a entrada
+de cada um uma vez (ver acima) — depois disso elas se encontram sozinhas, sem
+configurar IP; acompanhe pela tela **Rede** quantas máquinas estão conectadas.
 
 ### Testando a malha de rede sem várias máquinas físicas
 

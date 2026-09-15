@@ -51,9 +51,9 @@ try:
     from controllers.fechamentoController import FechamentoController
     from controllers.usuariosController import UsuariosController
     from controllers.rascunhosController import RascunhosController
+    from controllers.clientesController import ClientesController
     from services.rede import rede
-    from services.pizzeriaServerService import pizzeria_server
-    from services.servidor import servidor_local
+    from services import limpezaServidorAntigo
     from services.sugestoesEndereco import sugestoes_endereco
     from services.iconProvider import IconProvider
     from services.comandaEstiloService import ComandaEstiloController
@@ -117,19 +117,6 @@ def _iniciar_rede():
     sinal `iniciada`."""
     status.iniciando("rede", "Iniciando rede local...")
     rede.iniciar()
-
-
-def _iniciar_servidor_local():
-    """Sobe o ppgs_server, mas só se ESTA máquina for a designada na tela Rede
-    (ver services/servidor/servidorLocal.py). Vem depois de _iniciar_rede
-    porque a designação é estado da malha; a decisão em si não espera a malha
-    subir — ela também está gravada em Config/servidor_designado.json, pra que
-    a primeira máquina do expediente suba o servidor sem depender de haver
-    mais alguém ligado.
-
-    Todo o trabalho pesado (clone, toolchain, compilação) acontece numa thread
-    de fundo em prioridade ociosa a partir daqui, com a janela já na tela."""
-    servidor_local.iniciar()
 
 
 def _mostrar_resultado_da_atualizacao():
@@ -236,6 +223,10 @@ if __name__ == "__main__":
     # próprio porque Consulta e Fechamento consomem os dois lados disto.
     usuariosController = UsuariosController()
     engine.rootContext().setContextProperty("usuariosController", usuariosController)
+    # Cadastro de clientes da Entrega (autofill por telefone), guardado nas
+    # próprias máquinas e replicado pela malha — ver services/rede/clientes.py.
+    clientesController = ClientesController()
+    engine.rootContext().setContextProperty("clientesController", clientesController)
     # Pedidos começados e não finalizados, listados na faixa do topo de Balcão e
     # Entrega (ver services/rascunhosPedido.py). Controller próprio porque a
     # faixa é uma só, compartilhada pelas duas telas.
@@ -260,23 +251,9 @@ if __name__ == "__main__":
     rede.pedidoRemovidoRemoto.connect(consultaController.removerPedidoRemoto)
     engine.rootContext().setContextProperty("redeController", rede)
     engine.rootContext().setContextProperty("statusController", status)
-    engine.rootContext().setContextProperty("pizzeriaServerController", pizzeria_server)
-    engine.rootContext().setContextProperty("servidorLocalController", servidor_local)
-    # Sugestões de rua/bairro da Entrega, direto do Photon e do histórico da
-    # malha — sem passar pelo ppgs_server (ver services/sugestoesEndereco.py).
+    # Sugestões de rua/bairro da Entrega, direto do Photon e do índice de ruas
+    # replicado pela malha (ver services/sugestoesEndereco.py).
     engine.rootContext().setContextProperty("sugestoesEnderecoController", sugestoes_endereco)
-    # O estado de conexão é reconferido a cada 30s, o que é barato mas lento
-    # demais para o instante que mais importa: o servidor desta máquina acaba
-    # de subir e o caixa já está lançando o primeiro pedido do dia. Sem isto,
-    # a Entrega passaria até meio minuto achando que não há servidor — e é
-    # justamente `conectado` que decide se ela pergunta ou não sobre salvar o
-    # endereço do cliente.
-    servidor_local.estadoMudou.connect(pizzeria_server.verificarConexao)
-    # O servidor sobrevive de propósito ao fechamento do sistema (ver o
-    # docstring de ServidorLocalService.encerrar): na abertura seguinte ele é
-    # adotado em vez de reiniciado, o que acaba com a janela sem servidor a cada
-    # fechar/abrir. Isto aqui só fecha o arquivo de log do lado de cá.
-    app.aboutToQuit.connect(servidor_local.encerrar)
 
     engine.addImportPath(qml_dir)
 
@@ -304,7 +281,6 @@ if __name__ == "__main__":
     # qualquer uma dessas tarefas começar.
     QTimer.singleShot(0, _mostrar_resultado_da_atualizacao)
     QTimer.singleShot(0, _iniciar_rede)
-    QTimer.singleShot(0, _iniciar_servidor_local)
     # Sem localização da pizzaria conhecida, a máquina que a define a detecta
     # pela internet — uma chamada só, e nunca por cima de uma já definida.
     QTimer.singleShot(0, sugestoes_endereco.garantirLocalizacao)
@@ -319,5 +295,8 @@ if __name__ == "__main__":
     # Em thread porque é I/O bloqueante puro (PowerShell/CUPS) e não toca
     # objeto Qt nenhum.
     threading.Thread(target=_tarefas_de_fundo, daemon=True).start()
+    # O ppgs_server da versão anterior sobrevivia ao fechamento do app: na
+    # máquina que o hospedava ele continuaria de pé depois da atualização.
+    threading.Thread(target=limpezaServidorAntigo.executar, daemon=True).start()
 
     sys.exit(app.exec())

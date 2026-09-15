@@ -291,17 +291,22 @@ denunciado o defeito 1) e o que cada ciclo de anti-entropy pediu/aplicou.
 
 ## Fora do escopo (mencionar, não implementar agora)
 
-- Sem autenticação/senha para entrar na rede — qualquer instância deste app
-  na mesma LAN entra automaticamente, conforme pedido pelo usuário.
+- Entrar na rede agora exige aprovação: cada máquina nova é pareada uma vez,
+  com um código de 6 dígitos conferido nas duas telas (ver
+  `services/rede/seguranca.py`, `SessaoPareamento`). Isso passou a ser
+  necessário quando o cadastro de clientes saiu do servidor separado e passou
+  a ser replicado pela própria malha. Fora do escopo continua: tirar uma
+  máquina da rede (troca da chave de todas), cifrar as comandas `.txt` em
+  disco e a exclusão/retenção de clientes.
 - O código de usuário de dois dígitos (ver `services/rede/usuarios.py`) **não**
   contradiz o item acima, e não deve ser lido como se contradissesse. Ele é
   atribuição — responder "quem editou esta comanda?" — e um obstáculo
   deliberado antes de editar/apagar comanda. Não é autenticação: dois dígitos
   são cem combinações, o cadastro trafega e é guardado em claro, e uma máquina
   hostil na LAN continua sendo peer pleno, capaz de ler o cadastro e publicar
-  um usuário forjado. Fechar isso de verdade exigiria primeiro trocar a
-  `CHAVE_PADRAO` de `services/rede/seguranca.py` por uma chave por instalação
-  — o caminho de volta que aquele módulo já documenta.
+  um usuário forjado. A chave por instalação tirou dessa conta a máquina
+  estranha — ela não entra mais —, mas entre máquinas aprovadas o código segue
+  sendo atribuição, não autenticação.
 - O guarda do código só entra em cena depois que existe **senha do dono** na
   máquina (ver `UsuariosController.guardaAtivo` e `services/rede/senhaDono.py`).
   Sem senha, a casa ainda não decidiu usar a tranca — e a máquina que só

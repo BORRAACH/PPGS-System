@@ -93,10 +93,15 @@ class PrinterService:
         só o que segue pro cabeçote muda.
 
         O comando de codepage não acompanha a imagem: ele diz à impressora como
-        interpretar bytes de TEXTO, e num raster não há nenhum."""
+        interpretar bytes de TEXTO, e num raster não há nenhum.
+
+        Comanda com endereço (Entrega) ganha, no fim, o QR code que abre o
+        endereço no Google Maps (ver comandaImagemService.qr_endereco_em_raster)
+        — nos dois caminhos, e sempre como imagem."""
         familia = estilo.fonte_impressao()
+        qr_endereco = comandaImagemService.qr_endereco_em_raster(conteudo, familia)
         if not familia:
-            return self._em_texto(conteudo)
+            return self._em_texto(conteudo) + qr_endereco
 
         raster = comandaImagemService.para_raster(conteudo, familia)
         if raster is None:
@@ -106,10 +111,10 @@ class PrinterService:
             # Cupom na fonte errada é contratempo; cupom que não sai é pedido
             # perdido.
             print(f"[PrinterService] Não foi possível desenhar a comanda em '{familia}' — imprimindo em texto.")
-            return self._em_texto(conteudo)
+            return self._em_texto(conteudo) + qr_endereco
 
         print(f"[PrinterService] Comanda desenhada em '{familia}': {len(conteudo)} bytes de texto viraram {len(raster)} bytes de imagem.")
-        return raster
+        return raster + qr_endereco
 
     def _em_texto(self, conteudo: bytes) -> bytes:
         """O caminho de texto, com uma exceção: o título da modalidade sai como

@@ -49,6 +49,7 @@ folga estranha é só questão de gosto.
 
 import math
 import re
+import urllib.parse
 
 from PyQt6.QtCore import QRectF, Qt, QThread
 from PyQt6.QtGui import QColor, QFont, QFontDatabase, QFontMetricsF, QGuiApplication, QImage, QPainter
@@ -1561,3 +1562,146 @@ def para_raster(conteudo_bytes, familia, largura_dots=LARGURA_UTIL_DOTS):
         # impressão, onde uma exceção que escapa mata o job em silêncio.
         print(f"[comandaImagemService] Falha ao desenhar a comanda em '{familia}': {erro}")
         return None
+
+
+# ---------- QR code do endereço (comanda de Entrega) ----------
+#
+# No fim do cupom de Entrega sai um QR code que, lido pela câmera do celular,
+# abre o Google Maps com o endereço da comanda já digitado — o motoboy não
+# precisa copiar a rua à mão.
+#
+# O ENDEREÇO SAI DO TEXTO DA COMANDA, pelas mesmas expressões que a Consulta usa
+# para ler o arquivo (ver comandaParserService), e não de um campo novo gravado
+# no .txt: o arquivo é o registro da comanda (ver o topo deste módulo), e assim
+# ele não muda. De brinde, a reimpressão de uma comanda antiga também sai com o
+# QR, e quem imprime é a máquina da malha que tem a impressora — ela lê o
+# endereço do mesmo arquivo que recebeu.
+
+# Quantos dots de papel cada módulo (quadradinho) do QR ocupa. Um link do Maps
+# com rua, número, bairro e cidade dá um símbolo de 45 a 53 módulos com a zona
+# de silêncio; a 6 dots isso fica com uns 4 cm de lado — grande o bastante para
+# a câmera de qualquer celular ler de primeira, pequeno o bastante para não
+# encompridar o cupom.
+_MODULO_QR_DOTS = 6
+# Zona de silêncio (margem branca em volta), em módulos. O padrão do QR pede 4;
+# com menos, alguns leitores não acham o símbolo.
+_BORDA_QR_MODULOS = 4
+_ESPACO_ACIMA_QR_DOTS = 16
+_TAMANHO_LEGENDA_QR_PX = 24
+_LEGENDA_QR = "Abrir endereço no Google Maps"
+# O link "universal" de busca do Maps: no celular com o app instalado ele abre o
+# app já com a busca feita; sem o app, abre o Maps no navegador.
+_URL_BUSCA_MAPA = "https://www.google.com/maps/search/?api=1&query="
+
+_avisou_sem_segno = False
+
+
+def _cidade_da_pizzaria():
+    """A cidade da localização definida na tela Rede, para o Maps não achar a
+    rua noutra cidade de mesmo nome de rua. Importada aqui dentro, e não no topo:
+    services.rede importa este módulo, e o import no topo fecharia um ciclo."""
+    try:
+        from services.rede import localizacaoServidor
+
+        return str(localizacaoServidor.carregar().get("cidade") or "").strip()
+    except Exception:
+        return ""
+
+
+def endereco_da_comanda(conteudo_bytes) -> str:
+    """"RUA, NÚMERO - BAIRRO, Cidade" lido das linhas Endereço:/Bairro: da
+    comanda, ou "" quando ela não tem endereço (Balcão, Mesa, Entrega com o
+    endereço em branco)."""
+    conteudo = parser.limpar_codigos_impressora(
+        bytes(conteudo_bytes).decode(texto.CODEPAGE_IMPRESSORA, errors="replace")
+    )
+    endereco = " ".join(parser.extrair_campo(parser.PADRAO_ENDERECO, conteudo).split())
+    if not endereco:
+        return ""
+    bairro = " ".join(parser.extrair_campo(parser.PADRAO_BAIRRO, conteudo).split())
+    completo = endereco + (f" - {bairro}" if bairro else "")
+    cidade = _cidade_da_pizzaria()
+    if cidade and cidade.lower() not in completo.lower():
+        completo += f", {cidade}"
+    return completo
+
+
+def link_mapa(endereco: str) -> str:
+    return _URL_BUSCA_MAPA + urllib.parse.quote_plus(endereco)
+
+
+def desenhar_qr_endereco(conteudo_bytes, familia="", largura_dots=LARGURA_UTIL_DOTS):
+    """(QImage, link) do QR do endereço da comanda, ou None quando não há
+    endereço ou não há como gerar o QR (biblioteca segno ausente).
+
+    A legenda sai na `familia` quando ela existe nesta máquina; sem fonte
+    nenhuma, só o QR — ele se explica sozinho para quem aponta a câmera."""
+    global _avisou_sem_segno
+
+    endereco = endereco_da_comanda(conteudo_bytes)
+    if not endereco:
+        return None
+    try:
+        import segno
+    except ImportError:
+        if not _avisou_sem_segno:
+            _avisou_sem_segno = True
+            print("[comandaImagemService] Biblioteca 'segno' ausente — a comanda de Entrega sai sem o QR do endereço.")
+        return None
+
+    link = link_mapa(endereco)
+    matriz = [list(linha) for linha in segno.make(link, error="m", micro=False).matrix_iter(
+        scale=1, border=_BORDA_QR_MODULOS
+    )]
+    lado = len(matriz) * _MODULO_QR_DOTS
+    if lado > largura_dots:
+        print(f"[comandaImagemService] Endereço longo demais para o QR caber no papel — cupom sem QR: {endereco!r}")
+        return None
+
+    com_legenda = fonte_disponivel(familia)
+    altura_legenda = _TAMANHO_LEGENDA_QR_PX + 8 if com_legenda else 0
+    imagem, pintor = _nova_imagem(largura_dots, _ESPACO_ACIMA_QR_DOTS + altura_legenda + lado)
+    try:
+        preto = QColor(0, 0, 0)
+        if com_legenda:
+            pintor.setPen(preto)
+            pintor.setFont(_fonte(familia, _TAMANHO_LEGENDA_QR_PX, True, False))
+            pintor.drawText(
+                QRectF(0, _ESPACO_ACIMA_QR_DOTS, largura_dots, altura_legenda),
+                int(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop),
+                _LEGENDA_QR,
+            )
+        esquerda = (int(largura_dots) - lado) // 2
+        topo = _ESPACO_ACIMA_QR_DOTS + altura_legenda
+        for y, linha in enumerate(matriz):
+            for x, escuro in enumerate(linha):
+                if escuro:
+                    pintor.fillRect(esquerda + x * _MODULO_QR_DOTS, topo + y * _MODULO_QR_DOTS,
+                                    _MODULO_QR_DOTS, _MODULO_QR_DOTS, preto)
+    finally:
+        pintor.end()
+    return imagem, link
+
+
+def qr_endereco_em_raster(conteudo_bytes, familia="", largura_dots=LARGURA_UTIL_DOTS):
+    """Os comandos raster ESC/POS do QR do endereço, para irem ao fim do cupom
+    — ou b"" quando a comanda não tem endereço ou algo falhou. Vale nos dois
+    caminhos de impressão: a impressora aceita imagem depois de texto no mesmo
+    envio (ver titulo_em_raster).
+
+    A legenda usa a fonte da comanda quando há uma escolhida e presente nesta
+    máquina; senão a Figtree embarcada, como o título em modo texto."""
+    try:
+        if not fonte_disponivel(familia):
+            familia = _FAMILIA_TITULO_EM_TEXTO
+        desenho = desenhar_qr_endereco(conteudo_bytes, familia, largura_dots)
+        if desenho is None:
+            return b""
+        imagem, link = desenho
+        empacotado, bytes_por_linha = _empacotar(imagem)
+        print(f"[comandaImagemService] QR do endereço no cupom: {link}")
+        return _comandos_raster(empacotado, bytes_por_linha, imagem.height())
+    except Exception as erro:
+        # Mesma política do resto do módulo: sem QR, o cupom sai do mesmo jeito.
+        print(f"[comandaImagemService] Falha ao desenhar o QR do endereço: {erro}")
+        return b""

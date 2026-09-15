@@ -9,10 +9,9 @@ módulo é um decalque.
 
 O QUE ESTE CADASTRO É, E O QUE NÃO É. Dois dígitos são cem combinações —
 quem quiser acerta por tentativa em poucos minutos, e o guarda ainda por
-cima freia mas não impede isso. Some a isso que a malha não autentica
-ninguém (services/rede/seguranca.py:CHAVE_PADRAO está no código-fonte, e
-architecture/EXPLAIN.md registra a decisão): qualquer instância do app na
-mesma LAN lê este arquivo e pode publicar um cadastro forjado. Então isto
+cima freia mas não impede isso. Some a isso que qualquer máquina aprovada na
+rede (ver services/rede/seguranca.py) lê este arquivo e pode publicar um
+cadastro forjado. Então isto
 aqui é ATRIBUIÇÃO — responder "quem editou esta comanda?" — e um obstáculo
 contra a própria equipe, não um segredo. É por isso que o código fica em
 claro: hashear dois dígitos seria teatro (cem pré-imagens) e ainda

@@ -10,5 +10,6 @@ dependencies = [
     "cryptography",
     "pywin32; sys_platform == 'win32'",
     "qtawesome",
+    "segno",
     "zeroconf",
 ]

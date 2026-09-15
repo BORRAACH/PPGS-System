@@ -35,13 +35,6 @@ Page {
     // apagar-e-recriar, a comanda nova nasceria fora do caixa do dia — isto
     // pede que a baixa seja transferida pra ela assim que for salva.
     property bool manterBaixaAoSalvar: false
-    // Estado do autofill por telefone (ver Connections com
-    // pizzeriaServerController mais abaixo): se o telefone atual já tem
-    // endereço salvo no servidor, e quais dígitos foram usados na última
-    // busca disparada — usado para descartar uma resposta que chegue
-    // depois do atendente já ter trocado o telefone de novo.
-    property bool enderecoEncontradoNoServidor: false
-    property string telefoneEmConsulta: ""
     // Índice da linha de modeloPedidos que está sendo editada pelo popup de
     // seleção — precisa ficar fora do delegate porque o popup é um único
     // item reaproveitado, não recriado a cada clique.
@@ -246,41 +239,6 @@ Page {
                 sucesso ? ("Comanda impressa (" + mensagem + ")") : ("Falha ao imprimir: " + mensagem),
                 sucesso
             );
-        }
-    }
-
-    // Resultado da busca de endereço por telefone (buscarPorTelefone) e do
-    // salvamento (salvarEndereco) — ver PizzeriaServerService. A consulta é
-    // assíncrona, então tanto onEnderecoEncontrado quanto
-    // onEnderecoNaoEncontrado só valem se ainda forem sobre o telefone que
-    // está no campo agora (telefoneEmConsulta); senão o atendente já apagou
-    // e redigitou outro número enquanto a resposta ainda estava a caminho.
-    Connections {
-        target: pizzeriaServerController
-
-        function onEnderecoEncontrado(dados) {
-            if (stackViewLocal.currentItem.inputTelefone.text.replace(/\D/g, "") !== telaEntrega.telefoneEmConsulta)
-                return ;
-
-            var campos = stackViewLocal.currentItem;
-            campos.inputNomeCliente.text = dados.nome || "";
-            campos.inputEndereco.text = dados.rua || "";
-            campos.inputNumero.text = dados.numero || "";
-            campos.inputBairro.text = dados.bairro || "";
-            campos.inputObservacao.text = dados.observacao || "";
-            telaEntrega.enderecoEncontradoNoServidor = true;
-            telaEntrega.mostrarNotificacao("Endereço encontrado e preenchido automaticamente.", true);
-        }
-
-        function onEnderecoNaoEncontrado() {
-            if (stackViewLocal.currentItem.inputTelefone.text.replace(/\D/g, "") !== telaEntrega.telefoneEmConsulta)
-                return ;
-
-            telaEntrega.enderecoEncontradoNoServidor = false;
-        }
-
-        function onEnderecoSalvo(sucesso, mensagem) {
-            telaEntrega.mostrarNotificacao(mensagem, sucesso);
         }
     }
 
@@ -596,10 +554,8 @@ Page {
             // lá — Component.onCompleted sozinho é cedo demais: o StackView
             // externo ainda assume o foco de volta ao concluir a transição).
             property alias inputTelefone: inputTelefone
-            // Expostos para o Connections de pizzeriaServerController (fora
-            // deste Component) poder preencher os campos quando a busca por
-            // telefone encontra um endereço salvo — mesmo motivo do alias
-            // acima.
+            // Expostos para quem está fora deste Component ler e preencher os
+            // campos (rascunho, testes) — mesmo motivo do alias acima.
             property alias inputNomeCliente: inputNomeCliente
             property alias inputEndereco: inputEndereco
             property alias inputNumero: inputNumero
@@ -856,26 +812,21 @@ Page {
             // Chamada pelos botões Imprimir/Lançar no lugar de
             // prosseguirImprimir/prosseguirLancar diretos, quando a comanda
             // não está vazia: se houver telefone + algum dado de endereço,
-            // pergunta antes se deve salvar/sobrescrever no servidor (ver
+            // pergunta antes se deve salvar/sobrescrever o cliente (ver
             // PopupSalvarEndereco e o onRespondido dele, mais abaixo). Sem
             // telefone/endereço suficiente não faz sentido perguntar — segue
             // direto.
             //
-            // O estado do servidor NÃO entra mais nesta decisão. Ele entrava
-            // enquanto uma gravação sem servidor de pé era impossível: a
-            // pergunta seria sobre algo que não podia acontecer, e o caixa
-            // clicaria "Salvar" achando que guardou o endereço do cliente.
-            // Agora o salvamento vai para uma fila em disco
-            // (services/rede/enviosPendentes.py) e sobe sozinho quando o
-            // servidor voltar, então perguntar com o servidor fora do ar
-            // guarda o cadastro de verdade. Manter o gate antigo é que passou
-            // a ser a perda de dado: todo endereço tomado com a máquina
-            // hospedeira desligada sumia sem nunca ter sido oferecido.
+            // Sem rede também não pergunta: o cadastro de clientes só existe com
+            // a máquina numa rede (ver controllers/clientesController.py), e o
+            // caixa clicaria "Salvar" achando que guardou o cliente. "Já existe"
+            // é conferido agora, e não guardado de quando o telefone foi
+            // digitado: o número pode ter sido corrigido depois.
             function confirmarSalvarEnderecoEProsseguir(acao, dadosPedido) {
                 var temTelefone = dadosPedido.telefone.replace(/\D/g, "").length >= 10;
                 var temEndereco = dadosPedido.endereco.trim() !== "" || dadosPedido.numero !== "" || dadosPedido.bairro.trim() !== "";
-                if (temTelefone && temEndereco) {
-                    popupSalvarEndereco.abrirPara(acao, dadosPedido, telaEntrega.enderecoEncontradoNoServidor);
+                if (temTelefone && temEndereco && clientesController.disponivel()) {
+                    popupSalvarEndereco.abrirPara(acao, dadosPedido, clientesController.existe(dadosPedido.telefone));
                     return ;
                 }
                 if (acao === "imprimir")
@@ -923,8 +874,6 @@ Page {
             // novo criado depois.
             function zerarCampos() {
                 telaEntrega.manterBaixaAoSalvar = false;
-                telaEntrega.enderecoEncontradoNoServidor = false;
-                telaEntrega.telefoneEmConsulta = "";
                 inputTelefone.text = "";
                 inputEndereco.text = "";
                 inputNumero.text = "";
@@ -944,8 +893,7 @@ Page {
             }
 
             // --- AUTOCOMPLETE DE ENDEREÇO E BAIRRO ---
-            // Termo da última busca de sugestão disparada por cada campo —
-            // mesmo papel de telaEntrega.telefoneEmConsulta no autofill: a
+            // Termo da última busca de sugestão disparada por cada campo: a
             // resposta chega assíncrona com o termo ecoado, e só vale se
             // ainda for sobre o que está digitado agora.
             property string termoEnderecoEmConsulta: ""
@@ -1186,20 +1134,27 @@ Page {
                                     reformatando = false;
                                 }
 
-                                // Dispara a busca de endereço salvo ao SAIR do
-                                // campo (não a cada tecla) — ver Connections
-                                // com pizzeriaServerController, que preenche
-                                // Nome/Endereço/Número/Bairro/Observação quando
-                                // a resposta chegar.
+                                // Busca o cliente ao SAIR do campo (não a cada
+                                // tecla) e preenche Nome/Endereço/Número/
+                                // Bairro/Observação na hora: o cadastro está
+                                // nesta máquina (ver controllers/
+                                // clientesController.py), então não há resposta
+                                // a esperar nem resposta atrasada a descartar.
                                 onEditingFinished: {
                                     var digitos = text.replace(/\D/g, "");
-                                    if (digitos.length < 10) {
-                                        telaEntrega.telefoneEmConsulta = "";
-                                        telaEntrega.enderecoEncontradoNoServidor = false;
+                                    if (digitos.length < 10)
                                         return ;
-                                    }
-                                    telaEntrega.telefoneEmConsulta = digitos;
-                                    pizzeriaServerController.buscarPorTelefone(digitos);
+
+                                    var cliente = clientesController.buscarPorTelefone(digitos);
+                                    if (!cliente || !cliente.rua)
+                                        return ;
+
+                                    inputNomeCliente.text = cliente.nome || "";
+                                    inputEndereco.text = cliente.rua || "";
+                                    inputNumero.text = cliente.numero || "";
+                                    inputBairro.text = cliente.bairro || "";
+                                    inputObservacao.text = cliente.observacao || "";
+                                    telaEntrega.mostrarNotificacao("Cliente encontrado e preenchido automaticamente.", true);
                                 }
 
                                 background: Rectangle {
@@ -1281,9 +1236,9 @@ Page {
                                 placeholderTextColor: Estilo.global.textPlaceholder
                                 placeholderText: "ENDEREÇO"
                                 // Mesma capitalizacao do nome do cliente logo acima.
-                                // Vale tambem para o endereco que chega preenchido do servidor
-                                // (ver onEnderecoEncontrado): a rua cadastrada em minusculo por
-                                // outra maquina sai formatada aqui do mesmo jeito.
+                                // Vale tambem para o endereco que chega preenchido do cadastro de
+                                // clientes (ver o onEditingFinished do Telefone): a rua cadastrada
+                                // em minusculo por outra maquina sai formatada aqui do mesmo jeito.
                                 //
                                 // A capitalizacao reescreve o texto e reentra
                                 // aqui (mesmo caso do "reformatando" do
@@ -1875,15 +1830,12 @@ Page {
                 id: popupSalvarEndereco
 
                 onRespondido: function(salvar) {
-                    // Sem reconferir o servidor: o popup fica na tela
-                    // esperando uma decisão e a hospedeira pode cair nesse
-                    // intervalo, mas isso deixou de importar — salvarEndereco
-                    // enfileira antes de tentar subir, então a resposta "Salvar"
-                    // vale igual com ou sem servidor no ar. Quem conta o que
-                    // aconteceu é o onEnderecoSalvo, que distingue "salvo no
-                    // servidor" de "guardado para subir depois".
-                    if (salvar)
-                        pizzeriaServerController.salvarEndereco(dados);
+                    // Gravação local e síncrona: o resultado já está aqui, e
+                    // as outras máquinas recebem o cliente pela malha.
+                    if (salvar) {
+                        var salvou = clientesController.salvarCliente(dados);
+                        telaEntrega.mostrarNotificacao(salvou ? "Cliente salvo." : "Não foi possível salvar o cliente — veja logs/app.log.", salvou);
+                    }
 
                     if (acaoPendente === "imprimir")
                         prosseguirImprimir(dados);

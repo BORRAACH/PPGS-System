@@ -4,9 +4,9 @@ import estilo 1.0
 
 // Popup de confirmação usado por Entrega.qml ao clicar Imprimir/Lançar com
 // telefone+endereço preenchidos: pergunta se deve salvar (ou sobrescrever,
-// se já havia um endereço salvo pra esse telefone — ver
-// enderecoEncontradoNoServidor) no pizzeria-server, antes de prosseguir com
-// o pedido em si. Mesmo padrão de abrirPara/respondido de
+// se já havia um cliente salvo pra esse telefone) no cadastro de clientes
+// (ver controllers/clientesController.py), antes de prosseguir com o pedido
+// em si. Mesmo padrão de abrirPara/respondido de
 // PopupComandaTeste.qml.
 Popup {
     id: popupSalvarEndereco

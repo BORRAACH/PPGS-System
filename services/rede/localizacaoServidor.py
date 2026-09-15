@@ -1,10 +1,9 @@
 """Persistência de onde fica a pizzaria — o centro da região a que as
 sugestões de endereço da Entrega se limitam (ver services/sugestoesEndereco.py).
 
-A localização é a da máquina que hospeda o ppgs_server: ela a detecta (pela
-conexão de internet, ou pelo endereço digitado na tela Rede) e a malha
-espalha a escolha, pelo mesmo caminho da designação do servidor — evento de
-gossip mais campo no handshake, arbitrados por idEvento (ver
+Qualquer máquina a define — pela conexão de internet, quando nenhuma é
+conhecida ainda, ou pelo endereço digitado na tela Rede — e a malha espalha a
+escolha: evento de gossip mais campo no handshake, arbitrados por idEvento (ver
 RedeService._aplicar_localizacao). Assim uma instalação nova, em outra
 cidade, passa a sugerir as ruas da cidade dela sem ninguém mexer em código.
 
@@ -13,8 +12,8 @@ Por que ela importa tanto: sem um retângulo de busca, o Photon devolve
 Taubaté. O viés de proximidade dele sozinho não segura a região; o `bbox`
 segura.
 
-O arquivo local existe pelo mesmo motivo de servidorDesignado.py: uma
-máquina que liga sozinha ainda sabe onde está. Fica em Config/ (e na lista
+O arquivo local existe para uma máquina que liga sozinha ainda saber onde
+está. Fica em Config/ (e na lista
 de ignorados do dev_watch.py)."""
 
 import math

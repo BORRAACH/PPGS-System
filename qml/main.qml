@@ -210,6 +210,17 @@ ApplicationWindow {
         }
     }
 
+    // Uma máquina nova pedindo para entrar na rede: aparece em qualquer tela,
+    // porque o pedido expira e quem está no balcão raramente está na tela Rede
+    // (ver components/PopupPedidoEntrada.qml).
+    PopupPedidoEntrada {
+        onResultado: function(mensagem, sucesso) {
+            if (stackView.currentItem && stackView.currentItem.mostrarNotificacao)
+                stackView.currentItem.mostrarNotificacao(mensagem, sucesso);
+
+        }
+    }
+
     // O resultado de qualquer impressão do app, em qualquer tela — daí morar
     // aqui e não numa página (ver components/NotificacaoImpressao.qml).
     NotificacaoImpressao {

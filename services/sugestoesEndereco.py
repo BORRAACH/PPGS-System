@@ -14,7 +14,7 @@ Três fontes, nesta ordem:
   índice, e a próxima busca delas já é local.
 
 Os dois arquivos são replicados pela malha, então a máquina que montou o
-índice (a do servidor) serve todas as outras.
+índice (a que definiu a localização) serve todas as outras.
 
 Antes isto ia pelo ppgs_server, e a sugestão ficava refém dele: binário
 desatualizado respondendo 404, rate limiter de 200ms compartilhado por todos
@@ -44,8 +44,8 @@ from services.buscaCardapio import normalizar
 from services.rede import historicoEnderecos, indiceRuas, localizacaoServidor, rede, relogio
 
 _URL_PHOTON = "https://photon.komoot.io/api/"
-# Geolocalização pela conexão de internet, para a hospedeira que ainda não tem
-# localização definida. Precisão de cidade — é o que o índice precisa.
+# Geolocalização pela conexão de internet, para quando nenhuma máquina da rede
+# definiu a localização ainda. Precisão de cidade — é o que o índice precisa.
 _URL_GEOLOCALIZACAO_IP = "https://ipinfo.io/json"
 # Por espera de rede (conectar, cada leitura) — ver requisicaoHttp.obter_json.
 _TIMEOUT_S = 6
@@ -234,7 +234,7 @@ class SugestoesEnderecoService(QObject):
         self._timer_gravar_correios.setSingleShot(True)
         self._timer_gravar_correios.setInterval(_INTERVALO_GRAVACAO_CORREIOS_MS)
         self._timer_gravar_correios.timeout.connect(self._gravar_correios)
-        # Espera pelo índice da máquina do servidor (ver _garantir_indice).
+        # Espera pelo índice da máquina responsável por ele (ver _garantir_indice).
         self._espera_hospedeira = QTimer(self)
         self._espera_hospedeira.setSingleShot(True)
         self._espera_hospedeira.setInterval(_ESPERA_INDICE_DA_HOSPEDEIRA_MS)
@@ -263,11 +263,8 @@ class SugestoesEnderecoService(QObject):
             indiceRuas.obter,
             lambda _bloco, payload: self._ao_receber_indice_remoto(payload),
         )
-        # Virar a hospedeira (ou deixar de haver uma) pode tornar esta máquina
-        # a responsável pela localização e pelo índice; uma localização nova
-        # pede um índice novo.
-        rede.servidorDesignadoMudou.connect(self.garantirLocalizacao)
-        rede.servidorDesignadoMudou.connect(self.garantirIndice)
+        # Uma localização nova pede um índice novo — e decide quem o monta
+        # (ver _responsavel_pelo_indice).
         rede.localizacaoServidorMudou.connect(self.garantirIndice)
 
     # ---------- Busca (Entrega.qml) ----------
@@ -534,11 +531,11 @@ class SugestoesEnderecoService(QObject):
         localizacao = rede.localizacaoServidor
         if not localizacao:
             return
-        if not sem_hospedeira and not self._pode_definir_localizacao():
-            # Quem monta é a máquina do servidor. Mas se ela estiver desligada,
-            # ou numa versão do sistema sem índice, ninguém montaria nunca:
-            # continuando sem índice depois da espera, esta máquina monta o
-            # seu — e a fusão por união junta os dois quando ela aparecer.
+        if not sem_hospedeira and not self._responsavel_pelo_indice(localizacao):
+            # Quem monta é a máquina que definiu a localização. Mas se ela
+            # estiver desligada, ninguém montaria nunca: continuando sem índice
+            # depois da espera, esta máquina monta o seu — e a fusão por união
+            # junta os dois quando ela aparecer.
             if not indiceRuas.base().get("cidade") and not self._espera_hospedeira.isActive():
                 self._espera_hospedeira.start()
             return
@@ -663,18 +660,21 @@ class SugestoesEnderecoService(QObject):
 
     # ---------- Localização da pizzaria (Rede.qml) ----------
 
-    def _pode_definir_localizacao(self):
-        """A hospedeira define — ou qualquer máquina, enquanto nenhuma foi
-        escolhida: sugestão de endereço não depende de haver servidor."""
-        return rede.servidorAqui or not rede.maquinaServidor
+    @staticmethod
+    def _responsavel_pelo_indice(localizacao):
+        """A máquina que definiu a localização monta o índice das ruas dela: o
+        idEvento da localização carrega o nome de quem a gravou (ver
+        services/rede/relogio.py). Uma máquina só, para o Overpass e o ViaCEP
+        não serem consultados por todas ao mesmo tempo."""
+        return relogio.maquina_do_id(localizacao.get("idEvento", "")) == rede.nomeLocal
 
     @pyqtSlot()
     @protegido(None)
     def garantirLocalizacao(self):
-        """Detecta a localização pela conexão de internet quando esta máquina
-        é quem define e ainda não há nenhuma conhecida. Nunca sobrescreve uma
-        existente — nem a digitada na tela Rede, nem a aprendida de um peer."""
-        if rede.localizacaoServidor or self._detectando_localizacao or not self._pode_definir_localizacao():
+        """Detecta a localização pela conexão de internet quando ainda não há
+        nenhuma conhecida. Nunca sobrescreve uma existente — nem a digitada na
+        tela Rede, nem a aprendida de um peer."""
+        if rede.localizacaoServidor or self._detectando_localizacao:
             return
 
         self._detectando_localizacao = True
@@ -712,11 +712,6 @@ class SugestoesEnderecoService(QObject):
         texto = (texto or "").strip()
         if not texto:
             self.localizacaoDefinida.emit(False, "Digite o endereço da pizzaria.")
-            return
-        if not self._pode_definir_localizacao():
-            self.localizacaoDefinida.emit(
-                False, f"Quem define a localização é a máquina do servidor ('{rede.maquinaServidor}')."
-            )
             return
 
         def concluir(dados, erro):

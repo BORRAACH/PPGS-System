@@ -52,14 +52,11 @@ def _raiz_projeto():
 def rodar_git(*args, cwd=None, timeout=None, env_extra=None):
     """Roda um comando git e devolve a saída, ou None se ele falhou.
 
-    Público (e com `cwd`/`env_extra`) porque
-    services/servidor/servidorLocal.py clona e atualiza o repositório do
-    ppgs_server com exatamente os mesmos cuidados desta função — os três
-    detalhes abaixo (BatchMode, encoding explícito e timeout) já custaram
-    incidentes reais em produção, e reimplementá-los noutro arquivo seria
-    convidar os mesmos incidentes de volta. `env_extra` existe pro
-    servidorLocal poder apontar o GIT_SSH_COMMAND pra deploy key dele sem
-    mexer no ambiente do processo inteiro."""
+    Público (e com `cwd`/`env_extra`) para quem precisar rodar git noutro
+    repositório com os mesmos cuidados — os três detalhes abaixo (BatchMode,
+    encoding explícito e timeout) já custaram incidentes reais em produção, e
+    reimplementá-los noutro arquivo seria convidar os mesmos incidentes de
+    volta."""
     # Sem isso, um "git fetch" contra um remoto SSH sem a chave já
     # destravada no agente trava esperando a senha da chave (via askpass) —
     # e como main.py roda essa checagem toda vez que abre (inclusive a cada

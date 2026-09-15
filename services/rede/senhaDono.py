@@ -36,10 +36,9 @@ máquina e vale em todas, inclusive nas que entrarem depois: máquina nova que
 chegasse sem senha seria uma porta aberta até alguém lembrar de fechá-la.
 
 O QUE ISTO NÃO É. A senha tranca a TELA. Ela não impede quem edita
-`pedidos/.sync/usuarios.json` na mão, nem quem roda outra instância do app na
-LAN e publica um `usuario_alterado` pelo gossip — a malha não autentica
-ninguém (ver `CHAVE_PADRAO` em seguranca.py e a seção "Fora do escopo" de
-architecture/EXPLAIN.md). É um obstáculo contra quem usa o app, no mesmo
+`pedidos/.sync/usuarios.json` na mão, nem quem opera outra máquina já aprovada
+na rede e publica um `usuario_alterado` pelo gossip (ver a seção "Fora do
+escopo" de architecture/EXPLAIN.md). É um obstáculo contra quem usa o app, no mesmo
 espírito do código de dois dígitos, não um segredo contra alguém decidido.
 
 ESQUECEU A SENHA. Não há porta dos fundos, e isso é de propósito: uma que

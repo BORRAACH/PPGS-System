@@ -11,8 +11,8 @@ o cadastro em uma delas faria a outra depender do controller de uma tela
 sem relação nenhuma com usuários.
 
 O que este guarda protege, dito sem eufemismo: a equipe do balcão. Dois
-dígitos são cem combinações e a malha não autentica ninguém (ver o topo de
-services/rede/usuarios.py). Ele responde "quem editou esta comanda?" e
+dígitos são cem combinações, e qualquer máquina aprovada na rede é peer pleno
+(ver o topo de services/rede/usuarios.py). Ele responde "quem editou esta comanda?" e
 obriga um ato deliberado antes de uma edição destrutiva — não impede quem
 quiser insistir.
 

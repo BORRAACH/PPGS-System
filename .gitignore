@@ -53,13 +53,14 @@ design/templates/
 # código-fonte.
 cpu.txt
 
-# Chave da malha por instalação. Não é mais gerada nem lida — a chave virou
-# uma constante do código (ver seguranca.CHAVE_PADRAO) —, mas a linha fica:
-# máquinas que rodaram a versão anterior têm o arquivo sobrando, e ele não
-# deve ir pro repositório nem se a chave por instalação voltar um dia.
+# Chave da malha por instalação (cifrada pelo cofre local) e a própria chave
+# local, protegida pelo Windows — ver services/rede/seguranca.py e
+# services/cofreLocal.py. De cada máquina, e nunca para o repositório.
 Config/chave_malha.json
-# Qual máquina hospeda o ppgs_server — decisão local de cada instalação.
+Config/chave_local.bin
+# Sobra da época do servidor separado, que as máquinas antigas ainda têm.
 Config/servidor_designado.json
+Config/localizacao_servidor.json
 
 # Cache do rope (motor de refatoracao usado por editores Python) — banco
 # local reconstruido sozinho, nao codigo-fonte.

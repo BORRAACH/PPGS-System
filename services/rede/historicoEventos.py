@@ -99,11 +99,11 @@ _EVENTOS = {
     "maquina_conectada": (MAQUINAS, "Máquina entrou na rede"),
     "maquina_desconectada": (MAQUINAS, "Máquina saiu da rede"),
     "maquina_recusada": (MAQUINAS, "Máquina recusada na rede"),
-    "servidor_designado": (MAQUINAS, "Servidor central mudou de máquina"),
-    # Anotados só na máquina hospedeira, no instante em que ela avisa a malha
-    # (ver RedeService._ao_mudar_servidor_local).
-    "servidor_no_ar": (MAQUINAS, "Servidor central entrou no ar"),
-    "servidor_fora_do_ar": (MAQUINAS, "Servidor central saiu do ar"),
+    # Pareamento (ver RedeService.criarRede/aceitarPedido). Anotados por quem
+    # criou a rede, por quem aprovou e pela máquina que entrou; a
+    # reconciliação do domínio "historico" leva as linhas às demais.
+    "rede_criada": (MAQUINAS, "Rede criada"),
+    "maquina_pareada": (MAQUINAS, "Máquina aprovada na rede"),
     "conflito_detectado": (COMANDAS, "Divergência detectada entre máquinas"),
     "conflito_resolvido": (COMANDAS, "Divergência resolvida"),
     # Cadastro de quem pode autorizar as ações destrutivas (ver
@@ -169,9 +169,8 @@ _DETALHE = {
     # O endereço, e não um nome: uma máquina recusada nunca chegou a
     # dizer como se chama — o handshake morre antes do "identificar".
     "maquina_recusada": lambda p: f"{p.get('endereco', '?')} — {p.get('motivo', '')}".strip(" —"),
-    "servidor_designado": lambda p: p.get("nome", ""),
-    "servidor_no_ar": lambda p: p.get("nome", ""),
-    "servidor_fora_do_ar": lambda p: p.get("nome", ""),
+    "rede_criada": lambda p: p.get("nome", ""),
+    "maquina_pareada": lambda p: p.get("nome", ""),
     "conflito_detectado": lambda p: p.get("arquivo", ""),
     "conflito_resolvido": lambda p: p.get("arquivo", ""),
     # Só o nome, nunca o código: o código não é segredo (ver o topo de

@@ -10,7 +10,6 @@ from Config.logConfig import protegido
 from services import comandaEstiloService as estilo
 from services import comandaParserService as parser
 from services import comandaTextoService as texto
-from services.pizzeriaServerService import pizzeria_server
 from services.rede import (baixaComandas, contagemCaixa, despesasCaixa, edicoesCaixa, extrasCaixa,
                            fechamentoCache, rede, relogio, tombstones)
 
@@ -1233,65 +1232,6 @@ class FechamentoController(QObject):
         impressão do app."""
         resumo = self._calcular_resumo_dia(data_iso)
         rede.solicitar_impressao(self._montar_recibo_fechamento(data_iso, resumo))
-        return True
-
-    # ---------- Envio do resumo do dia ao servidor central ----------
-
-    def _montar_payload_servidor(self, data_iso, resumo):
-        """Traduz o resumo interno do dia no corpo que o pizzeria-server
-        espera em POST /fechamentos (ver models::Fechamento lá).
-
-        Os números são exatamente os mesmos que saem no cupom de fechamento
-        (ver _montar_recibo_fechamento) — o papel impresso e o que o servidor
-        guarda não podem contar histórias diferentes do mesmo dia."""
-        bruto = resumo.get("total", 0.0)
-        total_extras = (resumo.get("extras") or {}).get("total", 0.0)
-
-        origens = []
-        for tipo, info in (resumo.get("porTipo") or {}).items():
-            formas = self._somar_por_forma_pagamento(tipo, info.get("comandas", []))
-            origens.append({
-                "tipo": tipo,
-                "quantidade": info.get("quantidade", 0),
-                "total": info.get("total", 0.0),
-                "dinheiro": formas["dinheiro"],
-                "pix": formas["pix"],
-                "cartao": formas["cartao"],
-            })
-
-        return {
-            "data": data_iso,
-            # É este id que decide, no servidor, qual de dois fechamentos do
-            # mesmo dia predomina — um relógio lógico híbrido, não o relógio
-            # de parede: as máquinas da pizzaria não rodam NTP, e um envio
-            # vindo de um terminal adiantado não pode desfazer um fechamento
-            # que aconteceu depois (ver services/rede/relogio.py).
-            "id_evento": relogio.novo_id(),
-            "enviado_em": datetime.now().isoformat(timespec="seconds"),
-            "quantidade_vendas": resumo.get("quantidade", 0),
-            "total_vendas": bruto,
-            "total_extras": total_extras,
-            "total_liquido": bruto - total_extras,
-            "origens": origens,
-            "produtos": resumo.get("produtos") or [],
-        }
-
-    @pyqtSlot(str, result=bool)
-    @protegido(False)
-    def enviarFechamentoServidor(self, data_iso):
-        """Publica o resumo de `data_iso` no pizzeria-server. Chamado pelo
-        botão "Fechar Caixa" (ver Fechamento.qml), logo depois de
-        calcularFechamento — daí ler do cache que aquele acabou de gravar em
-        vez de varrer as comandas do dia uma terceira vez.
-
-        O resultado chega depois, assíncrono, por
-        pizzeriaServerController.fechamentoEnviado — igual a qualquer outra
-        chamada ao servidor central."""
-        resumo = fechamentoCache.carregar(data_iso)
-        if resumo is None or not self._cache_atualizado(resumo):
-            resumo = self._calcular_resumo_dia(data_iso)
-
-        pizzeria_server.enviarFechamento(self._montar_payload_servidor(data_iso, resumo))
         return True
 
     # ---------- Fechamento rápido (ver qml/pages/fechamento/PopupFechamentoRapido.qml) ----------

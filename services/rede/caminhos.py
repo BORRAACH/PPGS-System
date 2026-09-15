@@ -88,3 +88,23 @@ def salvar_json(caminho: str, dados: dict, rotulo: str, compacto: bool = False) 
             os.remove(temporario)
         except OSError:
             pass
+
+
+def salvar_bytes(caminho: str, conteudo: bytes, rotulo: str) -> bool:
+    """Mesmo cuidado de `salvar_json` (temporário com PID + os.replace), para
+    arquivo binário — o cadastro de clientes, que vai cifrado para o disco (ver
+    services/rede/clientes.py). Devolve False quando a gravação falha."""
+    temporario = f"{caminho}.{os.getpid()}.tmp"
+    try:
+        os.makedirs(os.path.dirname(caminho), exist_ok=True)
+        with open(temporario, "wb") as arquivo:
+            arquivo.write(conteudo)
+        os.replace(temporario, caminho)
+        return True
+    except OSError as erro:
+        print(f"[{rotulo}] Falha ao gravar {caminho}: {erro}")
+        try:
+            os.remove(temporario)
+        except OSError:
+            pass
+        return False

@@ -13,7 +13,7 @@ import estilo 1.0
 // PopupBuscaCardapio.qml (setas movem a seleção sem tirar o foco do campo).
 //
 // Quem decide QUANDO buscar não é este componente: o debounce e a chamada ao
-// pizzeriaServerController ficam com o dono do campo, que chama mostrar()
+// sugestoesEnderecoController ficam com o dono do campo, que chama mostrar()
 // com o que a resposta trouxe. Aqui só mora a parte de tela.
 Popup {
     id: lista

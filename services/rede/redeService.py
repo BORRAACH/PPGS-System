@@ -13,18 +13,15 @@ from PyQt6.QtCore import QObject, QByteArray, QTimer, pyqtProperty, pyqtSignal, 
 from PyQt6.QtNetwork import QHostAddress, QTcpServer, QTcpSocket
 
 from Config.logConfig import protegido
-from services import comandaImagemService
+from services import cofreLocal, comandaImagemService
 from services.printerService import PrinterService
-from services.rede import caminhos, historicoEventos, impressoraFixada, indicePedidos, localizacaoServidor, relogio, seguranca, sequenciaComandas, servidorDesignado, tombstones
+from services.rede import caminhos, historicoEventos, impressoraFixada, indicePedidos, localizacaoServidor, relogio, seguranca, sequenciaComandas, tombstones
 from services.rede.descoberta import criar_descoberta
 from services.rede.eventos import BarramentoEventos
 
 # Tipo de evento de gossip que anuncia um número de comanda reservado (ver
 # reservar_numero_comanda e services/rede/sequenciaComandas.py).
 _EVENTO_COMANDA_NUMERADA = "comanda_numerada"
-# Anuncia à malha qual máquina passa a hospedar o ppgs_server (ver
-# designarServidor/services/rede/servidorDesignado.py).
-_EVENTO_SERVIDOR_DESIGNADO = "servidor_designado"
 # Anuncia onde fica a pizzaria — a região das sugestões de endereço da Entrega
 # (ver services/rede/localizacaoServidor.py e services/sugestoesEndereco.py).
 _EVENTO_LOCALIZACAO_SERVIDOR = "localizacao_servidor"
@@ -38,12 +35,14 @@ _TIMEOUT_IMPRESSAO_MS = 10000
 # scanner de portas que abre a conexão e fica calado. Sem isto, os dois
 # deixariam um socket e uma sessão vivos para sempre.
 _TIMEOUT_HANDSHAKE_MS = 8000
-# Teto de espera de uma requisição HTTP encaminhada pela malha até o
-# ppgs_server da máquina hospedeira (ver solicitar_servidor). Mais folgado
-# que os 5s que o cliente HTTP usava contra a LAN: agora há dois saltos
-# (malha até a hospedeira, e loopback dela até o servidor), e a hospedeira
-# é uma máquina de balcão que pode estar imprimindo no mesmo instante.
-_TIMEOUT_SERVIDOR_MS = 12000
+# Quanto um pedido de entrada na rede fica esperando alguém aprovar (ver
+# pedirEntrada/aceitarPedido). Generoso porque, do outro lado, há uma pessoa
+# indo até a outra máquina conferir o código.
+_TIMEOUT_PAREAMENTO_MS = 120000
+# Pedidos de entrada esperando aprovação ao mesmo tempo. A porta da malha é
+# alcançável por qualquer um na rede local, e sem teto um programa qualquer
+# encheria a tela de pedidos falsos.
+_MAXIMO_PEDIDOS_ENTRADA = 3
 # De quanto em quanto tempo se tenta reconectar a um peer que a descoberta
 # já anunciou mas com quem não há conexão aberta agora (ver
 # _tentar_reconectar). Sem isto, uma única tentativa de conexão que falhe
@@ -125,31 +124,16 @@ class RedeService(QObject):
     # impressora dela) pode ter mudado — Rede.qml usa pra reconsultar
     # impressoraPrincipal() e atualizar o painel sozinho.
     impressoraPrincipalMudou = pyqtSignal()
-    # (id_req, status HTTP, corpo) — resposta de uma requisição encaminhada
-    # ao ppgs_server. status 0 significa que ela não chegou a ser respondida
-    # (sem hospedeira, timeout, socket caído).
-    respostaServidor = pyqtSignal(str, int, QByteArray)
-    # A máquina que hospeda o ppgs_server mudou (ou o preparo dela mudou de
-    # estado) — a tela Rede e o cliente HTTP reagem a isto.
-    servidorDesignadoMudou = pyqtSignal()
+    # A chave desta máquina, as máquinas para pedir entrada, o pedido em
+    # andamento ou os pedidos esperando aprovação mudaram (ver
+    # pedirEntrada/aceitarPedido) — a tela Rede se redesenha com isto.
+    pareamentoMudou = pyqtSignal()
+    # (id da instância, nome da máquina, código de 6 dígitos) — alguém pediu
+    # para entrar na rede e o código já está pronto para conferir. À parte de
+    # pareamentoMudou porque é o que abre o popup de aprovação em qualquer tela.
+    pedidoEntradaRecebido = pyqtSignal(str, str, str)
     # A localização da pizzaria mudou (definida aqui ou aprendida de um peer).
     localizacaoServidorMudou = pyqtSignal()
-    # (nome da máquina hospedeira, servidor no ar nela) — o aviso DIRETO que a
-    # hospedeira manda no instante em que o ppgs_server dela sobe ou cai, mais
-    # o que ela conta de si mesma no handshake. Existe porque o único jeito de
-    # um terminal descobrir isso antes era perguntando de 30 em 30 segundos
-    # (ver services/pizzeriaServerService.py): o servidor subia e o balcão
-    # ficava até meio minuto sem autofill de endereço, sem nada acontecendo na
-    # rede além da espera.
-    servidorNoArMudou = pyqtSignal(str, bool)
-    # Uso interno: uma requisição encaminhada terminou nesta máquina e
-    # precisa voltar pro socket de origem a partir da thread dele.
-    _servidorRespostaLocal = pyqtSignal(str, str, int, QByteArray)
-    # Uso interno: o ServidorLocalService avisa que o processo do servidor
-    # subiu/caiu de dentro da thread de preparo dele, e anunciar isso escreve
-    # em QTcpSocket — só seguro na thread que os criou. Mesmo motivo (e mesmo
-    # desenho) de _servidorRespostaLocal acima.
-    _servidorLocalNoAr = pyqtSignal(bool)
     # Uso interno: repassa o resultado da checagem da impressora local (rodada
     # numa thread, porque PrinterService.localizar_impressora() executa
     # lpstat/PowerShell) de volta pra thread principal — mesmo padrão de
@@ -189,20 +173,39 @@ class RedeService(QObject):
         # protocolo.
         self._sessoes = {}
         # Peers que apareceram mas foram recusados no handshake — endereço ->
-        # motivo. Com a chave igual em toda máquina, o que sobra aqui é
-        # incompatibilidade de versão: uma máquina atualizada e outra não se
-        # recusam explicitamente em vez de travar num frame que a outra não
-        # sabe ler. Existe pra tela Rede poder dizer qual é o motivo — sem
+        # motivo: uma máquina de outra rede (chave diferente) ou ainda na
+        # versão antiga do sistema. As duas se recusam explicitamente em vez de
+        # travar num frame que a outra não sabe ler. Existe pra tela Rede poder
+        # dizer qual é o motivo — sem
         # isso, "a outra máquina não aparece" é indistinguível de a rede estar
         # fora do ar, que foi exatamente a confusão que este projeto já pagou
         # caro uma vez (ver architecture/EXPLAIN.md, "Observabilidade").
         self._recusados = {}
-        # A chave que assina o handshake e alimenta o HKDF. Hoje é uma
-        # constante igual em toda máquina (ver seguranca.CHAVE_PADRAO); segue
-        # guardada num campo porque é assim que ela chega em cada SessaoSegura,
-        # e porque é o ponto que volta a variar por instalação no dia em que a
-        # rede da pizzaria deixar de ser confiável.
+        # A chave da rede em que esta máquina entrou, ou None enquanto ela não
+        # entrou em nenhuma (ver criarRede/pedirEntrada). Sem chave a máquina
+        # fica em modo pareamento: anuncia-se, lista as máquinas pareadas que
+        # enxerga e aceita só a resposta ao próprio pedido de entrada — nenhuma
+        # comanda, cliente ou histórico sai ou entra.
         self._chave_malha = seguranca.carregar_chave()
+        # Máquinas pareadas encontradas enquanto esta ainda não tem chave —
+        # id da instância -> {"id", "nome", "enderecos", "porta"}.
+        self._candidatos_pareamento = {}
+        # O pedido de entrada que ESTA máquina fez (lado que pede), ou None.
+        self._pareamento_saida = None
+        # Pedidos de entrada de outras máquinas esperando alguém aprovar aqui
+        # (lado que aprova) — id da instância -> {"nome", "codigo", ...}.
+        self._pedidos_entrada = {}
+        # Socket de pareamento -> {"papel", "sessao"}. Um socket de pareamento
+        # nunca vira sessão da malha: termina com a chave entregue ou recusada.
+        self._contextos_pareamento = {}
+        # Conexões de entrada que ainda não disseram o que querem — um 'ola' de
+        # máquina pareada ou um pedido de entrada (ver _decidir_entrada).
+        self._entradas_indefinidas = set()
+        # Reconexão e reconciliação já ligadas (ver _ativar_malha).
+        self._malha_ativa = False
+        # Qual mecanismo guarda a chave local (ver cofreLocal.protecao) —
+        # calculado uma vez: no Linux perguntar custa uma chamada ao chaveiro.
+        self._protecao_local = None
         # Tudo que a descoberta já anunciou, conectado ou não — id da
         # instância -> {"enderecos": [str], "porta": int, "tentativas": int}.
         # É o que permite reconectar sem depender de o zeroconf reemitir o
@@ -232,27 +235,9 @@ class RedeService(QObject):
         # propagado/atualizado depois via gossip (evento "impressora_fixada").
         self._nome_maquina_fixada = impressoraFixada.carregar_nome_fixado()
         self._jobs_impressao = {}  # job_id -> {"timer": QTimer, "concluido": bool}
-        # Requisições HTTP encaminhadas pela malha, esperando resposta —
-        # id_req -> {"timer": QTimer, "concluido": bool}. Mesmo desenho dos
-        # jobs de impressão acima.
-        self._jobs_servidor = {}
-        # Máquina que hospeda o ppgs_server, por nome, e o idEvento da
-        # decisão (ver services/rede/servidorDesignado.py). Lido do disco
-        # aqui pra uma máquina que liga sozinha já saber que é ela;
-        # atualizado depois por gossip.
-        self._nome_servidor, self._id_evento_servidor = servidorDesignado.carregar()
-        # Onde fica a pizzaria ({} enquanto ninguém definiu) — mesmo ciclo da
-        # designação logo acima: do disco agora, por gossip e handshake depois
-        # (ver _aplicar_localizacao).
+        # Onde fica a pizzaria ({} enquanto ninguém definiu) — do disco agora,
+        # por gossip e handshake depois (ver _aplicar_localizacao).
         self._localizacao_servidor = localizacaoServidor.carregar()
-        # Preenchido pelo ServidorLocalService desta máquina quando ela é a
-        # hospedeira — encaminhar requisições exige o token, e só ele sabe
-        # se o processo já subiu.
-        self._encaminhar_para_servidor_local = None
-        # O ppgs_server desta máquina está no ar? Só chega a ser verdadeiro na
-        # hospedeira, e é isto que ela anuncia aos peers e conta no handshake
-        # (ver anunciar_servidor_no_ar).
-        self._servidor_no_ar_local = False
 
         # Domínios de estado inscritos na camada de anti-entropy periódica
         # (ver registrarDominioSincronizado) — nome -> {"resumo", "obter",
@@ -272,10 +257,7 @@ class RedeService(QObject):
         self._eventos.registrar("pedido_apagado", self._ao_receber_evento_pedido_apagado)
         self._eventos.registrar("impressora_fixada", self._ao_receber_evento_impressora_fixada)
         self._eventos.registrar(_EVENTO_COMANDA_NUMERADA, self._ao_receber_evento_comanda_numerada)
-        self._eventos.registrar(_EVENTO_SERVIDOR_DESIGNADO, self._ao_receber_evento_servidor_designado)
         self._eventos.registrar(_EVENTO_LOCALIZACAO_SERVIDOR, self._ao_receber_evento_localizacao)
-        self._servidorRespostaLocal.connect(self._responder_servidor_ao_peer)
-        self._servidorLocalNoAr.connect(self._ao_mudar_servidor_local)
 
         # Histórico da malha: eventos são imutáveis, então a reconciliação é a
         # união dos dois lados e não existe "apagar" (a retenção é local, ver
@@ -402,19 +384,47 @@ class RedeService(QObject):
         # iniciar() volta antes dela ficar pronta, então "a malha está no ar"
         # é uma resposta que só ela pode dar.
         self._descoberta.iniciada.connect(self._ao_iniciar_descoberta)
-        self._descoberta.iniciar(self._id, self._tcp_server.serverPort())
+        self._descoberta.iniciar(self._id, self._tcp_server.serverPort(), self._nome_local, bool(self._chave_malha))
+
+        # Detecta a impressora local uma vez já ao iniciar, e depois
+        # periodicamente — cobre o caso de a impressora ser plugada com o
+        # app já aberto. Vale também sem rede: é esta eleição que manda a
+        # comanda para a impressora desta própria máquina.
+        self._detectar_impressora_local()
+        self._timer_impressora.timeout.connect(self._detectar_impressora_local)
+        self._timer_impressora.start(_INTERVALO_CHECAGEM_IMPRESSORA_MS)
+
+        if self._chave_malha:
+            self._ativar_malha()
+        else:
+            print("[RedeService] Esta máquina ainda não entrou em nenhuma rede — ela aparece para as outras "
+                  "e espera o pareamento pela tela Rede.")
+
+    def _ativar_malha(self):
+        """Liga o que só existe entre máquinas pareadas: discar para os peers,
+        refazer conexões e reconciliar. Chamado na abertura, se já há chave, ou
+        no instante em que a chave chega (criarRede/pareamento) — sem reiniciar
+        o app."""
+        if self._malha_ativa or not self._iniciado or not self._chave_malha:
+            return
+        self._malha_ativa = True
+
+        # As máquinas que esta enxergou enquanto esperava o pareamento viram
+        # peers conhecidos: a descoberta não as anuncia de novo sozinha.
+        for id_remoto, candidato in self._candidatos_pareamento.items():
+            self._peers_conhecidos.setdefault(id_remoto, {
+                "enderecos": list(candidato["enderecos"]),
+                "porta": candidato["porta"],
+                "tentativas": 0,
+                "falhas": 0,
+                "proximaTentativa": 0.0,
+            })
+        self._candidatos_pareamento.clear()
 
         # Rede de segurança da conexão: refaz sozinho as tentativas que
         # falharam, sem depender de a descoberta reanunciar o peer.
         self._timer_reconexao.timeout.connect(self._tentar_reconectar)
         self._timer_reconexao.start(_INTERVALO_RECONEXAO_MS)
-
-        # Detecta a impressora local uma vez já ao iniciar, e depois
-        # periodicamente — cobre o caso de a impressora ser plugada com o
-        # app já aberto.
-        self._detectar_impressora_local()
-        self._timer_impressora.timeout.connect(self._detectar_impressora_local)
-        self._timer_impressora.start(_INTERVALO_CHECAGEM_IMPRESSORA_MS)
 
         # Anti-entropy: começa com um atraso aleatório (0-10s) só no
         # arranque, pra várias máquinas ligadas juntas (ex: todas no início
@@ -426,13 +436,15 @@ class RedeService(QObject):
             lambda: self._timer_reconciliacao.start(_INTERVALO_RECONCILIACAO_MS),
         )
 
+        for id_remoto in list(self._peers_conhecidos):
+            self._tentar_conectar_a_peer(id_remoto)
+
     def _motivo_para_nao_iniciar(self) -> str:
         """Texto pronto pra tela, ou "" se está tudo certo pra subir.
 
-        Sobrou um motivo só. A falta de chave não é mais um deles: ela agora é
-        uma constante do código (ver seguranca.CHAVE_PADRAO), então toda
-        máquina tem a mesma e a malha sobe sozinha, como era antes de a chave
-        por instalação existir."""
+        A falta de chave não é um motivo: sem ela a máquina sobe em modo
+        pareamento (ver _ativar_malha), porque é justamente pela porta aberta
+        que a resposta ao pedido de entrada chega."""
         if not seguranca.DISPONIVEL:
             return "Falta a biblioteca 'cryptography' — rede local desativada"
         return ""
@@ -457,17 +469,42 @@ class RedeService(QObject):
     def _ao_iniciar_descoberta(self, ok: bool):
         from services.statusInicializacaoService import status
 
-        if ok:
-            status.concluida("rede", "Rede local no ar")
-        else:
+        if not ok:
             status.falhou("rede", "Rede local indisponível")
+        elif not self._chave_malha:
+            status.falhou("rede", "Esta máquina ainda não entrou numa rede — abra a tela Rede")
+        else:
+            status.concluida("rede", "Rede local no ar")
 
-    def _ao_descobrir_peer(self, id_remoto: str, enderecos: list, porta_tcp: int):
+    def _ao_descobrir_peer(self, id_remoto: str, enderecos: list, porta_tcp: int, nome: str = "", pareada: bool = True):
         """Uma instância apareceu na rede (ver services/rede/descoberta.py).
         A descoberta avisa de tudo que encontra, inclusive desta própria
         máquina e de peers repetidos — filtrar é aqui, que é quem sabe com
         quem já existe conexão aberta."""
         if id_remoto == self._id or not enderecos or not porta_tcp:
+            return
+
+        if not self._chave_malha:
+            # Modo pareamento: não se disca para ninguém, só se lista quem pode
+            # aprovar a entrada. Anúncio sem nome é de uma versão do sistema
+            # anterior ao pareamento, que não saberia responder ao pedido.
+            if pareada and nome:
+                novo = id_remoto not in self._candidatos_pareamento
+                self._candidatos_pareamento[id_remoto] = {
+                    "id": id_remoto,
+                    "nome": nome,
+                    "enderecos": list(enderecos),
+                    "porta": porta_tcp,
+                }
+                if novo:
+                    print(f"[RedeService] Máquina pareada encontrada: '{nome}' em {', '.join(enderecos)}:{porta_tcp}.")
+                    self.pareamentoMudou.emit()
+            return
+
+        if not pareada:
+            # Máquina esperando pareamento: ela não tem chave para o handshake,
+            # e discar para ela só encheria a lista de recusadas. Ela chega até
+            # aqui pelo pedido de entrada, não pela descoberta.
             return
 
         conhecido = self._peers_conhecidos.get(id_remoto)
@@ -550,7 +587,7 @@ class RedeService(QObject):
     def _ao_conectar_entrada(self):
         while self._tcp_server.hasPendingConnections():
             socket = self._tcp_server.nextPendingConnection()
-            self._preparar_socket(socket)
+            self._preparar_socket(socket, entrada=True)
 
     def _mensagem_identificar(self):
         return {
@@ -575,35 +612,24 @@ class RedeService(QObject):
             # como a malha é sempre full-mesh, cada peer já manda a dele
             # diretamente pra todo mundo, não precisa repassar de terceiros.
             "idEntrada": self._id_entrada,
-            # Pelo mesmo motivo de nomeMaquinaFixada logo acima: quem conecta
-            # DEPOIS de o servidor já ter subido não recebeu o aviso da hora
-            # (ver _ao_mudar_servidor_local, que só alcança quem estava
-            # conectado naquele instante) e ficaria esperando o próximo tique
-            # de verificação para descobrir o que a hospedeira já sabia.
-            "servidorNoAr": self._servidor_no_ar_local,
-            # QUEM hospeda, não só se está no ar — e pelo mesmo motivo de
-            # nomeMaquinaFixada. A designação só viajava no evento de gossip
-            # publicado no instante do clique em "Rodar aqui", que alcança
-            # exclusivamente quem estava conectado NAQUELE momento. A máquina
-            # que abre o app depois (o balcão que liga às 18h, a máquina nova,
-            # a que foi reinstalada) nunca aprendia por caminho nenhum: ficava
-            # com _nome_servidor vazio, e aí solicitar_servidor responde 0 sem
-            # nem sair da máquina — a tela de Rede dizia "Servidor central
-            # inacessível" para sempre, com o servidor de pé e anunciado ao
-            # lado. O idEvento vai junto porque é ele que arbitra duas
-            # designações em disputa (ver _aplicar_designacao).
-            "nomeMaquinaServidor": self._nome_servidor,
-            "idEventoServidor": self._id_evento_servidor,
-            # Pelo mesmo motivo da designação: o evento de gossip só alcança
-            # quem estava conectado quando a localização foi definida.
+            # Pelo mesmo motivo de nomeMaquinaFixada: o evento de gossip só
+            # alcança quem estava conectado quando a localização foi definida.
             "localizacaoServidor": self._localizacao_servidor,
         }
 
-    def _preparar_socket(self, socket: QTcpSocket, destino: str = "", id_remoto: str = ""):
+    def _preparar_socket(self, socket: QTcpSocket, destino: str = "", id_remoto: str = "", entrada: bool = False):
         self._buffers[socket] = bytearray()
         socket.readyRead.connect(lambda: self._ao_ler(socket))
         socket.disconnected.connect(lambda: self._ao_desconectar(socket))
         socket.errorOccurred.connect(lambda erro: self._ao_falhar_socket(socket, erro, destino, id_remoto))
+
+        if entrada:
+            # Quem abriu a conexão é quem diz o que quer: o 'ola' de uma máquina
+            # pareada ou um pedido de entrada na rede. O primeiro frame decide
+            # (ver _decidir_entrada), então nada sai daqui antes dele.
+            self._entradas_indefinidas.add(socket)
+            QTimer.singleShot(_TIMEOUT_HANDSHAKE_MS, lambda: self._cortar_handshake_pendente(socket, destino))
+            return
 
         try:
             self._sessoes[socket] = seguranca.SessaoSegura(self._chave_malha, self._id)
@@ -635,8 +661,12 @@ class RedeService(QObject):
 
     def _cortar_handshake_pendente(self, socket: QTcpSocket, destino: str):
         try:
+            if socket in self._contextos_pareamento:
+                # Pareamento tem prazo próprio: há uma pessoa conferindo código.
+                return
+            indefinida = socket in self._entradas_indefinidas
             sessao = self._sessoes.get(socket)
-            if sessao is None or sessao.pronta:
+            if not indefinida and (sessao is None or sessao.pronta):
                 return
             onde = destino or socket.peerAddress().toString()
             print(f"[RedeService] Handshake da malha não fechou em {_TIMEOUT_HANDSHAKE_MS // 1000}s com {onde} — pode ser uma máquina com a versão antiga do sistema.")
@@ -654,6 +684,9 @@ class RedeService(QObject):
                 self._recusados[onde] = motivo
             self._sessoes.pop(socket, None)
             self._buffers.pop(socket, None)
+            self._entradas_indefinidas.discard(socket)
+            if socket in self._contextos_pareamento:
+                self._perdeu_socket_pareamento(socket)
             socket.close()
             socket.deleteLater()
             self.peersMudaram.emit(len(self._peers))
@@ -682,6 +715,9 @@ class RedeService(QObject):
                 print(f"[RedeService] Não foi possível conectar em {destino}: {socket.errorString()} ({erro.name if hasattr(erro, 'name') else erro}).")
             self._buffers.pop(socket, None)
             self._sessoes.pop(socket, None)
+            self._entradas_indefinidas.discard(socket)
+            if socket in self._contextos_pareamento:
+                self._perdeu_socket_pareamento(socket)
             socket.close()
             socket.deleteLater()
         except RuntimeError:
@@ -697,6 +733,9 @@ class RedeService(QObject):
         try:
             self._buffers.pop(socket, None)
             self._sessoes.pop(socket, None)
+            self._entradas_indefinidas.discard(socket)
+            if socket in self._contextos_pareamento:
+                self._perdeu_socket_pareamento(socket)
             id_removido = None
             for id_peer, sock in list(self._peers.items()):
                 if sock is socket:
@@ -711,17 +750,6 @@ class RedeService(QObject):
                 # Se a máquina que caiu era a eleita pra imprimir, reeleger
                 # (ou ficar sem impressora) na hora, sem esperar nada.
                 self._recalcular_maquina_impressora()
-                # E se era a que hospeda o ppgs_server, dizer isso agora.
-                # O espelho disto na ENTRADA já existia (o handshake avisa
-                # "servidor no ar" a quem acaba de conectar), mas a saída não
-                # avisava nada: o balcão continuava marcando "Servidor central
-                # conectado" com a hospedeira desligada, até o próximo tique de
-                # verificação. Nessa janela a Entrega oferecia salvar endereço
-                # apontando para uma máquina que não existe mais — e é
-                # exatamente o instante em que um cadastro se perdia.
-                if nome and nome == self._nome_servidor:
-                    print(f"[RedeService] A máquina que hospeda o servidor ('{nome}') saiu da malha.")
-                    self.servidorNoArMudou.emit(nome, False)
         except RuntimeError:
             pass
 
@@ -759,10 +787,6 @@ class RedeService(QObject):
         buffer = self._buffers.setdefault(socket, bytearray())
         buffer.extend(bytes(socket.readAll()))
 
-        sessao = self._sessoes.get(socket)
-        if sessao is None:
-            return
-
         try:
             frames = seguranca.desenquadrar(buffer)
         except seguranca.ErroSeguranca as erro:
@@ -771,6 +795,20 @@ class RedeService(QObject):
             return
 
         for frame in frames:
+            # O que um frame significa depende de em que ponto o socket está:
+            # abertura ainda indefinida, pareamento, ou sessão da malha.
+            if socket in self._entradas_indefinidas:
+                if not self._decidir_entrada(socket, frame):
+                    return
+                continue
+            if socket in self._contextos_pareamento:
+                if not self._processar_frame_pareamento(socket, frame):
+                    return
+                continue
+
+            sessao = self._sessoes.get(socket)
+            if sessao is None:
+                return
             if not sessao.pronta:
                 if not self._avancar_handshake(socket, sessao, frame):
                     return
@@ -788,6 +826,205 @@ class RedeService(QObject):
                 # conexão inteira.
                 continue
             self._processar_mensagem(socket, mensagem)
+
+    def _decidir_entrada(self, socket: QTcpSocket, frame: bytes) -> bool:
+        """Primeiro frame de uma conexão de entrada. Devolve False quando o
+        socket foi encerrado e não se deve ler mais nada dele."""
+        self._entradas_indefinidas.discard(socket)
+        onde = socket.peerAddress().toString()
+        try:
+            mensagem = seguranca.ler_json(frame)
+        except seguranca.ErroSeguranca as erro:
+            self._recusar_socket(socket, f"abertura ilegível ({erro})", onde)
+            return False
+
+        tipo = mensagem.get("tipo")
+        if tipo == seguranca.TIPO_PEDIDO:
+            return self._receber_pedido_entrada(socket, mensagem)
+
+        if tipo != "ola":
+            self._recusar_socket(socket, f"abertura desconhecida ({tipo!r})", onde)
+            return False
+
+        if not self._chave_malha:
+            # Uma máquina pareada discou antes de esta ter chave (ela ainda
+            # anunciava a versão antiga do nosso anúncio, por exemplo).
+            self._recusar_socket(socket, "esta máquina ainda não entrou na rede", onde)
+            return False
+
+        try:
+            sessao = seguranca.SessaoSegura(self._chave_malha, self._id)
+        except seguranca.ErroSeguranca as erro:
+            print(f"[RedeService] Não foi possível abrir sessão segura: {erro}")
+            self._recusar_socket(socket, str(erro), onde)
+            return False
+        self._sessoes[socket] = sessao
+        # O 'ola' daqui sai antes da confirmação que a resposta ao dele gera:
+        # o outro lado precisa das duas aberturas para derivar as chaves.
+        socket.write(sessao.frame_inicial())
+        return self._avancar_handshake(socket, sessao, frame)
+
+    # ---------- Pareamento pela porta da malha ----------
+
+    def _receber_pedido_entrada(self, socket: QTcpSocket, mensagem: dict) -> bool:
+        """Lado que APROVA: uma máquina sem chave pediu para entrar."""
+        onde = socket.peerAddress().toString()
+        try:
+            sessao = seguranca.SessaoPareamento(seguranca.SessaoPareamento.APROVA, self._id, self._nome_local)
+        except seguranca.ErroSeguranca as erro:
+            self._recusar_socket(socket, str(erro), onde)
+            return False
+
+        if not self._chave_malha:
+            socket.write(sessao.frame_recusa(f"'{self._nome_local}' também ainda não está em nenhuma rede."))
+            socket.disconnectFromHost()
+            return False
+
+        em_andamento = sum(1 for contexto in self._contextos_pareamento.values()
+                           if contexto["papel"] == seguranca.SessaoPareamento.APROVA)
+        if em_andamento >= _MAXIMO_PEDIDOS_ENTRADA:
+            socket.write(sessao.frame_recusa("Há pedidos demais esperando nesta máquina — tente de novo em instantes."))
+            socket.disconnectFromHost()
+            return False
+
+        try:
+            resposta = sessao.receber_pedido(mensagem)
+        except seguranca.ErroSeguranca as erro:
+            print(f"[RedeService] Pedido de entrada inválido de {onde}: {erro}")
+            self._recusar_socket(socket, str(erro), onde)
+            return False
+
+        for contexto in self._contextos_pareamento.values():
+            if contexto["papel"] == seguranca.SessaoPareamento.APROVA and contexto["sessao"].id_remoto == sessao.id_remoto:
+                # A mesma máquina pedindo por outro dos endereços dela: basta um.
+                socket.disconnectFromHost()
+                return False
+
+        self._contextos_pareamento[socket] = {"papel": seguranca.SessaoPareamento.APROVA, "sessao": sessao}
+        socket.write(resposta)
+        QTimer.singleShot(_TIMEOUT_PAREAMENTO_MS, lambda s=socket: self._expirar_pedido_entrada(s))
+        return True
+
+    def _processar_frame_pareamento(self, socket: QTcpSocket, frame: bytes) -> bool:
+        """Um frame de um socket de pareamento, pelos dois lados. Devolve False
+        quando o socket foi encerrado."""
+        contexto = self._contextos_pareamento.get(socket)
+        sessao = contexto["sessao"]
+        onde = socket.peerAddress().toString()
+        try:
+            mensagem = seguranca.ler_json(frame)
+            tipo = mensagem.get("tipo")
+
+            if contexto["papel"] == seguranca.SessaoPareamento.APROVA:
+                if tipo != seguranca.TIPO_REVELACAO:
+                    raise seguranca.ErroSeguranca(f"mensagem inesperada no pareamento ({tipo!r})")
+                sessao.receber_revelacao(mensagem)
+                self._pedidos_entrada[sessao.id_remoto] = {
+                    "nome": sessao.nome_remoto,
+                    "codigo": sessao.codigo,
+                    "endereco": onde,
+                    "socket": socket,
+                    "sessao": sessao,
+                }
+                codigo = self._codigo_legivel(sessao.codigo)
+                print(f"[RedeService] '{sessao.nome_remoto}' ({onde}) pediu para entrar na rede — código {codigo}.")
+                self.pedidoEntradaRecebido.emit(sessao.id_remoto, sessao.nome_remoto, codigo)
+                self.pareamentoMudou.emit()
+                return True
+
+            saida = self._pareamento_saida
+            if not saida or socket not in saida["sockets"]:
+                raise seguranca.ErroSeguranca("resposta de um pedido que já não existe")
+
+            if tipo == seguranca.TIPO_RESPOSTA:
+                if saida["socket"] is not None:
+                    # O mesmo pedido chegou por outro endereço e já foi
+                    # respondido por lá: este socket sobra.
+                    self._contextos_pareamento.pop(socket, None)
+                    saida["sockets"].remove(socket)
+                    socket.close()
+                    return False
+                socket.write(sessao.receber_resposta(mensagem))
+                saida["socket"] = socket
+                saida["codigo"] = sessao.codigo
+                saida["estado"] = "aguardando"
+                for outro in list(saida["sockets"]):
+                    if outro is not socket:
+                        saida["sockets"].remove(outro)
+                        self._contextos_pareamento.pop(outro, None)
+                        self._buffers.pop(outro, None)
+                        outro.close()
+                        outro.deleteLater()
+                print(f"[RedeService] Pedido de entrada chegou a '{saida['nome']}' — código {self._codigo_legivel(sessao.codigo)}.")
+                self.pareamentoMudou.emit()
+                return True
+
+            if tipo == seguranca.TIPO_CHAVE:
+                chave = sessao.abrir_chave(mensagem)
+                try:
+                    seguranca.salvar_chave(chave)
+                except seguranca.ErroSeguranca as erro:
+                    self._encerrar_pareamento_saida(
+                        "falhou", f"A entrada foi aprovada, mas esta máquina não conseguiu guardar a chave: {erro}"
+                    )
+                    return False
+                nome = saida["nome"]
+                self._encerrar_pareamento_saida("concluido", f"Esta máquina entrou na rede (aprovada em '{nome}').")
+                historicoEventos.registrar_local("maquina_pareada", {"nome": self._nome_local})
+                self._entrar_na_rede(chave)
+                return False
+
+            if tipo == seguranca.TIPO_RECUSA:
+                motivo = str(mensagem.get("motivo") or "") or f"O pedido foi recusado em '{saida['nome']}'."
+                self._encerrar_pareamento_saida("recusado", motivo)
+                return False
+
+            raise seguranca.ErroSeguranca(f"mensagem inesperada no pareamento ({tipo!r})")
+        except seguranca.ErroSeguranca as erro:
+            print(f"[RedeService] Pareamento com {onde} interrompido: {erro}")
+            if contexto["papel"] == seguranca.SessaoPareamento.PEDE:
+                self._encerrar_pareamento_saida("falhou", str(erro))
+            else:
+                self._recusar_socket(socket, str(erro), onde)
+            return False
+
+    def _expirar_pedido_entrada(self, socket: QTcpSocket):
+        contexto = self._contextos_pareamento.get(socket)
+        if contexto is None:
+            return
+        try:
+            socket.write(contexto["sessao"].frame_recusa("O pedido expirou sem ninguém aprovar."))
+            socket.disconnectFromHost()
+        except RuntimeError:
+            pass
+        self._perdeu_socket_pareamento(socket)
+
+    def _perdeu_socket_pareamento(self, socket: QTcpSocket):
+        """Um socket de pareamento fechou (ou foi fechado). Do lado que aprova,
+        o pedido some da tela; do lado que pede, o pedido falha se não sobrou
+        outro caminho até a máquina escolhida."""
+        contexto = self._contextos_pareamento.pop(socket, None)
+        if contexto is None:
+            return
+
+        if contexto["papel"] == seguranca.SessaoPareamento.APROVA:
+            for id_remoto, pedido in list(self._pedidos_entrada.items()):
+                if pedido["socket"] is socket:
+                    del self._pedidos_entrada[id_remoto]
+                    print(f"[RedeService] O pedido de entrada de '{pedido['nome']}' foi encerrado.")
+                    self.pareamentoMudou.emit()
+            return
+
+        saida = self._pareamento_saida
+        if not saida or socket not in saida["sockets"]:
+            return
+        saida["sockets"].remove(socket)
+        if saida["estado"] not in ("conectando", "aguardando"):
+            return
+        if saida["socket"] is socket:
+            self._encerrar_pareamento_saida("falhou", f"'{saida['nome']}' fechou a conexão antes de aprovar.")
+        elif not saida["sockets"]:
+            self._encerrar_pareamento_saida("falhou", f"Não foi possível falar com '{saida['nome']}'.")
 
     def _avancar_handshake(self, socket: QTcpSocket, sessao, frame: bytes) -> bool:
         """Devolve False quando o socket foi recusado e não se deve continuar
@@ -833,7 +1070,6 @@ class RedeService(QObject):
                 "temImpressora": bool(mensagem.get("temImpressora")),
                 "infoImpressora": mensagem.get("infoImpressora"),
                 "idEntrada": mensagem.get("idEntrada"),
-                "servidorNoAr": bool(mensagem.get("servidorNoAr")),
             }
             print(f"[RedeService] Conectado a '{self._info_peers[id_remoto]['nome']}' ({self._info_peers[id_remoto]['endereco']}) — {len(self._peers)} peer(s) na malha.")
             # Entrada/saída de máquina não passa pelo barramento de eventos
@@ -860,22 +1096,7 @@ class RedeService(QObject):
                 # desse sinal pra atualizar nomeMaquinaFixada/candidatosImpressora
                 # (ver fixarImpressoraPrincipal, mesmo motivo documentado lá).
                 self.impressoraPrincipalMudou.emit()
-            # Quem hospeda o servidor, aprendido do peer. ANTES do aviso de
-            # "servidor no ar" logo abaixo, e não depois: aquele aviso faz o
-            # PizzeriaServerService conferir a conexão na hora, e uma conferência
-            # feita sem saber para qual máquina mandar a requisição falha na
-            # porta de casa — o balcão passaria mais 30s dizendo "inacessível"
-            # com tudo já no lugar.
-            self._aplicar_designacao(
-                mensagem.get("nomeMaquinaServidor") or "",
-                mensagem.get("idEventoServidor") or "",
-            )
             self._aplicar_localizacao(mensagem.get("localizacaoServidor") or {})
-            # O peer pode estar com o servidor no ar há horas: para quem
-            # acabou de entrar na malha, o handshake é o "aviso de que o
-            # servidor subiu" — e é aqui que ele passa a valer.
-            if self._info_peers[id_remoto]["servidorNoAr"]:
-                self.servidorNoArMudou.emit(self._info_peers[id_remoto]["nome"], True)
             # Assim que os dois se identificam, trocam a lista de arquivos
             # locais pra resolver o catch-up de quem ficou offline.
             self._enviar(socket, {"tipo": "meus_arquivos", "arquivos": self._listar_arquivos_locais()})
@@ -931,65 +1152,6 @@ class RedeService(QObject):
                 self._info_peers[id_remoto]["temImpressora"] = bool(mensagem.get("temImpressora"))
                 self._info_peers[id_remoto]["infoImpressora"] = mensagem.get("infoImpressora")
                 self._recalcular_maquina_impressora()
-
-        elif tipo == "servidor_requisicao":
-            # Esta máquina hospeda o ppgs_server e um peer quer falar com ele.
-            # O peer já provou ter a chave da malha (senão esta mensagem nem
-            # teria sido aberta), que é justamente a condição de acesso.
-            id_req = mensagem.get("id_req", "")
-            if not id_req:
-                return
-            id_remetente = self._id_do_socket(socket)
-            if id_remetente is None:
-                return
-            try:
-                corpo = base64.b64decode(mensagem.get("corpo_b64") or "")
-            except ValueError:
-                return
-            self._encaminhar_local(
-                id_req,
-                mensagem.get("metodo", "GET"),
-                mensagem.get("caminho", "/"),
-                corpo,
-                # A resposta pode chegar de outra thread (o cliente HTTP do
-                # encaminhador é assíncrono), e escrever num QTcpSocket só é
-                # seguro na thread que o criou — daí o sinal, entregue pelo
-                # Qt na thread principal. Mesmo motivo de
-                # _imprimirRemotoConcluido logo abaixo.
-                lambda status, dados, _id=id_req, _rem=id_remetente: self._servidorRespostaLocal.emit(
-                    _rem, _id, status, QByteArray(dados)
-                ),
-            )
-
-        elif tipo == "servidor_resposta":
-            id_req = mensagem.get("id_req", "")
-            job = self._jobs_servidor.pop(id_req, None)
-            if job is None or job["concluido"]:
-                return
-            job["concluido"] = True
-            job["timer"].stop()
-            job["timer"].deleteLater()
-            try:
-                corpo = base64.b64decode(mensagem.get("corpo_b64") or "")
-            except ValueError:
-                corpo = b""
-            self.respostaServidor.emit(id_req, int(mensagem.get("status") or 0), QByteArray(corpo))
-
-        elif tipo == "servidor_status":
-            # A máquina hospedeira avisando que o ppgs_server dela acabou de
-            # subir (ou de sair do ar). Não passa pelo barramento de eventos
-            # de propósito: isto não é um dado a guardar e reconciliar, é
-            # estado de um processo que só vale enquanto aquela máquina está
-            # conectada — exatamente o caso do "status_impressora" acima.
-            id_remoto = self._id_do_socket(socket)
-            if id_remoto is None or id_remoto not in self._info_peers:
-                return
-            no_ar = bool(mensagem.get("noAr"))
-            self._info_peers[id_remoto]["servidorNoAr"] = no_ar
-            nome_peer = self._info_peers[id_remoto].get("nome") or ""
-            print(f"[RedeService] '{nome_peer}' avisou que o servidor central "
-                  f"{'subiu' if no_ar else 'saiu do ar'} lá.")
-            self.servidorNoArMudou.emit(nome_peer, no_ar)
 
         elif tipo == "imprimir":
             job_id = mensagem.get("job_id", "")
@@ -1775,26 +1937,6 @@ class RedeService(QObject):
         "esta comanda foi criada antes ou depois de ter sido apagada?"."""
         self._eventos.publicar("pedido_apagado", {"arquivo": nome_arquivo, "idEvento": id_evento})
 
-    # ---------- ppgs_server encaminhado pela malha ----------
-    #
-    # O servidor deixou de escutar na LAN: ele só aceita conexões em
-    # 127.0.0.1, na máquina que o hospeda. As outras chegam nele por aqui,
-    # dentro da sessão já autenticada e cifrada da malha. Isso troca uma
-    # regra que se pode contornar ("confie em quem está nesta faixa de IP")
-    # por uma que não se contorna: sem a chave da malha não há sessão, e sem
-    # sessão não há como sequer falar com a porta — ela não existe fora da
-    # máquina hospedeira.
-
-    @pyqtProperty(str, notify=servidorDesignadoMudou)
-    def maquinaServidor(self) -> str:
-        """Nome da máquina que hospeda o ppgs_server, ou "" se nenhuma foi
-        escolhida ainda."""
-        return self._nome_servidor
-
-    @pyqtProperty(bool, notify=servidorDesignadoMudou)
-    def servidorAqui(self) -> bool:
-        return bool(self._nome_servidor) and self._nome_servidor == self._nome_local
-
     # ---------- Localização da pizzaria ----------
 
     @pyqtProperty("QVariantMap", notify=localizacaoServidorMudou)
@@ -1806,9 +1948,8 @@ class RedeService(QObject):
 
     def definir_localizacao_servidor(self, dados: dict) -> bool:
         """Adota `dados` como a localização da pizzaria e anuncia à malha.
-        Quem decide SE esta máquina pode definir é o chamador (ver
-        SugestoesEnderecoService._pode_definir_localizacao); aqui só se carimba
-        o idEvento que arbitra a escolha. False se as coordenadas não servirem."""
+        Qualquer máquina pode definir; aqui só se carimba o idEvento que
+        arbitra duas escolhas em disputa. False se as coordenadas não servirem."""
         registro = localizacaoServidor.normalizar_registro(dict(dados or {}, idEvento=relogio.novo_id()))
         if not registro:
             return False
@@ -1820,9 +1961,8 @@ class RedeService(QObject):
         self._aplicar_localizacao(payload or {})
 
     def _aplicar_localizacao(self, dados: dict):
-        """Última decisão vence, pelo relógio lógico — mesma regra (e mesmo
-        motivo) de _aplicar_designacao: uma localização antiga chegando
-        atrasada pelo handshake não pode desfazer uma recente."""
+        """Última decisão vence, pelo relógio lógico: uma localização antiga
+        chegando atrasada pelo handshake não pode desfazer uma recente."""
         registro = localizacaoServidor.normalizar_registro(dados)
         if not registro:
             return
@@ -1835,194 +1975,218 @@ class RedeService(QObject):
               f"({registro['lat']}, {registro['lon']}, origem {registro['origem']}).")
         self.localizacaoServidorMudou.emit()
 
-    @pyqtSlot(result="QVariantList")
-    @protegido([])
-    def maquinasDisponiveis(self) -> list:
-        """Máquinas que podem hospedar o servidor: esta e os peers conectados.
-        Alimenta a lista de escolha em Rede.qml."""
-        maquinas = [{
-            "nome": self._nome_local,
-            "local": True,
-            "hospeda": self.servidorAqui,
-        }]
-        vistos = {self._nome_local}
-        for info in self._info_peers.values():
-            nome = info.get("nome") or ""
-            if not nome or nome in vistos:
-                continue
-            vistos.add(nome)
-            maquinas.append({"nome": nome, "local": False, "hospeda": nome == self._nome_servidor})
-        return maquinas
+    # ---------- Pareamento: API da tela Rede ----------
+    #
+    # Uma máquina sem chave pede para entrar (pedirEntrada); numa máquina já
+    # pareada o pedido aparece com um código de 6 dígitos, que a pessoa confere
+    # na tela da máquina nova antes de aceitar (aceitarPedido). O protocolo em
+    # si está em seguranca.SessaoPareamento; aqui só sockets e estado de tela.
+
+    @staticmethod
+    def _codigo_legivel(codigo: str) -> str:
+        return f"{codigo[:3]} {codigo[3:]}" if len(codigo) == 6 else codigo
+
+    @pyqtProperty(bool, notify=pareamentoMudou)
+    def pareada(self) -> bool:
+        return bool(self._chave_malha)
+
+    @pyqtProperty("QVariantList", notify=pareamentoMudou)
+    def maquinasParaParear(self) -> list:
+        """Máquinas pareadas que esta enxerga enquanto não tem chave."""
+        maquinas = [
+            {"id": candidato["id"], "nome": candidato["nome"], "endereco": (candidato["enderecos"] or [""])[0]}
+            for candidato in self._candidatos_pareamento.values()
+        ]
+        return sorted(maquinas, key=lambda maquina: maquina["nome"].lower())
+
+    @pyqtProperty("QVariantMap", notify=pareamentoMudou)
+    def pareamentoSaida(self) -> dict:
+        """O pedido de entrada feito por esta máquina: {} ou {"id", "nome",
+        "estado", "codigo", "mensagem"}, com estado "conectando",
+        "aguardando", "concluido", "recusado", "expirado", "falhou" ou
+        "cancelado"."""
+        saida = self._pareamento_saida
+        if not saida:
+            return {}
+        return {
+            "id": saida["id"],
+            "nome": saida["nome"],
+            "estado": saida["estado"],
+            "codigo": self._codigo_legivel(saida["codigo"]),
+            "mensagem": saida["mensagem"],
+        }
+
+    @pyqtProperty("QVariantList", notify=pareamentoMudou)
+    def pedidosEntrada(self) -> list:
+        """Pedidos de outras máquinas esperando aprovação aqui."""
+        return [
+            {"id": id_remoto, "nome": pedido["nome"], "codigo": self._codigo_legivel(pedido["codigo"]), "endereco": pedido["endereco"]}
+            for id_remoto, pedido in self._pedidos_entrada.items()
+        ]
+
+    @pyqtProperty(str, notify=pareamentoMudou)
+    def protecaoLocal(self) -> str:
+        """Quem guarda a chave local desta máquina (ver cofreLocal.protecao):
+        a tela avisa quando é só um arquivo."""
+        if self._protecao_local is None:
+            self._protecao_local = cofreLocal.protecao()
+        return self._protecao_local
+
+    def chave_indice_clientes(self) -> bytes:
+        """Chave do índice do cadastro de clientes, ou b"" sem rede (ver
+        services/rede/clientes.py). A chave da malha em si nunca sai daqui."""
+        return seguranca.chave_indice_clientes(self._chave_malha) if self._chave_malha else b""
+
+    @pyqtSlot(result=str)
+    @protegido("Falha inesperada ao criar a rede — ver logs/app.log.")
+    def criarRede(self) -> str:
+        """Primeira máquina: gera a chave e passa a ser a rede. Devolve "" ou o
+        motivo de não ter criado."""
+        if self._chave_malha:
+            return "Esta máquina já está numa rede."
+        motivo = self._motivo_para_nao_iniciar()
+        if motivo:
+            return motivo
+        try:
+            chave = seguranca.gerar_chave()
+        except seguranca.ErroSeguranca as erro:
+            return str(erro)
+        self._cancelar_pareamento_saida()
+        historicoEventos.registrar_local("rede_criada", {"nome": self._nome_local})
+        self._entrar_na_rede(chave)
+        return ""
+
+    def _entrar_na_rede(self, chave: bytes):
+        from services.statusInicializacaoService import status
+
+        self._chave_malha = chave
+        self._descoberta.definir_pareada(True)
+        self._ativar_malha()
+        status.concluida("rede", "Rede local no ar")
+        self.pareamentoMudou.emit()
+
+    @pyqtSlot(str, result=bool)
+    @protegido(False)
+    def pedirEntrada(self, id_remoto: str) -> bool:
+        """Lado que PEDE: abre o pareamento com a máquina escolhida, por todos
+        os endereços que ela anunciou (fica o primeiro que responder)."""
+        if self._chave_malha or not self._iniciado:
+            return False
+        candidato = self._candidatos_pareamento.get(id_remoto)
+        if candidato is None:
+            return False
+
+        self._cancelar_pareamento_saida()
+        try:
+            sessao = seguranca.SessaoPareamento(seguranca.SessaoPareamento.PEDE, self._id, self._nome_local)
+        except seguranca.ErroSeguranca as erro:
+            print(f"[RedeService] Não foi possível abrir o pareamento: {erro}")
+            return False
+
+        saida = {
+            "id": id_remoto,
+            "nome": candidato["nome"],
+            "sessao": sessao,
+            "sockets": [],
+            "socket": None,
+            "estado": "conectando",
+            "codigo": "",
+            "mensagem": "",
+        }
+        self._pareamento_saida = saida
+        frame = sessao.frame_pedido()
+
+        for endereco in candidato["enderecos"]:
+            socket = QTcpSocket(self)
+            self._buffers[socket] = bytearray()
+            self._contextos_pareamento[socket] = {"papel": seguranca.SessaoPareamento.PEDE, "sessao": sessao}
+            socket.readyRead.connect(lambda s=socket: self._ao_ler(s))
+            socket.disconnected.connect(lambda s=socket: self._ao_desconectar(s))
+            socket.errorOccurred.connect(lambda erro, s=socket: self._ao_falhar_socket(s, erro, "", ""))
+            socket.connected.connect(lambda s=socket: s.write(frame))
+            saida["sockets"].append(socket)
+            socket.connectToHost(QHostAddress(endereco), candidato["porta"])
+
+        QTimer.singleShot(_TIMEOUT_PAREAMENTO_MS, lambda s=saida: self._expirar_pareamento_saida(s))
+        print(f"[RedeService] Pedindo para entrar na rede de '{candidato['nome']}'.")
+        self.pareamentoMudou.emit()
+        return True
+
+    @pyqtSlot()
+    @protegido(None)
+    def cancelarPedidoEntrada(self):
+        self._cancelar_pareamento_saida()
+        self.pareamentoMudou.emit()
+
+    def _cancelar_pareamento_saida(self):
+        saida = self._pareamento_saida
+        if saida and saida["estado"] in ("conectando", "aguardando"):
+            self._encerrar_pareamento_saida("cancelado", "")
+        self._pareamento_saida = None
+
+    def _expirar_pareamento_saida(self, saida: dict):
+        if saida is self._pareamento_saida and saida["estado"] in ("conectando", "aguardando"):
+            self._encerrar_pareamento_saida("expirado", "Ninguém aprovou a entrada a tempo — peça de novo.")
+
+    def _encerrar_pareamento_saida(self, estado: str, mensagem: str):
+        saida = self._pareamento_saida
+        if not saida:
+            return
+        saida["estado"] = estado
+        saida["mensagem"] = mensagem
+        sockets, saida["sockets"], saida["socket"] = list(saida["sockets"]), [], None
+        for socket in sockets:
+            self._contextos_pareamento.pop(socket, None)
+            self._buffers.pop(socket, None)
+            try:
+                socket.close()
+                socket.deleteLater()
+            except RuntimeError:
+                pass
+        if mensagem:
+            print(f"[RedeService] Pedido de entrada {estado}: {mensagem}")
+        self.pareamentoMudou.emit()
+
+    @pyqtSlot(str, result=bool)
+    @protegido(False)
+    def aceitarPedido(self, id_remoto: str) -> bool:
+        """Lado que APROVA: entrega a chave da rede à máquina que pediu. Quem
+        chama já conferiu o código e passou pela autorização (ver
+        qml/components/PopupPedidoEntrada.qml)."""
+        pedido = self._pedidos_entrada.pop(id_remoto, None)
+        if pedido is None or not self._chave_malha:
+            self.pareamentoMudou.emit()
+            return False
+        socket = pedido["socket"]
+        self._contextos_pareamento.pop(socket, None)
+        try:
+            socket.write(pedido["sessao"].frame_chave(self._chave_malha))
+            socket.flush()
+            socket.disconnectFromHost()
+        except (seguranca.ErroSeguranca, RuntimeError) as erro:
+            print(f"[RedeService] Não foi possível entregar a chave a '{pedido['nome']}': {erro}")
+            self.pareamentoMudou.emit()
+            return False
+        print(f"[RedeService] '{pedido['nome']}' aprovada: a chave da rede foi entregue.")
+        historicoEventos.registrar_local("maquina_pareada", {"nome": pedido["nome"]})
+        self.pareamentoMudou.emit()
+        return True
 
     @pyqtSlot(str)
     @protegido(None)
-    def designarServidor(self, nome_maquina: str):
-        """Escolhe (nesta máquina e em toda a malha) quem hospeda o servidor.
-        Chamado pelo botão "Rodar aqui" de Rede.qml."""
-        if not nome_maquina:
+    def recusarPedido(self, id_remoto: str):
+        pedido = self._pedidos_entrada.pop(id_remoto, None)
+        if pedido is None:
             return
-        id_evento = relogio.novo_id()
-        self._aplicar_designacao(nome_maquina, id_evento)
-        self._eventos.publicar(_EVENTO_SERVIDOR_DESIGNADO, {"nome": nome_maquina, "idEvento": id_evento})
-        historicoEventos.registrar_local("servidor_designado", {"nome": nome_maquina})
-
-    def _ao_receber_evento_servidor_designado(self, payload: dict, _socket=None):
-        self._aplicar_designacao(payload.get("nome") or "", payload.get("idEvento") or "")
-
-    def _aplicar_designacao(self, nome: str, id_evento: str):
-        """Última decisão vence, pelo relógio lógico. Comparar (e não apenas
-        aceitar) importa: sem isso, uma designação antiga que chega atrasada
-        pela reconciliação desfaria uma troca recente, e o servidor ficaria
-        pingando entre duas máquinas — exatamente o ping-pong que o cache de
-        fechamento já sofreu uma vez (ver architecture/EXPLAIN.md)."""
-        if not nome:
-            return
-        # `mais_novo` devolve BOOL, não o id vencedor. Comparar o retorno com
-        # `self._id_evento_servidor` (uma string) dava sempre False, então esta
-        # guarda nunca guardou nada: qualquer designação que chegasse era
-        # aplicada, inclusive uma antiga chegando atrasada — exatamente o
-        # ping-pong que o parágrafo acima diz evitar. Passou a importar de
-        # verdade agora que a designação viaja em todo handshake: sem isto, uma
-        # máquina com a escolha velha empurraria a escolha velha para a malha
-        # inteira a cada reconexão.
-        #
-        # Adota só o que for ESTRITAMENTE mais novo. idEvento vazio (registro
-        # antigo, ou peer de uma versão sem este campo) conta como mais velho
-        # que qualquer id real — ver relogio.mais_novo —, então não derruba uma
-        # escolha datada.
-        if self._id_evento_servidor and not relogio.mais_novo(id_evento, self._id_evento_servidor):
-            return
-        if nome == self._nome_servidor and id_evento == self._id_evento_servidor:
-            return
-        self._nome_servidor = nome
-        self._id_evento_servidor = id_evento
-        servidorDesignado.salvar(nome, id_evento)
-        print(f"[RedeService] ppgs_server designado para a máquina '{nome}'.")
-        self.servidorDesignadoMudou.emit()
-
-    def registrar_encaminhador_local(self, funcao):
-        """Ligado pelo ServidorLocalService desta máquina. `funcao(metodo,
-        caminho, corpo, responder)` fala com o ppgs_server em 127.0.0.1 e
-        chama `responder(status, corpo)` quando a resposta chegar.
-
-        A inversão existe pra manter a fronteira que este módulo já respeita
-        em todo o resto: RedeService cuida de sockets e protocolo, e não sabe
-        o que é um token HTTP nem se o processo do servidor está de pé."""
-        self._encaminhar_para_servidor_local = funcao
-
-    def anunciar_servidor_no_ar(self, no_ar: bool):
-        """Avisa a malha inteira que o ppgs_server DESTA máquina subiu (ou
-        caiu). Chamado pelo ServidorLocalService a cada mudança de estado,
-        inclusive de dentro da thread de preparo — daí o sinal interno: o
-        anúncio em si só acontece na thread dona dos sockets."""
-        self._servidorLocalNoAr.emit(bool(no_ar))
-
-    def _ao_mudar_servidor_local(self, no_ar: bool):
-        """Manda o aviso a todo peer conectado agora. Quem conectar depois
-        recebe a mesma informação no handshake (ver _mensagem_identificar), e
-        quem estiver fora do ar neste instante não perde nada: ao voltar, o
-        handshake conta a situação já atualizada.
-
-        Só age na mudança de fato: o estado do servidor é recalculado a cada
-        passo do preparo, e repetir "continua no ar" a cada um deles viraria
-        tráfego (e uma linha de histórico) sem informação nenhuma."""
-        if no_ar == self._servidor_no_ar_local:
-            return
-        self._servidor_no_ar_local = no_ar
-
-        for socket in self._peers.values():
-            self._enviar(socket, {"tipo": "servidor_status", "noAr": no_ar})
-        print(f"[RedeService] Avisando {len(self._peers)} peer(s): o servidor central "
-              f"{'subiu' if no_ar else 'parou'} nesta máquina.")
-
-        # Registrado só aqui, na hospedeira, e não em cada máquina que recebe
-        # o aviso: subir e cair é um fato ÚNICO, do servidor — diferente de
-        # "maquina_conectada", que é o ponto de vista de cada uma. A
-        # reconciliação do domínio "historico" leva esta linha às demais.
-        historicoEventos.registrar_local(
-            "servidor_no_ar" if no_ar else "servidor_fora_do_ar",
-            {"nome": self._nome_local},
-        )
-
-        # A hospedeira também é cliente do próprio servidor (ver o atalho em
-        # solicitar_servidor), então o aviso vale para ela na mesma hora.
-        self.servidorNoArMudou.emit(self._nome_local, no_ar)
-
-    def solicitar_servidor(self, metodo: str, caminho: str, corpo: bytes = b"") -> str:
-        """Manda uma requisição ao ppgs_server, onde quer que ele esteja, e
-        devolve o id pra casar com a resposta que virá pelo sinal
-        respostaServidor. Nunca bloqueia."""
-        id_req = uuid.uuid4().hex
-
-        if not self._nome_servidor:
-            QTimer.singleShot(0, lambda: self.respostaServidor.emit(id_req, 0, QByteArray(b"")))
-            return id_req
-
-        if self.servidorAqui:
-            # Atalho: sem volta pela malha quando o servidor é local.
-            self._encaminhar_local(id_req, metodo, caminho, corpo,
-                                   lambda status, dados: self.respostaServidor.emit(id_req, status, QByteArray(dados)))
-            return id_req
-
-        socket_destino = self._socket_da_maquina(self._nome_servidor)
-        if socket_destino is None:
-            QTimer.singleShot(0, lambda: self.respostaServidor.emit(id_req, 0, QByteArray(b"")))
-            return id_req
-
-        self._enviar(socket_destino, {
-            "tipo": "servidor_requisicao",
-            "id_req": id_req,
-            "metodo": metodo,
-            "caminho": caminho,
-            "corpo_b64": base64.b64encode(corpo or b"").decode("ascii"),
-        })
-
-        timer = QTimer(self)
-        timer.setSingleShot(True)
-        timer.timeout.connect(lambda: self._finalizar_job_servidor(id_req))
-        self._jobs_servidor[id_req] = {"timer": timer, "concluido": False}
-        timer.start(_TIMEOUT_SERVIDOR_MS)
-        return id_req
-
-    def _socket_da_maquina(self, nome: str):
-        for id_peer, info in self._info_peers.items():
-            if info.get("nome") == nome:
-                return self._peers.get(id_peer)
-        return None
-
-    def _encaminhar_local(self, id_req: str, metodo: str, caminho: str, corpo: bytes, responder):
-        """Entrega ao ppgs_server desta máquina. `responder(status, bytes)`."""
-        encaminhar = self._encaminhar_para_servidor_local
-        if encaminhar is None:
-            # Esta máquina é a designada, mas o processo do servidor ainda
-            # não subiu (preparo em andamento, ou falhou). 503 e não 0: a
-            # diferença importa pro cliente, que trata 0 como "não achei a
-            # máquina" e 503 como "achei, mas ela não está pronta".
-            responder(503, b"")
-            return
-        encaminhar(metodo, caminho, corpo, responder)
-
-    def _responder_servidor_ao_peer(self, id_remetente: str, id_req: str, status: int, corpo: QByteArray):
-        """Devolve ao peer o que o ppgs_server local respondeu. Procura o
-        socket pelo id do peer (e não guarda o socket) porque a conexão pode
-        ter caído enquanto a requisição rodava — mesmo cuidado de
-        _imprimirRemotoConcluido."""
-        socket = self._peers.get(id_remetente)
-        if socket is None:
-            return
-        self._enviar(socket, {
-            "tipo": "servidor_resposta",
-            "id_req": id_req,
-            "status": int(status),
-            "corpo_b64": base64.b64encode(bytes(corpo)).decode("ascii"),
-        })
-
-    def _finalizar_job_servidor(self, id_req: str):
-        job = self._jobs_servidor.pop(id_req, None)
-        if job is None or job["concluido"]:
-            return
-        job["timer"].deleteLater()
-        self.respostaServidor.emit(id_req, 0, QByteArray(b""))
+        socket = pedido["socket"]
+        self._contextos_pareamento.pop(socket, None)
+        try:
+            socket.write(pedido["sessao"].frame_recusa(f"'{self._nome_local}' recusou a entrada."))
+            socket.disconnectFromHost()
+        except RuntimeError:
+            pass
+        print(f"[RedeService] Pedido de entrada de '{pedido['nome']}' recusado.")
+        self.pareamentoMudou.emit()
 
     def solicitar_impressao(self, conteudo_bytes: bytes):
         """Pede a impressão da comanda na máquina eleita da malha (ver

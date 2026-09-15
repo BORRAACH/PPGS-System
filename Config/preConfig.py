@@ -55,11 +55,14 @@ _DEPENDENCIAS_PIP = [
     # que numa máquina desatualizada recusa o Photon e o Overpass. Melhor
     # esforço: sem ela as requisições usam a lista padrão do Python.
     ("certifi", ("certifi",), None),
-    # Criptografia da malha (ver services/rede/seguranca.py) e as chaves
-    # derivadas que o ppgs_server usa. Diferente do resto desta lista, esta
-    # NÃO é melhor esforço: sem ela a malha simplesmente não sobe
-    # (RedeService._motivo_para_nao_iniciar). Entrar na malha voltou a ser
-    # aberto, mas o tráfego dela segue cifrado, e cair para um modo em claro
+    # QR code do endereço no fim da comanda de Entrega (ver
+    # comandaImagemService.qr_endereco_em_raster). Puro Python, sem outras
+    # dependências. Melhor esforço: sem ela a comanda sai igual, só sem o QR.
+    ("segno", ("segno",), None),
+    # Criptografia da malha e do cadastro de clientes em disco (ver
+    # services/rede/seguranca.py e services/cofreLocal.py). Diferente do resto
+    # desta lista, esta NÃO é melhor esforço: sem ela a malha simplesmente não
+    # sobe (RedeService._motivo_para_nao_iniciar). Cair para um modo em claro
     # poria as comandas e os endereços dos clientes no ar pra quem estivesse
     # ouvindo o wi-fi — sem nada na tela denunciando isso.
     ("cryptography", ("cryptography",), None),
