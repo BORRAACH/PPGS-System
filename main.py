@@ -52,11 +52,13 @@ try:
     from controllers.usuariosController import UsuariosController
     from controllers.rascunhosController import RascunhosController
     from controllers.clientesController import ClientesController
+    from controllers.rotasController import RotasController
     from controllers.validacaoEnderecoController import ValidacaoEnderecoController
     from services.rede import rede
     from services import limpezaServidorAntigo
     from services.sugestoesEndereco import sugestoes_endereco
     from services.iconProvider import IconProvider
+    from services import redeQml
     from services.comandaEstiloService import ComandaEstiloController
     from services import comandaImagemService
     from services.cardapioService import CardapioController
@@ -194,6 +196,11 @@ if __name__ == "__main__":
 
     engine = QQmlApplicationEngine()
 
+    # User-Agent nos pedidos de rede do QML: sem ele o OpenStreetMap bloqueia
+    # os blocos do mapa (ver services/redeQml.py). Precisa vir antes de
+    # qualquer QML carregar.
+    redeQml.instalar(engine)
+
     # Diretório onde o script está sendo executado
     base_dir = os.path.dirname(os.path.abspath(__file__))
     qml_dir = os.path.join(base_dir, "qml")
@@ -255,6 +262,10 @@ if __name__ == "__main__":
     # Sugestões de rua/bairro da Entrega, direto do Photon e do índice de ruas
     # replicado pela malha (ver services/sugestoesEndereco.py).
     engine.rootContext().setContextProperty("sugestoesEnderecoController", sugestoes_endereco)
+    # Comparação de rotas de entrega da tela Mapa: grafo das ruas baixado do
+    # OSM e buscas A* numa thread (ver services/grafoRuas.py).
+    rotasController = RotasController()
+    engine.rootContext().setContextProperty("rotasController", rotasController)
     # Validação do endereço de entrega por CEP (Photon → Nominatim → ViaCEP) e
     # zona de entrega pelo grafo de ruas (ver services/validacaoEndereco.py).
     validacaoEnderecoController = ValidacaoEnderecoController()
@@ -296,6 +307,7 @@ if __name__ == "__main__":
     # garantirIndice quando termina.
     QTimer.singleShot(0, sugestoes_endereco.aquecerIndice)
     app.aboutToQuit.connect(sugestoes_endereco.encerrar)
+    app.aboutToQuit.connect(rotasController.encerrar)
     app.aboutToQuit.connect(validacaoEnderecoController.encerrar)
 
     # Em thread porque é I/O bloqueante puro (PowerShell/CUPS) e não toca

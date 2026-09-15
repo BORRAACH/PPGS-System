@@ -95,6 +95,13 @@ Rectangle {
                 }
 
                 ListElement {
+                    icone: "fa6s.map-location-dot"
+                    textoTooltip: "Mapa"
+                    pagina: "../pages/mapa/Maps.qml"
+                    nomeTela: "telaMapa"
+                }
+
+                ListElement {
                     icone: "fa6s.cash-register"
                     textoTooltip: "Fechamento"
                     pagina: "../pages/fechamento/Fechamento.qml"
@@ -117,6 +124,24 @@ Rectangle {
                 width: parent.width - Estilo.global.padding.xs * 2
 
                 Repeater {
+                    // replace(null, ...) troca a pilha INTEIRA
+                    // pela página nova — não push(), que só
+                    // empilha por cima sem nunca destruir nada.
+                    // Navegação aqui é sempre entre telas
+                    // irmãs (Início, Balcão, Entrega, Salão...),
+                    // nunca um "entrar mais fundo" que precise
+                    // voltar depois, então Início não é mais um
+                    // caso especial (pop(null)) — é só mais um
+                    // destino, como qualquer outro (ver
+                    // qml/pages/inicio/Inicio.qml). Com push(),
+                    // um dia inteiro clicando entre telas sem
+                    // nunca "voltar" acumulava uma instância
+                    // nova a cada clique, cada uma com seu
+                    // próprio ListModel/Timer/conexões, sem
+                    // nunca liberar memória — exatamente o tipo
+                    // de vazamento que trava máquinas fracas ao
+                    // longo do expediente.
+
                     model: modeloNavegacao
 
                     delegate: Button {
@@ -131,24 +156,6 @@ Rectangle {
                         // erro de navegação no meio do atendimento.
                         implicitHeight: Math.max(Responsivo.alvoToque, 24 + Estilo.global.padding.md * 2)
                         onClicked: {
-                            // replace(null, ...) troca a pilha INTEIRA
-                            // pela página nova — não push(), que só
-                            // empilha por cima sem nunca destruir nada.
-                            // Navegação aqui é sempre entre telas
-                            // irmãs (Início, Balcão, Entrega, Salão...),
-                            // nunca um "entrar mais fundo" que precise
-                            // voltar depois, então Início não é mais um
-                            // caso especial (pop(null)) — é só mais um
-                            // destino, como qualquer outro (ver
-                            // qml/pages/inicio/Inicio.qml). Com push(),
-                            // um dia inteiro clicando entre telas sem
-                            // nunca "voltar" acumulava uma instância
-                            // nova a cada clique, cada uma com seu
-                            // próprio ListModel/Timer/conexões, sem
-                            // nunca liberar memória — exatamente o tipo
-                            // de vazamento que trava máquinas fracas ao
-                            // longo do expediente.
-
                             if (sideBar.stackView && sideBar.stackView.currentItem && sideBar.stackView.currentItem.objectName !== nomeTela)
                                 sideBar.stackView.replace(null, pagina, {
                             }, StackView.Immediate);
@@ -242,6 +249,9 @@ Rectangle {
                 spacing: Estilo.global.spacing.md
 
                 Repeater {
+                    // Ver o mesmo comentário no Repeater de
+                    // modeloNavegacao acima.
+
                     model: modeloRodape
 
                     delegate: Button {
@@ -254,9 +264,6 @@ Rectangle {
                         // erro de navegação no meio do atendimento.
                         implicitHeight: Math.max(Responsivo.alvoToque, 24 + Estilo.global.padding.md * 2)
                         onClicked: {
-                            // Ver o mesmo comentário no Repeater de
-                            // modeloNavegacao acima.
-
                             if (sideBar.stackView && sideBar.stackView.currentItem && sideBar.stackView.currentItem.objectName !== nomeTela)
                                 sideBar.stackView.replace(null, pagina, {
                             }, StackView.Immediate);

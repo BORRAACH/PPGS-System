@@ -1271,6 +1271,63 @@ class FechamentoController(QObject):
 
         return abertas
 
+    @pyqtSlot(str, result="QVariantList")
+    @protegido([])
+    def listarEntregasAbertas(self, data_iso):
+        """As comandas de Entrega de `data_iso` ainda sem baixa, da mais recente
+        pra mais antiga (mesma ordem de listarComandasAbertas), com o endereço
+        separado em rua, número e bairro — para o painel de rotas do Mapa
+        (qml/pages/mapa/PainelRotas.qml) pôr uma delas como destino.
+
+        Entrega sem endereço fica de fora: não há destino para ela. Só o
+        cabeçalho de cada comanda é devolvido, sem o cupom: o painel relê a
+        lista a cada comanda que chega ou recebe baixa."""
+        baixas = baixaComandas.carregar()
+
+        arquivos = sorted(
+            self._listar_arquivos_do_dia(data_iso),
+            key=parser.carimbo_arquivo,
+            reverse=True,
+        )
+
+        entregas = []
+        for nome_arquivo in arquivos:
+            if nome_arquivo in baixas or parser.tipo_comanda(nome_arquivo) != "Entrega":
+                continue
+            caminho = os.path.join(self.pasta_pedidos, nome_arquivo)
+            try:
+                with open(caminho, "rb") as arquivo:
+                    conteudo = arquivo.read().decode(parser.CODEPAGE_IMPRESSORA, errors="replace")
+            except OSError as erro:
+                print(f"[FechamentoController] Falha ao ler {caminho}: {erro}")
+                continue
+            conteudo = parser.limpar_codigos_impressora(conteudo)
+
+            # "Endereço: Rua Goiás, 196" — o número vem colado na rua (ver
+            # EntregaController._salvarComanda).
+            rua, numero = parser.dividir_endereco_numero(parser.extrair_campo(parser.PADRAO_ENDERECO, conteudo))
+            if not rua:
+                continue
+            bairro = parser.extrair_campo(parser.PADRAO_BAIRRO, conteudo)
+            endereco_texto = f"{rua}, {numero}" if numero else rua
+            if bairro:
+                endereco_texto += f" — {bairro}"
+
+            entregas.append({
+                "arquivo": nome_arquivo,
+                "codigo": parser.codigo_comanda(nome_arquivo, conteudo),
+                "cliente": parser.extrair_campo(parser.PADRAO_CLIENTE, conteudo),
+                "dataHora": parser.extrair_campo(parser.PADRAO_DATA, conteudo),
+                "valor": parser.extrair_valor_total(conteudo),
+                "rua": rua,
+                "numero": numero,
+                "bairro": bairro,
+                "complemento": parser.extrair_campo(parser.PADRAO_COMPLEMENTO, conteudo),
+                "enderecoTexto": endereco_texto,
+            })
+
+        return entregas
+
     @pyqtSlot(str, result="QVariantMap")
     @protegido({})
     def obterComanda(self, nome_arquivo):
