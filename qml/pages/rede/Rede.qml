@@ -593,6 +593,9 @@ Page {
 
                 readonly property var localizacao: redeController.localizacaoServidor
                 readonly property bool definida: localizacao && localizacao.lat !== undefined
+                // Zona de entrega do validador de endereço da Entrega (ver
+                // services/validacaoEndereco.py). 25 min até alguém mudar.
+                readonly property int limiteEntrega: definida && localizacao.limiteEntregaMin ? localizacao.limiteEntregaMin : 25
                 property bool buscando: false
                 property string mensagem: ""
 
@@ -611,6 +614,32 @@ Page {
                 color: Estilo.global.surface
                 border.color: Estilo.global.borderCard
                 border.width: Estilo.global.borderWidth.hairline
+
+                // O limite mudou noutra máquina (ou a localização foi
+                // redefinida): o seletor acompanha, a não ser que o atendente
+                // esteja mexendo nele agora.
+                Connections {
+                    target: redeController
+
+                    function onLocalizacaoServidorMudou() {
+                        if (!spinLimiteEntrega.activeFocus && !publicarLimiteEntrega.running)
+                            spinLimiteEntrega.value = cartaoLocalizacao.limiteEntrega;
+                    }
+                }
+
+                // Um clique na seta por vez anunciaria à malha cada passo: só o
+                // valor em que o atendente parou vai.
+                Timer {
+                    id: publicarLimiteEntrega
+
+                    interval: 800
+                    onTriggered: {
+                        var ok = redeController.definirLimiteEntrega(spinLimiteEntrega.value);
+                        cartaoLocalizacao.mensagem = ok
+                            ? "Zona de entrega atualizada em todas as máquinas: até " + spinLimiteEntrega.value + " min de carro."
+                            : "Defina a localização da pizzaria antes da zona de entrega.";
+                    }
+                }
 
                 Connections {
                     target: sugestoesEnderecoController
@@ -695,6 +724,66 @@ Page {
                             tom: Estilo.screen.rede
                             enabled: !cartaoLocalizacao.buscando && inputLocalizacao.text.trim().length > 0
                             onClicked: cartaoLocalizacao.buscar()
+                        }
+                    }
+
+                    // Zona de entrega: até quantos minutos de carro, pelas
+                    // ruas, a pizzaria entrega. Passou disso, o validador de
+                    // endereço da Entrega avisa "fora da zona de entrega".
+                    RowLayout {
+                        Layout.fillWidth: true
+                        visible: cartaoLocalizacao.definida
+                        spacing: Estilo.global.spacing.sm
+
+                        Icone { nome: "fa6s.motorcycle"; cor: Estilo.screen.rede.accent; tamanho: Estilo.global.fontSize.lg }
+
+                        Text {
+                            text: "Entrega até"
+                            font.pixelSize: Estilo.global.fontSize.md
+                            color: Estilo.global.text
+                        }
+
+                        // Mesmo desenho do SpinnerCopias (components/), com
+                        // outra faixa: de 5 em 5 minutos, de 5 a 120 — os
+                        // limites que services/rede/localizacaoServidor.py
+                        // aceita.
+                        SpinBox {
+                            id: spinLimiteEntrega
+
+                            from: 5
+                            to: 120
+                            stepSize: 5
+                            editable: true
+                            Layout.preferredWidth: 110
+                            Layout.preferredHeight: 38
+                            Component.onCompleted: value = cartaoLocalizacao.limiteEntrega
+                            onValueModified: publicarLimiteEntrega.restart()
+
+                            contentItem: TextInput {
+                                text: spinLimiteEntrega.textFromValue(spinLimiteEntrega.value, spinLimiteEntrega.locale)
+                                font.pixelSize: Estilo.global.fontSize.lg
+                                color: Estilo.global.textInput
+                                horizontalAlignment: Qt.AlignHCenter
+                                verticalAlignment: Qt.AlignVCenter
+                                readOnly: !spinLimiteEntrega.editable
+                                validator: spinLimiteEntrega.validator
+                                selectByMouse: true
+                            }
+
+                            background: Rectangle {
+                                radius: Estilo.global.radius.sm
+                                color: Estilo.global.inputBackground
+                                border.color: spinLimiteEntrega.activeFocus ? Estilo.screen.rede.accent : Estilo.global.border
+                                border.width: spinLimiteEntrega.activeFocus ? 2 : 1
+                            }
+                        }
+
+                        Text {
+                            Layout.fillWidth: true
+                            text: "min de carro (acima disso o endereço sai como fora da zona de entrega)"
+                            font.pixelSize: Estilo.global.fontSize.xs
+                            color: Estilo.global.textSecondary
+                            wrapMode: Text.WordWrap
                         }
                     }
 

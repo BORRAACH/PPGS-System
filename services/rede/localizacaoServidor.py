@@ -32,6 +32,21 @@ MEIA_LARGURA_BBOX = 0.15
 
 _ORIGENS = ("manual", "ip")
 
+# Até quantos minutos de carro a pizzaria entrega: a zona de entrega que o
+# validador de endereço confere (ver services/validacaoEndereco.py). Definido na
+# tela Rede e viajando junto com a localização.
+LIMITE_ENTREGA_PADRAO_MIN = 25
+LIMITE_ENTREGA_MINIMO_MIN = 5
+LIMITE_ENTREGA_MAXIMO_MIN = 120
+
+
+def _limite_entrega(valor) -> int:
+    try:
+        minutos = int(float(valor))
+    except (TypeError, ValueError):
+        return LIMITE_ENTREGA_PADRAO_MIN
+    return max(LIMITE_ENTREGA_MINIMO_MIN, min(LIMITE_ENTREGA_MAXIMO_MIN, minutos))
+
 
 def _caminho_arquivo() -> str:
     return os.path.join(caminhos.raiz_projeto(), "Config", _ARQUIVO)
@@ -63,6 +78,8 @@ def normalizar_registro(dados) -> dict:
         "lat": lat,
         "lon": lon,
         "origem": origem if origem in _ORIGENS else "manual",
+        # Registro de uma versão anterior (sem o campo) fica com o padrão.
+        "limiteEntregaMin": _limite_entrega(dados.get("limiteEntregaMin")),
         "idEvento": id_evento,
     }
 

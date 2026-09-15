@@ -1950,12 +1950,26 @@ class RedeService(QObject):
         """Adota `dados` como a localização da pizzaria e anuncia à malha.
         Qualquer máquina pode definir; aqui só se carimba o idEvento que
         arbitra duas escolhas em disputa. False se as coordenadas não servirem."""
-        registro = localizacaoServidor.normalizar_registro(dict(dados or {}, idEvento=relogio.novo_id()))
+        dados = dict(dados or {})
+        # Redefinir o endereço da pizzaria não pode zerar o limite da zona de
+        # entrega escolhido antes (ver definirLimiteEntrega).
+        if "limiteEntregaMin" not in dados and self._localizacao_servidor.get("limiteEntregaMin"):
+            dados["limiteEntregaMin"] = self._localizacao_servidor["limiteEntregaMin"]
+        registro = localizacaoServidor.normalizar_registro(dict(dados, idEvento=relogio.novo_id()))
         if not registro:
             return False
         self._aplicar_localizacao(registro)
         self._eventos.publicar(_EVENTO_LOCALIZACAO_SERVIDOR, registro)
         return True
+
+    @pyqtSlot(int, result=bool)
+    def definirLimiteEntrega(self, minutos: int) -> bool:
+        """Até quantos minutos de carro a pizzaria entrega (a zona de entrega do
+        validador de endereço). Viaja com a localização, pelo mesmo arbitramento
+        por idEvento. False enquanto a localização não foi definida."""
+        if not self._localizacao_servidor:
+            return False
+        return self.definir_localizacao_servidor(dict(self._localizacao_servidor, limiteEntregaMin=minutos))
 
     def _ao_receber_evento_localizacao(self, payload: dict, _socket=None):
         self._aplicar_localizacao(payload or {})
