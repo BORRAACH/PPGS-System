@@ -22,11 +22,18 @@ Não há exclusão pela malha (nem tombstones): o que existe é sobrescrever o
 endereço quando o cliente muda.
 
 `{chave: {"telefone", "nome", "rua", "numero", "bairro", "observacao",
-"atualizadoEm", "idEventoRevisao"}}`."""
+"complemento", "cep", "cidade", "uf", "latitude", "longitude",
+"validadoEm", "atualizadoEm", "idEventoRevisao"}}`.
+
+Os campos do endereço validado (complemento em diante) vieram com o validador
+de endereço da Entrega (services/validacaoEndereco.py). Uma máquina ainda na
+versão anterior os descarta ao receber o cliente; a chave e o
+"idEventoRevisao" continuam os mesmos, então a reconciliação não entra em laço."""
 
 import hashlib
 import hmac
 import json
+import math
 import os
 import time
 from datetime import datetime
@@ -40,7 +47,11 @@ DOMINIO = "clientes"
 
 # Tamanho máximo de cada campo — os mesmos limites que o ppgs_server validava
 # (src/models.rs), para um registro vindo da malha não poder crescer sem teto.
-_CAMPOS = {"nome": 120, "rua": 120, "numero": 20, "bairro": 80, "observacao": 200}
+_CAMPOS = {
+    "nome": 120, "rua": 120, "numero": 20, "bairro": 80, "observacao": 200,
+    # Endereço validado (ver o topo).
+    "complemento": 80, "cep": 9, "cidade": 80, "uf": 2, "validadoEm": 32,
+}
 _MINIMO_DIGITOS_TELEFONE = 10
 _MAXIMO_DIGITOS_TELEFONE = 20
 
@@ -71,6 +82,14 @@ def _limpar(valor, tamanho: int) -> str:
     return " ".join(str(valor or "").split())[:tamanho]
 
 
+def _coordenada(valor, limite):
+    try:
+        numero = float(valor)
+    except (TypeError, ValueError):
+        return None
+    return numero if math.isfinite(numero) and -limite <= numero <= limite else None
+
+
 def _normalizar(registro) -> dict | None:
     """O registro com os campos conhecidos, limpos e dentro do tamanho — ou
     None se ele não tem o mínimo (telefone válido e rua)."""
@@ -83,6 +102,9 @@ def _normalizar(registro) -> dict | None:
     if not normalizado["rua"]:
         return None
     normalizado["telefone"] = telefone
+    # Coordenadas do endereço validado: número finito dentro do globo, ou None.
+    normalizado["latitude"] = _coordenada(registro.get("latitude"), 90)
+    normalizado["longitude"] = _coordenada(registro.get("longitude"), 180)
     normalizado["atualizadoEm"] = _limpar(registro.get("atualizadoEm"), 32)
     normalizado["idEventoRevisao"] = _limpar(registro.get("idEventoRevisao"), 80)
     return normalizado

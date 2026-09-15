@@ -707,6 +707,18 @@ Page {
                     "endereco": dados.endereco || "",
                     "numero": dados.numero || "",
                     "bairro": dados.bairro || "",
+                    // Endereço validado da Entrega (ver
+                    // components/DeliveryAddressValidator.qml): sem estes, voltar
+                    // para a Entrega validaria tudo de novo e perderia o
+                    // complemento.
+                    "complemento": dados.complemento || "",
+                    "cep": dados.cep || "",
+                    "cidade": dados.cidade || "",
+                    "uf": dados.uf || "",
+                    "latitude": dados.latitude === undefined ? null : dados.latitude,
+                    "longitude": dados.longitude === undefined ? null : dados.longitude,
+                    "validadoEm": dados.validadoEm || "",
+                    "enderecoStatus": dados.enderecoStatus || "",
                     "observacaoGeral": dados.observacaoGeral || "",
                     "taxaEntrega": dados.taxaEntrega || ""
                 };

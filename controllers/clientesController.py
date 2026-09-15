@@ -92,6 +92,14 @@ class ClientesController(QObject):
             "numero": dados.get("numero", ""),
             "bairro": bairro,
             "observacao": dados.get("observacaoGeral", ""),
+            # Endereço validado (ver qml/components/DeliveryAddressValidator.qml).
+            "complemento": dados.get("complemento", ""),
+            "cep": dados.get("cep", ""),
+            "cidade": dados.get("cidade", ""),
+            "uf": dados.get("uf", ""),
+            "latitude": dados.get("latitude"),
+            "longitude": dados.get("longitude"),
+            "validadoEm": dados.get("validadoEm", ""),
         }, chave_indice)
         if resultado is None:
             return False

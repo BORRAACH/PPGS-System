@@ -45,6 +45,7 @@ function abrir(pilhaPrincipal, nomeArquivo, manterBaixa) {
             "enderecoInicial": dados.endereco,
             "numeroInicial": dados.numero,
             "bairroInicial": dados.bairro,
+            "complementoInicial": dados.complemento || "",
             "observacaoInicial": dados.observacaoGeral,
             "formaPagamentoInicial": dados.formaPagamento,
             "trocoInicial": dados.troco,

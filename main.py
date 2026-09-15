@@ -52,6 +52,7 @@ try:
     from controllers.usuariosController import UsuariosController
     from controllers.rascunhosController import RascunhosController
     from controllers.clientesController import ClientesController
+    from controllers.validacaoEnderecoController import ValidacaoEnderecoController
     from services.rede import rede
     from services import limpezaServidorAntigo
     from services.sugestoesEndereco import sugestoes_endereco
@@ -254,6 +255,10 @@ if __name__ == "__main__":
     # Sugestões de rua/bairro da Entrega, direto do Photon e do índice de ruas
     # replicado pela malha (ver services/sugestoesEndereco.py).
     engine.rootContext().setContextProperty("sugestoesEnderecoController", sugestoes_endereco)
+    # Validação do endereço de entrega por CEP (Photon → Nominatim → ViaCEP) e
+    # zona de entrega pelo grafo de ruas (ver services/validacaoEndereco.py).
+    validacaoEnderecoController = ValidacaoEnderecoController()
+    engine.rootContext().setContextProperty("validacaoEnderecoController", validacaoEnderecoController)
 
     engine.addImportPath(qml_dir)
 
@@ -291,6 +296,7 @@ if __name__ == "__main__":
     # garantirIndice quando termina.
     QTimer.singleShot(0, sugestoes_endereco.aquecerIndice)
     app.aboutToQuit.connect(sugestoes_endereco.encerrar)
+    app.aboutToQuit.connect(validacaoEnderecoController.encerrar)
 
     # Em thread porque é I/O bloqueante puro (PowerShell/CUPS) e não toca
     # objeto Qt nenhum.

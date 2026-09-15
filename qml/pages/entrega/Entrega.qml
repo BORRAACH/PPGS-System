@@ -20,6 +20,9 @@ Page {
     property string enderecoInicial: ""
     property string numeroInicial: ""
     property string bairroInicial: ""
+    // Do endereço validado (ver components/DeliveryAddressValidator.qml): a
+    // comanda reaberta traz só o complemento, que sai no papel.
+    property string complementoInicial: ""
     property string observacaoInicial: ""
     property string formaPagamentoInicial: ""
     property string trocoInicial: ""
@@ -557,9 +560,7 @@ Page {
             // Expostos para quem está fora deste Component ler e preencher os
             // campos (rascunho, testes) — mesmo motivo do alias acima.
             property alias inputNomeCliente: inputNomeCliente
-            property alias inputEndereco: inputEndereco
-            property alias inputNumero: inputNumero
-            property alias inputBairro: inputBairro
+            property alias validadorEndereco: validadorEndereco
             property alias inputObservacao: inputObservacao
 
             // Precisam ficar aqui dentro do Component, não na raiz da Page:
@@ -583,12 +584,26 @@ Page {
                     });
                 }
 
+                // endereco/numero/bairro com as chaves de sempre; o resto é do
+                // endereço validado — o complemento vai para o papel,
+                // CEP/cidade/UF só para o QR Code (ver
+                // controllers/entregaController.py), e tudo para o cadastro do
+                // cliente.
+                var endereco = validadorEndereco.dados();
                 return {
                     "cliente": inputNomeCliente.text,
                     "telefone": inputTelefone.text,
-                    "endereco": inputEndereco.text,
-                    "numero": inputNumero.text,
-                    "bairro": inputBairro.text,
+                    "endereco": endereco.endereco,
+                    "numero": endereco.numero,
+                    "bairro": endereco.bairro,
+                    "complemento": endereco.complemento,
+                    "cep": endereco.cep,
+                    "cidade": endereco.cidade,
+                    "uf": endereco.uf,
+                    "latitude": endereco.latitude,
+                    "longitude": endereco.longitude,
+                    "validadoEm": endereco.validadoEm,
+                    "enderecoStatus": endereco.enderecoStatus,
                     "observacaoGeral": inputObservacao.text,
                     "itens": itens,
                     "formaPagamento": camposPagamento.formaPagamento,
@@ -658,9 +673,7 @@ Page {
 
                 inputNomeCliente.text = dados.cliente || "";
                 inputTelefone.text = dados.telefone || "";
-                inputEndereco.text = dados.endereco || "";
-                inputNumero.text = dados.numero || "";
-                inputBairro.text = dados.bairro || "";
+                validadorEndereco.preencher(dados);
                 inputObservacao.text = dados.observacaoGeral || "";
                 modeloPedidos.clear();
                 var itens = dados.itens || [];
@@ -699,7 +712,7 @@ Page {
             // vazia. formaPagamento/statusPagamento não contam: sempre têm
             // um valor padrão (Pix/NP), não refletem preenchimento do usuário.
             function comandaVazia(dados) {
-                if (dados.cliente.trim() !== "" || dados.telefone !== "" || dados.endereco.trim() !== "" || dados.numero !== "" || dados.bairro.trim() !== "" || dados.observacaoGeral.trim() !== "" || dados.troco !== "" || dados.taxaEntrega !== "")
+                if (dados.cliente.trim() !== "" || dados.telefone !== "" || dados.endereco.trim() !== "" || dados.numero !== "" || dados.bairro.trim() !== "" || dados.complemento !== "" || dados.observacaoGeral.trim() !== "" || dados.troco !== "" || dados.taxaEntrega !== "")
                     return false;
 
                 for (var i = 0; i < dados.itens.length; i++) {
@@ -823,6 +836,18 @@ Page {
             // é conferido agora, e não guardado de quando o telefone foi
             // digitado: o número pode ter sido corrigido depois.
             function confirmarSalvarEnderecoEProsseguir(acao, dadosPedido) {
+                // Endereço que não ficou pronto (não validado, faltando número,
+                // complemento de condomínio ou CEP) pergunta antes. Não
+                // bloqueia: "Prosseguir assim mesmo" segue — rua nova que o mapa
+                // não conhece ou internet fora do ar não impedem a entrega.
+                if (validadorEndereco.revisaoPendente) {
+                    dialogoEnderecoNaoValidado.abrirPara(acao, dadosPedido);
+                    return ;
+                }
+                perguntarSalvarEnderecoEProsseguir(acao, dadosPedido);
+            }
+
+            function perguntarSalvarEnderecoEProsseguir(acao, dadosPedido) {
                 var temTelefone = dadosPedido.telefone.replace(/\D/g, "").length >= 10;
                 var temEndereco = dadosPedido.endereco.trim() !== "" || dadosPedido.numero !== "" || dadosPedido.bairro.trim() !== "";
                 if (temTelefone && temEndereco && clientesController.disponivel()) {
@@ -875,9 +900,7 @@ Page {
             function zerarCampos() {
                 telaEntrega.manterBaixaAoSalvar = false;
                 inputTelefone.text = "";
-                inputEndereco.text = "";
-                inputNumero.text = "";
-                inputBairro.text = "";
+                validadorEndereco.limpar();
                 inputObservacao.text = "";
                 inputNomeCliente.text = "";
                 modeloPedidos.clear();
@@ -890,132 +913,6 @@ Page {
                 });
                 camposPagamento.redefinirPadrao();
                 spinnerCopias.value = 2;
-            }
-
-            // --- AUTOCOMPLETE DE ENDEREÇO E BAIRRO ---
-            // Termo da última busca de sugestão disparada por cada campo: a
-            // resposta chega assíncrona com o termo ecoado, e só vale se
-            // ainda for sobre o que está digitado agora.
-            property string termoEnderecoEmConsulta: ""
-            property string termoBairroEmConsulta: ""
-            // Último bairro que o autocomplete do Endereço escreveu no campo
-            // Bairro. Distingue "posto pela sugestão" (pode ser trocado quando
-            // o atendente escolhe outra rua) de "digitado à mão" (fica).
-            property string bairroAutopreenchido: ""
-            // Ligado enquanto a escolha de uma sugestão escreve no campo: a
-            // escrita dispara onTextChanged com o foco no campo, e sem isto a
-            // lista reabriria sugerindo a rua que acabou de ser escolhida.
-            property bool aplicandoSugestao: false
-
-            // Chamadas a cada tecla (onTextChanged dos campos). O que está
-            // salvo nesta máquina — histórico e índice de ruas — aparece na
-            // hora, desde a primeira letra: a consulta é local e custa
-            // frações de milissegundo. Só quando nada salvo casa, e com 3
-            // letras ou mais, entra o debounce que leva a busca ao Photon.
-            function sugerirEndereco() {
-                if (aplicandoSugestao)
-                    return;
-                debounceEndereco.stop();
-                var termo = inputEndereco.text.trim();
-                var locais = termo ? sugestoesEnderecoController.sugerirEnderecosLocais(termo, inputBairro.text.trim()) : [];
-                if (locais.length > 0) {
-                    conteudoEntrega.termoEnderecoEmConsulta = termo;
-                    sugestoesEndereco.mostrar(locais);
-                    return;
-                }
-                // Lista do termo anterior fora da frente: ela não casa mais
-                // com o que está digitado.
-                sugestoesEndereco.close();
-                if (termo.length >= 3)
-                    debounceEndereco.restart();
-            }
-
-            function sugerirBairro() {
-                if (aplicandoSugestao)
-                    return;
-                debounceBairro.stop();
-                var termo = inputBairro.text.trim();
-                var locais = termo ? sugestoesEnderecoController.sugerirBairrosLocais(termo) : [];
-                if (locais.length > 0) {
-                    conteudoEntrega.termoBairroEmConsulta = termo;
-                    sugestoesBairro.mostrar(locais);
-                    return;
-                }
-                sugestoesBairro.close();
-                if (termo.length >= 3)
-                    debounceBairro.restart();
-            }
-
-            // Debounce da busca no Photon — só para o que NÃO está salvo
-            // localmente (ver sugerirEndereco): a consulta sai ~100ms depois
-            // da ÚLTIMA tecla, não a cada uma, para uma palavra digitada de
-            // corrido sair numa consulta só. A que ficar para trás é abortada
-            // (ver _consultar_photon).
-            // Um timer por campo, e não um só: os dois campos podem estar
-            // em consulta ao mesmo tempo (Tab rápido entre eles).
-            //
-            // O gate de activeFocus (aqui e no onTextChanged dos campos)
-            // é o que impede o preenchimento programático de abrir lista:
-            // o autofill por telefone e o aplicarRascunho escrevem nos
-            // campos com o foco em outro lugar.
-            Timer {
-                id: debounceEndereco
-
-                interval: 100
-                onTriggered: {
-                    var termo = inputEndereco.text.trim();
-                    if (termo.length < 3 || !inputEndereco.activeFocus) {
-                        sugestoesEndereco.close();
-                        return;
-                    }
-                    conteudoEntrega.termoEnderecoEmConsulta = termo;
-                    // O bairro já digitado vai junto: as ruas dele sobem para
-                    // o topo da lista (ver ordenar_enderecos).
-                    sugestoesEnderecoController.buscarEnderecos(termo, inputBairro.text.trim());
-                }
-            }
-
-            Timer {
-                id: debounceBairro
-
-                interval: 100
-                onTriggered: {
-                    var termo = inputBairro.text.trim();
-                    if (termo.length < 3 || !inputBairro.activeFocus) {
-                        sugestoesBairro.close();
-                        return;
-                    }
-                    conteudoEntrega.termoBairroEmConsulta = termo;
-                    sugestoesEnderecoController.buscarBairros(termo);
-                }
-            }
-
-            // Dentro do Component, e não junto do Connections de autofill da
-            // Page: os campos e as listas só existem nesta árvore. A falha
-            // silenciosa está no lado Python (services/sugestoesEndereco.py):
-            // sem internet vem só o histórico; sem histórico, lista vazia —
-            // mostrar() fecha a lista e o campo segue sendo um campo comum.
-            // Com histórico o sinal chega duas vezes para o mesmo termo (o
-            // histórico na hora, a lista completa quando o Photon responder).
-            Connections {
-                target: sugestoesEnderecoController
-
-                function onEnderecosSugeridos(termo, sugestoes) {
-                    // Resposta atrasada (o atendente já digitou mais, ou já
-                    // saiu do campo): descarta — a consulta do texto atual,
-                    // se houver, traz a lista certa.
-                    if (!inputEndereco.activeFocus || termo !== inputEndereco.text.trim())
-                        return;
-
-                    sugestoesEndereco.mostrar(sugestoes);
-                }
-
-                function onBairrosSugeridos(termo, sugestoes) {
-                    if (!inputBairro.activeFocus || termo !== inputBairro.text.trim())
-                        return;
-
-                    sugestoesBairro.mostrar(sugestoes);
-                }
             }
 
             // Rola verticalmente quando a lista de pedidos cresce (ou a
@@ -1150,9 +1047,10 @@ Page {
                                         return ;
 
                                     inputNomeCliente.text = cliente.nome || "";
-                                    inputEndereco.text = cliente.rua || "";
-                                    inputNumero.text = cliente.numero || "";
-                                    inputBairro.text = cliente.bairro || "";
+                                    // Cadastro com endereço já validado volta
+                                    // validado, sem consultar nada; o antigo (sem
+                                    // CEP) é validado agora, em segundo plano.
+                                    validadorEndereco.preencher(cliente);
                                     inputObservacao.text = cliente.observacao || "";
                                     telaEntrega.mostrarNotificacao("Cliente encontrado e preenchido automaticamente.", true);
                                 }
@@ -1199,9 +1097,9 @@ Page {
                                 leftPadding: 10
                                 rightPadding: 10
                                 text: clienteNome
-                                KeyNavigation.tab: inputEndereco
+                                KeyNavigation.tab: validadorEndereco.primeiroCampo
                                 KeyNavigation.backtab: inputTelefone
-                                Keys.onReturnPressed: inputEndereco.forceActiveFocus()
+                                Keys.onReturnPressed: validadorEndereco.focar()
 
                                 background: Rectangle {
                                     radius: Estilo.global.radius.pill
@@ -1215,246 +1113,29 @@ Page {
 
                     }
 
-                    // Campos Endereço e Número
-                    Row {
-                        spacing: Estilo.global.spacing.md
+                    // Endereço de entrega validado: rua, número, complemento e
+                    // CEP num fluxo só, no lugar dos antigos
+                    // campos Endereço/Número/Bairro (ver
+                    // components/DeliveryAddressValidator.qml).
+                    DeliveryAddressValidator {
+                        id: validadorEndereco
 
-                        Column {
-                            spacing: 4
+                        width: conteudoEntrega.larguraCampos
+                        tom: Estilo.screen.entrega
+                        campoAnterior: inputNomeCliente
+                        proximoCampo: inputObservacao
 
-                            Text {
-                                text: "Endereço"
-                                font.pixelSize: Estilo.global.fontSize.sm
-                                font.bold: true
-                                color: Estilo.global.textSecondary
-                            }
-
-                            TextField {
-                                id: inputEndereco
-
-                                color: Estilo.global.textInput
-                                placeholderTextColor: Estilo.global.textPlaceholder
-                                placeholderText: "ENDEREÇO"
-                                // Mesma capitalizacao do nome do cliente logo acima.
-                                // Vale tambem para o endereco que chega preenchido do cadastro de
-                                // clientes (ver o onEditingFinished do Telefone): a rua cadastrada
-                                // em minusculo por outra maquina sai formatada aqui do mesmo jeito.
-                                //
-                                // A capitalizacao reescreve o texto e reentra
-                                // aqui (mesmo caso do "reformatando" do
-                                // telefone) — a consulta local repetida no
-                                // mesmo tique e barata. O gate de activeFocus
-                                // deixa de fora as escritas programaticas:
-                                // autofill, rascunho, limpeza.
-                                onTextChanged: {
-                                    Texto.capitalizarCampo(inputEndereco);
-                                    if (activeFocus)
-                                        conteudoEntrega.sugerirEndereco();
-                                }
-                                width: Math.round((conteudoEntrega.larguraCampos - Estilo.global.spacing.md) * 0.78)
-                                topPadding: 10
-                                bottomPadding: 10
-                                leftPadding: 10
-                                rightPadding: 10
-                                text: enderecoInicial
-                                KeyNavigation.tab: inputNumero
-                                KeyNavigation.backtab: inputNomeCliente
-                                // Setas navegam a lista de sugestões sem tirar
-                                // o foco do campo, como em PopupBuscaCardapio.
-                                Keys.onDownPressed: sugestoesEndereco.mover(1)
-                                Keys.onUpPressed: sugestoesEndereco.mover(-1)
-                                // Enter aceita a sugestão destacada, se houver
-                                // — senão segue o fluxo de sempre (próximo
-                                // campo). Os dois handlers porque o Enter do
-                                // teclado numérico é outra tecla.
-                                Keys.onReturnPressed: {
-                                    if (!(sugestoesEndereco.opened && sugestoesEndereco.confirmar()))
-                                        inputNumero.forceActiveFocus();
-                                }
-                                Keys.onEnterPressed: {
-                                    if (!(sugestoesEndereco.opened && sugestoesEndereco.confirmar()))
-                                        inputNumero.forceActiveFocus();
-                                }
-                                // Esc no campo, porque o popup não tem foco
-                                // pra receber o CloseOnEscape sozinho. Só é
-                                // consumido com a lista aberta — fechado, o
-                                // Esc segue pra quem mais o trate.
-                                Keys.onEscapePressed: function (evento) {
-                                    evento.accepted = sugestoesEndereco.opened;
-                                    sugestoesEndereco.close();
-                                }
-                                // Saiu do campo (Tab, clique noutro lugar): a
-                                // lista não tem mais a quem sugerir.
-                                onActiveFocusChanged: {
-                                    if (!activeFocus)
-                                        sugestoesEndereco.close();
-                                }
-
-                                background: Rectangle {
-                                    radius: Estilo.global.radius.pill
-                                    color: Estilo.global.inputBackground
-                                    border.color: parent.activeFocus ? Estilo.screen.entrega.accent : Estilo.global.border
-                                    border.width: Estilo.global.borderWidth.hairline
-                                }
-
-                            }
-
-                            ListaSugestoes {
-                                id: sugestoesEndereco
-
-                                campo: inputEndereco
-
-                                onEscolhida: function (texto, detalhe) {
-                                    // A atribuição dispara onTextChanged (com
-                                    // o foco ainda no campo), que rearma o
-                                    // debounce — o stop logo depois cancela,
-                                    // senão a lista reabriria em 100ms
-                                    // sugerindo o que acabou de ser escolhido.
-                                    conteudoEntrega.aplicandoSugestao = true;
-                                    inputEndereco.text = texto;
-                                    conteudoEntrega.aplicandoSugestao = false;
-                                    debounceEndereco.stop();
-                                    inputEndereco.cursorPosition = inputEndereco.text.length;
-
-                                    // Autofill do bairro da rua escolhida — só
-                                    // com o campo vazio ou com um bairro que o
-                                    // próprio autocomplete pôs ali. Um bairro
-                                    // digitado à mão fica: é o nome que a
-                                    // equipe usa, e o do mapa nem sempre é
-                                    // ("Areão" no OSM, "Jardim Garcês" na
-                                    // comanda). A escrita com o foco no
-                                    // Endereço não abre a lista do Bairro (ver
-                                    // o gate de activeFocus lá).
-                                    var bairroAtual = inputBairro.text.trim();
-                                    if (detalhe && (bairroAtual === "" || bairroAtual === conteudoEntrega.bairroAutopreenchido)) {
-                                        inputBairro.text = detalhe;
-                                        // Guardado depois da capitalização que
-                                        // o onTextChanged do Bairro aplica.
-                                        conteudoEntrega.bairroAutopreenchido = inputBairro.text.trim();
-                                    }
-                                }
-                            }
-                        }
-
-                        Column {
-                            spacing: 4
-
-                            Text {
-                                text: "Número"
-                                font.pixelSize: Estilo.global.fontSize.sm
-                                font.bold: true
-                                color: Estilo.global.textSecondary
-                            }
-
-                            TextField {
-                                id: inputNumero
-
-                                color: Estilo.global.textInput
-                                placeholderTextColor: Estilo.global.textPlaceholder
-                                placeholderText: "NÚMERO"
-                                width: (conteudoEntrega.larguraCampos - Estilo.global.spacing.md) - Math.round((conteudoEntrega.larguraCampos - Estilo.global.spacing.md) * 0.78)
-                                topPadding: 10
-                                bottomPadding: 10
-                                leftPadding: 10
-                                rightPadding: 10
-                                text: numeroInicial
-                                inputMethodHints: Qt.ImhDigitsOnly
-                                KeyNavigation.tab: inputBairro
-                                KeyNavigation.backtab: inputEndereco
-                                Keys.onReturnPressed: inputBairro.forceActiveFocus()
-
-                                validator: RegularExpressionValidator {
-                                    regularExpression: /^[0-9]*$/
-                                }
-
-                                background: Rectangle {
-                                    radius: Estilo.global.radius.pill
-                                    color: Estilo.global.inputBackground
-                                    border.color: parent.activeFocus ? Estilo.screen.entrega.accent : Estilo.global.border
-                                    border.width: Estilo.global.borderWidth.hairline
-                                }
-
-                            }
-                        }
-
-                    }
-
-                    // Campo Bairro
-                    Column {
-                        spacing: 4
-
-                        Text {
-                            text: "Bairro"
-                            font.pixelSize: Estilo.global.fontSize.sm
-                            font.bold: true
-                            color: Estilo.global.textSecondary
-                        }
-
-                        TextField {
-                            id: inputBairro
-
-                            color: Estilo.global.textInput
-                            placeholderTextColor: Estilo.global.textPlaceholder
-                            placeholderText: "BAIRRO"
-                            // Mesma capitalizacao do nome do cliente logo acima.
-                            //
-                            // Debounce/gate iguais aos de inputEndereco — ver
-                            // os comentários lá; a diferença é só a camada
-                            // pedida ao Photon (bairros, não ruas).
-                            onTextChanged: {
-                                Texto.capitalizarCampo(inputBairro);
-                                if (activeFocus)
-                                    conteudoEntrega.sugerirBairro();
-                            }
-                            width: conteudoEntrega.larguraCampos
-                            topPadding: 10
-                            bottomPadding: 10
-                            leftPadding: 10
-                            rightPadding: 10
-                            text: bairroInicial
-                            KeyNavigation.tab: inputObservacao
-                            KeyNavigation.backtab: inputNumero
-                            Keys.onDownPressed: sugestoesBairro.mover(1)
-                            Keys.onUpPressed: sugestoesBairro.mover(-1)
-                            Keys.onReturnPressed: {
-                                if (!(sugestoesBairro.opened && sugestoesBairro.confirmar()))
-                                    inputObservacao.forceActiveFocus();
-                            }
-                            Keys.onEnterPressed: {
-                                if (!(sugestoesBairro.opened && sugestoesBairro.confirmar()))
-                                    inputObservacao.forceActiveFocus();
-                            }
-                            Keys.onEscapePressed: function (evento) {
-                                evento.accepted = sugestoesBairro.opened;
-                                sugestoesBairro.close();
-                            }
-                            onActiveFocusChanged: {
-                                if (!activeFocus)
-                                    sugestoesBairro.close();
-                            }
-
-                            background: Rectangle {
-                                radius: Estilo.global.radius.pill
-                                color: Estilo.global.inputBackground
-                                border.color: parent.activeFocus ? Estilo.screen.entrega.accent : Estilo.global.border
-                                border.width: Estilo.global.borderWidth.hairline
-                            }
-
-                        }
-
-                        ListaSugestoes {
-                            id: sugestoesBairro
-
-                            campo: inputBairro
-
-                            onEscolhida: function (texto) {
-                                // Ver o comentário homônimo em sugestoesEndereco.
-                                conteudoEntrega.aplicandoSugestao = true;
-                                inputBairro.text = texto;
-                                conteudoEntrega.aplicandoSugestao = false;
-                                debounceBairro.stop();
-                                inputBairro.cursorPosition = inputBairro.text.length;
-                            }
+                        // Comanda reaberta pela Consulta. O rascunho e o
+                        // autofill por telefone chamam preencher() direto.
+                        Component.onCompleted: {
+                            if (telaEntrega.enderecoInicial !== "" || telaEntrega.numeroInicial !== ""
+                                    || telaEntrega.complementoInicial !== "")
+                                preencher({
+                                    "endereco": telaEntrega.enderecoInicial,
+                                    "numero": telaEntrega.numeroInicial,
+                                    "bairro": telaEntrega.bairroInicial,
+                                    "complemento": telaEntrega.complementoInicial
+                                });
                         }
                     }
 
@@ -1485,7 +1166,7 @@ Page {
                             leftPadding: 10
                             rightPadding: 10
                             text: observacaoInicial
-                            KeyNavigation.backtab: inputBairro
+                            KeyNavigation.backtab: validadorEndereco.ultimoCampo
                             // Tab/Enter chamam primeiroCampoPedido() na hora (não
                             // usam "KeyNavigation.tab: ..."): esse binding seria
                             // avaliado só uma vez, cedo demais — antes do primeiro
@@ -1784,16 +1465,31 @@ Page {
 
                 }
 
-                ResumoComanda {
+                // Coluna da direita: o resultado da validação do endereço em
+                // cima do Resumo da comanda — à vista enquanto o atendente
+                // segue preenchendo o pedido, e fora do meio dos campos. Some 3
+                // segundos depois da confirmação ou no × (ver
+                // components/ResultadoValidacaoEndereco.qml).
+                ColumnLayout {
                     Layout.preferredWidth: conteudoEntrega.larguraResumo
                     Layout.alignment: Qt.AlignHCenter | Qt.AlignVCenter
-                    itens: modeloPedidos
-                    corDestaque: Estilo.screen.entrega.accent
-                    formaPagamento: camposPagamento.formaPagamento
-                    troco: camposPagamento.formaPagamento === "Dinheiro" ? camposPagamento.troco : ""
-                    pago: camposPagamento.pago
-                    taxaEntrega: camposPagamento.taxaEntrega
-                    mostrarTaxaEntrega: true
+                    spacing: Estilo.global.spacing.lg
+
+                    ResultadoValidacaoEndereco {
+                        Layout.fillWidth: true
+                        validador: validadorEndereco
+                    }
+
+                    ResumoComanda {
+                        Layout.fillWidth: true
+                        itens: modeloPedidos
+                        corDestaque: Estilo.screen.entrega.accent
+                        formaPagamento: camposPagamento.formaPagamento
+                        troco: camposPagamento.formaPagamento === "Dinheiro" ? camposPagamento.troco : ""
+                        pago: camposPagamento.pago
+                        taxaEntrega: camposPagamento.taxaEntrega
+                        mostrarTaxaEntrega: true
+                    }
                 }
 
             }
@@ -1824,7 +1520,50 @@ Page {
                 }
             }
 
-            // Só abre quando confirmarSalvarEnderecoEProsseguir() decide que
+            // Aberto por confirmarSalvarEnderecoEProsseguir() quando o endereço
+            // não ficou pronto. Nunca some sem resposta: "Revisar" volta ao
+            // campo que falta, "Prosseguir assim mesmo" segue com o pedido.
+            Dialogo {
+                id: dialogoEnderecoNaoValidado
+
+                property string acaoPendente: ""
+                property var dados: null
+
+                function abrirPara(acao, dadosPedido) {
+                    acaoPendente = acao;
+                    dados = dadosPedido;
+                    corpo = validadorEndereco.resumoPendencia() + " Revise os dados.";
+                    open();
+                }
+
+                titulo: "Endereço não validado"
+                nomeIcone: "fa6s.triangle-exclamation"
+
+                Botao {
+                    text: "Revisar"
+                    variante: "secundario"
+                    tom: Estilo.screen.entrega
+                    onClicked: {
+                        dialogoEnderecoNaoValidado.close();
+                        // Depois do fechamento, que devolve o foco a quem o tinha.
+                        Qt.callLater(validadorEndereco.focarPendencia);
+                    }
+                }
+
+                Botao {
+                    text: "Prosseguir assim mesmo"
+                    variante: "primario"
+                    tom: Estilo.action.confirm
+                    onClicked: {
+                        var acao = dialogoEnderecoNaoValidado.acaoPendente;
+                        var dadosPedido = dialogoEnderecoNaoValidado.dados;
+                        dialogoEnderecoNaoValidado.close();
+                        perguntarSalvarEnderecoEProsseguir(acao, dadosPedido);
+                    }
+                }
+            }
+
+            // Só abre quando perguntarSalvarEnderecoEProsseguir() decide que
             // vale perguntar (telefone + algum dado de endereço presentes).
             PopupSalvarEndereco {
                 id: popupSalvarEndereco
