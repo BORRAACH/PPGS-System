@@ -41,6 +41,7 @@ from PyQt6.QtCore import QObject, QTimer, pyqtProperty, pyqtSignal, pyqtSlot
 from Config.logConfig import protegido
 from services import montadorIndiceRuas, requisicaoHttp
 from services.buscaCardapio import normalizar
+from services.enderecoFormatado import bairros_equivalentes, escolher_bairro, formatar_endereco, normalizar_endereco
 from services.rede import historicoEnderecos, indiceRuas, localizacaoServidor, rede, relogio
 
 _URL_PHOTON = "https://photon.komoot.io/api/"
@@ -91,9 +92,10 @@ _INTERVALO_GRAVACAO_CORREIOS_MS = 15000
 
 # ---------- Funções puras (ordenação e leitura do Photon) ----------
 
-def _unicos(grupos, chave=normalizar, limite=_LIMITE_SUGESTOES):
+def _unicos(grupos, chave=normalizar_endereco, limite=_LIMITE_SUGESTOES):
     """Concatena os grupos na ordem dada, sem repetir item (pela `chave`,
-    que compara sem acento/caixa) e parando no limite."""
+    que compara sem acento, caixa, pontuação e abreviação) e parando no
+    limite."""
     vistos = set()
     saida = []
     for grupo in grupos:
@@ -123,12 +125,34 @@ def ordenar_enderecos(bairro, historico, ruas_indice, ruas_photon):
 
     Rua com bairro dos Correios vira uma sugestão por bairro oficial — uma
     avenida longa tem um CEP por trecho, cada um no seu bairro. Sem bairro
-    oficial, uma sugestão só, com o bairro mais provável. A repetição é
-    cortada por rua E bairro."""
-    bairro_normalizado = normalizar(bairro)
+    oficial, uma sugestão só, com o bairro mais provável.
+
+    O endereço salvo sai com a grafia do índice (ou do Photon) quando é a mesma
+    rua: "RUA ANTONIO ROMERO / ARCO IRIS" do histórico vira "Rua Antônio Romero
+    / Parque Arco Íris", e aí se junta à sugestão do índice em vez de aparecer
+    duas vezes. A repetição é cortada por rua E bairro, já formatados e
+    comparados por enderecoFormatado.normalizar_endereco."""
+    bairro_digitado = normalizar_endereco(bairro)
 
     def do_bairro(nome_bairro):
-        return bool(bairro_normalizado) and normalizar(nome_bairro).startswith(bairro_normalizado)
+        if not bairro_digitado or not nome_bairro:
+            return False
+        return normalizar_endereco(nome_bairro).startswith(bairro_digitado) or bairros_equivalentes(bairro, nome_bairro)
+
+    # Grafia formatada de cada rua, pelo nome comparável: o índice primeiro
+    # (é ele que tem os bairros oficiais), depois o Photon.
+    referencias = {}
+    for r in ruas_indice:
+        referencias.setdefault(normalizar_endereco(r["nome"]), (r["nome"], r.get("oficiais") or [], r.get("bairros") or []))
+    for p in ruas_photon:
+        referencias.setdefault(normalizar_endereco(p["nome"]), (p["nome"], [], p.get("bairros") or []))
+
+    def formatada(nome, nome_bairro):
+        referencia = referencias.get(normalizar_endereco(nome))
+        if referencia is None:
+            return {"nome": nome, "bairro": nome_bairro}
+        nome_formatado, oficiais, conhecidos = referencia
+        return {"nome": nome_formatado, "bairro": escolher_bairro(nome_bairro, oficiais, conhecidos)}
 
     def uma(nome, bairros):
         bairros = [b for b in bairros if b]
@@ -139,7 +163,7 @@ def ordenar_enderecos(bairro, historico, ruas_indice, ruas_photon):
     def cada(nome, bairros):
         return [{"nome": nome, "bairro": b} for b in bairros] or [{"nome": nome, "bairro": ""}]
 
-    do_historico = [s for r in historico for s in cada(r["rua"], [r.get("bairro", "")])]
+    do_historico = [formatada(r["rua"], r.get("bairro", "")) for r in historico]
     do_indice = [
         s for r in ruas_indice
         for s in (cada(r["nome"], r["oficiais"]) if r.get("oficiais") else uma(r["nome"], r["bairros"]))
@@ -149,7 +173,7 @@ def ordenar_enderecos(bairro, historico, ruas_indice, ruas_photon):
     fontes = (do_historico, do_indice, do_photon)
     return _unicos(
         [[s for s in fonte if do_bairro(s["bairro"])] for fonte in fontes] + list(fontes),
-        chave=lambda s: f"{normalizar(s['nome'])}|{normalizar(s['bairro'])}",
+        chave=lambda s: f"{normalizar_endereco(s['nome'])}|{normalizar_endereco(s['bairro'])}",
     )
 
 
@@ -350,6 +374,9 @@ class SugestoesEnderecoService(QObject):
         """Conta o endereço de uma comanda lançada/impressa no histórico e
         avisa a malha. Chamado pelo EntregaController depois de a comanda ser
         salva."""
+        # Grava a grafia do índice quando é a mesma rua: "RUA SAO VICENTE DE
+        # PAULA" entra como "Rua São Vicente de Paula" (ver enderecoFormatado).
+        endereco, bairro = formatar_endereco(endereco, bairro)
         resultado = historicoEnderecos.registrar(endereco, bairro)
         if resultado is None:
             return

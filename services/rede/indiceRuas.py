@@ -51,6 +51,7 @@ import json
 import os
 
 from services.buscaCardapio import normalizar
+from services.enderecoFormatado import normalizar_endereco, termos_de_busca
 from services.rede import caminhos, relogio
 
 _ROTULO = "indiceRuas"
@@ -82,6 +83,9 @@ _chaves_busca = None  # ([chave] ordenada, [(sufixo do meio, chave)] ordenada)
 _bairros_busca = None  # [(prioridade, nome normalizado, nome)]
 _blocos = None  # {bloco: {chave: rua}}
 _hashes = None  # {bloco: sha1}
+# (lista de busca de quando foi montado, {nome comparável: chave}). Refeito
+# quando _chaves_busca é trocada, ou seja, quando o índice muda.
+_equivalentes = None
 
 
 def _caminho_arquivo():
@@ -438,42 +442,67 @@ def buscar_ruas(termo):
     """Ruas cujo nome tem uma palavra começando por `termo` —
     [{"nome", "bairros", "oficiais"}], primeiro as que começam pelo termo
     (em ordem alfabética), depois as que o têm no meio (em ordem da parte
-    que casou). Para no limite: o custo não cresce com o tamanho da cidade."""
-    termo_normalizado = normalizar(termo)
-    if not termo_normalizado:
+    que casou). Para no limite: o custo não cresce com o tamanho da cidade.
+    O termo vale também com a abreviação resolvida ("av indep" acha a
+    "Avenida Independência", ver enderecoFormatado.termos_de_busca)."""
+    termos = termos_de_busca(termo)
+    if not termos:
         return []
     _preparar_busca()
     inicios, meios = _chaves_busca
 
     achadas = []
     vistas = set()
-    indice = bisect.bisect_left(inicios, termo_normalizado)
-    while indice < len(inicios) and len(achadas) < _LIMITE_BUSCA and inicios[indice].startswith(termo_normalizado):
-        achadas.append(inicios[indice])
-        vistas.add(inicios[indice])
-        indice += 1
+    for termo_normalizado in termos:
+        indice = bisect.bisect_left(inicios, termo_normalizado)
+        while indice < len(inicios) and len(achadas) < _LIMITE_BUSCA and inicios[indice].startswith(termo_normalizado):
+            if inicios[indice] not in vistas:
+                vistas.add(inicios[indice])
+                achadas.append(inicios[indice])
+            indice += 1
 
-    indice = bisect.bisect_left(meios, (termo_normalizado,))
-    while indice < len(meios) and len(achadas) < _LIMITE_BUSCA:
-        sufixo, k = meios[indice]
-        if not sufixo.startswith(termo_normalizado):
-            break
-        if k not in vistas:
-            vistas.add(k)
-            achadas.append(k)
-        indice += 1
+    for termo_normalizado in termos:
+        indice = bisect.bisect_left(meios, (termo_normalizado,))
+        while indice < len(meios) and len(achadas) < _LIMITE_BUSCA:
+            sufixo, k = meios[indice]
+            if not sufixo.startswith(termo_normalizado):
+                break
+            if k not in vistas:
+                vistas.add(k)
+                achadas.append(k)
+            indice += 1
 
     ruas = _carregar()["ruas"]
     return [_para_sugestao(ruas[k]) for k in achadas]
 
 
+def rua_equivalente(nome):
+    """A rua do índice que é a mesma de `nome` — sem caixa, acento e
+    pontuação, e com abreviação resolvida ("R. SAO VICENTE DE PAULA") —, no
+    formato de _para_sugestao, ou None."""
+    global _equivalentes
+    ruas = _carregar()["ruas"]
+    rua = ruas.get(chave_rua(nome))
+    if rua is None:
+        _preparar_busca()
+        if _equivalentes is None or _equivalentes[0] is not _chaves_busca:
+            mapa = {}
+            for k, dados in ruas.items():
+                mapa.setdefault(normalizar_endereco(dados["nome"]), k)
+            _equivalentes = (_chaves_busca, mapa)
+        k = _equivalentes[1].get(normalizar_endereco(nome))
+        rua = ruas.get(k) if k else None
+    return _para_sugestao(rua) if rua else None
+
+
 def buscar_bairros(termo):
     """Nomes de bairro conhecidos pelo índice com uma palavra começando por
     `termo`, os dos Correios primeiro."""
-    termo_normalizado = normalizar(termo)
-    if not termo_normalizado:
+    termos = termos_de_busca(termo)
+    if not termos:
         return []
     _preparar_busca()
     return [
-        nome for _ordem, nb, nome in _bairros_busca if f" {termo_normalizado}" in f" {nb}"
+        nome for _ordem, nb, nome in _bairros_busca
+        if any(f" {t}" in f" {nb}" or f" {t}" in f" {normalizar_endereco(nome)}" for t in termos)
     ][:_LIMITE_BAIRROS]

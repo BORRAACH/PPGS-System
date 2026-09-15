@@ -24,6 +24,7 @@ import os
 from datetime import datetime
 
 from services.buscaCardapio import normalizar
+from services.enderecoFormatado import normalizar_endereco, termos_de_busca
 from services.rede import caminhos, relogio
 
 _ROTULO = "historicoEnderecos"
@@ -80,7 +81,10 @@ def _lido():
         registros = sorted(
             dados.values(), key=lambda r: (_inteiro(r.get("usos")), r.get("ultimoUso", "")), reverse=True
         )
-        normalizados = [(normalizar(r.get("rua", "")), normalizar(r.get("bairro", "")), r) for r in registros]
+        # Forma de comparação (e não a chave): "RUA ANTONIO ROMERO" e "R. Antônio
+        # Romero" casam com a mesma busca, e "ARCO IRIS" e "Arco-Iris" somam os
+        # usos no mesmo bairro. Ver services/enderecoFormatado.py.
+        normalizados = [(normalizar_endereco(r.get("rua", "")), normalizar_endereco(r.get("bairro", "")), r) for r in registros]
 
         totais = {}
         grafias = {}
@@ -204,12 +208,12 @@ def _casa(texto_normalizado, termo_normalizado):
 def buscar_ruas(termo, limite=40):
     """Registros cuja rua casa com `termo`, dos mais usados para os menos —
     no máximo `limite` (a lista na tela mostra 8)."""
-    termo_normalizado = normalizar(termo)
-    if not termo_normalizado:
+    termos = termos_de_busca(termo)
+    if not termos:
         return []
     registros = []
     for rua, _bairro, registro in _lido()[2]:
-        if _casa(rua, termo_normalizado):
+        if any(_casa(rua, t) for t in termos):
             registros.append(dict(registro))
             if len(registros) >= limite:
                 break
@@ -219,7 +223,7 @@ def buscar_ruas(termo, limite=40):
 def buscar_bairros(termo):
     """Nomes de bairro que casam com `termo`, somando os usos de todas as
     ruas de cada bairro — o bairro onde a pizzaria mais entrega vem primeiro."""
-    termo_normalizado = normalizar(termo)
-    if not termo_normalizado:
+    termos = termos_de_busca(termo)
+    if not termos:
         return []
-    return [nome for nb, nome in _lido()[3] if _casa(nb, termo_normalizado)][:20]
+    return [nome for nb, nome in _lido()[3] if any(_casa(nb, t) for t in termos)][:20]

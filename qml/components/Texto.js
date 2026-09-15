@@ -22,28 +22,49 @@ function normalizar(texto) {
 // um espaco: "maria alice" vira "Maria Alice". Usado nos campos de nome de
 // cliente de Balcao, Entrega e Salao.
 //
-// So LEVANTA letras, nunca abaixa: "maria ALICE" vira "Maria ALICE", e quem
-// digitou tudo em maiuscula continua com tudo em maiuscula. A regra pedida foi
-// "deixar maiuscula a primeira letra", e abaixar o resto por conta propria
-// destruiria o que a pessoa escreveu de proposito.
+// So LEVANTA a inicial das palavras, nunca abaixa o resto: "maria ALICE" vira
+// "Maria ALICE", e quem digitou tudo em maiuscula continua com tudo em
+// maiuscula. A regra pedida foi "deixar maiuscula a primeira letra", e abaixar
+// o resto por conta propria destruiria o que a pessoa escreveu de proposito.
 //
-// A regra e literalmente "depois de um espaco", entao "maria de souza" vira
-// "Maria De Souza" — as particulas (de, da, dos) tambem sobem. Fica assim de
-// caso pensado: uma lista de excecoes erraria em sobrenome que comeca com elas
-// e em apelido do balcao, e o atendente sempre pode abaixar a letra na mao.
+// A excecao sao as particulas (de, da, das, do, dos, e) depois da primeira
+// palavra: ficam minusculas, "maria de souza" vira "Maria de Souza". Antes elas
+// subiam como qualquer palavra, e o endereco escolhido na sugestao ("Rua Sao
+// Vicente de Paula", do indice de ruas/Photon) virava "Rua Sao Vicente De
+// Paula" antes de ser salvo, diferente da grafia do mapa. O custo aceito: um
+// sobrenome ou apelido que seja so "De"/"Da" fica minusculo, e o atendente nao
+// consegue mais subir a particula na mao.
+//
+// Digitando letra a letra a regra converge: "d" sobe para "D", "De" vira "de"
+// (e particula), "den" volta a subir para "Den" — "Denise" termina certo.
 //
 // Dois espacos seguidos continuam sendo dois espacos, e o texto NUNCA muda de
 // tamanho — e disso que capitalizarCampo depende para devolver o cursor ao
 // lugar certo.
+var _PARTICULAS = { "de": true, "da": true, "das": true, "do": true, "dos": true, "e": true };
+
 function capitalizarNomes(texto) {
     var origem = texto || "";
     var resultado = "";
-    var comecoDePalavra = true;
+    var primeiraPalavra = true;
+    var i = 0;
 
-    for (var i = 0; i < origem.length; i++) {
-        var caractere = origem[i];
-        resultado += comecoDePalavra ? _maiusculaSegura(caractere) : caractere;
-        comecoDePalavra = (caractere === " ");
+    while (i < origem.length) {
+        if (origem[i] === " ") {
+            resultado += " ";
+            i++;
+            continue;
+        }
+        var fim = i;
+        while (fim < origem.length && origem[fim] !== " ")
+            fim++;
+        var palavra = origem.slice(i, fim);
+        if (!primeiraPalavra && _PARTICULAS[palavra.toLowerCase()] === true)
+            resultado += _minusculaSegura(palavra);
+        else
+            resultado += _maiusculaSegura(palavra[0]) + palavra.slice(1);
+        primeiraPalavra = false;
+        i = fim;
     }
 
     return resultado;
@@ -58,6 +79,12 @@ function capitalizarNomes(texto) {
 function _maiusculaSegura(caractere) {
     var maiuscula = caractere.toUpperCase();
     return maiuscula.length === caractere.length ? maiuscula : caractere;
+}
+
+// A minuscula de um texto, com a mesma guarda de tamanho de _maiusculaSegura.
+function _minusculaSegura(texto) {
+    var minuscula = texto.toLowerCase();
+    return minuscula.length === texto.length ? minuscula : texto;
 }
 
 // Aplica capitalizarNomes a um TextField, preservando a posicao do cursor.

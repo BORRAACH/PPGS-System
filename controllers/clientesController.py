@@ -14,6 +14,7 @@ atendente que é preciso entrar numa rede pela tela Rede."""
 from PyQt6.QtCore import QObject, pyqtSignal, pyqtSlot
 
 from Config.logConfig import protegido
+from services.enderecoFormatado import formatar_endereco
 from services.rede import clientes, rede
 
 _EVENTO_CLIENTE_SALVO = "cliente_salvo"
@@ -61,7 +62,12 @@ class ClientesController(QObject):
         chave_indice = rede.chave_indice_clientes()
         if not chave_indice:
             return {}
-        return clientes.buscar(telefone, chave_indice) or {}
+        cliente = clientes.buscar(telefone, chave_indice) or {}
+        if cliente.get("rua"):
+            # O autofill já mostra a grafia do índice; o cadastro antigo em
+            # maiúsculas é regravado formatado no próximo salvar.
+            cliente["rua"], cliente["bairro"] = formatar_endereco(cliente["rua"], cliente.get("bairro"))
+        return cliente
 
     @pyqtSlot(str, result=bool)
     @protegido(False)
@@ -78,12 +84,13 @@ class ClientesController(QObject):
         if not chave_indice:
             return False
         dados = dados or {}
+        rua, bairro = formatar_endereco(dados.get("endereco", ""), dados.get("bairro", ""))
         resultado = clientes.salvar({
             "telefone": dados.get("telefone", ""),
             "nome": dados.get("cliente", ""),
-            "rua": dados.get("endereco", ""),
+            "rua": rua,
             "numero": dados.get("numero", ""),
-            "bairro": dados.get("bairro", ""),
+            "bairro": bairro,
             "observacao": dados.get("observacaoGeral", ""),
         }, chave_indice)
         if resultado is None:
