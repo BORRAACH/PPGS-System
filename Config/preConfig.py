@@ -50,6 +50,11 @@ _DEPENDENCIAS_PIP = [
     # broadcast UDP de reserva, então continua sendo melhor esforço como o
     # resto desta lista.
     ("zeroconf", ("zeroconf",), None),
+    # Lista de certificados raiz das requisições às APIs de mapa (ver
+    # services/requisicaoHttp.py). No Windows ela substitui a lista do sistema,
+    # que numa máquina desatualizada recusa o Photon e o Overpass. Melhor
+    # esforço: sem ela as requisições usam a lista padrão do Python.
+    ("certifi", ("certifi",), None),
     # Criptografia da malha (ver services/rede/seguranca.py) e as chaves
     # derivadas que o ppgs_server usa. Diferente do resto desta lista, esta
     # NÃO é melhor esforço: sem ela a malha simplesmente não sobe

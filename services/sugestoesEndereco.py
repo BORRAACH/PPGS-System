@@ -24,18 +24,22 @@ O bairro já digitado muda a ORDEM, não a consulta: ruas daquele bairro sobem
 para o topo.
 
 Falha é silenciosa por desenho: sem nada local e sem internet, lista vazia —
-o campo segue sendo um campo de texto comum."""
+o campo segue sendo um campo de texto comum.
 
-import json
+As requisições HTTP (Photon e ipinfo) não passam pelo QNetworkAccessManager:
+no Windows ele travava sem nunca responder. Saem por services/requisicaoHttp.py,
+só com o Python, numa thread do pool, e a resposta volta para a thread da
+interface por sinal (ver _pedir_json)."""
+
 import threading
 import time
 import traceback
+from concurrent.futures import ThreadPoolExecutor
 
-from PyQt6.QtCore import QObject, QTimer, QUrl, QUrlQuery, pyqtProperty, pyqtSignal, pyqtSlot
-from PyQt6.QtNetwork import QNetworkAccessManager, QNetworkReply, QNetworkRequest
+from PyQt6.QtCore import QObject, QTimer, pyqtProperty, pyqtSignal, pyqtSlot
 
 from Config.logConfig import protegido
-from services import montadorIndiceRuas
+from services import montadorIndiceRuas, requisicaoHttp
 from services.buscaCardapio import normalizar
 from services.rede import historicoEnderecos, indiceRuas, localizacaoServidor, rede, relogio
 
@@ -43,9 +47,11 @@ _URL_PHOTON = "https://photon.komoot.io/api/"
 # Geolocalização pela conexão de internet, para a hospedeira que ainda não tem
 # localização definida. Precisão de cidade — é o que o índice precisa.
 _URL_GEOLOCALIZACAO_IP = "https://ipinfo.io/json"
-# A política de uso do Photon pede um User-Agent que identifique a aplicação.
-_USER_AGENT = b"ppgs-system"
-_TIMEOUT_MS = 4000
+# Por espera de rede (conectar, cada leitura) — ver requisicaoHttp.obter_json.
+_TIMEOUT_S = 6
+# Threads das requisições. Duas bastam: uma busca por campo (Endereço e
+# Bairro), e a resposta de uma busca já substituída é só descartada.
+_THREADS_HTTP = 2
 
 # Mesmo mínimo que o debounce da Entrega.qml aplica: com 1-2 letras quase
 # tudo casa, e a lista não sugere nada — só rola.
@@ -165,23 +171,11 @@ def _bairros_do_photon(features):
     return [str(props["name"]) for props, _coordenadas in features if props.get("name")]
 
 
-def _ler_json(resposta):
-    """Corpo JSON (dict) de uma resposta 200, ou None em qualquer falha."""
-    status = resposta.attribute(QNetworkRequest.Attribute.HttpStatusCodeAttribute)
-    if resposta.error() != QNetworkReply.NetworkError.NoError or int(status or 0) != 200:
-        return None
-    try:
-        dados = json.loads(bytes(resposta.readAll()).decode("utf-8", errors="replace"))
-    except ValueError:
-        return None
-    return dados if isinstance(dados, dict) else None
-
-
-def _ler_features(resposta):
+def _features_de(dados):
     """[(properties, coordinates)] do GeoJSON do Photon, ou None se a
-    resposta não prestou (sem rede, timeout, erro HTTP, JSON inválido)."""
-    dados = _ler_json(resposta)
-    if dados is None or not isinstance(dados.get("features"), list):
+    resposta não prestou (sem rede, timeout, erro HTTP, JSON inválido — que
+    chegam aqui como dados None)."""
+    if not isinstance(dados, dict) or not isinstance(dados.get("features"), list):
         return None
     features = []
     for feature in dados["features"]:
@@ -192,13 +186,6 @@ def _ler_features(resposta):
         if isinstance(props, dict):
             features.append((props, coordenadas))
     return features
-
-
-def _requisicao(url: QUrl) -> QNetworkRequest:
-    requisicao = QNetworkRequest(url)
-    requisicao.setRawHeader(b"User-Agent", _USER_AGENT)
-    requisicao.setTransferTimeout(_TIMEOUT_MS)
-    return requisicao
 
 
 class SugestoesEnderecoService(QObject):
@@ -220,15 +207,19 @@ class SugestoesEnderecoService(QObject):
     _correiosConsultado = pyqtSignal(str, object)
     _montagemTerminou = pyqtSignal(str)
     _indiceLido = pyqtSignal(object)
+    # A resposta de uma requisição HTTP feita numa thread do pool (ver
+    # _pedir_json): (quem espera, JSON decodificado ou None, erro ou None).
+    _respostaHttp = pyqtSignal(object, object, object)
 
     def __init__(self):
         super().__init__()
-        self._http = QNetworkAccessManager(self)
+        self._http = ThreadPoolExecutor(max_workers=_THREADS_HTTP, thread_name_prefix="sugestoes-http")
         # (camadas, termo normalizado, bbox) -> (instante, resultado extraído)
         self._cache = {}
-        # campo ("endereco"/"bairro") -> resposta em andamento. Uma por campo:
-        # a busca nova aborta a anterior, que já não interessa a ninguém.
-        self._em_curso = {}
+        # campo ("endereco"/"bairro") -> número da busca mais recente. Uma
+        # requisição em thread não tem como ser abortada: a resposta de uma
+        # busca que já foi substituída por outra é descartada quando chega.
+        self._geracao = {}
         self._detectando_localizacao = False
         # Só para o log não repetir "Photon indisponível" a cada tecla.
         self._photon_respondendo = True
@@ -252,6 +243,7 @@ class SugestoesEnderecoService(QObject):
         self._correiosConsultado.connect(self._ao_correios_consultado)
         self._montagemTerminou.connect(self._ao_montagem_terminar)
         self._indiceLido.connect(self._ao_indice_lido)
+        self._respostaHttp.connect(self._ao_responder_http)
         self._timer_gravar_indice = QTimer(self)
         self._timer_gravar_indice.setSingleShot(True)
         self._timer_gravar_indice.setInterval(_ATRASO_GRAVACAO_INDICE_MS)
@@ -399,41 +391,30 @@ class SugestoesEnderecoService(QObject):
             responder(guardado)
             return
 
-        anterior = self._em_curso.pop(campo, None)
-        if anterior is not None:
-            # A marca distingue "abortada por uma busca mais nova" do timeout,
-            # que o Qt também entrega como OperationCanceledError.
-            anterior.setProperty("substituida", True)
-            anterior.abort()
+        geracao = self._geracao.get(campo, 0) + 1
+        self._geracao[campo] = geracao
 
-        consulta = QUrlQuery()
-        consulta.addQueryItem("q", termo)
-        for camada in camadas:
-            consulta.addQueryItem("layer", camada)
+        # Lista de pares, e não dict: "layer" se repete.
+        parametros = [("q", termo)] + [("layer", camada) for camada in camadas]
         if bbox:
-            consulta.addQueryItem("bbox", bbox)
-            consulta.addQueryItem("lat", f"{localizacao['lat']:.6f}")
-            consulta.addQueryItem("lon", f"{localizacao['lon']:.6f}")
-        consulta.addQueryItem("limit", str(_LIMITE_PHOTON))
+            parametros += [
+                ("bbox", bbox),
+                ("lat", f"{localizacao['lat']:.6f}"),
+                ("lon", f"{localizacao['lon']:.6f}"),
+            ]
+        parametros.append(("limit", str(_LIMITE_PHOTON)))
         # "default" devolve o nome local ("Rua ..."), não "... Street".
-        consulta.addQueryItem("lang", "default")
-        url = QUrl(_URL_PHOTON)
-        url.setQuery(consulta)
+        parametros.append(("lang", "default"))
 
-        resposta = self._http.get(_requisicao(url))
-        self._em_curso[campo] = resposta
-
-        def concluir():
-            resposta.deleteLater()
-            if self._em_curso.get(campo) is resposta:
-                del self._em_curso[campo]
-            if resposta.property("substituida"):
+        def concluir(dados, erro):
+            if self._geracao.get(campo) != geracao:
+                # Já há uma busca mais nova para este campo.
                 return
 
-            features = _ler_features(resposta)
+            features = _features_de(dados)
             if features is None:
                 if self._photon_respondendo:
-                    print(f"[sugestoesEndereco] Photon indisponível ({resposta.errorString()}).")
+                    print(f"[sugestoesEndereco] Photon indisponível ({erro or 'resposta inválida'}).")
                 self._photon_respondendo = False
                 responder([])
                 return
@@ -445,7 +426,33 @@ class SugestoesEnderecoService(QObject):
             self._guardar(chave_cache, resultado)
             responder(resultado)
 
-        resposta.finished.connect(concluir)
+        self._pedir_json(_URL_PHOTON, parametros, concluir)
+
+    def _pedir_json(self, url, parametros, ao_terminar):
+        """Faz a requisição numa thread do pool e entrega `ao_terminar(dados,
+        erro)` na thread da interface: `dados` é o JSON já decodificado, ou None
+        com `erro` dizendo o motivo. `ao_terminar` sempre é chamado — é o que
+        garante que ninguém fica esperando para sempre (o "Buscando..." da
+        tela Rede)."""
+        def trabalho():
+            try:
+                dados, erro = requisicaoHttp.obter_json(url, parametros, timeout=_TIMEOUT_S), None
+            except Exception as falha:  # qualquer falha vira resposta vazia, nunca thread morta calada
+                dados, erro = None, falha
+            try:
+                self._respostaHttp.emit(ao_terminar, dados, erro)
+            except RuntimeError:
+                pass  # sistema fechando: o serviço já foi destruído
+
+        try:
+            self._http.submit(trabalho)
+        except RuntimeError:
+            # Pool já encerrado (fechamento do sistema): responde vazio na hora.
+            ao_terminar(None, requisicaoHttp.ErroRequisicao("sistema fechando"))
+
+    @protegido(None)
+    def _ao_responder_http(self, ao_terminar, dados, erro):
+        ao_terminar(dados, erro)
 
     def _do_cache(self, chave):
         entrada = self._cache.get(chave)
@@ -650,6 +657,7 @@ class SugestoesEnderecoService(QObject):
         """Fechamento do sistema: para a thread e grava o que o ViaCEP já
         respondeu, para a próxima abertura não repetir essas consultas."""
         self._cancelar_montagem.set()
+        self._http.shutdown(wait=False, cancel_futures=True)
         self._gravar_correios()
         indiceRuas.gravar_pendente()
 
@@ -670,16 +678,14 @@ class SugestoesEnderecoService(QObject):
             return
 
         self._detectando_localizacao = True
-        resposta = self._http.get(_requisicao(QUrl(_URL_GEOLOCALIZACAO_IP)))
 
-        def concluir():
-            resposta.deleteLater()
+        def concluir(dados, erro):
             self._detectando_localizacao = False
-            dados = _ler_json(resposta) or {}
+            dados = dados if isinstance(dados, dict) else {}
             try:
                 lat, lon = (float(parte) for parte in str(dados.get("loc", "")).split(","))
             except ValueError:
-                print(f"[sugestoesEndereco] Não foi possível detectar a localização pela internet ({resposta.errorString()}).")
+                print(f"[sugestoesEndereco] Não foi possível detectar a localização pela internet ({erro or 'resposta sem coordenadas'}).")
                 return
             # Alguém pode ter definido enquanto a detecção estava no ar.
             if rede.localizacaoServidor:
@@ -695,7 +701,7 @@ class SugestoesEnderecoService(QObject):
             }):
                 print(f"[sugestoesEndereco] Localização detectada pela internet: {descricao} ({lat}, {lon}).")
 
-        resposta.finished.connect(concluir)
+        self._pedir_json(_URL_GEOLOCALIZACAO_IP, None, concluir)
 
     @pyqtSlot(str)
     @protegido(None)
@@ -713,18 +719,10 @@ class SugestoesEnderecoService(QObject):
             )
             return
 
-        consulta = QUrlQuery()
-        consulta.addQueryItem("q", texto)
-        consulta.addQueryItem("limit", "1")
-        consulta.addQueryItem("lang", "default")
-        url = QUrl(_URL_PHOTON)
-        url.setQuery(consulta)
-        resposta = self._http.get(_requisicao(url))
-
-        def concluir():
-            resposta.deleteLater()
-            features = _ler_features(resposta)
+        def concluir(dados, erro):
+            features = _features_de(dados)
             if features is None:
+                print(f"[sugestoesEndereco] Photon indisponível ao definir a localização ({erro or 'resposta inválida'}).")
                 self.localizacaoDefinida.emit(False, "Sem resposta do serviço de mapas — confira a internet e tente de novo.")
                 return
             if not features:
@@ -754,7 +752,7 @@ class SugestoesEnderecoService(QObject):
             })
             self.localizacaoDefinida.emit(ok, descricao if ok else "O lugar encontrado tem coordenadas inválidas.")
 
-        resposta.finished.connect(concluir)
+        self._pedir_json(_URL_PHOTON, [("q", texto), ("limit", "1"), ("lang", "default")], concluir)
 
 
 # Singleton de módulo — mesmo padrão dos demais services do projeto.

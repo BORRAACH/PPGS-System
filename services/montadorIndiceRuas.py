@@ -14,16 +14,17 @@ Pensado para a máquina fraca do balcão:
   2.500 ruas leva por volta de uma hora, quase tudo espera de rede, sem
   disputar CPU com a tela; e retoma de onde parou na abertura seguinte;
 - o cálculo de proximidade entre ruas e bairros cede a vez à thread da
-  interface a cada punhado de ruas."""
+  interface a cada punhado de ruas.
 
-import json
+O HTTP sai por services/requisicaoHttp.py, só com o Python: no Windows, o
+caminho padrão passaria pelo proxy e pela lista de certificados do sistema."""
+
 import math
 import time
 import unicodedata
-import urllib.error
 import urllib.parse
-import urllib.request
 
+from services import requisicaoHttp
 from services.buscaCardapio import normalizar
 from services.rede import indiceRuas
 
@@ -34,7 +35,6 @@ _URLS_OVERPASS = (
     "https://overpass.kumi.systems/api/interpreter",
 )
 _URL_VIACEP = "https://viacep.com.br/ws/{uf}/{cidade}/{logradouro}/json/"
-_USER_AGENT = "ppgs-system"
 _TIMEOUT_OVERPASS_S = 180
 _TIMEOUT_VIACEP_S = 15
 
@@ -88,16 +88,13 @@ def _distancia_m(a, b):
 
 
 def _baixar_overpass(consulta, cancelado):
-    corpo = urllib.parse.urlencode({"data": consulta}).encode("utf-8")
     ultimo_erro = None
     for url in _URLS_OVERPASS:
         if cancelado.is_set():
             raise ErroMontagem("cancelado")
-        requisicao = urllib.request.Request(url, data=corpo, headers={"User-Agent": _USER_AGENT})
         try:
-            with urllib.request.urlopen(requisicao, timeout=_TIMEOUT_OVERPASS_S + 20) as resposta:
-                return json.load(resposta)
-        except (urllib.error.URLError, OSError, ValueError) as erro:
+            return requisicaoHttp.obter_json(url, formulario={"data": consulta}, timeout=_TIMEOUT_OVERPASS_S + 20)
+        except requisicaoHttp.ErroRequisicao as erro:
             ultimo_erro = erro
     raise ErroMontagem(f"mapa de ruas indisponível ({ultimo_erro})")
 
@@ -174,17 +171,15 @@ def consultar_correios(uf, cidade, nome):
         cidade=urllib.parse.quote(_sem_acento(cidade)),
         logradouro=urllib.parse.quote(nome, safe=""),
     )
-    requisicao = urllib.request.Request(url, headers={"User-Agent": _USER_AGENT})
     try:
-        with urllib.request.urlopen(requisicao, timeout=_TIMEOUT_VIACEP_S) as resposta:
-            dados = json.load(resposta)
-    except urllib.error.HTTPError as erro:
-        if erro.code == 400:
+        dados = requisicaoHttp.obter_json(url, timeout=_TIMEOUT_VIACEP_S)
+    except requisicaoHttp.ErroRequisicao as erro:
+        if erro.status == 400:
             # Termo que o ViaCEP recusa (caractere estranho no nome da via):
             # não é falha do serviço, só uma rua sem resposta.
             return []
-        raise ErroMontagem(f"ViaCEP respondeu HTTP {erro.code}") from erro
-    except (urllib.error.URLError, OSError, ValueError) as erro:
+        if erro.status:
+            raise ErroMontagem(f"ViaCEP respondeu HTTP {erro.status}") from erro
         raise ErroMontagem(f"ViaCEP indisponível ({erro})") from erro
 
     if not isinstance(dados, list):
