@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Layouts
 import "../pages/pedidos/MontagemItem.js" as Montagem
 import "DestinoPedido.js" as Destino
 import "RoteiroLancamento.js" as Roteiro
@@ -734,7 +735,12 @@ Popup {
             }
 
             if (nome === "sabores") {
-                var sabores = popupLancamento._opcoesDaEtapa("sabores");
+                // Com algo digitado na barra, só as pizzas que casam, na ordem
+                // de relevância da busca (ver _buscarSabores); sem, todas. O
+                // _devePular continua olhando a lista inteira, nunca a filtrada.
+                var sabores = popupLancamento.termoSabores.trim() !== ""
+                    ? popupLancamento._buscarSabores(popupLancamento.termoSabores)
+                    : popupLancamento._opcoesDaEtapa("sabores");
                 for (i = 0; i < sabores.length; i++) {
                     saida.push({
                         "rotulo": sabores[i].nome,
@@ -823,15 +829,22 @@ Popup {
 
     property int indiceFoco: 0
 
+    // O que está digitado na barra de busca da etapa de sabores ("" = todas as
+    // pizzas).
+    property string termoSabores: ""
 
     onEtapaChanged: {
         popupLancamento.indiceFoco = 0;
+        // Cada visita à etapa de sabores começa com a lista inteira.
+        popupLancamento.termoSabores = "";
+        campoBuscaSabor.text = "";
         modeloEtapa.recarregar();
+        popupLancamento._focarEtapa();
     }
 
     onOpened: {
         modeloEtapa.recarregar();
-        conteudo.forceActiveFocus();
+        popupLancamento._focarEtapa();
     }
 
     onClosed: {
@@ -846,6 +859,50 @@ Popup {
     // fluxo sem clicar em nada.
     function linhasDaEtapa() {
         return modeloEtapa.linhas;
+    }
+
+    // Na etapa de sabores o teclado vai para a barra de busca; nas outras,
+    // continua no FocusScope do conteúdo.
+    //
+    // O `focus = false` antes é obrigatório: forceActiveFocus() num FocusScope
+    // devolve o foco ao último filho que o tinha, e sem isto a barra, já
+    // escondida, continuava recebendo as teclas na etapa seguinte (letras
+    // mexiam na busca invisível e o Tab avançava até nas etapas obrigatórias).
+    function _focarEtapa() {
+        if (popupLancamento.etapa === "sabores") {
+            campoBuscaSabor.forceActiveFocus();
+        } else {
+            campoBuscaSabor.focus = false;
+            conteudo.forceActiveFocus();
+        }
+    }
+
+    // Pizzas que casam com `termo`, pela busca do cardápio restrita à categoria
+    // (services/buscaCardapio.buscar com chave_categoria). Primeiro vêm os
+    // nomes que COMEÇAM com o termo, achados por busca binária no índice, que
+    // é mantido em ordem alfabética. Depois vêm os que têm o termo no meio do
+    // nome ou nos ingredientes: esses nenhuma busca binária acha, porque ela só
+    // localiza prefixos numa lista ordenada.
+    function _buscarSabores(termo) {
+        return cardapioController.buscarNaCategoria("pizzas", termo);
+    }
+
+    // Cada tecla na barra: refaz a lista e destaca o primeiro resultado, que é
+    // o mais relevante (o Enter já marca ele).
+    function filtrarSabores(texto) {
+        popupLancamento.termoSabores = texto;
+        popupLancamento.indiceFoco = 0;
+        modeloEtapa.recarregar();
+        listaEtapa.positionViewAtBeginning();
+    }
+
+    // Alt da ESQUERDA, e não o AltGr: ver o comentário no Keys.onLeftPressed
+    // do conteúdo. Função porque a barra de busca de sabores faz a mesma
+    // pergunta.
+    function _ehAltEsquerdo(evento) {
+        var comAlt = (evento.modifiers & Qt.AltModifier) !== 0;
+        var ehAltGr = (evento.modifiers & (Qt.GroupSwitchModifier | Qt.ControlModifier)) !== 0;
+        return comAlt && !ehAltGr;
     }
 
     function _mover(passo) {
@@ -907,10 +964,7 @@ Popup {
         // X11 e Ctrl+Alt no Windows. Exigir a ausência dos dois deixa passar
         // só o Alt esquerdo, nas duas plataformas em que este app roda.
         Keys.onLeftPressed: function (evento) {
-            var comAlt = (evento.modifiers & Qt.AltModifier) !== 0;
-            var ehAltGr = (evento.modifiers & (Qt.GroupSwitchModifier | Qt.ControlModifier)) !== 0;
-
-            if (!comAlt || ehAltGr) {
+            if (!popupLancamento._ehAltEsquerdo(evento)) {
                 evento.accepted = false;
                 return;
             }
@@ -1025,6 +1079,103 @@ Popup {
                 color: Estilo.global.divider
             }
 
+            // --- Busca de sabores (só na etapa de sabores) ---
+            // Com 74 pizzas, achar a outra metade rolando a lista custava várias
+            // setas; digitando o começo do nome ela vem para o topo.
+            //
+            // Mesmo padrão visual da barra do PopupBuscaCardapio (a primeira do
+            // Ctrl+S): lupa verde fora do campo, campo em pílula com os mesmos
+            // paddings e a contagem de resultados à direita.
+            Item {
+                width: parent.width
+                height: visible ? linhaBuscaSabor.implicitHeight + Estilo.global.padding.md * 2 : 0
+                visible: popupLancamento.etapa === "sabores"
+
+                RowLayout {
+                    id: linhaBuscaSabor
+
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    anchors.leftMargin: Estilo.global.padding.xl
+                    anchors.rightMargin: Estilo.global.padding.xl
+                    spacing: Estilo.global.spacing.sm
+
+                    // Declarada exatamente como a lupa do PopupBuscaCardapio, sem
+                    // Layout.preferredWidth/Height: dentro do RowLayout ela sai
+                    // no tamanho da imagem, maior que `tamanho`, e é esse o
+                    // tamanho que a barra do Ctrl+S mostra.
+                    Icone {
+                        nome: "fa6s.magnifying-glass"
+                        cor: Estilo.action.confirm.base
+                        tamanho: Estilo.global.fontSize.lg
+                        Layout.alignment: Qt.AlignVCenter
+                    }
+
+                    TextField {
+                        id: campoBuscaSabor
+
+                        Layout.fillWidth: true
+                        color: Estilo.global.textInput
+                        placeholderTextColor: Estilo.global.textPlaceholder
+                        placeholderText: "Buscar sabor para a outra metade…"
+                        font.pixelSize: Estilo.global.fontSize.lg
+                        topPadding: 10
+                        bottomPadding: 10
+                        leftPadding: 12
+                        rightPadding: 12
+                        selectByMouse: true
+
+                        onTextEdited: popupLancamento.filtrarSabores(text)
+
+                        // Nesta etapa o foco fica aqui, então o campo repete o
+                        // teclado do conteúdo: setas navegam na lista, Enter
+                        // marca, Tab continua e Alt+← volta. O ← sozinho segue
+                        // movendo o cursor no texto.
+                        Keys.onUpPressed: popupLancamento._mover(-1)
+                        Keys.onDownPressed: popupLancamento._mover(1)
+                        Keys.onReturnPressed: popupLancamento._acionarFoco()
+                        Keys.onEnterPressed: popupLancamento._acionarFoco()
+                        Keys.onTabPressed: function (evento) {
+                            popupLancamento._avancar();
+                            evento.accepted = true;
+                        }
+                        Keys.onLeftPressed: function (evento) {
+                            if (!popupLancamento._ehAltEsquerdo(evento)) {
+                                evento.accepted = false;
+                                return;
+                            }
+                            popupLancamento.voltar();
+                            evento.accepted = true;
+                        }
+                        // O primeiro Esc limpa a busca; com ela vazia, volta a
+                        // etapa como em qualquer outra.
+                        Keys.onEscapePressed: {
+                            if (text !== "") {
+                                clear();
+                                popupLancamento.filtrarSabores("");
+                            } else {
+                                popupLancamento.voltar();
+                            }
+                        }
+
+                        background: Rectangle {
+                            radius: Estilo.global.radius.pill
+                            color: Estilo.global.inputBackground
+                            border.color: campoBuscaSabor.activeFocus ? Estilo.action.confirm.base : Estilo.global.border
+                            border.width: Estilo.global.borderWidth.hairline
+                        }
+                    }
+
+                    Text {
+                        text: modeloEtapa.linhas.length === 1 ? "1 sabor" : (modeloEtapa.linhas.length + " sabores")
+                        font.pixelSize: Estilo.global.fontSize.sm
+                        color: Estilo.global.textMuted
+                        Layout.alignment: Qt.AlignVCenter
+                    }
+                }
+            }
+
             // --- Lista da etapa ---
             ListView {
                 id: listaEtapa
@@ -1105,6 +1256,18 @@ Popup {
                 }
             }
 
+            // A busca de sabores não achou nada: sem isto a etapa ficava só com
+            // o rodapé, sem dizer por quê.
+            Text {
+                width: parent.width
+                visible: popupLancamento.etapa === "sabores" && popupLancamento.termoSabores.trim() !== "" && modeloEtapa.linhas.length === 0
+                padding: Estilo.global.padding.xl
+                text: "Nenhum sabor casa com \"" + popupLancamento.termoSabores.trim() + "\"."
+                wrapMode: Text.WordWrap
+                font.pixelSize: Estilo.global.fontSize.md
+                color: Estilo.global.textSecondary
+            }
+
             Rectangle {
                 width: parent.width
                 height: 1
@@ -1147,6 +1310,11 @@ Popup {
                         var partes = popupLancamento.etapaMultipla
                             ? ["Enter marca", "Tab continua"]
                             : ["↑ ↓ navegar", "Enter escolher"];
+                        // Só com algo digitado: sem, o texto de exemplo da barra já
+                        // diz que dá para buscar, e a dica a mais empurrava o
+                        // "Tab continua" para fora do rodapé.
+                        if (popupLancamento.etapa === "sabores" && popupLancamento.termoSabores !== "")
+                            partes.unshift("Esc limpa a busca");
                         if (popupLancamento.podePular && !popupLancamento.etapaMultipla)
                             partes.push("Tab pula");
                         partes.push("Alt+← volta");
