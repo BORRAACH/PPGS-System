@@ -9,9 +9,11 @@ import estilo 1.0
 // aqui só se desenha. Separado dele para morar noutro ponto da tela — na
 // Entrega, acima do Resumo da comanda —, longe dos campos.
 //
-// Some sozinho 3 segundos depois da confirmação, ou no ×. Volta quando a
-// validação muda de estado (outra rua, número trocado, CEP corrigido): aí há
-// resultado novo para ler.
+// Endereço validado e completo confirma sozinho (ver
+// DeliveryAddressValidator.confirmacaoAutomatica), e o cartão some 1 segundo
+// depois — o tempo de ver o selo —, ou no ×. Volta quando a validação muda de
+// estado (outra rua, número trocado, CEP corrigido): aí há resultado novo para
+// ler.
 Rectangle {
     id: cartao
 
@@ -44,8 +46,8 @@ Rectangle {
             cartao.dispensado = false;
         }
 
-        // Confirmado: fica 3 segundos para o atendente ver o selo e some.
-        // Uma edição antes disso desfaz a confirmação, e o cartão fica.
+        // Confirmado: fica 1 segundo para o atendente ver o selo e some. Uma
+        // edição antes disso desfaz a confirmação, e o cartão fica.
         function onEnderecoConfirmadoChanged() {
             if (cartao.validador.enderecoConfirmado)
                 esconder.restart();
@@ -57,7 +59,7 @@ Rectangle {
     Timer {
         id: esconder
 
-        interval: 3000
+        interval: 1000
         onTriggered: cartao.dispensado = true
     }
 
@@ -216,7 +218,8 @@ Rectangle {
             // Sem foco: o clique não tira o teclado do campo, e cada ação
             // já leva o foco para onde faz sentido.
             Botao {
-                visible: cartao.validador.pronto && !cartao.validador.enderecoConfirmado
+                // Só sem a confirmação automática: com ela não há o que apertar.
+                visible: !cartao.validador.confirmacaoAutomatica && cartao.validador.pronto && !cartao.validador.enderecoConfirmado
                 text: "Confirmar"
                 nomeIcone: "fa6s.check"
                 variante: "primario"

@@ -37,7 +37,7 @@ Column {
     property Item proximoCampo: null
     // Para quem está fora apontar o Tab para dentro daqui.
     property alias primeiroCampo: campoEndereco
-    property alias ultimoCampo: campoCep
+    property alias ultimoCampo: campoBairro
 
     // Adaptação a outras telas — o painel de rotas do Mapa
     // (pages/mapa/PainelRotas.qml) usa sem rótulo, sem complemento e sem zona
@@ -76,8 +76,13 @@ Column {
     // O atendente escolheu seguir com o endereço sem validação ("Usar mesmo
     // assim"): a Entrega não pergunta de novo ao imprimir.
     property bool usarMesmoAssim: false
-    // "Confirmar" apertado com o endereço pronto. Qualquer edição desfaz.
+    // Confirmado: sozinho, quando o endereço fica pronto (ver
+    // confirmacaoAutomatica), ou pelo "Confirmar". Uma edição desfaz, e a
+    // confirmação automática volta assim que o endereço fica pronto de novo.
     property bool enderecoConfirmado: false
+    // Endereço validado e completo confirma sem botão, e o cartão de resultado
+    // fecha sozinho logo depois. false devolve o "Confirmar" ao cartão.
+    property bool confirmacaoAutomatica: true
 
     // ===== O que está digitado =====
     readonly property string textoEndereco: campoEndereco.text.trim()
@@ -97,6 +102,27 @@ Column {
     readonly property bool verificado: status === "validado" && numeroOk && cepOk
     // Há endereço, ele não ficou pronto e ninguém decidiu seguir assim mesmo.
     readonly property bool revisaoPendente: temEndereco && !pronto && !usarMesmoAssim
+    // Pronto e ainda não confirmado: a confirmação automática entra.
+    readonly property bool deveConfirmarSozinho: confirmacaoAutomatica && pronto && !enderecoConfirmado
+    // Adiado para depois do binding: confirmar() mexe em enderecoConfirmado,
+    // que o próprio deveConfirmarSozinho lê. Não mexe no foco — o atendente
+    // pode estar digitando o complemento.
+    onDeveConfirmarSozinhoChanged: {
+        if (deveConfirmarSozinho)
+            Qt.callLater(validador.confirmar);
+    }
+
+    // bairro é o estado; campoBairro, a tela. O que o atendente digita no
+    // campo já chega a bairro (ver o onTextChanged dele); aqui volta para o
+    // campo o que veio de fora: sugestão, validação, preencher, limpar.
+    onBairroChanged: {
+        if (campoBairro.text.trim() === validador.bairro)
+            return;
+        var aplicandoAntes = validador._aplicando;
+        validador._aplicando = true;
+        campoBairro.text = validador.bairro;
+        validador._aplicando = aplicandoAntes;
+    }
     // Pendências só aparecem em vermelho depois da primeira validação: um
     // formulário que acabou de abrir não começa cheio de campos acusando erro.
     readonly property bool _mostrarPendencias: status !== "" && status !== "validando"
@@ -183,6 +209,8 @@ Column {
     // Número e CEP da última validação: mudou um deles, valida de novo.
     property string _numeroValidado: ""
     property string _cepValidado: ""
+    // Bairro da última validação: editado à mão, valida de novo com ele.
+    property string _bairroValidado: ""
     // CEP escrito pela sugestão ou pela validação, e não pelo atendente: esse
     // some quando a rua muda; o digitado fica.
     property string _cepAutomatico: ""
@@ -271,6 +299,7 @@ Column {
             validador.status = "validado";
             validador._numeroValidado = validador.numero;
             validador._cepValidado = validador.cep;
+            validador._bairroValidado = validador.bairro;
             return;
         }
 
@@ -416,10 +445,12 @@ Column {
             campoCep.text = sugestao.cep || "";
         validador._aplicando = false;
 
+        // Sugestão sem bairro conhecido não apaga o que está no campo Bairro.
+        var bairroEscolhido = sugestao.bairroNome || (validador.campoUnico ? "" : validador.bairro);
         validador._zerarResultado();
         validador._cepAutomatico = sugestao.cep || "";
-        validador.bairro = sugestao.bairroNome || "";
-        validador._escolha = sugestao;
+        validador.bairro = bairroEscolhido;
+        validador._escolha = Object.assign({}, sugestao, { "bairroNome": bairroEscolhido });
         validador.validar();
         validador._focarDepoisDaRua();
     }
@@ -448,11 +479,14 @@ Column {
         }
         validador._aplicando = false;
 
+        // Bairro que não veio no texto: fica o do campo (digitado à mão, ou o
+        // de antes). No campo único o texto é tudo: sem bairro nele, não há.
+        var bairroTexto = info.bairro || (validador.campoUnico ? "" : validador.bairro);
         validador._zerarResultado();
-        validador.bairro = info.bairro || "";
+        validador.bairro = bairroTexto;
         validador._escolha = {
             "rua": info.rua,
-            "bairro": info.bairro || "",
+            "bairro": bairroTexto,
             "pistaCondominio": info.pistaCondominio === true
         };
         validador.validar();
@@ -475,6 +509,7 @@ Column {
         validador.usarMesmoAssim = false;
         validador._numeroValidado = validador.numero;
         validador._cepValidado = validador.cep;
+        validador._bairroValidado = validador.bairro;
         var cepDigitado = validador.cepOk && validador.cep !== validador._cepAutomatico;
         validador._geracaoValidacao = cepDigitado
             ? validacaoEnderecoController.validarComCep(escolha, validador.numero, validador.cep)
@@ -518,6 +553,7 @@ Column {
             validador._cepAutomatico = r.cep;
         validador.rua = r.rua || "";
         validador.bairro = r.bairro || "";
+        validador._bairroValidado = validador.bairro;
         validador.cidade = r.cidade || "";
         validador.uf = r.uf || "";
         validador.latitude = validador._numeroOuNulo(r.latitude);
@@ -552,7 +588,12 @@ Column {
             campoCep.text = "";
             validador._aplicando = false;
         }
+        // O bairro fica: quem reescreve a rua sem escolher sugestão pode estar
+        // corrigindo só a digitação (a sugestão com bairro o reescreve). No
+        // campo único ele está no texto, que acabou de mudar.
+        var bairroAntes = validador.campoUnico ? "" : validador.bairro;
         validador._zerarResultado();
+        validador.bairro = bairroAntes;
         validador.enderecoEditado();
     }
 
@@ -582,6 +623,7 @@ Column {
         validador.enderecoConfirmado = false;
         validador._numeroValidado = "";
         validador._cepValidado = "";
+        validador._bairroValidado = "";
     }
 
     function _numeroOuNulo(valor) {
@@ -603,6 +645,52 @@ Column {
     // complemento.
     function _depoisDoNumero() {
         return validador.mostrarComplemento ? campoComplemento : campoCep;
+    }
+
+    // O atendente mudou o bairro à mão (digitando ou pela lista): valida de
+    // novo com ele. Numa rua com mais de um CEP é o bairro que escolhe; achado
+    // o CEP, o campo volta ao bairro oficial dos Correios.
+    function _revalidarPeloBairro() {
+        if (!validador._escolha.rua || validador.bairro === validador._bairroValidado)
+            return;
+        validador._escolha = Object.assign({}, validador._escolha, { "bairro": validador.bairro, "bairroNome": validador.bairro });
+        validador.validar();
+    }
+
+    // Sugestões de bairro: o histórico desta máquina na hora, o Photon depois
+    // do debounce — as mesmas da Entrega antes do validador
+    // (services/sugestoesEndereco.py).
+    function _sugerirBairro() {
+        debounceBairro.stop();
+        var termo = campoBairro.text.trim();
+        if (termo === "" || typeof sugestoesEnderecoController === "undefined") {
+            listaBairros.close();
+            return;
+        }
+        var locais = sugestoesEnderecoController.sugerirBairrosLocais(termo);
+        if (locais.length > 0) {
+            listaBairros.mostrar(locais);
+            return;
+        }
+        listaBairros.close();
+        if (termo.length >= 3)
+            debounceBairro.restart();
+    }
+
+    function _enterNoBairro() {
+        if (listaBairros.opened && listaBairros.confirmar())
+            return;
+        validador._revalidarPeloBairro();
+        validador.concluir();
+    }
+
+    // Enter no CEP: segue para o Bairro, o último campo; no campo único não
+    // há Bairro, e conclui.
+    function _enterNoCep() {
+        if (validador.campoUnico)
+            validador.concluir();
+        else
+            campoBairro.forceActiveFocus();
     }
 
     // Enter no Complemento: falta o CEP, vai até ele; senão conclui.
@@ -640,6 +728,28 @@ Column {
         onTriggered: {
             if (validador._escolha.rua && validador.numero !== validador._numeroValidado)
                 validador.validar();
+        }
+    }
+
+    Timer {
+        id: debounceBairro
+
+        interval: 350
+        onTriggered: {
+            if (campoBairro.activeFocus && campoBairro.text.trim().length >= 3)
+                sugestoesEnderecoController.buscarBairros(campoBairro.text.trim());
+        }
+    }
+
+    Connections {
+        target: typeof sugestoesEnderecoController !== "undefined" ? sugestoesEnderecoController : null
+        ignoreUnknownSignals: true
+
+        // Resposta atrasada (o atendente já digitou mais ou saiu do campo) é
+        // descartada.
+        function onBairrosSugeridos(termo, sugestoes) {
+            if (campoBairro.activeFocus && termo === campoBairro.text.trim())
+                listaBairros.mostrar(sugestoes);
         }
     }
 
@@ -891,10 +1001,10 @@ Column {
                 leftPadding: 10
                 rightPadding: 10
                 inputMethodHints: Qt.ImhDigitsOnly
-                KeyNavigation.tab: validador.proximoCampo
+                KeyNavigation.tab: validador.campoUnico ? validador.proximoCampo : campoBairro
                 KeyNavigation.backtab: validador.mostrarComplemento ? campoComplemento : campoNumero
-                Keys.onReturnPressed: validador.concluir()
-                Keys.onEnterPressed: validador.concluir()
+                Keys.onReturnPressed: validador._enterNoCep()
+                Keys.onEnterPressed: validador._enterNoCep()
                 onTextChanged: {
                     if (reformatando)
                         return;
@@ -920,6 +1030,86 @@ Column {
                                 : (validador._mostrarPendencias && !validador.cepOk ? Estilo.status.error.content : Estilo.global.border)
                     border.width: validador._mostrarPendencias && !validador.cepOk ? 2 : Estilo.global.borderWidth.hairline
                 }
+            }
+        }
+    }
+
+    // Bairro: preenchido pela sugestão e pela validação (o oficial dos
+    // Correios), e editável — o digitado vale para a próxima validação.
+    Column {
+        id: colunaBairro
+
+        // No campo único o bairro está no próprio texto.
+        visible: !validador.campoUnico
+        spacing: 4
+
+        Text {
+            text: "Bairro"
+            font.pixelSize: Estilo.global.fontSize.sm
+            font.bold: true
+            color: Estilo.global.textSecondary
+        }
+
+        TextField {
+            id: campoBairro
+
+            width: validador.width
+            color: Estilo.global.textInput
+            placeholderTextColor: Estilo.global.textPlaceholder
+            placeholderText: "BAIRRO"
+            topPadding: 10
+            bottomPadding: 10
+            leftPadding: 10
+            rightPadding: 10
+            KeyNavigation.tab: validador.proximoCampo
+            KeyNavigation.backtab: campoCep
+            // Setas navegam as sugestões sem tirar o foco do campo.
+            Keys.onDownPressed: listaBairros.mover(1)
+            Keys.onUpPressed: listaBairros.mover(-1)
+            Keys.onReturnPressed: validador._enterNoBairro()
+            Keys.onEnterPressed: validador._enterNoBairro()
+            Keys.onEscapePressed: function (evento) {
+                evento.accepted = listaBairros.opened;
+                listaBairros.close();
+            }
+            // Mesma capitalização da rua. Só a escrita do atendente (com o
+            // foco no campo) vira bairro e abre sugestões; a do próprio
+            // componente volta por onBairroChanged.
+            onTextChanged: {
+                Texto.capitalizarCampo(campoBairro);
+                if (validador._aplicando || !activeFocus)
+                    return;
+                validador.bairro = text.trim();
+                validador.enderecoConfirmado = false;
+                validador._sugerirBairro();
+            }
+            onActiveFocusChanged: {
+                if (!activeFocus)
+                    listaBairros.close();
+            }
+            onEditingFinished: validador._revalidarPeloBairro()
+
+            background: Rectangle {
+                radius: Estilo.global.radius.pill
+                color: Estilo.global.inputBackground
+                border.color: campoBairro.activeFocus ? validador.corDestaque : Estilo.global.border
+                border.width: Estilo.global.borderWidth.hairline
+            }
+        }
+
+        ListaSugestoes {
+            id: listaBairros
+
+            campo: campoBairro
+
+            onEscolhida: function (texto) {
+                validador._aplicando = true;
+                campoBairro.text = texto;
+                validador._aplicando = false;
+                debounceBairro.stop();
+                campoBairro.cursorPosition = campoBairro.text.length;
+                validador.bairro = campoBairro.text.trim();
+                validador._revalidarPeloBairro();
             }
         }
     }

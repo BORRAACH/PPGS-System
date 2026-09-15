@@ -1467,9 +1467,9 @@ Page {
 
                 // Coluna da direita: o resultado da validação do endereço em
                 // cima do Resumo da comanda — à vista enquanto o atendente
-                // segue preenchendo o pedido, e fora do meio dos campos. Some 3
-                // segundos depois da confirmação ou no × (ver
-                // components/ResultadoValidacaoEndereco.qml).
+                // segue preenchendo o pedido, e fora do meio dos campos. Endereço
+                // validado se confirma sozinho, e o cartão some 1 segundo depois
+                // ou no × (ver components/ResultadoValidacaoEndereco.qml).
                 ColumnLayout {
                     Layout.preferredWidth: conteudoEntrega.larguraResumo
                     Layout.alignment: Qt.AlignHCenter | Qt.AlignVCenter
