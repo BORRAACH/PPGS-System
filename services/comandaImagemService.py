@@ -1609,12 +1609,17 @@ def _cidade_da_pizzaria():
 
 
 def endereco_da_comanda(conteudo_bytes) -> str:
-    """"RUA, NÚMERO - BAIRRO, Cidade" lido das linhas Endereço:/Bairro: da
-    comanda, ou "" quando ela não tem endereço (Balcão, Mesa, Entrega com o
-    endereço em branco)."""
-    conteudo = parser.limpar_codigos_impressora(
-        bytes(conteudo_bytes).decode(texto.CODEPAGE_IMPRESSORA, errors="replace")
-    )
+    """O endereço para o QR. Comanda com endereço validado traz a linha interna
+    com o endereço completo, CEP incluído (ver
+    comandaEstiloService.MARCA_ENDERECO_QR), e ela vale. Sem ela (comanda
+    antiga, endereço não validado): "RUA, NÚMERO - BAIRRO, Cidade" lido das
+    linhas Endereço:/Bairro:, ou "" quando não há endereço (Balcão, Mesa,
+    Entrega com o endereço em branco)."""
+    bruto = bytes(conteudo_bytes).decode(texto.CODEPAGE_IMPRESSORA, errors="replace")
+    completo = parser.extrair_endereco_qr(bruto)
+    if completo:
+        return completo
+    conteudo = parser.limpar_codigos_impressora(bruto)
     endereco = " ".join(parser.extrair_campo(parser.PADRAO_ENDERECO, conteudo).split())
     if not endereco:
         return ""

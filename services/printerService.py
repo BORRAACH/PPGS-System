@@ -32,6 +32,10 @@ _COMANDO_CODEPAGE_CP850 = b"\x1b\x74\x02"
 # O marcador de tamanho em pixels, do lado de cá já em bytes — é assim que ele
 # chega, e converter o conteúdo inteiro pra texto só pra limpá-lo seria trocar
 # uma substituição por duas conversões de codepage.
+# A linha interna do endereço do QR (ver comandaEstiloService.MARCA_ENDERECO_QR),
+# inteira e com a quebra: depois de virar QR, ela não vai ao papel em nenhum dos
+# dois caminhos.
+_PADRAO_LINHA_ENDERECO_QR = re.compile(re.escape(estilo.MARCA_ENDERECO_QR.encode("ascii")) + rb"[^\n]*\n?")
 _PADRAO_MARCA_TAMANHO = re.compile(
     re.escape(estilo.MARCA_TAMANHO_PX.encode("ascii")) + rb"\d{3}"
 )
@@ -100,6 +104,9 @@ class PrinterService:
         — nos dois caminhos, e sempre como imagem."""
         familia = estilo.fonte_impressao()
         qr_endereco = comandaImagemService.qr_endereco_em_raster(conteudo, familia)
+        # O QR já leu o endereço completo: a linha interna sai antes do desenho
+        # e do texto.
+        conteudo = _PADRAO_LINHA_ENDERECO_QR.sub(b"", conteudo)
         if not familia:
             return self._em_texto(conteudo) + qr_endereco
 

@@ -132,6 +132,25 @@ def _comando_tamanho_px(tamanho_px):
     return f"{MARCA_TAMANHO_PX}{tamanho_px:03d}"
 
 
+# O endereço completo de uma comanda de Entrega, para o QR Code do Google Maps:
+# "Rua Goiás, 196 - Jardim dos Estados, Taubaté - SP, 12062-130", numa linha só
+# no fim do arquivo. CEP e cidade não saem no papel (lá só sai o complemento),
+# mas o QR precisa deles para abrir o lugar certo.
+#
+# Mesma família e mesmo contrato do MARCA_TAMANHO_PX: é recado para quem
+# desenha a comanda e NUNCA chega à impressora. Quem imprime tira a linha antes
+# de mandar (PrinterService._preparar_conteudo), quem lê a comanda salva a
+# descarta (comandaParserService._PADRAO_ESTILO) e o QR a lê
+# (comandaImagemService.endereco_da_comanda).
+MARCA_ENDERECO_QR = _GS + "~E"
+
+
+def linha_endereco_qr(endereco_completo):
+    """A linha interna do QR para `endereco_completo`, ou "" sem endereço."""
+    endereco = " ".join(str(endereco_completo or "").split())
+    return f"{MARCA_ENDERECO_QR}{endereco}" if endereco else ""
+
+
 TAMANHO_PX_DESLIGA = _comando_tamanho_px(TAMANHO_FONTE_BASE_PX)
 
 
@@ -165,6 +184,9 @@ CAMPOS = [
     "telefone",
     "endereco",
     "bairro",
+    # Do endereço validado da Entrega (ver services/validacaoEndereco.py): só
+    # sai quando preenchido. Ponto de referência vai na Observação.
+    "complemento_entrega",
     "data",
     "usuario",
     "pedido",
@@ -273,6 +295,7 @@ RODULOS_CAMPOS = {
     "telefone": "Telefone",
     "endereco": "Endereço (com número)",
     "bairro": "Bairro",
+    "complemento_entrega": "Complemento (apto/bloco)",
     "data": "Data/hora do pedido",
     # Quem autorizou o lançamento no balcão (ver services/rede/usuarios.py e
     # components/PopupAutorizacao.qml). Sai em branco — e a linha some — nas
@@ -368,6 +391,7 @@ CAMPOS_ORDENAVEIS = [
     "telefone",
     "endereco",
     "bairro",
+    "complemento_entrega",
     "data",
     "itens",
     "observacao_entrega",
@@ -435,6 +459,7 @@ CATEGORIA_CAMPO = {
     "telefone": "cabecalho",
     "endereco": "cabecalho",
     "bairro": "cabecalho",
+    "complemento_entrega": "cabecalho",
     "data": "cabecalho",
     "observacao_entrega": "observacao",
     "forma_pagamento": "pagamento",
@@ -517,6 +542,7 @@ TIPOS_POR_CAMPO = {
     "telefone": ["Entrega"],
     "endereco": ["Entrega"],
     "bairro": ["Entrega"],
+    "complemento_entrega": ["Entrega"],
     "data": ["Balcão", "Entrega", "Mesa"],
     "usuario": ["Balcão", "Entrega", "Mesa"],
     "itens": ["Balcão", "Entrega", "Mesa"],
@@ -571,6 +597,7 @@ _ORDEM_PADRAO = [
     "telefone",
     "endereco",
     "bairro",
+    "complemento_entrega",
     "data",
     "itens",
     "observacao_entrega",

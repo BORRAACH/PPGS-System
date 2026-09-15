@@ -63,10 +63,16 @@ GS = "\x1d"
 # removê-lo, o "\x1d~048" apareceria no meio do nome do cliente na Consulta e
 # seria reimpresso junto a cada edição, aninhando um marcador dentro do outro.
 # Diferente dos quatro de cima, o parâmetro dele tem três caracteres.
+#
+# A linha interna do endereço do QR (ver comandaEstiloService.MARCA_ENDERECO_QR)
+# sai INTEIRA, com a quebra de linha: ela nunca foi parte do cupom, e deixá-la
+# aqui poria o CEP no meio da Consulta e a reimprimiria a cada edição.
 _PADRAO_ESTILO = re.compile(
-    r"(?:" + re.escape(ESC) + r"[E\-]|" + re.escape(GS) + r"[B!])[\s\S]"
+    re.escape(estilo.MARCA_ENDERECO_QR) + r"[^\n]*\n?"
+    r"|(?:" + re.escape(ESC) + r"[E\-]|" + re.escape(GS) + r"[B!])[\s\S]"
     r"|" + re.escape(estilo.MARCA_TAMANHO_PX) + r"\d{3}"
 )
+_PADRAO_ENDERECO_QR = re.compile(re.escape(estilo.MARCA_ENDERECO_QR) + r"([^\n]*)")
 
 # Sem underscore: usadas de fora (ConsultaController) via extrair_campo(),
 # diferente das de baixo, que só interessam às funções desta própria
@@ -98,6 +104,9 @@ PADRAO_TELEFONE = re.compile(r"^Telefone:[ \t]*(.*)$", re.MULTILINE)
 # Só o cupom final de Mesa imprime esta linha (ver SalaoController._montarCupomFinal).
 PADRAO_MESA = re.compile(r"^Mesa:[ \t]*(.*)$", re.MULTILINE)
 PADRAO_BAIRRO = re.compile(r"^Bairro:[ \t]*(.*)$", re.MULTILINE)
+# Do endereço validado (ver EntregaController._salvarComanda): só existe quando
+# o atendente informou. Comandas anteriores não têm a linha.
+PADRAO_COMPLEMENTO = re.compile(r"^Complemento:[ \t]*(.*)$", re.MULTILINE)
 PADRAO_OBSERVACAO_GERAL = re.compile(r"^Observação:[ \t]*(.*)$", re.MULTILINE)
 PADRAO_TROCO = re.compile(r"^Troco para:[ \t]*(.*)$", re.MULTILINE)
 PADRAO_TAXA_ENTREGA = re.compile(r"^Taxa de entrega:[ \t]*(.*)$", re.MULTILINE)
@@ -178,6 +187,14 @@ def limpar_codigos_impressora(texto):
 def extrair_campo(padrao, texto):
     match = padrao.search(texto)
     return match.group(1).strip() if match else ""
+
+
+def extrair_endereco_qr(texto):
+    """O endereço completo da linha interna do QR, ou "" quando a comanda não a
+    tem. `texto` é o conteúdo decodificado ANTES de limpar_codigos_impressora,
+    que remove a linha inteira."""
+    match = _PADRAO_ENDERECO_QR.search(texto or "")
+    return " ".join(limpar_codigos_impressora(match.group(1)).split()) if match else ""
 
 
 def extrair_status_pagamento(texto):

@@ -562,6 +562,7 @@ class ConsultaController(QObject):
             "endereco": endereco,
             "numero": numero,
             "bairro": parser.extrair_campo(parser.PADRAO_BAIRRO, conteudo),
+            "complemento": parser.extrair_campo(parser.PADRAO_COMPLEMENTO, conteudo),
             "observacaoGeral": parser.extrair_campo(parser.PADRAO_OBSERVACAO_GERAL, conteudo),
             "formaPagamento": parser.extrair_campo(parser.PADRAO_FORMA_PAGAMENTO, conteudo),
             "troco": parser.extrair_campo(parser.PADRAO_TROCO, conteudo),

@@ -211,6 +211,8 @@ Column {
         "telefone": { "prefixo": "Telefone: ", "valor": "(11) 91234-5678" },
         "endereco": { "prefixo": "Endereço: ", "valor": "Rua Exemplo, 123" },
         "bairro": { "prefixo": "Bairro: ", "valor": "Centro" },
+        // Só sai quando o atendente informa (endereço validado da Entrega).
+        "complemento_entrega": { "prefixo": "Complemento: ", "valor": "Apto 501, Bloco A" },
         "data": { "prefixo": "Data: ", "valor": "25/07/2026 20:15:00" },
         // Faltava aqui, e era só por isso que o campo não tinha como ser
         // editado: sem exemplo, linhasDoCampo devolve lista vazia, o campo não

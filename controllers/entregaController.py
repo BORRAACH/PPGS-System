@@ -20,6 +20,20 @@ CODEPAGE_IMPRESSORA = texto.CODEPAGE_IMPRESSORA
 _MARCA_COMANDA_TESTE = f"{estilo.NEGRITO_LIGA}*** COMANDA DE TESTE ***{estilo.NEGRITO_DESLIGA}"
 
 
+def _endereco_para_qr(rua, numero, bairro, cidade, uf, cep):
+    """"Rua Goiás, 196 - Jardim dos Estados, Taubaté - SP, 12062-130" para o QR
+    Code, ou "" quando o endereço não passou pelo validador (sem CEP nem
+    cidade): aí o QR continua saindo das linhas Endereço:/Bairro:, como antes."""
+    rua = " ".join(str(rua or "").split())
+    if not rua or not (cep or cidade):
+        return ""
+    endereco = f"{rua}, {numero}" if numero else rua
+    if bairro:
+        endereco += f" - {bairro}"
+    local = " - ".join(p for p in (cidade, uf) if p)
+    return ", ".join(p for p in (endereco, local, cep) if p)
+
+
 class EntregaController(QObject):
     def __init__(self):
         super().__init__()
@@ -54,6 +68,13 @@ class EntregaController(QObject):
         endereco = dados.get("endereco", "")
         numero = dados.get("numero", "")
         bairro = dados.get("bairro", "")
+        # Endereço validado (ver qml/components/DeliveryAddressValidator.qml).
+        # O complemento sai no papel; CEP, cidade e UF só vão para o QR Code
+        # (ver _endereco_para_qr). Ponto de referência vai na Observação.
+        complemento = " ".join(str(dados.get("complemento", "") or "").split())
+        cep = str(dados.get("cep", "") or "").strip()
+        cidade = str(dados.get("cidade", "") or "").strip()
+        uf = str(dados.get("uf", "") or "").strip()
         observacaoGeral = dados.get("observacaoGeral", "")
         itens = dados.get("itens", [])
         forma_pagamento = dados.get("formaPagamento", "")
@@ -96,6 +117,8 @@ class EntregaController(QObject):
             "telefone": [f"Telefone: {estilo.formatar_campo(telefone, 'telefone')}"],
             "endereco": [f"Endereço: {estilo.formatar_campo(endereco_completo, 'endereco')}"],
             "bairro": [f"Bairro: {estilo.formatar_campo(bairro, 'bairro')}"],
+            # Só com conteúdo: sem complemento a linha some do cupom.
+            "complemento_entrega": [f"Complemento: {estilo.formatar_campo(complemento, 'complemento_entrega')}"] if complemento else None,
             "data": [f"Data: {estilo.formatar_campo(agora.strftime('%d/%m/%Y %H:%M:%S'), 'data')}"],
             # Quem autorizou o lançamento (ver components/PopupAutorizacao.qml).
             # None quando vem vazio — comanda de teste, ou ninguém cadastrado
@@ -120,6 +143,12 @@ class EntregaController(QObject):
         if teste:
             linhas_arquivo.extend(estilo.linhas_espacamento_secoes())
             linhas_arquivo.append(_MARCA_COMANDA_TESTE)
+
+        # O endereço completo, só para o QR Code do Maps: a linha interna não sai
+        # no papel (ver comandaEstiloService.MARCA_ENDERECO_QR).
+        linha_qr = estilo.linha_endereco_qr(_endereco_para_qr(endereco, numero, bairro, cidade, uf, cep))
+        if linha_qr:
+            linhas_arquivo.append(linha_qr)
 
         conteudo = "\n".join(linhas_arquivo) + "\n"
         # Modo binário: o texto vira bytes em cp850 e os códigos ESC/POS de
