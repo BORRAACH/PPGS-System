@@ -1,8 +1,19 @@
 """Validação do endereço de entrega (qml/components/DeliveryAddressValidator.qml).
 
-As sugestões locais saem na hora (sugerirLocais: histórico e índice de ruas, sem
-internet). O resto vai para uma thread: Photon para as sugestões, e a cadeia
-Photon → Nominatim → ViaCEP → zona de entrega para validar. A resposta volta à
+As sugestões locais saem na hora (sugerirLocais, sem internet), nesta ordem:
+
+1. a casa já entregue: rua e número que a equipe já lançou, com o bairro e o
+   CEP daquela comanda (services/rede/historicoEnderecos.aprendido) — uma
+   correção de bairro feita pelo atendente vale dali em diante;
+2. a casa do cadastro do IBGE (services/cnefe.py): o bairro, o CEP e o ponto
+   do número digitado;
+3. o histórico e o índice de ruas, como antes; sem número, os bairros do
+   cadastro do IBGE entram no lugar dos palpites do OpenStreetMap.
+
+Uma rua resolvida pelo número (1 ou 2) não aparece de novo com outro bairro.
+
+O resto vai para uma thread: Photon para as sugestões, e a cadeia cadastro do
+IBGE → Photon → Nominatim → ViaCEP → zona de entrega para validar. A resposta volta à
 thread da interface por sinal, com um número de geração: a resposta de um
 pedido já substituído por outro é descartada.
 
@@ -17,10 +28,15 @@ from concurrent.futures import ThreadPoolExecutor
 from PyQt6.QtCore import QObject, pyqtSignal, pyqtSlot
 
 from Config.logConfig import protegido
-from services import grafoRuas, validacaoEndereco
-from services.rede import indiceRuas, rede
-from services.enderecoFormatado import formatar_endereco
+from services import cnefe, grafoRuas, validacaoEndereco
+from services.rede import historicoEnderecos, indiceRuas, rede
+from services.enderecoFormatado import formatar_endereco, normalizar_endereco
 from services.sugestoesEndereco import sugestoes_endereco
+
+# Bairros do cadastro do IBGE por rua, quando o número ainda não foi digitado.
+_BAIRROS_CNEFE_POR_RUA = 3
+# Ruas do cadastro do IBGE consultadas por busca.
+_RUAS_CNEFE = 5
 
 
 class ValidacaoEnderecoController(QObject):
@@ -54,18 +70,103 @@ class ValidacaoEnderecoController(QObject):
         return localizacao
 
     @staticmethod
-    def _locais(info):
-        """Histórico e índice de ruas desta máquina para a rua digitada, com a
-        grafia do índice. Aqui, na thread da interface: o índice só é lido nela
-        (ver enderecoFormatado.formatar_endereco), e a thread da busca recebe
-        a lista pronta."""
+    def _cnefe_ativo():
+        """O cadastro do IBGE desta máquina é da cidade do índice de ruas. Com
+        a pizzaria mudando de cidade, o banco antigo fica de fora até o novo
+        ficar pronto."""
+        if not indiceRuas.carregado():
+            return False
+        base = indiceRuas.base()
+        return cnefe.disponivel_para(base.get("cidade"), base.get("uf"))
+
+    @classmethod
+    def _locais(cls, info):
+        """As sugestões desta máquina para a rua digitada (ver o topo), com a
+        grafia do índice. Aqui, na thread da interface: o índice e o histórico
+        só são lidos nela (ver enderecoFormatado.formatar_endereco), e a thread
+        da busca recebe a lista pronta.
+
+        Cada item: {"nome", "bairro", "fonte"} e, quando se sabe, "cep",
+        "latitude", "longitude", "numeroNoMapa" e "condominio"."""
         if not info["rua"]:
             return []
-        saida = []
-        for local in sugestoes_endereco._enderecos_locais(info["rua"], info["bairro"]):
+        numero = info["numero"] if info["numero"] != "S/N" else ""
+        usar_cnefe = cls._cnefe_ativo()
+        locais = sugestoes_endereco._enderecos_locais(info["rua"], info["bairro"])
+        ruas_cnefe = cnefe.buscar_ruas(info["rua"], _RUAS_CNEFE) if usar_cnefe else []
+
+        # As ruas candidatas, na ordem em que aparecem: histórico e índice
+        # primeiro, depois as que só o cadastro do IBGE conhece.
+        ruas = []
+        vistas = set()
+        for nome in [l["nome"] for l in locais] + [r["nome"] for r in ruas_cnefe]:
+            rua_formatada, _ = formatar_endereco(nome, "")
+            chave = normalizar_endereco(rua_formatada)
+            if chave and chave not in vistas:
+                vistas.add(chave)
+                ruas.append(rua_formatada)
+
+        resolvidas = []
+        chaves_resolvidas = set()
+        if numero:
+            for rua in ruas:
+                achado = cls._casa_conhecida(rua, numero, usar_cnefe)
+                if achado:
+                    resolvidas.append(achado)
+                    chaves_resolvidas.add(normalizar_endereco(rua))
+            # A casa já entregue antes da do cadastro.
+            resolvidas.sort(key=lambda s: s["fonte"] != "aprendido")
+
+        conhecidas_cnefe = {normalizar_endereco(formatar_endereco(r["nome"], "")[0]) for r in ruas_cnefe}
+        demais = []
+        for local in locais:
             rua, bairro = formatar_endereco(local.get("nome"), local.get("bairro"))
-            saida.append({"nome": rua, "bairro": bairro})
-        return saida
+            chave = normalizar_endereco(rua)
+            if chave in chaves_resolvidas:
+                continue
+            # O bairro que o OSM supôs para a rua perde para os do cadastro.
+            if local.get("fonte") in ("indice", "photon") and chave in conhecidas_cnefe:
+                continue
+            demais.append({"nome": rua, "bairro": bairro, "fonte": local.get("fonte") or "local"})
+        do_cnefe = []
+        for rua_cnefe in ruas_cnefe:
+            rua, _ = formatar_endereco(rua_cnefe["nome"], "")
+            if normalizar_endereco(rua) in chaves_resolvidas:
+                continue
+            for trecho in cnefe.bairros_da_rua(rua_cnefe["id"])[:_BAIRROS_CNEFE_POR_RUA]:
+                _, bairro = formatar_endereco(rua, trecho["bairro"])
+                do_cnefe.append({"nome": rua, "bairro": bairro, "fonte": "cnefe"})
+        # O histórico fala a língua da equipe; o cadastro vem antes do índice.
+        historico = [d for d in demais if d["fonte"] == "historico"]
+        indice = [d for d in demais if d["fonte"] != "historico"]
+        return resolvidas + historico + do_cnefe + indice
+
+    @staticmethod
+    def _casa_conhecida(rua, numero, usar_cnefe):
+        """A sugestão da casa `numero` da `rua`: a da última comanda para ela,
+        senão a do cadastro do IBGE (o número exato ou um vizinho); None se
+        nenhuma das duas conhece."""
+        aprendido = historicoEnderecos.aprendido(rua, numero)
+        casa = cnefe.endereco(rua, numero) if usar_cnefe else None
+        if not aprendido and not casa:
+            return None
+        sugestao = {"nome": rua, "fonte": "cnefe"}
+        if casa:
+            # O ponto vem do cadastro mesmo quando o bairro é o aprendido.
+            sugestao.update({
+                "bairro": formatar_endereco(rua, casa["bairro"])[1],
+                "cep": casa["cep"],
+                "latitude": casa["latitude"],
+                "longitude": casa["longitude"],
+                "numeroNoMapa": casa["exato"],
+                "condominio": casa["condominio"],
+            })
+        if aprendido:
+            rua_formatada, bairro = formatar_endereco(aprendido["rua"] or rua, aprendido["bairro"])
+            sugestao.update({"nome": rua_formatada, "bairro": bairro, "fonte": "aprendido"})
+            if aprendido["cep"]:
+                sugestao["cep"] = aprendido["cep"]
+        return sugestao
 
     def _enviar(self, trabalho):
         try:
@@ -143,6 +244,16 @@ class ValidacaoEnderecoController(QObject):
             escolha["cep"] = cep
             escolha["cepDigitado"] = True
         localizacao = self._localizacao()
+        escolha["usarCnefe"] = self._cnefe_ativo()
+        # A última comanda para esta casa decide o bairro e o CEP — menos
+        # quando o atendente acabou de escrever o bairro à mão.
+        aprendido = historicoEnderecos.aprendido(escolha.get("rua"), numero)
+        if aprendido and not escolha.get("bairroManual"):
+            _, bairro = formatar_endereco(escolha.get("rua"), aprendido["bairro"])
+            escolha["bairroAprendido"] = bairro
+            if aprendido["cep"] and not cep:
+                escolha["cep"] = aprendido["cep"]
+                escolha["cepAprendido"] = True
         # Sem zona (painel de rotas), o grafo de ruas nem é carregado.
         if not escolha.get("semZona"):
             self.prepararZona()

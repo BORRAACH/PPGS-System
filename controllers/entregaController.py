@@ -234,4 +234,6 @@ class EntregaController(QObject):
         atendente lançar o pedido de novo."""
         if dados.get("teste"):
             return
-        sugestoes_endereco.registrarUso(dados.get("endereco", ""), dados.get("bairro", ""))
+        sugestoes_endereco.registrarUso(
+            dados.get("endereco", ""), dados.get("bairro", ""), dados.get("numero", ""), dados.get("cep", "")
+        )

@@ -13,6 +13,10 @@ Três fontes, nesta ordem:
   com nada nas duas primeiras. As ruas que ele acha na cidade entram no
   índice, e a próxima busca delas já é local.
 
+O índice é acompanhado do cadastro de endereços do IBGE (services/cnefe.py),
+baixado por cada máquina assim que se sabe a cidade e a UF do índice — quem o
+usa é a validação do endereço (controllers/validacaoEnderecoController.py).
+
 Os dois arquivos são replicados pela malha, então a máquina que montou o
 índice (a que definiu a localização) serve todas as outras.
 
@@ -39,7 +43,7 @@ from concurrent.futures import ThreadPoolExecutor
 from PyQt6.QtCore import QObject, QTimer, pyqtProperty, pyqtSignal, pyqtSlot
 
 from Config.logConfig import protegido
-from services import montadorIndiceRuas, requisicaoHttp
+from services import cnefe, montadorIndiceRuas, requisicaoHttp
 from services.buscaCardapio import normalizar
 from services.enderecoFormatado import bairros_equivalentes, escolher_bairro, formatar_endereco, normalizar_endereco
 from services.rede import historicoEnderecos, indiceRuas, localizacaoServidor, rede, relogio
@@ -111,9 +115,11 @@ def _unicos(grupos, chave=normalizar_endereco, limite=_LIMITE_SUGESTOES):
 
 
 def ordenar_enderecos(bairro, historico, ruas_indice, ruas_photon):
-    """Lista final de ruas sugeridas, como [{"nome", "bairro"}] — o bairro
-    aparece embaixo do nome na lista e preenche o campo Bairro quando a rua é
-    escolhida (ver Entrega.qml). "" quando a fonte não sabe o bairro.
+    """Lista final de ruas sugeridas, como [{"nome", "bairro", "fonte"}] — o
+    bairro aparece embaixo do nome na lista e preenche o campo Bairro quando a
+    rua é escolhida (ver Entrega.qml). "" quando a fonte não sabe o bairro.
+    "fonte" diz de onde veio: "historico", "correios" (bairro oficial do
+    índice), "indice" (bairro do OSM no índice) ou "photon".
 
     - `historico`: registros de historicoEnderecos.buscar_ruas.
     - `ruas_indice`: [{"nome", "bairros", "oficiais"}] de indiceRuas.buscar_ruas.
@@ -150,25 +156,25 @@ def ordenar_enderecos(bairro, historico, ruas_indice, ruas_photon):
     def formatada(nome, nome_bairro):
         referencia = referencias.get(normalizar_endereco(nome))
         if referencia is None:
-            return {"nome": nome, "bairro": nome_bairro}
+            return {"nome": nome, "bairro": nome_bairro, "fonte": "historico"}
         nome_formatado, oficiais, conhecidos = referencia
-        return {"nome": nome_formatado, "bairro": escolher_bairro(nome_bairro, oficiais, conhecidos)}
+        return {"nome": nome_formatado, "bairro": escolher_bairro(nome_bairro, oficiais, conhecidos), "fonte": "historico"}
 
-    def uma(nome, bairros):
+    def uma(nome, bairros, fonte):
         bairros = [b for b in bairros if b]
         # Mostra o bairro que casou com o digitado; senão o mais provável.
         casados = [b for b in bairros if do_bairro(b)]
-        return [{"nome": nome, "bairro": (casados or bairros or [""])[0]}]
+        return [{"nome": nome, "bairro": (casados or bairros or [""])[0], "fonte": fonte}]
 
-    def cada(nome, bairros):
-        return [{"nome": nome, "bairro": b} for b in bairros] or [{"nome": nome, "bairro": ""}]
+    def cada(nome, bairros, fonte):
+        return [{"nome": nome, "bairro": b, "fonte": fonte} for b in bairros] or [{"nome": nome, "bairro": "", "fonte": fonte}]
 
     do_historico = [formatada(r["rua"], r.get("bairro", "")) for r in historico]
     do_indice = [
         s for r in ruas_indice
-        for s in (cada(r["nome"], r["oficiais"]) if r.get("oficiais") else uma(r["nome"], r["bairros"]))
+        for s in (cada(r["nome"], r["oficiais"], "correios") if r.get("oficiais") else uma(r["nome"], r["bairros"], "indice"))
     ]
-    do_photon = [s for p in ruas_photon for s in uma(p["nome"], p["bairros"])]
+    do_photon = [s for p in ruas_photon for s in uma(p["nome"], p["bairros"], "photon")]
 
     fontes = (do_historico, do_indice, do_photon)
     return _unicos(
@@ -231,6 +237,8 @@ class SugestoesEnderecoService(QObject):
     _correiosConsultado = pyqtSignal(str, object)
     _montagemTerminou = pyqtSignal(str)
     _indiceLido = pyqtSignal(object)
+    # Fim da montagem do cadastro do IBGE: "" ou o motivo da falha.
+    _cnefeTerminou = pyqtSignal(str)
     # A resposta de uma requisição HTTP feita numa thread do pool (ver
     # _pedir_json): (quem espera, JSON decodificado ou None, erro ou None).
     _respostaHttp = pyqtSignal(object, object, object)
@@ -250,6 +258,12 @@ class SugestoesEnderecoService(QObject):
 
         self._montando = False
         self._cancelar_montagem = threading.Event()
+        self._cancelar_cnefe = threading.Event()
+        self._trabalho_cnefe = ""
+        # (cidade, UF) cuja montagem falhou nesta sessão: não tenta de novo a
+        # cada bloco do índice que chega pela malha, só na próxima abertura.
+        self._cnefe_falhou_para = None
+        self._cnefe_para = None
         self._trabalho_indice = ""
         self._status_indice = ""
         # Respostas do ViaCEP esperando a próxima gravação em lote.
@@ -267,6 +281,7 @@ class SugestoesEnderecoService(QObject):
         self._correiosConsultado.connect(self._ao_correios_consultado)
         self._montagemTerminou.connect(self._ao_montagem_terminar)
         self._indiceLido.connect(self._ao_indice_lido)
+        self._cnefeTerminou.connect(self._ao_cnefe_terminar)
         self._respostaHttp.connect(self._ao_responder_http)
         self._timer_gravar_indice = QTimer(self)
         self._timer_gravar_indice.setSingleShot(True)
@@ -368,16 +383,16 @@ class SugestoesEnderecoService(QObject):
 
         self._consultar_photon("bairro", termo, ("district", "locality"), _bairros_do_photon, responder)
 
-    @pyqtSlot(str, str)
     @protegido(None)
-    def registrarUso(self, endereco, bairro):
+    def registrarUso(self, endereco, bairro, numero="", cep=""):
         """Conta o endereço de uma comanda lançada/impressa no histórico e
         avisa a malha. Chamado pelo EntregaController depois de a comanda ser
-        salva."""
+        salva. O número e o CEP ensinam o bairro daquela casa (ver
+        historicoEnderecos.aprendido)."""
         # Grava a grafia do índice quando é a mesma rua: "RUA SAO VICENTE DE
         # PAULA" entra como "Rua São Vicente de Paula" (ver enderecoFormatado).
         endereco, bairro = formatar_endereco(endereco, bairro)
-        resultado = historicoEnderecos.registrar(endereco, bairro)
+        resultado = historicoEnderecos.registrar(endereco, bairro, numero, cep)
         if resultado is None:
             return
         chave, registro = resultado
@@ -536,9 +551,44 @@ class SugestoesEnderecoService(QObject):
             texto += f" ({consultadas} de {total} consultadas)." if consultadas < total else "."
             if self._trabalho_indice:
                 texto += f" {self._trabalho_indice}"
+            texto += " " + self._status_cnefe()
         if texto != self._status_indice:
             self._status_indice = texto
             self.statusIndiceMudou.emit()
+
+    def _status_cnefe(self):
+        if self._trabalho_cnefe:
+            return self._trabalho_cnefe
+        dados = cnefe.meta()
+        if dados:
+            total = f"{int(dados.get('enderecos') or 0):,}".replace(",", ".")
+            return f"Cadastro do IBGE: {total} endereços de {dados.get('cidade')}."
+        return "Cadastro do IBGE ainda não baixado."
+
+    def _garantir_cnefe(self):
+        """Baixa o cadastro do IBGE da cidade do índice, se esta máquina ainda
+        não tem o dela. Cada máquina baixa o seu (ver services/cnefe.py)."""
+        base = indiceRuas.base() if indiceRuas.carregado() else {}
+        cidade, uf = base.get("cidade") or "", str(base.get("uf") or "").upper()
+        if not cidade or not uf or self._cnefe_falhou_para == (cidade, uf):
+            return
+
+        def terminar(erro):
+            try:
+                self._cnefeTerminou.emit(erro)
+            except RuntimeError:
+                pass  # sistema fechando: o serviço já foi destruído
+
+        if cnefe.garantir(cidade, uf, self._cancelar_cnefe, terminar):
+            self._cnefe_para = (cidade, uf)
+            self._trabalho_cnefe = "Baixando o cadastro de endereços do IBGE..."
+            self._atualizar_status()
+
+    def _ao_cnefe_terminar(self, erro):
+        if erro:
+            self._cnefe_falhou_para = self._cnefe_para
+        self._trabalho_cnefe = f"Cadastro do IBGE não baixado: {erro}." if erro else ""
+        self._atualizar_status()
 
     @pyqtSlot()
     @protegido(None)
@@ -549,6 +599,7 @@ class SugestoesEnderecoService(QObject):
         consulta dos bairros nos Correios de onde parou. As outras máquinas
         recebem tudo pela malha."""
         self._garantir_indice(sem_hospedeira=False)
+        self._garantir_cnefe()
 
     def _garantir_indice(self, sem_hospedeira):
         if self._montando or not indiceRuas.carregado():
@@ -641,6 +692,7 @@ class SugestoesEnderecoService(QObject):
         print(f"[sugestoesEndereco] Índice de ruas montado: {total} ruas de {base['cidade']}/{base['uf']}.")
         self._trabalho_indice = "Consultando bairros nos Correios em segundo plano..." if base.get("uf") else ""
         self._atualizar_status()
+        self._garantir_cnefe()
 
     def _ao_correios_consultado(self, chave, bairros):
         self._correios_a_gravar[chave] = bairros
@@ -675,12 +727,14 @@ class SugestoesEnderecoService(QObject):
         if indiceRuas.aplicar_remoto(payload):
             self._agendar_gravacao_indice()
             self._atualizar_status()
+            self._garantir_cnefe()
 
     @pyqtSlot()
     def encerrar(self):
         """Fechamento do sistema: para a thread e grava o que o ViaCEP já
         respondeu, para a próxima abertura não repetir essas consultas."""
         self._cancelar_montagem.set()
+        self._cancelar_cnefe.set()
         self._http.shutdown(wait=False, cancel_futures=True)
         self._gravar_correios()
         indiceRuas.gravar_pendente()

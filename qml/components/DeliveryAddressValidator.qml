@@ -522,6 +522,9 @@ Column {
     }
 
     function _aplicarResultado(r) {
+        // O bairro escrito à mão continua valendo nas próximas validações
+        // (número trocado, CEP digitado).
+        var bairroManual = validador._escolha.bairroManual === true;
         validador._aplicando = true;
         if (r.rua && !validador.campoUnico)
             campoEndereco.text = r.rua;
@@ -573,7 +576,8 @@ Column {
             "bairro": validador.bairro,
             "latitude": validador.latitude,
             "longitude": validador.longitude,
-            "pistaCondominio": validador.complementoObrigatorio
+            "pistaCondominio": validador.complementoObrigatorio,
+            "bairroManual": bairroManual
         };
         validador.status = r.status || "atencao";
     }
@@ -648,12 +652,19 @@ Column {
     }
 
     // O atendente mudou o bairro à mão (digitando ou pela lista): valida de
-    // novo com ele. Numa rua com mais de um CEP é o bairro que escolhe; achado
-    // o CEP, o campo volta ao bairro oficial dos Correios.
+    // novo com ele. Numa rua com mais de um CEP é o bairro que escolhe o CEP,
+    // e o bairro escrito fica — é a correção de uma sugestão com o bairro
+    // errado, e não volta para o dos Correios (ver "bairroManual" em
+    // services/validacaoEndereco.py). Lançado o pedido, a casa fica com esse
+    // bairro nas próximas sugestões.
     function _revalidarPeloBairro() {
         if (!validador._escolha.rua || validador.bairro === validador._bairroValidado)
             return;
-        validador._escolha = Object.assign({}, validador._escolha, { "bairro": validador.bairro, "bairroNome": validador.bairro });
+        validador._escolha = Object.assign({}, validador._escolha, {
+            "bairro": validador.bairro,
+            "bairroNome": validador.bairro,
+            "bairroManual": validador.bairro !== ""
+        });
         validador.validar();
     }
 

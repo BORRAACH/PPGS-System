@@ -3,6 +3,9 @@ Entrega (qml/components/DeliveryAddressValidator.qml).
 
 FLUXO de validar(), cada consulta com TEMPO_LIMITE_S de espera:
 
+0. Cadastro do IBGE (services/cnefe.py), local: o ponto, o CEP e o bairro do
+   número digitado, e se ali há mais de uma unidade. Com a casa achada, o
+   Photon nem é consultado.
 1. Photon: o ponto do endereço. Quando o OSM tem a casa (a Rua Goiás tem o 229)
    vem a coordenada dela e, muitas vezes, o CEP; na maioria das ruas só existe
    a rua, e o ponto é o dela.
@@ -23,6 +26,11 @@ FLUXO de validar(), cada consulta com TEMPO_LIMITE_S de espera:
 5. Zona de entrega: tempo de rota de carro da pizzaria até o ponto, pelo grafo
    de ruas (services/grafoRuas.py), contra o limite da tela Rede.
 
+BAIRRO. O dos Correios substitui o da sugestão — menos quando o atendente o
+escreveu à mão ("bairroManual") ou quando é o da última comanda para a mesma
+casa ("bairroAprendido", ver historicoEnderecos.aprendido): aí ele fica, e o
+dos Correios só serve para escolher o CEP e aparece numa mensagem.
+
 Falha de rede não derruba nada: o resultado sai com o que deu para descobrir e
 o status "atencao" ("Serviço indisponível — dados parciais").
 
@@ -32,13 +40,14 @@ pelo Qt travava sem resposta)."""
 
 import math
 import re
+import sqlite3
 import threading
 import time
 import unicodedata
 import urllib.parse
 from datetime import datetime, timezone
 
-from services import requisicaoHttp
+from services import cnefe, requisicaoHttp
 from services.buscaCardapio import normalizar
 from services.enderecoFormatado import bairros_equivalentes, normalizar_endereco
 
@@ -410,9 +419,10 @@ def _sugestao(rua, numero, bairro, cidade, cep="", lat=None, lon=None, fonte="",
 def sugestoes_locais(texto, localizacao, locais):
     """As sugestões do histórico/índice de ruas (sem internet), com o número e
     as pistas do que foi digitado. `locais`: [{"nome", "bairro"}] de
-    SugestoesEnderecoService._enderecos_locais, já com a grafia do índice —
-    quem formata é o controller, na thread da interface (o índice só é lido
-    nela; ver enderecoFormatado.formatar_endereco)."""
+    ValidacaoEnderecoController._locais, já com a grafia do índice — quem
+    formata é o controller, na thread da interface (o índice só é lido nela;
+    ver enderecoFormatado.formatar_endereco). A casa já conhecida (histórico ou
+    cadastro do IBGE) traz também o CEP e, do cadastro, o ponto."""
     info = interpretar(texto)
     cidade = _limpo((localizacao or {}).get("cidade"))
     saida = []
@@ -422,8 +432,11 @@ def sugestoes_locais(texto, localizacao, locais):
         if not local.get("nome") or chave in vistos:
             continue
         vistos.add(chave)
-        saida.append(_sugestao(local["nome"], info["numero"], local.get("bairro", ""), cidade,
-                               fonte="local", condominio=info["pistaCondominio"]))
+        saida.append(_sugestao(
+            local["nome"], info["numero"], local.get("bairro", ""), cidade, local.get("cep", ""),
+            _float(local.get("latitude")), _float(local.get("longitude")), local.get("fonte") or "local",
+            info["pistaCondominio"] or bool(local.get("condominio")), bool(local.get("numeroNoMapa")),
+        ))
     return saida
 
 
@@ -435,6 +448,9 @@ def sugestoes(texto, localizacao, locais=(), limite=LIMITE_SUGESTOES):
     cidade = _limpo((localizacao or {}).get("cidade"))
     saida = sugestoes_locais(texto, localizacao, locais)
     vistos = {normalizar_endereco(s["rua"]) + "|" + normalizar_endereco(s["bairroNome"]) for s in saida}
+    # Ruas que o histórico da casa ou o cadastro do IBGE já resolveram: o
+    # bairro que o Photon daria a elas é só um palpite do OpenStreetMap.
+    resolvidas = [s["rua"] for s in saida if s["fonte"] in ("aprendido", "cnefe")]
     aviso = ""
 
     if len(normalizar(info["rua"])) >= 3:
@@ -451,6 +467,8 @@ def sugestoes(texto, localizacao, locais=(), limite=LIMITE_SUGESTOES):
             casa = str(props.get("housenumber") or "").upper()
             rua = props.get("street") or (props.get("name") if props.get("osm_key") == "highway" else "")
             if not rua or (casa and casa != info["numero"]):
+                continue
+            if any(mesma_rua(rua, outra) for outra in resolvidas):
                 continue
             bairro = props.get("district") or props.get("locality") or ""
             chave = normalizar_endereco(rua) + "|" + normalizar_endereco(bairro)
@@ -521,6 +539,11 @@ def validar(escolha, numero, localizacao, obter_grafo=None):
     # sugestão é trocado ou descartado em silêncio — ninguém o informou.
     cep_digitado = bool(escolha.get("cepDigitado")) and bool(r["cep"])
     cep_descartado = False
+    # Bairro que a validação não troca pelo dos Correios (ver o topo).
+    if escolha.get("bairroAprendido") and not escolha.get("bairroManual"):
+        r["bairro"] = _limpo(escolha["bairroAprendido"])
+    bairro_fixo = bool(r["bairro"]) and bool(escolha.get("bairroManual") or escolha.get("bairroAprendido"))
+    numero_no_cadastro = False
 
     if not r["rua"]:
         erros.append("Informe a rua do endereço de entrega.")
@@ -538,37 +561,61 @@ def validar(escolha, numero, localizacao, obter_grafo=None):
 
     numero_para_mapa = r["numero"] if r["numero"] and r["numero"] != "S/N" and numero_valido(r["numero"]) else ""
 
+    # --- 0. Cadastro do IBGE: a casa, sem internet ---
+    casa_cnefe = None
+    if numero_para_mapa and escolha.get("usarCnefe"):
+        try:
+            casa_cnefe = cnefe.endereco(r["rua"], numero_para_mapa)
+        except sqlite3.Error as erro:
+            print(f"[validacaoEndereco] cadastro do IBGE ilegível: {erro!r}")
+    if casa_cnefe:
+        achou_algo = True
+        if casa_cnefe["latitude"] is not None and (casa_cnefe["exato"] or r["latitude"] is None):
+            r["latitude"], r["longitude"] = casa_cnefe["latitude"], casa_cnefe["longitude"]
+        if casa_cnefe["exato"]:
+            r["numeroConfirmadoNoMapa"] = numero_no_cadastro = True
+        if casa_cnefe["condominio"]:
+            r["complementoObrigatorio"] = True
+        # CEP da sugestão (que pode ser do Photon) perde para o da casa; o
+        # digitado pelo atendente e o da última comanda para ela, não.
+        if casa_cnefe["cep"] and not cep_digitado and (not r["cep"] or (casa_cnefe["exato"] and not escolha.get("cepAprendido"))):
+            r["cep"] = formatar_cep(casa_cnefe["cep"])
+        if not r["bairro"]:
+            r["bairro"] = casa_cnefe["bairro"]
+
     # --- 1. Photon: ponto da casa (ou da rua) ---
-    try:
-        casa = rua_do_mapa = None
-        consulta = " ".join(p for p in (r["rua"], numero_para_mapa, cidade_est) if p)
-        for props, coordenadas in _photon(consulta, localizacao, 8):
-            if cidade_est and not _mesma_cidade(props.get("city") or props.get("county"), cidade_est):
-                continue
-            rua = props.get("street") or (props.get("name") if props.get("osm_key") == "highway" else "")
-            if not mesma_rua(rua, r["rua"]):
-                continue
-            achou_algo = True
-            numero_casa = str(props.get("housenumber") or "").upper()
-            if numero_para_mapa and numero_casa == numero_para_mapa:
-                casa = casa or (props, coordenadas)
-            elif not numero_casa:
-                rua_do_mapa = rua_do_mapa or (props, coordenadas)
-        escolhido = casa or rua_do_mapa
-        if escolhido:
-            props, coordenadas = escolhido
-            if casa or r["latitude"] is None:
-                r["latitude"], r["longitude"] = float(coordenadas[1]), float(coordenadas[0])
-            if casa:
-                r["numeroConfirmadoNoMapa"] = True
-                if _tem_pista_de_condominio(props.get("name")) or props.get("osm_value") == "apartments":
-                    r["complementoObrigatorio"] = True
-            if not r["cep"] and _cep_util(props.get("postcode")):
-                r["cep"] = formatar_cep(props.get("postcode"))
-            if not r["bairro"]:
-                r["bairro"] = _limpo(props.get("district") or props.get("locality"))
-    except requisicaoHttp.ErroRequisicao:
-        fora_do_ar.append("mapa")
+    # A casa já tem ponto pelo cadastro: o Photon não acrescentaria nada.
+    if not (numero_no_cadastro and r["latitude"] is not None):
+        try:
+            casa = rua_do_mapa = None
+            consulta = " ".join(p for p in (r["rua"], numero_para_mapa, cidade_est) if p)
+            for props, coordenadas in _photon(consulta, localizacao, 8):
+                if cidade_est and not _mesma_cidade(props.get("city") or props.get("county"), cidade_est):
+                    continue
+                rua = props.get("street") or (props.get("name") if props.get("osm_key") == "highway" else "")
+                if not mesma_rua(rua, r["rua"]):
+                    continue
+                achou_algo = True
+                numero_casa = str(props.get("housenumber") or "").upper()
+                if numero_para_mapa and numero_casa == numero_para_mapa:
+                    casa = casa or (props, coordenadas)
+                elif not numero_casa:
+                    rua_do_mapa = rua_do_mapa or (props, coordenadas)
+            escolhido = casa or rua_do_mapa
+            if escolhido:
+                props, coordenadas = escolhido
+                if casa or r["latitude"] is None:
+                    r["latitude"], r["longitude"] = float(coordenadas[1]), float(coordenadas[0])
+                if casa:
+                    r["numeroConfirmadoNoMapa"] = True
+                    if _tem_pista_de_condominio(props.get("name")) or props.get("osm_value") == "apartments":
+                        r["complementoObrigatorio"] = True
+                if not r["cep"] and _cep_util(props.get("postcode")):
+                    r["cep"] = formatar_cep(props.get("postcode"))
+                if not r["bairro"]:
+                    r["bairro"] = _limpo(props.get("district") or props.get("locality"))
+        except requisicaoHttp.ErroRequisicao:
+            fora_do_ar.append("mapa")
 
     # --- 2. Nominatim reverse no ponto ---
     if not r["cep"] and r["latitude"] is not None:
@@ -674,8 +721,11 @@ def validar(escolha, numero, localizacao, obter_grafo=None):
                 if not conflito:
                     if _limpo(oficial.get("logradouro")):
                         r["rua"] = _limpo(oficial.get("logradouro"))
-                    if _limpo(oficial.get("bairro")):
-                        r["bairro"] = _limpo(oficial.get("bairro"))
+                    bairro_oficial = _limpo(oficial.get("bairro"))
+                    if bairro_oficial and not bairro_fixo:
+                        r["bairro"] = bairro_oficial
+                    elif bairro_oficial and not bairros_equivalentes(r["bairro"], bairro_oficial):
+                        informacoes.append(f"Bairro mantido como {r['bairro']} (nos Correios: {bairro_oficial}).")
                 localidade = _limpo(oficial.get("localidade"))
                 if localidade:
                     if cidade_est and not _mesma_cidade(localidade, cidade_est):
@@ -726,7 +776,9 @@ def validar(escolha, numero, localizacao, obter_grafo=None):
         atencoes.append("Endereço não validado oficialmente. Revise os dados.")
     if r["complementoObrigatorio"]:
         informacoes.append("Parece condomínio: informe o apartamento ou o bloco.")
-    if r["numeroConfirmadoNoMapa"]:
+    if numero_no_cadastro:
+        informacoes.append("Número confirmado no cadastro de endereços do IBGE.")
+    elif r["numeroConfirmadoNoMapa"]:
         informacoes.append("Número confirmado no mapa.")
 
     return _fechar(r, erros, faltas, atencoes, informacoes)
