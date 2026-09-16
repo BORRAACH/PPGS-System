@@ -17,8 +17,16 @@ diz qual versão da entrada é a mais recente, arbitrada por
 relogio.mais_novo. Não há exclusão pela malha, e portanto nem tombstones: um
 endereço usado uma vez continua sendo um endereço que existe.
 
+Cada entrada guarda também os números já entregues naquela rua e bairro, com
+o CEP de cada um ("numeros"). É o que ensina o bairro certo de uma casa: o
+atendente corrigiu o bairro de "Rua X, 120" uma vez, e a próxima sugestão de
+"Rua X, 120" já vem com o bairro corrigido (ver aprendido). Entre duas
+entradas com o mesmo número — a rua em dois bairros, um deles o errado —
+vale a do uso mais recente.
+
 Guardado em pedidos/.sync/enderecos_usados.json:
-`{chave: {"rua", "bairro", "usos", "ultimoUso", "idEventoRevisao"}}`."""
+`{chave: {"rua", "bairro", "usos", "ultimoUso", "idEventoRevisao",
+  "numeros": {numero: {"cep", "em"}}}}`."""
 
 import os
 from datetime import datetime
@@ -35,6 +43,9 @@ DOMINIO = "enderecos_usados"
 # anos, mas o arquivo é lido a cada busca do autocomplete e reconciliado com
 # a malha inteira a cada ciclo — sem teto, ele só cresceria.
 LIMITE_ENTRADAS = 3000
+# Números guardados por entrada: os usados por último. Uma rua movimentada não
+# faz o arquivo crescer sem fim.
+LIMITE_NUMEROS = 40
 
 
 def _caminho_arquivo():
@@ -52,6 +63,36 @@ def _inteiro(valor):
         return max(0, int(valor))
     except (TypeError, ValueError):
         return 0
+
+
+def _numero_limpo(numero):
+    """"196", "196A" — sem espaço e em maiúsculas; "" para S/N e vazio, que
+    não identificam casa nenhuma."""
+    numero = "".join(str(numero or "").split()).upper()
+    return "" if not numero or numero in ("S/N", "SN") else numero
+
+
+def _numeros(valor):
+    """Os números de uma entrada, validados (o que vem da malha pode ser de
+    uma versão antiga, sem o campo)."""
+    saida = {}
+    for numero, dados in (valor.items() if isinstance(valor, dict) else ()):
+        numero = _numero_limpo(numero)
+        if numero and isinstance(dados, dict):
+            saida[numero] = {"cep": str(dados.get("cep") or ""), "em": str(dados.get("em") or "")}
+    return saida
+
+
+def _juntar_numeros(*grupos):
+    """União dos números, ficando com o uso mais recente de cada um e com os
+    LIMITE_NUMEROS mais recentes no total."""
+    juntos = {}
+    for grupo in grupos:
+        for numero, dados in _numeros(grupo).items():
+            if numero not in juntos or dados["em"] > juntos[numero]["em"]:
+                juntos[numero] = dados
+    recentes = sorted(juntos.items(), key=lambda item: item[1]["em"], reverse=True)[:LIMITE_NUMEROS]
+    return dict(recentes)
 
 
 def chave(rua, bairro):
@@ -123,10 +164,10 @@ def _salvar(dados):
     _cache = None
 
 
-def registrar(rua, bairro):
-    """Conta mais um uso de (rua, bairro) e devolve (chave, registro) para
-    quem vai publicar na malha — ou None quando não há rua (comanda sem
-    endereço não ensina nada)."""
+def registrar(rua, bairro, numero="", cep=""):
+    """Conta mais um uso de (rua, bairro) — e do número, com o CEP — e devolve
+    (chave, registro) para quem vai publicar na malha, ou None quando não há
+    rua (comanda sem endereço não ensina nada)."""
     rua = _limpar(rua)
     bairro = _limpar(bairro)
     if not rua:
@@ -135,14 +176,20 @@ def registrar(rua, bairro):
     dados = carregar()
     k = chave(rua, bairro)
     registro = dados.get(k) or {}
+    agora = datetime.now().isoformat(timespec="seconds")
+    numeros = dict(_numeros(registro.get("numeros")))
+    numero = _numero_limpo(numero)
+    if numero:
+        numeros[numero] = {"cep": _limpar(cep), "em": agora}
     registro = {
         # A grafia mais recente vence: se alguém corrigir o acento de uma
         # rua, é a correção que passa a ser sugerida.
         "rua": rua,
         "bairro": bairro,
         "usos": _inteiro(registro.get("usos")) + 1,
-        "ultimoUso": datetime.now().isoformat(timespec="seconds"),
+        "ultimoUso": agora,
         "idEventoRevisao": relogio.novo_id(),
+        "numeros": _juntar_numeros(numeros),
     }
     dados[k] = registro
     _salvar(dados)
@@ -159,7 +206,9 @@ def aplicar_remoto(_chave, payload):
 
     `usos` fica com o MAIOR dos dois lados: duas máquinas lançando a mesma rua
     quase juntas geram duas revisões, e a que perde a arbitragem não pode
-    levar a contagem dela embora."""
+    levar a contagem dela embora. Os números se juntam do mesmo jeito, e
+    também quando a revisão recebida é a mais velha: cada lado pode ter
+    entregado numa casa que o outro ainda não viu."""
     if not isinstance(payload, dict):
         return False
     rua = _limpar(payload.get("rua"))
@@ -172,8 +221,13 @@ def aplicar_remoto(_chave, payload):
     dados = carregar()
     k = chave(rua, bairro)
     local = dados.get(k)
+    numeros = _juntar_numeros((local or {}).get("numeros"), payload.get("numeros"))
     if local is not None and not relogio.mais_novo(id_revisao, local.get("idEventoRevisao", "")):
-        return False
+        if numeros == _numeros(local.get("numeros")):
+            return False
+        dados[k] = dict(local, numeros=numeros)
+        _salvar(dados)
+        return True
 
     dados[k] = {
         "rua": rua,
@@ -181,6 +235,7 @@ def aplicar_remoto(_chave, payload):
         "usos": max(_inteiro(payload.get("usos")), _inteiro((local or {}).get("usos"))),
         "ultimoUso": str(payload.get("ultimoUso") or ""),
         "idEventoRevisao": id_revisao,
+        "numeros": numeros,
     }
     _salvar(dados)
     return True
@@ -227,3 +282,21 @@ def buscar_bairros(termo):
     if not termos:
         return []
     return [nome for nb, nome in _lido()[3] if any(_casa(nb, t) for t in termos)][:20]
+
+
+def aprendido(rua, numero):
+    """{"rua", "bairro", "cep"} da última entrega em `numero` desta rua, ou
+    None se nunca se entregou nele. A rua é comparada sem acento, caixa e
+    abreviação (ver enderecoFormatado.normalizar_endereco)."""
+    numero = _numero_limpo(numero)
+    alvo = normalizar_endereco(rua)
+    if not numero or not alvo:
+        return None
+    melhor = None
+    for rua_normalizada, _bairro, registro in _lido()[2]:
+        if rua_normalizada != alvo:
+            continue
+        dados = _numeros(registro.get("numeros")).get(numero)
+        if dados and (melhor is None or dados["em"] > melhor[0]):
+            melhor = (dados["em"], {"rua": registro.get("rua", ""), "bairro": registro.get("bairro", ""), "cep": dados["cep"]})
+    return melhor[1] if melhor else None
