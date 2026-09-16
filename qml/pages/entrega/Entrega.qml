@@ -1124,6 +1124,10 @@ Page {
                         tom: Estilo.screen.entrega
                         campoAnterior: inputNomeCliente
                         proximoCampo: inputObservacao
+                        // Sem confirmar sozinho: a sugestão pode vir com o
+                        // bairro errado, e o cartão fica aberto com o
+                        // "Confirmar" até o atendente conferir e corrigir.
+                        confirmacaoAutomatica: false
 
                         // Comanda reaberta pela Consulta. O rascunho e o
                         // autofill por telefone chamam preencher() direto.
