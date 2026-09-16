@@ -412,7 +412,10 @@ class SalaoController(QObject):
         linhas.extend(estilo.linhas_espacamento_secoes())
         linhas.append(texto.MARCADOR_ITENS)
 
-        conteudo = "\n".join(linhas) + "\n"
+        # Mesma quebra por palavra da comanda de venda (ver
+        # comandaTextoService.quebrar_linhas): "(BROTO)" e o tipo de pão não
+        # podem sair partidos no papel do forno.
+        conteudo = "\n".join(texto.quebrar_linhas(linhas)) + "\n"
         return conteudo.encode(texto.CODEPAGE_IMPRESSORA, errors="replace")
 
     @pyqtSlot(str, "QVariantList", result=bool)

@@ -367,6 +367,9 @@ Page {
 
     function fecharCaixa() {
         telaFechamento.resumoAtual = fechamentoController.calcularFechamento(telaFechamento.dataSelecionada);
+        // Grava as estatísticas do dia (e avisa as outras máquinas) — ver
+        // controllers/estatisticasController.py.
+        estatisticasController.registrarFechamento(telaFechamento.dataSelecionada);
         fechamentoController.imprimirFechamentoCaixa(telaFechamento.dataSelecionada);
         telaFechamento.mostrarNotificacao("Caixa de " + telaFechamento.formatarDataExibicao(telaFechamento.dataSelecionada) + " recalculado, salvo e enviado para impressão.", true);
     }

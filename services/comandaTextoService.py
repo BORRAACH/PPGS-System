@@ -68,6 +68,117 @@ def linhas_modalidade(modalidade):
     return [recuo + estilo.formatar_com_atributos(rotulo, _ATRIBUTOS_MODALIDADE)] + estilo.linhas_espacamento_secoes()
 
 
+# Códigos de estilo embutidos no texto (ver comandaEstiloService.
+# formatar_campo): são invisíveis no papel e não podem contar como largura na
+# hora de quebrar a linha.
+_ESC = "\x1b"
+_GS = "\x1d"
+_PADRAO_ESTILO = re.compile(
+    r"(?:" + re.escape(_ESC) + r"[E\-]|" + re.escape(_GS) + r"[B!])[\s\S]"
+    r"|" + re.escape(estilo.MARCA_TAMANHO_PX) + r"\d{3}"
+)
+
+
+def largura_visivel(linha):
+    """Quantas colunas do papel a linha ocupa — o texto sem os códigos de
+    estilo, que não imprimem nada."""
+    return len(_PADRAO_ESTILO.sub("", linha))
+
+
+def quebrar_linha(linha, largura=COLUNAS_PAPEL):
+    """`linha` em uma ou mais linhas de até `largura` colunas, sem partir
+    palavra: a que não couber vai inteira para a de baixo.
+
+    POR QUE AQUI: o cupom sai numa régua de COLUNAS_PAPEL, e o que passa disso
+    a impressora quebra onde a conta der — no meio de "(BROTO)", de
+    "(PÃO FRANCÊS)" ou do nome do cliente. Quebrando na montagem, o papel sai
+    igual nos dois caminhos (texto e imagem, ver
+    comandaImagemService._quebrar_em_linhas_fisicas, que faz o mesmo em dots).
+
+    Os códigos de estilo viajam grudados no caractere seguinte e não contam
+    largura (ver largura_visivel). Eles não precisam ser repetidos na linha de
+    baixo: um "liga negrito" vale até o "desliga", atravessando a quebra.
+
+    A continuação entra recuada em dois espaços — o mesmo recuo dos adicionais
+    e da observação —, para se ler de relance que aquilo ainda é a linha de
+    cima. Palavra maior que a régua inteira é partida: não há para onde
+    empurrá-la."""
+    if largura_visivel(linha) <= largura:
+        return [linha]
+
+    recuo = "  "
+    # Cada unidade é (códigos de estilo, caractere visível): o que é invisível
+    # anda junto com a letra seguinte, para o negrito não se perder na quebra.
+    unidades = []
+    pendentes = ""
+    posicao = 0
+    for comando in _PADRAO_ESTILO.finditer(linha):
+        for caractere in linha[posicao:comando.start()]:
+            unidades.append((pendentes, caractere))
+            pendentes = ""
+        pendentes += comando.group()
+        posicao = comando.end()
+    for caractere in linha[posicao:]:
+        unidades.append((pendentes, caractere))
+        pendentes = ""
+
+    linhas = []
+    atual = ""
+    visivel = 0
+    palavra = []
+    largura_maxima = largura
+
+    def fechar_palavra():
+        """Põe a palavra pendente na linha atual, descendo quando não couber."""
+        nonlocal atual, visivel, palavra, largura_maxima
+        if not palavra:
+            return
+        if visivel and visivel + len(palavra) > largura_maxima:
+            linhas.append(atual)
+            atual = recuo
+            visivel = len(recuo)
+            largura_maxima = largura
+        for codigos, caractere in palavra:
+            atual += codigos + caractere
+            visivel += 1
+        palavra = []
+
+    for codigos, caractere in unidades:
+        if caractere == " ":
+            fechar_palavra()
+            # Espaço que não cabe fecha a linha e não abre a próxima.
+            if visivel + 1 > largura_maxima:
+                linhas.append(atual)
+                atual = recuo
+                visivel = len(recuo)
+                continue
+            atual += codigos + " "
+            visivel += 1
+            continue
+
+        # Palavra maior que a régua: parte, porque não cabe em linha nenhuma.
+        if len(palavra) + 1 > largura - len(recuo):
+            fechar_palavra()
+            linhas.append(atual)
+            atual = recuo
+            visivel = len(recuo)
+        palavra.append((codigos, caractere))
+
+    fechar_palavra()
+    if atual.strip() or not linhas:
+        linhas.append(atual)
+    # O ljust da tabela de itens deixa rabo de espaços na última linha.
+    return [l.rstrip() if l.strip() else l for l in linhas]
+
+
+def quebrar_linhas(linhas, largura=COLUNAS_PAPEL):
+    """quebrar_linha aplicada a uma lista, na ordem."""
+    quebradas = []
+    for linha in linhas:
+        quebradas.extend(quebrar_linha(linha, largura))
+    return quebradas
+
+
 def montar_linhas_por_ordem(ordem, renderizadores):
     """Monta a lista final de linhas da comanda (linhas_arquivo) a partir de
     `ordem` (lista de chaves, ver comandaEstiloService.ordem_secoes()) e
@@ -110,7 +221,12 @@ def montar_linhas_por_ordem(ordem, renderizadores):
                 linhas.extend(["-" * COLUNAS_PAPEL] * tracos)
                 linhas.extend(estilo.linhas_espacamento_secoes())
 
-        linhas.extend(conteudo)
+        # Quebra por palavra antes de ir ao papel: nenhum campo do cupom
+        # (cliente, endereço, observação) sai com palavra partida no meio. A
+        # tabela de itens chega pronta de formatar_tabela, que já quebra
+        # respeitando a coluna "pedido | valor" — quebrá-la de novo aqui
+        # desmancharia o alinhamento.
+        linhas.extend(conteudo if eh_itens else quebrar_linhas(conteudo))
 
         categoria_anterior = estilo.categoria_campo(chave)
         itens_anterior = eh_itens
@@ -510,6 +626,24 @@ def _acomodar_tamanho(coluna, tamanho, valor, largura_pedido):
     return coluna[:-len(marca)], None, tamanho
 
 
+def _linhas_do_nome(coluna, largura_pedido, valor):
+    """A coluna do item em uma ou mais linhas: a primeira alinhada com o valor,
+    as seguintes (o nome que não coube) recuadas, quebradas por palavra.
+
+    POR QUE NÃO BASTA O ljust: a régua do papel tem COLUNAS_PAPEL, e um nome
+    comprido faz "pedido | valor" passar disso — aí a impressora quebra onde a
+    conta der, no meio de "(BROTO)" ou de "(PÃO FRANCÊS)". Quebrando aqui, o
+    nome desce por palavra e a coluna do valor continua onde sempre esteve."""
+    if largura_visivel(coluna) <= largura_pedido:
+        return [coluna.ljust(largura_pedido)], []
+
+    # O recuo das linhas de continuação é o mesmo dos adicionais e da
+    # observação: lê-se de relance que aquilo ainda é o item de cima.
+    partes = quebrar_linha(coluna, largura_pedido)
+    primeira = partes[0].ljust(largura_pedido)
+    return [primeira], partes[1:]
+
+
 def formatar_tabela(grupos):
     """Alinha pedido e valor em uma coluna "|" e separa cada grupo com uma
     linha em branco. Depois de cada fração vêm seus adicionais (se houver);
@@ -535,8 +669,15 @@ def formatar_tabela(grupos):
             for coluna, valor, extras, tamanho in grupo["linhas"]
         ])
 
-    largura_pedido = max(
-        len(coluna) for linhas_grupo in preparados for coluna, _t, _b, _v, _e in linhas_grupo
+    # A coluna do pedido nunca passa do que sobra do papel depois do separador
+    # e do maior valor: é isso que garante que "pedido | valor" caiba nas
+    # COLUNAS_PAPEL, com ou sem nome comprido.
+    maior_valor = max(len(valor) for _c, _t, _b, valor, _e in
+                      [linha for linhas_grupo in preparados for linha in linhas_grupo])
+    teto_pedido = COLUNAS_PAPEL - len(_SEPARADOR_COLUNA) - maior_valor
+    largura_pedido = min(
+        teto_pedido,
+        max(len(coluna) for linhas_grupo in preparados for coluna, _t, _b, _v, _e in linhas_grupo),
     )
 
     texto_linhas = []
@@ -548,24 +689,28 @@ def formatar_tabela(grupos):
             # Alinha primeiro com o texto puro, e só então aplica o
             # estilo configurado — assim os bytes de controle (invisíveis
             # na impressão) não contam como largura na coluna.
-            coluna_pedido_fmt = formatar_coluna_pedido(coluna_pedido.ljust(largura_pedido), tamanho_na_coluna)
+            primeira, continuacao = _linhas_do_nome(coluna_pedido, largura_pedido, valor)
+            coluna_pedido_fmt = formatar_coluna_pedido(primeira[0], tamanho_na_coluna)
             texto_linhas.append(f"{coluna_pedido_fmt}{_SEPARADOR_COLUNA}{valor}")
+            # O resto do nome, que não coube ao lado do valor.
+            for resto in continuacao:
+                texto_linhas.append(formatar_coluna_pedido(resto, tamanho_na_coluna))
             # O tamanho que desceu vem colado no nome, ANTES dos adicionais:
             # ele é parte do item, não um extra dele.
             if tamanho_abaixo:
-                texto_linhas.append(f"  {estilo.formatar_campo(f'({tamanho_abaixo})', 'pedido_tamanho')}")
+                texto_linhas.extend(quebrar_linha(f"  {estilo.formatar_campo(f'({tamanho_abaixo})', 'pedido_tamanho')}"))
             for extra in extras:
-                texto_linhas.append(f"  {estilo.formatar_campo(extra, 'adicional_item')}")
+                texto_linhas.extend(quebrar_linha(f"  {estilo.formatar_campo(extra, 'adicional_item')}"))
 
         # Antes da borda, e depois de todas as frações: são adicionais, então
         # ficam perto dos outros adicionais; e valem para o item inteiro, então
         # não podem ficar colados numa fração só.
         for extra in grupo.get("adicionais_inteiros", []):
-            texto_linhas.append(f"  {estilo.formatar_campo(extra, 'adicional_item')}")
+            texto_linhas.extend(quebrar_linha(f"  {estilo.formatar_campo(extra, 'adicional_item')}"))
 
         if grupo["borda"]:
-            texto_linhas.append(f"  {estilo.formatar_campo(grupo['borda'], 'borda_item')}")
+            texto_linhas.extend(quebrar_linha(f"  {estilo.formatar_campo(grupo['borda'], 'borda_item')}"))
         if grupo["observacao"]:
-            texto_linhas.append(f"  {estilo.formatar_campo(grupo['observacao'], 'observacao_item')}")
+            texto_linhas.extend(quebrar_linha(f"  {estilo.formatar_campo(grupo['observacao'], 'observacao_item')}"))
 
     return texto_linhas

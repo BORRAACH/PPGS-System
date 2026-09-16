@@ -49,6 +49,7 @@ try:
     from controllers.salaoController import SalaoController
     from controllers.consultaController import ConsultaController
     from controllers.fechamentoController import FechamentoController
+    from controllers.estatisticasController import EstatisticasController
     from controllers.usuariosController import UsuariosController
     from controllers.rascunhosController import RascunhosController
     from controllers.clientesController import ClientesController
@@ -224,6 +225,10 @@ if __name__ == "__main__":
     engine.rootContext().setContextProperty("consultaController", consultaController)
     fechamentoController = FechamentoController()
     engine.rootContext().setContextProperty("fechamentoController", fechamentoController)
+    # Estatísticas diárias gravadas a cada "Fechar Caixa" e a página de
+    # Estatística (ver services/estatisticasService.py).
+    estatisticasController = EstatisticasController(fechamentoController)
+    engine.rootContext().setContextProperty("estatisticasController", estatisticasController)
     comandaEstiloController = ComandaEstiloController()
     engine.rootContext().setContextProperty("comandaEstiloController", comandaEstiloController)
     # Cadastro de quem pode autorizar edição/exclusão de comanda, e o guarda
@@ -309,6 +314,7 @@ if __name__ == "__main__":
     app.aboutToQuit.connect(sugestoes_endereco.encerrar)
     app.aboutToQuit.connect(rotasController.encerrar)
     app.aboutToQuit.connect(validacaoEnderecoController.encerrar)
+    app.aboutToQuit.connect(estatisticasController.encerrar)
 
     # Em thread porque é I/O bloqueante puro (PowerShell/CUPS) e não toca
     # objeto Qt nenhum.

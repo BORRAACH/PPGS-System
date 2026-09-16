@@ -326,6 +326,34 @@ def _largura_celula(tamanho_px):
     return tamanho_px * _LARGURA_COLUNA_DOTS / ALTURA_LINHA_DOTS
 
 
+def _despejar_palavra(fisicas, atual, x, palavra, largura_dots):
+    """Põe `palavra` (glifos ainda sem posição) na linha em construção, descendo
+    para a próxima quando ela não couber no que resta. Devolve (linha, x).
+
+    É isto que impede "(PÃO DE HAMBÚRGUER)" de sair como "(PÃO DE HAMBÚRGUER"
+    numa linha e ")" na outra, e "(BROTO)" partido no meio: a palavra vai
+    inteira para a linha de baixo. Antes a quebra era caractere a caractere,
+    onde a conta desse.
+
+    A posição de cada glifo só é resolvida aqui porque ela muda conforme a
+    palavra fique nesta linha ou desça para a seguinte."""
+    if not palavra:
+        return atual, x
+
+    largura_palavra = sum(glifo[5] for glifo in palavra)
+    # Desce só se houver linha para onde descer: uma palavra maior que o papel
+    # já chega aqui partida (ver _quebrar_em_linhas_fisicas).
+    if x > 0 and x + largura_palavra > largura_dots:
+        fisicas.append(atual)
+        atual = []
+        x = 0.0
+
+    for caractere, tamanho_px, negrito, sublinhado, reverso, largura_celula in palavra:
+        atual.append((caractere, x, tamanho_px, negrito, sublinhado, reverso))
+        x += largura_celula
+    return atual, x
+
+
 def _quebrar_em_linhas_fisicas(linhas_logicas, largura_dots):
     """Transforma as linhas do cupom em linhas FÍSICAS de papel, quebrando o
     que não cabe na largura, e resolve a posição de cada caractere.
@@ -336,6 +364,11 @@ def _quebrar_em_linhas_fisicas(linhas_logicas, largura_dots):
     linha de baixo sozinha. A imagem não tem esse reflexo: sem quebrar aqui, o
     que passa da largura é simplesmente cortado fora e some do papel — e o que
     some primeiro é o fim do nome do cliente, do endereço e do sabor da pizza.
+
+    A QUEBRA É POR PALAVRA: o que não cabe desce inteiro (ver
+    _despejar_palavra). Partir no meio escondia justamente o que só aparece na
+    exceção — "(BROTO)", "(MINI)" e o tipo de pão do lanche saíam cortados em
+    duas linhas.
 
     A conta é feita em DOTS, e não em colunas inteiras, porque o tamanho da
     fonte pode ser qualquer valor em pixels quando a comanda é desenhada (ver
@@ -359,15 +392,39 @@ def _quebrar_em_linhas_fisicas(linhas_logicas, largura_dots):
     for indice, trechos in enumerate(linhas_logicas):
         atual = []
         x = 0.0
+        # A palavra sendo montada, ainda sem posição: só ao fechá-la se sabe se
+        # ela cabe no que resta da linha (ver _despejar_palavra).
+        palavra = []
+        largura_palavra = 0.0
+
         for conteudo, negrito, sublinhado, reverso, tamanho_px in trechos:
             largura_celula = _largura_celula(tamanho_px)
             for caractere in conteudo:
+                if caractere != " ":
+                    # Palavra mais larga que o papel inteiro: não há para onde
+                    # empurrar, então ela parte — mas só nesse caso.
+                    if largura_palavra + largura_celula > largura_dots:
+                        atual, x = _despejar_palavra(fisicas, atual, x, palavra, largura_dots)
+                        palavra = []
+                        largura_palavra = 0.0
+                    palavra.append((caractere, tamanho_px, negrito, sublinhado, reverso, largura_celula))
+                    largura_palavra += largura_celula
+                    continue
+
+                atual, x = _despejar_palavra(fisicas, atual, x, palavra, largura_dots)
+                palavra = []
+                largura_palavra = 0.0
+                # Espaço que não cabe: a linha termina aqui e o espaço se perde,
+                # como em qualquer quebra de linha — ele não abre a linha nova.
                 if x + largura_celula > largura_dots:
                     fisicas.append(atual)
                     atual = []
                     x = 0.0
+                    continue
                 atual.append((caractere, x, tamanho_px, negrito, sublinhado, reverso))
                 x += largura_celula
+
+        atual, x = _despejar_palavra(fisicas, atual, x, palavra, largura_dots)
         # Mesmo vazia a linha entra: são as linhas em branco do espaçamento
         # entre seções (ver comandaEstiloService.linhas_espacamento_secoes), e
         # engoli-las grudaria as seções umas nas outras.

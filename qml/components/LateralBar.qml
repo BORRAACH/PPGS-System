@@ -109,6 +109,13 @@ Rectangle {
                 }
 
                 ListElement {
+                    icone: "fa6s.chart-line"
+                    textoTooltip: "Estatística"
+                    pagina: "../pages/estatistica/Estatistica.qml"
+                    nomeTela: "telaEstatistica"
+                }
+
+                ListElement {
                     icone: "fa6s.globe"
                     textoTooltip: "Rede"
                     pagina: "../pages/rede/Rede.qml"

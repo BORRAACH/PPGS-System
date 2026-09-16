@@ -10,8 +10,8 @@ from Config.logConfig import protegido
 from services import comandaEstiloService as estilo
 from services import comandaParserService as parser
 from services import comandaTextoService as texto
-from services.rede import (baixaComandas, contagemCaixa, despesasCaixa, edicoesCaixa, extrasCaixa,
-                           fechamentoCache, rede, relogio, tombstones)
+from services.rede import (alteracoesComandas, baixaComandas, contagemCaixa, despesasCaixa, edicoesCaixa,
+                           extrasCaixa, fechamentoCache, rede, relogio, tombstones)
 
 # Tipo de evento de gossip (ver services/rede/eventos.py:BarramentoEventos)
 # usado pra propagar o resumo de um dia recém-calculado pra malha inteira —
@@ -61,6 +61,11 @@ _EVENTO_DESPESA_APAGADA = "despesa_apagada"
 # Não há evento de "edição apagada": o domínio é append-only, uma alteração
 # registrada nunca é desfeita.
 _EVENTO_EDICAO_CAIXA = "edicao_caixa"
+
+# Toda edição ou exclusão de comanda, com baixa ou sem, para as estatísticas
+# do dia (ver services/rede/alteracoesComandas.py). Payload: o registro em si,
+# pelo mesmo motivo de _EVENTO_EDICAO_CAIXA.
+_EVENTO_COMANDA_ALTERADA = "comanda_alterada"
 
 # Contagem manual de Cartão/Dinheiro/Pix, usada pra calcular o "Lucro" (ver
 # services/rede/contagemCaixa.py). Ao contrário dos dois eventos acima, uma
@@ -170,6 +175,7 @@ class FechamentoController(QObject):
         rede.registrarEvento(_EVENTO_DESPESA_LANCADA, self._ao_receber_despesa_remota)
         rede.registrarEvento(_EVENTO_DESPESA_APAGADA, self._ao_receber_despesa_apagada_remota)
         rede.registrarEvento(_EVENTO_EDICAO_CAIXA, self._ao_receber_edicao_remota)
+        rede.registrarEvento(_EVENTO_COMANDA_ALTERADA, self._ao_receber_alteracao_remota)
         rede.registrarEvento(_EVENTO_CONTAGEM_ATUALIZADA, self._ao_receber_contagem_remota)
         rede.registrarDominioSincronizado(
             "fechamento",
@@ -204,6 +210,12 @@ class FechamentoController(QObject):
             self._resumo_edicoes,
             self._obter_edicao_reconciliacao,
             self._aplicar_edicao_reconciliacao,
+        )
+        rede.registrarDominioSincronizado(
+            alteracoesComandas.DOMINIO,
+            self._resumo_alteracoes,
+            self._obter_alteracao_reconciliacao,
+            self._aplicar_alteracao_reconciliacao,
         )
         rede.registrarDominioSincronizado(
             "contagem",
@@ -574,6 +586,58 @@ class FechamentoController(QObject):
             return
 
         self.edicoesAtualizadas.emit()
+
+    # ---------- Anti-entropy do domínio "alteracoes" (estatísticas) ----------
+    # Mesmo contrato de "edicoes": append-only, reconciliar é a união.
+
+    def _resumo_alteracoes(self):
+        limite = (datetime.now() - timedelta(days=_JANELA_RECONCILIACAO_FECHAMENTO_DIAS)).strftime("%Y-%m-%d")
+        return alteracoesComandas.resumo(limite)
+
+    def _obter_alteracao_reconciliacao(self, id_evento):
+        return alteracoesComandas.obter(id_evento)
+
+    def _aplicar_alteracao_reconciliacao(self, id_evento, payload):
+        alteracoesComandas.aplicar(id_evento, payload or {})
+
+    def _ao_receber_alteracao_remota(self, payload):
+        payload = payload or {}
+        if payload.get("id"):
+            alteracoesComandas.aplicar(payload["id"], payload)
+
+    def _registrar_alteracao_comanda(self, arquivo, acao, usuario, arquivo_novo=""):
+        """Anota uma edição ou exclusão de qualquer comanda — com baixa ou sem —
+        para as estatísticas do dia, e anuncia à malha. Chamado pelos dois
+        ganchos de alteração ANTES do teste de baixa, enquanto a comanda antiga
+        ainda está em disco.
+
+        Nunca levanta: uma falha aqui não pode impedir o registro da correção
+        do caixa, que é o que sai impresso."""
+        try:
+            data_iso = self._data_iso_da_comanda(arquivo)
+            if not arquivo or not data_iso:
+                return
+            codigo, cliente, valor_antes = self._instantaneo_da_comanda(arquivo)
+            valor_depois = self._instantaneo_da_comanda(arquivo_novo)[2] if arquivo_novo else 0.0
+            id_evento = alteracoesComandas.registrar(
+                data_iso,
+                acao,
+                parser.tipo_comanda(arquivo),
+                usuario or "",
+                datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
+                codigo=codigo,
+                cliente=cliente,
+                valor_antes=valor_antes,
+                valor_depois=valor_depois,
+                fechada=baixaComandas.esta_fechada(arquivo),
+                arquivo=arquivo,
+                arquivo_novo=arquivo_novo,
+            )
+            registro = alteracoesComandas.obter(id_evento)
+            if registro:
+                rede.publicarEvento(_EVENTO_COMANDA_ALTERADA, registro)
+        except Exception as erro:
+            print(f"[FechamentoController] falha ao registrar a alteração de {arquivo}: {erro!r}")
 
     # ---------- Anti-entropy do domínio "contagem" (Cartão/Dinheiro/Pix) ----------
     # Ao contrário de "baixas"/"extras" (que só crescem), aqui um mesmo dia
@@ -1454,6 +1518,8 @@ class FechamentoController(QObject):
         de uma venda ainda não conferida (o caminho da Consulta)."""
         arquivo_original = os.path.basename(arquivo_original or "")
         arquivo_novo = os.path.basename(arquivo_novo or "")
+        # Toda edição entra nas estatísticas, com baixa ou sem.
+        self._registrar_alteracao_comanda(arquivo_original, alteracoesComandas.ACAO_EDITADA, usuario, arquivo_novo)
         if not arquivo_original or not baixaComandas.esta_fechada(arquivo_original):
             return False
 
@@ -1491,6 +1557,8 @@ class FechamentoController(QObject):
         baixa (o caso normal da Consulta, que nem oferece a lixeira para
         comanda fechada)."""
         arquivo = os.path.basename(arquivo or "")
+        # Toda exclusão entra nas estatísticas, com baixa ou sem.
+        self._registrar_alteracao_comanda(arquivo, alteracoesComandas.ACAO_EXCLUIDA, usuario)
         if not arquivo or not baixaComandas.esta_fechada(arquivo):
             return False
 

@@ -130,6 +130,68 @@ Page {
         adicionaisAtual = lista;
     }
 
+    // O adicional destacado e o texto da busca, para fora da página (usados
+    // pela verificação sem tela).
+    readonly property int indiceDestacado: listaAdicionaisView.currentIndex
+    property alias textoBusca: campoBusca.text
+    property bool focoNaBusca: false
+    onFocoNaBuscaChanged: {
+        if (focoNaBusca)
+            campoBusca.forceActiveFocus();
+    }
+
+    // Adiciona o adicional destacado ao copo em montagem (ver
+    // listaAdicionaisView.currentIndex) — o alvo do Enter na busca.
+    function adicionarDestacado() {
+        var indice = listaAdicionaisView.currentIndex;
+        if (indice < 0 || indice >= modeloFiltrado.count)
+            return ;
+        var item = modeloFiltrado.get(indice);
+        adicionarAdicionalAtual(item.nome, parseValor(item.valor));
+    }
+
+    // Move o destaque na lista (setas do campo de busca), sem tirar o foco de
+    // onde se digita.
+    function moverDestaque(passo) {
+        if (modeloFiltrado.count === 0)
+            return ;
+        var destino = listaAdicionaisView.currentIndex + passo;
+        listaAdicionaisView.currentIndex = Math.max(0, Math.min(modeloFiltrado.count - 1, destino));
+        listaAdicionaisView.positionViewAtIndex(listaAdicionaisView.currentIndex, ListView.Contain);
+    }
+
+    // Há o que confirmar: copos já fechados, ou o copo em montagem (que só
+    // conta com algum adicional escolhido — ver valorCopoAtual). Vale para o
+    // botão e para o Ctrl+Enter, e por isso mora aqui e não no "enabled" do
+    // botão: duas cópias divergiriam, e o atalho lançaria um pedido que o
+    // botão recusa.
+    readonly property bool podeConfirmar: coposMontados.length > 0 || totalAdicionaisAtual > 0
+
+    // Junta os copos já adicionados com o copo em andamento (se ele já tiver
+    // algum adicional) e envia tudo de uma vez. Chamada pelo botão Confirmar e
+    // pelo Ctrl+Enter.
+    function confirmarPedido() {
+        var listaFinal = coposMontados.slice();
+        if (totalAdicionaisAtual > 0) {
+            listaFinal.push({
+                "tamanho": tamanhoSelecionado,
+                "valorNum": precoTamanho(tamanhoSelecionado),
+                "adicionais": adicionaisAtual.slice()
+            });
+        }
+        if (listaFinal.length === 0)
+            return ;
+
+        // A montagem do nome/valor mora em ../MontagemItem.js (ver o
+        // comentário equivalente em pizzas/Pizzas.qml) — inclusive o
+        // "achatamento" dos adicionais, que viram uma linha por unidade de
+        // quantidade.
+        var itens = listaFinal.map(Montagem.montarAcai);
+        if (typeof onPedidoSelecionado === "function")
+            onPedidoSelecionado(itens);
+        pilha.pop(null);
+    }
+
     // Fecha o copo em andamento (tamanho + adicionais atuais) e o guarda em
     // coposMontados, liberando os adicionais para montar o próximo copo sem
     // precisar reabrir esta tela. O tamanho permanece selecionado, já que o
@@ -240,6 +302,43 @@ Page {
 
     function parseValor(strValor) {
         return parseFloat((strValor || "0").replace(",", "."));
+    }
+
+    // Um Shortcut, e não Keys.onPressed: o foco quase sempre está dentro da
+    // barra de busca (é para lá que qualquer tecla imprimível o manda), e daí
+    // o evento nunca chegaria à página. O atalho vale enquanto esta página
+    // está na tela — "visible" cai sozinho quando a pilha empurra outra página
+    // por cima ou quando o Balcão/Entrega/Salão sai de cena.
+    //
+    // autoRepeat desligado porque isto é irreversível: pop(null) é animado,
+    // então a página continua visível por alguns quadros, e a repetição do
+    // teclado lançaria o mesmo pedido duas vezes.
+    Shortcut {
+        // "Ctrl+Enter" é o Enter do teclado numérico; "Ctrl+Return", o da
+        // tecla grande. Quem digita valores usa o numérico o tempo todo.
+        sequences: ["Ctrl+Return", "Ctrl+Enter"]
+        autoRepeat: false
+        enabled: telaAcai.visible && telaAcai.podeConfirmar
+        onActivated: telaAcai.confirmarPedido()
+    }
+
+    // Ctrl+Shift+Enter: fecha o copo em montagem e o guarda na fila, liberando os
+    // adicionais para o próximo — o mesmo que o botão "Adicionar Copo".
+    Shortcut {
+        sequences: ["Ctrl+Shift+Return", "Ctrl+Shift+Enter"]
+        autoRepeat: false
+        enabled: telaAcai.visible
+        onActivated: telaAcai.adicionarCopoAtual()
+    }
+
+    // Ctrl+Alt+Left: o mesmo que o botão "Voltar" — sai desta tela e volta
+    // para o pedido, descartando o que estava montado aqui. Left porque é
+    // para onde a seta do botão aponta.
+    Shortcut {
+        sequence: "Ctrl+Alt+Left"
+        autoRepeat: false
+        enabled: telaAcai.visible
+        onActivated: pilha.pop()
     }
 
     // Permite digitar direto na tela para pesquisar, sem precisar clicar
@@ -365,15 +464,23 @@ Page {
                     placeholderText: "Pesquisar adicional (ex: nutella, granola)..."
                     onTextChanged: {
                         filtrarAdicionais(text);
+                        // Cada busca recomeça o destaque no primeiro resultado:
+                        // é nele que o atendente está de olho.
+                        listaAdicionaisView.currentIndex = modeloFiltrado.count > 0 ? 0 : -1;
                     }
+                    // As setas andam pela lista sem tirar o foco da busca.
+                    Keys.onDownPressed: telaAcai.moverDestaque(1)
+                    Keys.onUpPressed: telaAcai.moverDestaque(-1)
                     // Enter com um só resultado na busca já adiciona esse
                     // adicional (mesmo efeito do botão "+") e limpa a busca.
+                    // Enter escolhe o adicional destacado — que começa no
+                    // primeiro resultado, o mais próximo do que foi digitado, e
+                    // anda com as setas. Antes só agia com um único resultado.
                     onAccepted: {
-                        if (modeloFiltrado.count === 1) {
-                            var item = modeloFiltrado.get(0);
-                            adicionarAdicionalAtual(item.nome, parseValor(item.valor));
-                            campoBusca.text = "";
-                        }
+                        if (modeloFiltrado.count === 0)
+                            return ;
+                        telaAcai.adicionarDestacado();
+                        campoBusca.text = "";
                     }
                 }
 
@@ -570,6 +677,10 @@ Page {
                     model: modeloFiltrado
                     spacing: Estilo.global.spacing.sm
                     clip: true
+                    // Só o destaque do teclado: o realce visual mora no
+                    // delegate (a lista não tem foco, quem tem é a busca).
+                    currentIndex: -1
+                    highlightFollowsCurrentItem: false
 
                     ScrollBar.vertical: ScrollBar {
                         policy: ScrollBar.AlwaysOn
@@ -583,13 +694,15 @@ Page {
                         id: itemRow
 
                         property int quantidade: quantidadeAdicionalAtual(model.nome)
+                        // O item que as setas apontam e que o Enter escolhe.
+                        readonly property bool destacado: index === listaAdicionaisView.currentIndex
 
                         width: listaAdicionaisView.width - (listaAdicionaisView.ScrollBar.vertical.visible ? listaAdicionaisView.ScrollBar.vertical.width : 0)
                         height: 52
                         radius: Estilo.global.radius.md
-                        color: quantidade > 0 ? Estilo.category.acai.soft : Estilo.global.surface
-                        border.color: quantidade > 0 ? Estilo.category.acai.base : Estilo.global.border
-                        border.width: quantidade > 0 ? 2 : 1
+                        color: quantidade > 0 ? Estilo.category.acai.soft : (destacado ? Estilo.global.surfaceHover : Estilo.global.surface)
+                        border.color: destacado ? Estilo.category.acai.pressed : (quantidade > 0 ? Estilo.category.acai.base : Estilo.global.border)
+                        border.width: (destacado || quantidade > 0) ? 2 : 1
 
                         Row {
                             anchors.left: parent.left
@@ -994,30 +1107,8 @@ Page {
 
                         width: (parent.width - parent.spacing) / 2
                         height: 46
-                        enabled: coposMontados.length > 0 || totalAdicionaisAtual > 0
-                        // Junta os copos já adicionados com o copo em andamento
-                        // (se ele já tiver algum adicional) e envia tudo de uma vez.
-                        onClicked: {
-                            var listaFinal = coposMontados.slice();
-                            if (totalAdicionaisAtual > 0) {
-                                listaFinal.push({
-                                    "tamanho": tamanhoSelecionado,
-                                    "valorNum": precoTamanho(tamanhoSelecionado),
-                                    "adicionais": adicionaisAtual.slice()
-                                });
-                            }
-                            if (listaFinal.length === 0)
-                                return ;
-
-                            // A montagem do nome/valor mora em ../MontagemItem.js
-                            // (ver o comentário equivalente em pizzas/Pizzas.qml)
-                            // — inclusive o "achatamento" dos adicionais, que
-                            // viram uma linha por unidade de quantidade.
-                            var itens = listaFinal.map(Montagem.montarAcai);
-                            if (typeof onPedidoSelecionado === "function")
-                                onPedidoSelecionado(itens);
-                            pilha.pop(null);
-                        }
+                        enabled: telaAcai.podeConfirmar
+                        onClicked: telaAcai.confirmarPedido()
 
                         contentItem: Text {
                             text: "Confirmar"

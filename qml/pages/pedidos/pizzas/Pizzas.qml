@@ -87,6 +87,44 @@ Page {
         pilha.pop(null);
     }
 
+    // O sabor destacado e o texto da busca, para fora da página (usados pela
+    // verificação sem tela).
+    readonly property int indiceDestacado: listaPizzasView.currentIndex
+    property alias textoBusca: campoBusca.text
+    property bool focoNaBusca: false
+    onFocoNaBuscaChanged: {
+        if (focoNaBusca)
+            campoBusca.forceActiveFocus();
+    }
+
+    // Escolhe o sabor destacado na lista (ver listaPizzasView.currentIndex) —
+    // o alvo do Enter na busca. Um sabor já escolhido, ou a pizza já no limite
+    // de sabores, não entra de novo.
+    function adicionarDestacado() {
+        var indice = listaPizzasView.currentIndex;
+        if (indice < 0 || indice >= modeloFiltrado.count)
+            return ;
+        var item = modeloFiltrado.get(indice);
+        if (isSelecionado(item.nome) || selecionados.length >= limiteSabores)
+            return ;
+        var lista = selecionados.slice();
+        lista.push({
+            "nome": item.nome,
+            "valorNum": parseValor(item.valor)
+        });
+        selecionados = lista;
+    }
+
+    // Move o destaque na lista (setas do campo de busca), sem tirar o foco de
+    // onde se digita.
+    function moverDestaque(passo) {
+        if (modeloFiltrado.count === 0)
+            return ;
+        var destino = listaPizzasView.currentIndex + passo;
+        listaPizzasView.currentIndex = Math.max(0, Math.min(modeloFiltrado.count - 1, destino));
+        listaPizzasView.positionViewAtIndex(listaPizzasView.currentIndex, ListView.Contain);
+    }
+
     // Fecha a pizza em andamento (sabores + tamanho atuais) e a guarda em
     // pizzasMontadas, liberando a seleção de sabores para montar a próxima
     // pizza sem precisar reabrir esta tela.
@@ -363,6 +401,25 @@ Page {
         onActivated: telaPizzas.confirmarPedido()
     }
 
+    // Ctrl+Shift+Enter: fecha a pizza em montagem e a guarda na fila, liberando a
+    // seleção para a próxima — o mesmo que o botão "Adicionar Pizza".
+    Shortcut {
+        sequences: ["Ctrl+Shift+Return", "Ctrl+Shift+Enter"]
+        autoRepeat: false
+        enabled: telaPizzas.visible && !popupAdicionaisBordas.visible
+        onActivated: telaPizzas.adicionarPizzaAtual()
+    }
+
+    // Ctrl+Alt+Left: o mesmo que o botão "Voltar" — sai desta tela e volta
+    // para o pedido, descartando o que estava montado aqui. Left porque é
+    // para onde a seta do botão aponta.
+    Shortcut {
+        sequence: "Ctrl+Alt+Left"
+        autoRepeat: false
+        enabled: telaPizzas.visible && !popupAdicionaisBordas.visible
+        onActivated: pilha.pop()
+    }
+
     // Permite digitar direto na tela para pesquisar, sem precisar clicar
     // antes na barra de busca — qualquer tecla "imprimível" (letras,
     // números, acentos) foca a barra e já entra com o caractere digitado.
@@ -519,22 +576,24 @@ Page {
                     enabled: selecionados.length < limiteSabores
                     onTextChanged: {
                         filtrarPizzas(text);
+                        // Cada busca recomeça o destaque no primeiro resultado:
+                        // é nele que o atendente está de olho.
+                        listaPizzasView.currentIndex = modeloFiltrado.count > 0 ? 0 : -1;
                     }
+                    // As setas andam pela lista sem tirar o foco da busca.
+                    Keys.onDownPressed: telaPizzas.moverDestaque(1)
+                    Keys.onUpPressed: telaPizzas.moverDestaque(-1)
                     // Enter com um só resultado na busca já seleciona esse sabor
                     // (mesmo efeito de um clique) e limpa a busca.
+                    // Enter escolhe o sabor destacado — que começa no primeiro
+                    // resultado, o mais próximo do que foi digitado, e anda com
+                    // as setas. Antes só agia com um único resultado na lista, e
+                    // com dois o Enter não fazia nada.
                     onAccepted: {
-                        if (modeloFiltrado.count === 1) {
-                            var item = modeloFiltrado.get(0);
-                            if (!isSelecionado(item.nome) && selecionados.length < limiteSabores) {
-                                var lista = selecionados.slice();
-                                lista.push({
-                                    "nome": item.nome,
-                                    "valorNum": parseValor(item.valor)
-                                });
-                                selecionados = lista;
-                            }
-                            campoBusca.text = "";
-                        }
+                        if (modeloFiltrado.count === 0)
+                            return ;
+                        telaPizzas.adicionarDestacado();
+                        campoBusca.text = "";
                     }
                 }
 
@@ -699,6 +758,10 @@ Page {
                     model: modeloFiltrado
                     spacing: Estilo.global.spacing.sm
                     clip: true
+                    // Só o destaque do teclado: o realce visual mora no
+                    // delegate (a lista não tem foco, quem tem é a busca).
+                    currentIndex: -1
+                    highlightFollowsCurrentItem: false
 
                     // 1. Adiciona a barra de rolagem à direita da lista
                     ScrollBar.vertical: ScrollBar {
@@ -710,6 +773,8 @@ Page {
                         id: btnItem
 
                         property bool checado: isSelecionado(model.nome)
+                        // O sabor que as setas apontam e que o Enter escolhe.
+                        readonly property bool destacado: index === listaPizzasView.currentIndex
 
                         // 2. Subtrai a largura da ScrollBar (aprox. 12px) para o botão não ficar embaixo dela
                         width: listaPizzasView.width - (listaPizzasView.ScrollBar.vertical.visible ? listaPizzasView.ScrollBar.vertical.width : 0)
@@ -773,9 +838,12 @@ Page {
 
                         background: Rectangle {
                             radius: Estilo.global.radius.md
-                            color: btnItem.checado ? Estilo.category.pizza.soft : (btnItem.down ? Estilo.global.surfacePressed : (btnItem.hovered ? Estilo.global.surfaceHover : Estilo.global.surface))
-                            border.color: btnItem.checado ? Estilo.action.confirm.base : Estilo.global.border
-                            border.width: btnItem.checado ? 2 : 1
+                            // O destacado (setas do teclado, alvo do Enter) tem
+                            // borda própria: a cor de fundo continua dizendo se
+                            // o sabor já entrou na pizza, que é outra coisa.
+                            color: btnItem.checado ? Estilo.category.pizza.soft : (btnItem.down ? Estilo.global.surfacePressed : (btnItem.hovered || btnItem.destacado ? Estilo.global.surfaceHover : Estilo.global.surface))
+                            border.color: btnItem.destacado ? Estilo.category.pizza.pressed : (btnItem.checado ? Estilo.action.confirm.base : Estilo.global.border)
+                            border.width: (btnItem.destacado || btnItem.checado) ? 2 : 1
                         }
                     }
                 }

@@ -126,6 +126,58 @@ Page {
         selecionados = lista;
     }
 
+    // O item destacado e o texto da busca, para fora da página (usados pela
+    // verificação sem tela dos atalhos).
+    readonly property int indiceDestacado: listaOutrosView.currentIndex
+    property bool focoNaBusca: false
+    onFocoNaBuscaChanged: { if (focoNaBusca) campoBusca.forceActiveFocus(); }
+    property alias textoBusca: campoBusca.text
+
+    // Adiciona o item destacado na lista (ver listaOutrosView.currentIndex) —
+    // o alvo do Ctrl+Shift+Enter. Sem destaque, não faz nada.
+    function adicionarDestacado() {
+        var indice = listaOutrosView.currentIndex;
+        if (indice < 0 || indice >= modeloFiltrado.count)
+            return ;
+        var item = modeloFiltrado.get(indice);
+        adicionarItem(item.nome, parseValor(item.valor));
+    }
+
+    // Move o destaque na lista (setas do campo de busca), sem tirar o foco de
+    // onde se digita.
+    function moverDestaque(passo) {
+        if (modeloFiltrado.count === 0)
+            return ;
+        var destino = listaOutrosView.currentIndex + passo;
+        listaOutrosView.currentIndex = Math.max(0, Math.min(modeloFiltrado.count - 1, destino));
+        listaOutrosView.positionViewAtIndex(listaOutrosView.currentIndex, ListView.Contain);
+    }
+
+    // Há o que confirmar. Vale para o botão e para o Ctrl+Enter, e por isso
+    // mora aqui e não no "enabled" do botão — duas cópias divergiriam, e o
+    // atalho passaria a lançar um pedido que o botão recusa.
+    readonly property bool podeConfirmar: totalItens > 0
+
+    // Envia sempre um array de itens — uma linha de pedido por unidade — para
+    // que Balcao/Entrega tratem qualquer quantidade da mesma forma. Chamada
+    // pelo botão Confirmar e pelo Ctrl+Enter.
+    function confirmarPedido() {
+        if (totalItens === 0)
+            return ;
+
+        var itens = [];
+        for (var i = 0; i < selecionados.length; i++) {
+            var item = selecionados[i];
+            // A montagem do nome/valor mora em ../MontagemItem.js (ver o
+            // comentário equivalente em pizzas/Pizzas.qml).
+            for (var q = 0; q < item.quantidade; q++)
+                itens.push(Montagem.montarSimples(item));
+        }
+        if (typeof onPedidoSelecionado === "function")
+            onPedidoSelecionado(itens);
+        pilha.pop(null);
+    }
+
     // Remove uma unidade do item; some da lista quando a quantidade chega a zero
     function removerItem(nome) {
         var lista = [];
@@ -144,6 +196,43 @@ Page {
             }
         }
         selecionados = lista;
+    }
+
+    // Um Shortcut, e não Keys.onPressed: o foco quase sempre está dentro da
+    // barra de busca (é para lá que qualquer tecla imprimível o manda), e daí
+    // o evento nunca chegaria à página. O atalho vale enquanto esta página
+    // está na tela — "visible" cai sozinho quando a pilha empurra outra página
+    // por cima ou quando o Balcão/Entrega/Salão sai de cena.
+    //
+    // autoRepeat desligado porque isto é irreversível: pop(null) é animado,
+    // então a página continua visível por alguns quadros, e a repetição do
+    // teclado lançaria o mesmo pedido duas vezes.
+    Shortcut {
+        // "Ctrl+Enter" é o Enter do teclado numérico; "Ctrl+Return", o da
+        // tecla grande. Quem digita valores usa o numérico o tempo todo.
+        sequences: ["Ctrl+Return", "Ctrl+Enter"]
+        autoRepeat: false
+        enabled: telaOutros.visible && telaOutros.podeConfirmar
+        onActivated: telaOutros.confirmarPedido()
+    }
+
+    // Ctrl+Shift+Enter: adiciona uma unidade do item destacado na lista (as setas
+    // movem o destaque).
+    Shortcut {
+        sequences: ["Ctrl+Shift+Return", "Ctrl+Shift+Enter"]
+        autoRepeat: false
+        enabled: telaOutros.visible
+        onActivated: telaOutros.adicionarDestacado()
+    }
+
+    // Ctrl+Alt+Left: o mesmo que o botão "Voltar" — sai desta tela e volta
+    // para o pedido, descartando o que estava montado aqui. Left porque é
+    // para onde a seta do botão aponta.
+    Shortcut {
+        sequence: "Ctrl+Alt+Left"
+        autoRepeat: false
+        enabled: telaOutros.visible
+        onActivated: pilha.pop()
     }
 
     // Permite digitar direto na tela para pesquisar, sem precisar clicar
@@ -265,15 +354,23 @@ Page {
                     placeholderText: "Pesquisar item (ex: chocolate, trufa)..."
                     onTextChanged: {
                         filtrarOutros(text);
+                        // Cada busca recomeça o destaque no primeiro resultado:
+                        // é nele que o atendente está de olho.
+                        listaOutrosView.currentIndex = modeloFiltrado.count > 0 ? 0 : -1;
                     }
-                    // Enter com um só resultado na busca já adiciona esse item
-                    // (mesmo efeito do botão "+") e limpa a busca.
+                    // As setas andam pela lista sem tirar o foco da busca —
+                    // mesma mecânica do popup de busca do Ctrl+S.
+                    Keys.onDownPressed: telaOutros.moverDestaque(1)
+                    Keys.onUpPressed: telaOutros.moverDestaque(-1)
+                    // Enter adiciona o item destacado — que começa no primeiro
+                    // resultado, o mais próximo do que foi digitado, e anda com as
+                    // setas (mesmo efeito do botão "+"). Antes só agia com um
+                    // único resultado, e com dois o Enter não fazia nada.
                     onAccepted: {
-                        if (modeloFiltrado.count === 1) {
-                            var item = modeloFiltrado.get(0);
-                            adicionarItem(item.nome, parseValor(item.valor));
-                            campoBusca.text = "";
-                        }
+                        if (modeloFiltrado.count === 0)
+                            return ;
+                        telaOutros.adicionarDestacado();
+                        campoBusca.text = "";
                     }
                 }
 
@@ -287,6 +384,10 @@ Page {
                     model: modeloFiltrado
                     spacing: Estilo.global.spacing.sm
                     clip: true
+                    // Só o destaque do teclado: o realce visual mora no
+                    // delegate (a lista não tem foco, quem tem é a busca).
+                    currentIndex: -1
+                    highlightFollowsCurrentItem: false
 
                     ScrollBar.vertical: ScrollBar {
                         policy: ScrollBar.AlwaysOn
@@ -300,13 +401,17 @@ Page {
                         id: itemRow
 
                         property int quantidade: quantidadeDe(model.nome)
+                        // O item que as setas apontam e que o Ctrl+Shift+Enter
+                        // adiciona. Separado de "quantidade": um item pode
+                        // estar destacado sem ter sido escolhido ainda.
+                        readonly property bool destacado: index === listaOutrosView.currentIndex
 
                         width: listaOutrosView.width - (listaOutrosView.ScrollBar.vertical.visible ? listaOutrosView.ScrollBar.vertical.width : 0)
                         height: 52
                         radius: Estilo.global.radius.md
-                        color: quantidade > 0 ? Estilo.category.outros.soft : Estilo.global.surface
-                        border.color: quantidade > 0 ? Estilo.category.outros.base : Estilo.global.border
-                        border.width: quantidade > 0 ? 2 : 1
+                        color: quantidade > 0 ? Estilo.category.outros.soft : (destacado ? Estilo.global.surfaceHover : Estilo.global.surface)
+                        border.color: destacado ? Estilo.category.outros.pressed : (quantidade > 0 ? Estilo.category.outros.base : Estilo.global.border)
+                        border.width: (destacado || quantidade > 0) ? 2 : 1
 
                         Row {
                             anchors.left: parent.left
@@ -603,27 +708,8 @@ Page {
 
                         width: (parent.width - parent.spacing) / 2
                         height: 46
-                        enabled: totalItens > 0
-                        onClicked: {
-                            if (totalItens === 0)
-                                return ;
-
-                            // Envia sempre um array de itens — uma linha de
-                            // pedido por unidade — para que Balcao/Entrega tratem
-                            // qualquer quantidade da mesma forma.
-                            var itens = [];
-                            for (var i = 0; i < selecionados.length; i++) {
-                                var item = selecionados[i];
-                                // A montagem do nome/valor mora em
-                                // ../MontagemItem.js (ver o comentário
-                                // equivalente em pizzas/Pizzas.qml).
-                                for (var q = 0; q < item.quantidade; q++)
-                                    itens.push(Montagem.montarSimples(item));
-                            }
-                            if (typeof onPedidoSelecionado === "function")
-                                onPedidoSelecionado(itens);
-                            pilha.pop(null);
-                        }
+                        enabled: telaOutros.podeConfirmar
+                        onClicked: telaOutros.confirmarPedido()
 
                         contentItem: Text {
                             text: "Confirmar"

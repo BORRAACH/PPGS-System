@@ -160,6 +160,33 @@ Page {
         selecionados = lista;
     }
 
+    // O item destacado e o texto da busca, para fora da página (usados pela
+    // verificação sem tela dos atalhos).
+    readonly property int indiceDestacado: listaBebidasView.currentIndex
+    property bool focoNaBusca: false
+    onFocoNaBuscaChanged: { if (focoNaBusca) campoBusca.forceActiveFocus(); }
+    property alias textoBusca: campoBusca.text
+
+    // Adiciona a bebida destacada na lista (ver listaBebidasView.currentIndex)
+    // — o alvo do Ctrl+Shift+Enter. Sem destaque, não faz nada.
+    function adicionarDestacado() {
+        var indice = listaBebidasView.currentIndex;
+        if (indice < 0 || indice >= modeloFiltrado.count)
+            return ;
+        var item = modeloFiltrado.get(indice);
+        adicionarItem(item.nome, parseValor(precoEfetivo(item)));
+    }
+
+    // Move o destaque na lista (setas do campo de busca), sem tirar o foco de
+    // onde se digita.
+    function moverDestaque(passo) {
+        if (modeloFiltrado.count === 0)
+            return ;
+        var destino = listaBebidasView.currentIndex + passo;
+        listaBebidasView.currentIndex = Math.max(0, Math.min(modeloFiltrado.count - 1, destino));
+        listaBebidasView.positionViewAtIndex(listaBebidasView.currentIndex, ListView.Contain);
+    }
+
     // Há o que confirmar. Vale tanto para o botão quanto para o Ctrl+Enter, e
     // por isso mora aqui e não no "enabled" do botão — duas cópias
     // divergiriam, e o atalho passaria a lançar um pedido que o botão recusa.
@@ -203,6 +230,25 @@ Page {
         autoRepeat: false
         enabled: telaBebidas.visible && telaBebidas.podeConfirmar
         onActivated: telaBebidas.confirmarPedido()
+    }
+
+    // Ctrl+Shift+Enter: adiciona uma unidade da bebida destacada na lista (as setas
+    // movem o destaque).
+    Shortcut {
+        sequences: ["Ctrl+Shift+Return", "Ctrl+Shift+Enter"]
+        autoRepeat: false
+        enabled: telaBebidas.visible
+        onActivated: telaBebidas.adicionarDestacado()
+    }
+
+    // Ctrl+Alt+Left: o mesmo que o botão "Voltar" — sai desta tela e volta
+    // para o pedido, descartando o que estava montado aqui. Left porque é
+    // para onde a seta do botão aponta.
+    Shortcut {
+        sequence: "Ctrl+Alt+Left"
+        autoRepeat: false
+        enabled: telaBebidas.visible
+        onActivated: pilha.pop()
     }
 
     // Permite digitar direto na tela para pesquisar, sem precisar clicar
@@ -324,15 +370,23 @@ Page {
                     placeholderText: "Pesquisar bebida (ex: coca, suco)..."
                     onTextChanged: {
                         filtrarBebidas(text);
+                        // Cada busca recomeça o destaque no primeiro resultado:
+                        // é nele que o atendente está de olho.
+                        listaBebidasView.currentIndex = modeloFiltrado.count > 0 ? 0 : -1;
                     }
-                    // Enter com um só resultado na busca já adiciona essa bebida
-                    // (mesmo efeito do botão "+") e limpa a busca.
+                    // As setas andam pela lista sem tirar o foco da busca —
+                    // mesma mecânica do popup de busca do Ctrl+S.
+                    Keys.onDownPressed: telaBebidas.moverDestaque(1)
+                    Keys.onUpPressed: telaBebidas.moverDestaque(-1)
+                    // Enter adiciona a bebida destacada — que começa no primeiro
+                    // resultado, o mais próximo do que foi digitado, e anda com as
+                    // setas (mesmo efeito do botão "+"). Antes só agia com um
+                    // único resultado, e com dois o Enter não fazia nada.
                     onAccepted: {
-                        if (modeloFiltrado.count === 1) {
-                            var item = modeloFiltrado.get(0);
-                            adicionarItem(item.nome, parseValor(precoEfetivo(item)));
-                            campoBusca.text = "";
-                        }
+                        if (modeloFiltrado.count === 0)
+                            return ;
+                        telaBebidas.adicionarDestacado();
+                        campoBusca.text = "";
                     }
                 }
 
@@ -346,6 +400,10 @@ Page {
                     model: modeloFiltrado
                     spacing: Estilo.global.spacing.sm
                     clip: true
+                    // Só o destaque do teclado: o realce visual mora no
+                    // delegate (a lista não tem foco, quem tem é a busca).
+                    currentIndex: -1
+                    highlightFollowsCurrentItem: false
 
                     ScrollBar.vertical: ScrollBar {
                         policy: ScrollBar.AlwaysOn
@@ -359,13 +417,17 @@ Page {
                         id: itemRow
 
                         property int quantidade: quantidadeDe(model.nome)
+                        // O item que as setas apontam e que o Ctrl+Shift+Enter
+                        // adiciona. Separado de "quantidade": um item pode
+                        // estar destacado sem ter sido escolhido ainda.
+                        readonly property bool destacado: index === listaBebidasView.currentIndex
 
                         width: listaBebidasView.width - (listaBebidasView.ScrollBar.vertical.visible ? listaBebidasView.ScrollBar.vertical.width : 0)
                         height: 52
                         radius: Estilo.global.radius.md
-                        color: quantidade > 0 ? Estilo.category.bebida.soft : Estilo.global.surface
-                        border.color: quantidade > 0 ? Estilo.category.bebida.base : Estilo.global.border
-                        border.width: quantidade > 0 ? 2 : 1
+                        color: quantidade > 0 ? Estilo.category.bebida.soft : (destacado ? Estilo.global.surfaceHover : Estilo.global.surface)
+                        border.color: destacado ? Estilo.category.bebida.strong : (quantidade > 0 ? Estilo.category.bebida.base : Estilo.global.border)
+                        border.width: (destacado || quantidade > 0) ? 2 : 1
 
                         Row {
                             anchors.left: parent.left

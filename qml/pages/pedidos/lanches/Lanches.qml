@@ -255,6 +255,41 @@ Page {
         selecionados = lista;
     }
 
+    // O item destacado, o texto da busca e o popup do pão, para fora da página
+    // (usados pela verificação sem tela dos atalhos).
+    readonly property int indiceDestacado: listaLanchesView.currentIndex
+    property bool focoNaBusca: false
+    onFocoNaBuscaChanged: { if (focoNaBusca) campoBusca.forceActiveFocus(); }
+    property alias textoBusca: campoBusca.text
+    readonly property bool popupPaoAberto: popupPao.visible
+
+    // Escolhe o lanche destacado na lista (ver listaLanchesView.currentIndex)
+    // — o alvo do Ctrl+Shift+Enter. Abre o popup do pão, como o clique: o
+    // preço do lanche depende do pão, então não há como adicionar sem ele.
+    function adicionarDestacado() {
+        var indice = listaLanchesView.currentIndex;
+        if (indice < 0 || indice >= modeloFiltrado.count)
+            return ;
+        var item = modeloFiltrado.get(indice);
+        paoPendente = {
+            "nome": item.nome,
+            "valorHamburguer": item.valorHamburguer,
+            "valorFrances": item.valorFrances,
+            "valorBaby": item.valorBaby
+        };
+        popupPao.open();
+    }
+
+    // Move o destaque na lista (setas do campo de busca), sem tirar o foco de
+    // onde se digita.
+    function moverDestaque(passo) {
+        if (modeloFiltrado.count === 0)
+            return ;
+        var destino = listaLanchesView.currentIndex + passo;
+        listaLanchesView.currentIndex = Math.max(0, Math.min(modeloFiltrado.count - 1, destino));
+        listaLanchesView.positionViewAtIndex(listaLanchesView.currentIndex, ListView.Contain);
+    }
+
     // Há o que confirmar. Vale tanto para o botão quanto para o Ctrl+Enter, e
     // por isso mora aqui e não no "enabled" do botão — duas cópias
     // divergiriam, e o atalho passaria a lançar um pedido que o botão recusa.
@@ -309,6 +344,25 @@ Page {
         autoRepeat: false
         enabled: telaLanches.visible && telaLanches.podeConfirmar && !popupPao.visible && !popupAdicionaisLanches.visible
         onActivated: telaLanches.confirmarPedido()
+    }
+
+    // Ctrl+Shift+Enter: escolhe o lanche destacado na lista (as setas movem o
+    // destaque) e abre o popup do pão, como um clique.
+    Shortcut {
+        sequences: ["Ctrl+Shift+Return", "Ctrl+Shift+Enter"]
+        autoRepeat: false
+        enabled: telaLanches.visible && !popupPao.visible && !popupAdicionaisLanches.visible
+        onActivated: telaLanches.adicionarDestacado()
+    }
+
+    // Ctrl+Alt+Left: o mesmo que o botão "Voltar" — sai desta tela e volta
+    // para o pedido, descartando o que estava montado aqui. Left porque é
+    // para onde a seta do botão aponta.
+    Shortcut {
+        sequence: "Ctrl+Alt+Left"
+        autoRepeat: false
+        enabled: telaLanches.visible && !popupPao.visible && !popupAdicionaisLanches.visible
+        onActivated: pilha.pop()
     }
 
     // Permite digitar direto na tela para pesquisar, sem precisar clicar
@@ -577,21 +631,23 @@ Page {
                     placeholderText: "Pesquisar lanche (ex: bacon, salada)..."
                     onTextChanged: {
                         filtrarLanches(text);
+                        // Cada busca recomeça o destaque no primeiro resultado:
+                        // é nele que o atendente está de olho.
+                        listaLanchesView.currentIndex = modeloFiltrado.count > 0 ? 0 : -1;
                     }
-                    // Enter com um só resultado na busca já escolhe esse lanche
-                    // (abre o popup de pão, como um clique) e limpa a busca.
+                    // As setas andam pela lista sem tirar o foco da busca —
+                    // mesma mecânica do popup de busca do Ctrl+S.
+                    Keys.onDownPressed: telaLanches.moverDestaque(1)
+                    Keys.onUpPressed: telaLanches.moverDestaque(-1)
+                    // Enter escolhe o lanche destacado — que começa no primeiro
+                    // resultado, o mais próximo do que foi digitado, e anda com as
+                    // setas — e abre o popup do pão, como um clique. Antes só
+                    // agia com um único resultado na lista.
                     onAccepted: {
-                        if (modeloFiltrado.count === 1) {
-                            var item = modeloFiltrado.get(0);
-                            paoPendente = {
-                                "nome": item.nome,
-                                "valorHamburguer": item.valorHamburguer,
-                                "valorFrances": item.valorFrances,
-                                "valorBaby": item.valorBaby
-                            };
-                            popupPao.open();
-                            campoBusca.text = "";
-                        }
+                        if (modeloFiltrado.count === 0)
+                            return ;
+                        telaLanches.adicionarDestacado();
+                        campoBusca.text = "";
                     }
                 }
 
@@ -605,6 +661,10 @@ Page {
                     model: modeloFiltrado
                     spacing: Estilo.global.spacing.sm
                     clip: true
+                    // Só o destaque do teclado: o realce visual mora no
+                    // delegate (a lista não tem foco, quem tem é a busca).
+                    currentIndex: -1
+                    highlightFollowsCurrentItem: false
 
                     ScrollBar.vertical: ScrollBar {
                         policy: ScrollBar.AlwaysOn
@@ -620,6 +680,9 @@ Page {
                         id: btnItem
 
                         property int quantidade: quantidadeDe(model.nome)
+                        // O lanche que as setas apontam e que o
+                        // Ctrl+Shift+Enter escolhe.
+                        readonly property bool destacado: index === listaLanchesView.currentIndex
 
                         width: listaLanchesView.width - (listaLanchesView.ScrollBar.vertical.visible ? listaLanchesView.ScrollBar.vertical.width : 0)
                         padding: Estilo.global.padding.md
@@ -672,9 +735,12 @@ Page {
 
                         background: Rectangle {
                             radius: Estilo.global.radius.md
-                            color: btnItem.quantidade > 0 ? Estilo.category.lanche.soft : (btnItem.down ? Estilo.global.surfacePressed : (btnItem.hovered ? Estilo.global.surfaceHover : Estilo.global.surface))
-                            border.color: btnItem.quantidade > 0 ? Estilo.category.lanche.base : Estilo.global.border
-                            border.width: btnItem.quantidade > 0 ? 2 : 1
+                            // O destacado (setas do teclado) tem borda própria:
+                            // a cor de fundo continua dizendo se o lanche já
+                            // foi escolhido, que é outra informação.
+                            color: btnItem.quantidade > 0 ? Estilo.category.lanche.soft : (btnItem.down ? Estilo.global.surfacePressed : (btnItem.hovered || btnItem.destacado ? Estilo.global.surfaceHover : Estilo.global.surface))
+                            border.color: btnItem.destacado ? Estilo.category.lanche.pressed : (btnItem.quantidade > 0 ? Estilo.category.lanche.base : Estilo.global.border)
+                            border.width: (btnItem.destacado || btnItem.quantidade > 0) ? 2 : 1
                         }
                     }
                 }
