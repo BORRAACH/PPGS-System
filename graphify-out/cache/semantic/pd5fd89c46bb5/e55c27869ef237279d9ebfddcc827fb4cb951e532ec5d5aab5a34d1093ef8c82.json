@@ -1,0 +1,1 @@
+{"nodes": [{"id": "architecture_explain", "label": "P2P Architecture Documentation", "file_type": "document", "source_file": "architecture/EXPLAIN.md", "rationale": "Detailed technical specification of the synchronization protocol and conflict resolution."}], "edges": [], "hyperedges": []}

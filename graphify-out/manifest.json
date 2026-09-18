@@ -1,0 +1,722 @@
+{
+  ".claude/settings.local.json": {
+    "mtime": 1784921790.738814,
+    "seen": 1789771753.6254134,
+    "ast_hash": "1195e1b2d37e2af599e6caf09e0a7b9b",
+    "semantic_hash": "1195e1b2d37e2af599e6caf09e0a7b9b"
+  },
+  "Config/__init__.py": {
+    "mtime": 1784954937.9896524,
+    "seen": 1789771753.625419,
+    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
+    "semantic_hash": "d41d8cd98f00b204e9800998ecf8427e"
+  },
+  "Config/atualizador.py": {
+    "mtime": 1789435764.2276711,
+    "seen": 1789771753.6254222,
+    "ast_hash": "648e048cf529e7af570a7b99439c9bf9",
+    "semantic_hash": "648e048cf529e7af570a7b99439c9bf9"
+  },
+  "Config/configurar_impressora_bematech.py": {
+    "mtime": 1785621570.144688,
+    "seen": 1789771753.625425,
+    "ast_hash": "2b32f780bd2268a2361f245dd1ff624e",
+    "semantic_hash": "2b32f780bd2268a2361f245dd1ff624e"
+  },
+  "Config/diagnosticar_impressora.py": {
+    "mtime": 1788127653.4983726,
+    "seen": 1789771753.6254277,
+    "ast_hash": "6194a4a4dd0ad6779e460755b9d831e3",
+    "semantic_hash": "6194a4a4dd0ad6779e460755b9d831e3"
+  },
+  "Config/fontes.py": {
+    "mtime": 1787611654.6241453,
+    "seen": 1789771753.62543,
+    "ast_hash": "2ca7dd8180df5371d16254878b57d56a",
+    "semantic_hash": "2ca7dd8180df5371d16254878b57d56a"
+  },
+  "Config/impressoraWindows.py": {
+    "mtime": 1785621441.1353266,
+    "seen": 1789771753.6254327,
+    "ast_hash": "c9201dac24f1aa0bb6ccb42cf085e9d1",
+    "semantic_hash": "c9201dac24f1aa0bb6ccb42cf085e9d1"
+  },
+  "Config/logConfig.py": {
+    "mtime": 1785284377.7527645,
+    "seen": 1789771753.625435,
+    "ast_hash": "d586b8294f472ead68d3df853c728e41",
+    "semantic_hash": "d586b8294f472ead68d3df853c728e41"
+  },
+  "Config/mesclarCardapio.py": {
+    "mtime": 1785117398.5570548,
+    "seen": 1789771753.6254363,
+    "ast_hash": "1033371d9004ed0cbe7c08d3f78c89e7",
+    "semantic_hash": "1033371d9004ed0cbe7c08d3f78c89e7"
+  },
+  "Config/preConfig.py": {
+    "mtime": 1789436848.436784,
+    "seen": 1789771753.625439,
+    "ast_hash": "2503d250d304d7c54d685be0f8074c2f",
+    "semantic_hash": "2503d250d304d7c54d685be0f8074c2f"
+  },
+  "controllers/balcaoController.py": {
+    "mtime": 1789425572.8889933,
+    "seen": 1789771753.6254404,
+    "ast_hash": "086bbd11f4dcab8376ca79f4e3577e51",
+    "semantic_hash": "086bbd11f4dcab8376ca79f4e3577e51"
+  },
+  "controllers/clientesController.py": {
+    "mtime": 1789495888.903071,
+    "seen": 1789771753.625442,
+    "ast_hash": "9796defcb855e6a8286046909c3a51eb",
+    "semantic_hash": "9796defcb855e6a8286046909c3a51eb"
+  },
+  "controllers/consultaController.py": {
+    "mtime": 1789495888.8982615,
+    "seen": 1789771753.6254447,
+    "ast_hash": "a70cc717a0a309e2bdbac4ad6f2535a8",
+    "semantic_hash": "a70cc717a0a309e2bdbac4ad6f2535a8"
+  },
+  "controllers/entregaController.py": {
+    "mtime": 1789602132.2243998,
+    "seen": 1789771753.6254475,
+    "ast_hash": "ff760adacc230486786cd265469475d9",
+    "semantic_hash": "ff760adacc230486786cd265469475d9"
+  },
+  "controllers/estatisticasController.py": {
+    "mtime": 1789501929.943954,
+    "seen": 1789771753.6254485,
+    "ast_hash": "07c1ebe4e0dd51745a7a1eb71f1fe020",
+    "semantic_hash": "07c1ebe4e0dd51745a7a1eb71f1fe020"
+  },
+  "controllers/fechamentoController.py": {
+    "mtime": 1789501964.413601,
+    "seen": 1789771753.6254501,
+    "ast_hash": "95adb285812b2f42b1dcc005867902b2",
+    "semantic_hash": "95adb285812b2f42b1dcc005867902b2"
+  },
+  "controllers/rascunhosController.py": {
+    "mtime": 1787868657.8041162,
+    "seen": 1789771753.6254523,
+    "ast_hash": "a019f6a6a406c107fce48fbb7192348e",
+    "semantic_hash": "a019f6a6a406c107fce48fbb7192348e"
+  },
+  "controllers/rotasController.py": {
+    "mtime": 1789450456.0235736,
+    "seen": 1789771753.6254535,
+    "ast_hash": "feff1dcb16fe106dc5dc5e94174def00",
+    "semantic_hash": "feff1dcb16fe106dc5dc5e94174def00"
+  },
+  "controllers/salaoController.py": {
+    "mtime": 1789519316.715611,
+    "seen": 1789771753.6254566,
+    "ast_hash": "67c71b7905081d52ffa5878759a60107",
+    "semantic_hash": "67c71b7905081d52ffa5878759a60107"
+  },
+  "controllers/usuariosController.py": {
+    "mtime": 1789435938.0966847,
+    "seen": 1789771753.6254585,
+    "ast_hash": "095fe8c8bc35b3145c9b5d73b350680c",
+    "semantic_hash": "095fe8c8bc35b3145c9b5d73b350680c"
+  },
+  "controllers/validacaoEnderecoController.py": {
+    "mtime": 1789602381.6554143,
+    "seen": 1789771753.6254618,
+    "ast_hash": "b3363ac2f8c213a7b13a017a7ab02760",
+    "semantic_hash": "b3363ac2f8c213a7b13a017a7ab02760"
+  },
+  "data/cardapio/.sync/versoes.json": {
+    "mtime": 1789422214.1671505,
+    "seen": 1789771753.6254647,
+    "ast_hash": "71eb93d582c8cde8427d65d811c65e38",
+    "semantic_hash": "71eb93d582c8cde8427d65d811c65e38"
+  },
+  "data/cardapio/acai.json": {
+    "mtime": 1785340127.334319,
+    "seen": 1789771753.6254673,
+    "ast_hash": "4c6bb5edcef703c19589948f8125c7c1",
+    "semantic_hash": "4c6bb5edcef703c19589948f8125c7c1"
+  },
+  "data/cardapio/adicionais.json": {
+    "mtime": 1787808931.1907682,
+    "seen": 1789771753.6254697,
+    "ast_hash": "2f6c351a7fde50706d5f60e420045ed0",
+    "semantic_hash": "2f6c351a7fde50706d5f60e420045ed0"
+  },
+  "data/cardapio/adicionaisLanches.json": {
+    "mtime": 1787806162.7731295,
+    "seen": 1789771753.6254716,
+    "ast_hash": "aba2209662c366e31fd72aa3bb759a19",
+    "semantic_hash": "aba2209662c366e31fd72aa3bb759a19"
+  },
+  "data/cardapio/bebidas.json": {
+    "mtime": 1789422214.1650882,
+    "seen": 1789771753.6254735,
+    "ast_hash": "1e43a8eea647d0e3059e1b913eca07e8",
+    "semantic_hash": "1e43a8eea647d0e3059e1b913eca07e8"
+  },
+  "data/cardapio/lanches.json": {
+    "mtime": 1786146035.4988394,
+    "seen": 1789771753.6254764,
+    "ast_hash": "3c647a845a625de3b2661948c26ab4dd",
+    "semantic_hash": "3c647a845a625de3b2661948c26ab4dd"
+  },
+  "data/cardapio/outros.json": {
+    "mtime": 1789422214.166965,
+    "seen": 1789771753.6254797,
+    "ast_hash": "38c4594b5637258bf96eeca626e08f8a",
+    "semantic_hash": "38c4594b5637258bf96eeca626e08f8a"
+  },
+  "data/cardapio/pizzas.json": {
+    "mtime": 1786146035.4988394,
+    "seen": 1789771753.6254814,
+    "ast_hash": "cd542b72c84ac114072203f400297e11",
+    "semantic_hash": "cd542b72c84ac114072203f400297e11"
+  },
+  "data/cardapio/promocoes/promo_seg_qui.json": {
+    "mtime": 1785116753.0628202,
+    "seen": 1789771753.625484,
+    "ast_hash": "42cf6fb76f7a0773e7c6f4db63165724",
+    "semantic_hash": "42cf6fb76f7a0773e7c6f4db63165724"
+  },
+  "data/cardapio/promocoes/promo_sex_dom.json": {
+    "mtime": 1785116770.8394725,
+    "seen": 1789771753.6254873,
+    "ast_hash": "cfe82dc5129da7265f221bffee006292",
+    "semantic_hash": "cfe82dc5129da7265f221bffee006292"
+  },
+  "dev_watch.py": {
+    "mtime": 1789435764.227258,
+    "seen": 1789771753.6254892,
+    "ast_hash": "ee6a5cb39d209b1c1e728347f4dc0320",
+    "semantic_hash": "ee6a5cb39d209b1c1e728347f4dc0320"
+  },
+  "docker/apagar_pedido_teste.py": {
+    "mtime": 1785191075.4301536,
+    "seen": 1789771753.6254916,
+    "ast_hash": "d2a3011774cf4c58437c90972839893c",
+    "semantic_hash": "d2a3011774cf4c58437c90972839893c"
+  },
+  "docker/cardapio_sync_teste.py": {
+    "mtime": 1786146035.4988394,
+    "seen": 1789771753.6254935,
+    "ast_hash": "5e81a086f5d954d3f404cb381791b3ca",
+    "semantic_hash": "5e81a086f5d954d3f404cb381791b3ca"
+  },
+  "docker/estilo_sync_teste.py": {
+    "mtime": 1785649026.3064678,
+    "seen": 1789771753.6254961,
+    "ast_hash": "efc9b452aec605ea68bf83da567de422",
+    "semantic_hash": "efc9b452aec605ea68bf83da567de422"
+  },
+  "docker/gerar_pedido_teste.py": {
+    "mtime": 1785092942.0055785,
+    "seen": 1789771753.6254988,
+    "ast_hash": "9db5dda555ab5eb75d3f36a9d3cb99e7",
+    "semantic_hash": "9db5dda555ab5eb75d3f36a9d3cb99e7"
+  },
+  "docker/historico_sync_teste.py": {
+    "mtime": 1786146035.4998393,
+    "seen": 1789771753.6255007,
+    "ast_hash": "0ea4ab75989276d29c0f05e37b41ca1b",
+    "semantic_hash": "0ea4ab75989276d29c0f05e37b41ca1b"
+  },
+  "docker/listar_peers_teste.py": {
+    "mtime": 1785645757.2486272,
+    "seen": 1789771753.6255023,
+    "ast_hash": "4fb3ba29f4f24689b07b4c164201df47",
+    "semantic_hash": "4fb3ba29f4f24689b07b4c164201df47"
+  },
+  "docker/malha_loop_teste.py": {
+    "mtime": 1785645938.9851317,
+    "seen": 1789771753.6255052,
+    "ast_hash": "2e6e684a80ff3cfd9742ea01dabb199f",
+    "semantic_hash": "2e6e684a80ff3cfd9742ea01dabb199f"
+  },
+  "docker/ordem_secoes_sync_teste.py": {
+    "mtime": 1786146035.4998393,
+    "seen": 1789771753.6255078,
+    "ast_hash": "8794964145a4902a56e271ae1cca3d61",
+    "semantic_hash": "8794964145a4902a56e271ae1cca3d61"
+  },
+  "docker/pareamento_teste.py": {
+    "mtime": 1789436206.19528,
+    "seen": 1789771753.6255112,
+    "ast_hash": "b24db9b16d2d1fc70868008b50c84305",
+    "semantic_hash": "b24db9b16d2d1fc70868008b50c84305"
+  },
+  "docker/sequencia_teste.py": {
+    "mtime": 1787611654.6273742,
+    "seen": 1789771753.6255145,
+    "ast_hash": "777011ae8fea9e085fd8bfc363577ca5",
+    "semantic_hash": "777011ae8fea9e085fd8bfc363577ca5"
+  },
+  "docker/usuarios_sync_teste.py": {
+    "mtime": 1787665325.1595957,
+    "seen": 1789771753.6255162,
+    "ast_hash": "499110084e1d31e51c6a8bed808a434f",
+    "semantic_hash": "499110084e1d31e51c6a8bed808a434f"
+  },
+  "launcher/iniciar.py": {
+    "mtime": 1786154755.3324037,
+    "seen": 1789771753.62552,
+    "ast_hash": "57d31e4b8f30e0b306e325a63ea80a5a",
+    "semantic_hash": "57d31e4b8f30e0b306e325a63ea80a5a"
+  },
+  "main.py": {
+    "mtime": 1789501964.4151912,
+    "seen": 1789771753.6255226,
+    "ast_hash": "62f5a7193962ebf2ee5ca8bf44ed43d3",
+    "semantic_hash": "62f5a7193962ebf2ee5ca8bf44ed43d3"
+  },
+  "pyproject.toml": {
+    "mtime": 1789436839.9662185,
+    "seen": 1789771753.6255255,
+    "ast_hash": "c4f6ad5a4e9a44fe2ba682cdbf3727c6",
+    "semantic_hash": "c4f6ad5a4e9a44fe2ba682cdbf3727c6"
+  },
+  "qml/components/DestinoPedido.js": {
+    "mtime": 1789429416.1759427,
+    "seen": 1789771753.6255283,
+    "ast_hash": "1fbeecee617d4da52befab57a18ce94e",
+    "semantic_hash": "1fbeecee617d4da52befab57a18ce94e"
+  },
+  "qml/components/EdicaoComanda.js": {
+    "mtime": 1789495888.8992429,
+    "seen": 1789771753.6255312,
+    "ast_hash": "d8a468378e378c27c25c7fe64241dc9c",
+    "semantic_hash": "d8a468378e378c27c25c7fe64241dc9c"
+  },
+  "qml/components/MontagemExtras.js": {
+    "mtime": 1788143345.8776944,
+    "seen": 1789771753.625533,
+    "ast_hash": "26bac34cba219d88149cf57e4f78ad10",
+    "semantic_hash": "26bac34cba219d88149cf57e4f78ad10"
+  },
+  "qml/components/ResumoExtras.js": {
+    "mtime": 1788219515.8483758,
+    "seen": 1789771753.625535,
+    "ast_hash": "df0e1c99339185dbc846e87f8626811e",
+    "semantic_hash": "df0e1c99339185dbc846e87f8626811e"
+  },
+  "qml/components/RoteiroLancamento.js": {
+    "mtime": 1788192672.3461468,
+    "seen": 1789771753.625536,
+    "ast_hash": "677a3a6268682c67a67f810436c09b49",
+    "semantic_hash": "677a3a6268682c67a67f810436c09b49"
+  },
+  "qml/components/Texto.js": {
+    "mtime": 1789482828.7822034,
+    "seen": 1789771753.6255388,
+    "ast_hash": "c5d919147e3230dadb5a085a5e64c118",
+    "semantic_hash": "c5d919147e3230dadb5a085a5e64c118"
+  },
+  "qml/components/graficos/Formato.js": {
+    "mtime": 1789515430.640649,
+    "seen": 1789771753.6255405,
+    "ast_hash": "edac3de1fcf734cd041543d4e35cea8f",
+    "semantic_hash": "edac3de1fcf734cd041543d4e35cea8f"
+  },
+  "qml/pages/consulta/BuscaComandas.js": {
+    "mtime": 1787611654.6341453,
+    "seen": 1789771753.6255429,
+    "ast_hash": "348b15df698e4fbeed5657788545f86c",
+    "semantic_hash": "348b15df698e4fbeed5657788545f86c"
+  },
+  "qml/pages/pedidos/MontagemItem.js": {
+    "mtime": 1787611654.636145,
+    "seen": 1789771753.625545,
+    "ast_hash": "95ea53b30434d220c4d4729ee443096c",
+    "semantic_hash": "95ea53b30434d220c4d4729ee443096c"
+  },
+  "scripts/verifica_tokens.py": {
+    "mtime": 1786166704.6772273,
+    "seen": 1789771753.6255465,
+    "ast_hash": "c0dc8272544cca3c37cb2d7eca777249",
+    "semantic_hash": "c0dc8272544cca3c37cb2d7eca777249"
+  },
+  "services/buscaCardapio.py": {
+    "mtime": 1788193968.1376822,
+    "seen": 1789771753.6255498,
+    "ast_hash": "48f745f6845f2096cd348a48e69c7e1f",
+    "semantic_hash": "48f745f6845f2096cd348a48e69c7e1f"
+  },
+  "services/cardapioService.py": {
+    "mtime": 1788193986.4800873,
+    "seen": 1789771753.625552,
+    "ast_hash": "ad07acf8c9fb10c94e3761a8bdd0404b",
+    "semantic_hash": "ad07acf8c9fb10c94e3761a8bdd0404b"
+  },
+  "services/cnefe.py": {
+    "mtime": 1789602097.5931084,
+    "seen": 1789771753.6255536,
+    "ast_hash": "83ebdca751d8ce90517648ec3106102a",
+    "semantic_hash": "83ebdca751d8ce90517648ec3106102a"
+  },
+  "services/cofreLocal.py": {
+    "mtime": 1789434501.7739482,
+    "seen": 1789771753.625556,
+    "ast_hash": "86bef8cb1a4c5d2a360a37b91c62f9af",
+    "semantic_hash": "86bef8cb1a4c5d2a360a37b91c62f9af"
+  },
+  "services/comandaComparacaoService.py": {
+    "mtime": 1789495888.898155,
+    "seen": 1789771753.6255589,
+    "ast_hash": "c4d2615111505e806d955c0c5e464d4d",
+    "semantic_hash": "c4d2615111505e806d955c0c5e464d4d"
+  },
+  "services/comandaEstiloService.py": {
+    "mtime": 1789495888.8960633,
+    "seen": 1789771753.6255603,
+    "ast_hash": "5bc4f339192ef8b40349698090f90a9c",
+    "semantic_hash": "5bc4f339192ef8b40349698090f90a9c"
+  },
+  "services/comandaImagemService.py": {
+    "mtime": 1789519277.336462,
+    "seen": 1789771753.6255617,
+    "ast_hash": "b39e7e93f02e20145e2404ff4786c5d9",
+    "semantic_hash": "b39e7e93f02e20145e2404ff4786c5d9"
+  },
+  "services/comandaParserService.py": {
+    "mtime": 1789495888.8962407,
+    "seen": 1789771753.6255636,
+    "ast_hash": "4e2d6a22726cf82c91b9182eb594aa13",
+    "semantic_hash": "4e2d6a22726cf82c91b9182eb594aa13"
+  },
+  "services/comandaSequencialService.py": {
+    "mtime": 1787611654.6391451,
+    "seen": 1789771753.625566,
+    "ast_hash": "182dbf4220528aa12548346c6e83795a",
+    "semantic_hash": "182dbf4220528aa12548346c6e83795a"
+  },
+  "services/comandaTextoService.py": {
+    "mtime": 1789519442.5480037,
+    "seen": 1789771753.6255682,
+    "ast_hash": "ea431be0039087f03300bf9fbd72e9d8",
+    "semantic_hash": "ea431be0039087f03300bf9fbd72e9d8"
+  },
+  "services/enderecoFormatado.py": {
+    "mtime": 1789482757.5885127,
+    "seen": 1789771753.6255703,
+    "ast_hash": "8acab18ffebac0c96901de99d614f3c1",
+    "semantic_hash": "8acab18ffebac0c96901de99d614f3c1"
+  },
+  "services/estatisticasService.py": {
+    "mtime": 1789501886.2576292,
+    "seen": 1789771753.6255715,
+    "ast_hash": "360e45006ba03645d2087fd7701ae27e",
+    "semantic_hash": "360e45006ba03645d2087fd7701ae27e"
+  },
+  "services/grafoRuas.py": {
+    "mtime": 1789450433.2986212,
+    "seen": 1789771753.6255732,
+    "ast_hash": "676b2f3c5992647e2b4df90ad6638c0c",
+    "semantic_hash": "676b2f3c5992647e2b4df90ad6638c0c"
+  },
+  "services/iconProvider.py": {
+    "mtime": 1788189546.5140357,
+    "seen": 1789771753.625576,
+    "ast_hash": "06c6ba0be5a6ea09dd29aef2efa0fec6",
+    "semantic_hash": "06c6ba0be5a6ea09dd29aef2efa0fec6"
+  },
+  "services/limpezaServidorAntigo.py": {
+    "mtime": 1789435228.2679672,
+    "seen": 1789771753.6255774,
+    "ast_hash": "1ac3ad744dc05745acd8ac7b55cc16ea",
+    "semantic_hash": "1ac3ad744dc05745acd8ac7b55cc16ea"
+  },
+  "services/montadorIndiceRuas.py": {
+    "mtime": 1789432381.2523417,
+    "seen": 1789771753.6255803,
+    "ast_hash": "7b4f82013fefc78315a6fb543684a693",
+    "semantic_hash": "7b4f82013fefc78315a6fb543684a693"
+  },
+  "services/pedidoService.py": {
+    "mtime": 1784694791.3847623,
+    "seen": 1789771753.6255822,
+    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
+    "semantic_hash": "d41d8cd98f00b204e9800998ecf8427e"
+  },
+  "services/printer/__init__.py": {
+    "mtime": 1784765849.2131994,
+    "seen": 1789771753.6255841,
+    "ast_hash": "0b08117709e8b3d02b74ef458dbadff7",
+    "semantic_hash": "0b08117709e8b3d02b74ef458dbadff7"
+  },
+  "services/printer/__main__.py": {
+    "mtime": 1784747556.1997998,
+    "seen": 1789771753.6255863,
+    "ast_hash": "0349ae7ee98091aa509c73f271031e8d",
+    "semantic_hash": "0349ae7ee98091aa509c73f271031e8d"
+  },
+  "services/printer/info.py": {
+    "mtime": 1784765843.58787,
+    "seen": 1789771753.6255875,
+    "ast_hash": "8b1d2d9b944cb6d62694d2c3be80c5bb",
+    "semantic_hash": "8b1d2d9b944cb6d62694d2c3be80c5bb"
+  },
+  "services/printer/linux.py": {
+    "mtime": 1785621537.5945966,
+    "seen": 1789771753.6255903,
+    "ast_hash": "563620c4d3c1d5fdcabe15588049e138",
+    "semantic_hash": "563620c4d3c1d5fdcabe15588049e138"
+  },
+  "services/printer/modelos.py": {
+    "mtime": 1785201382.73583,
+    "seen": 1789771753.6255941,
+    "ast_hash": "86fc1800c1d88280399b26c4b6f02e89",
+    "semantic_hash": "86fc1800c1d88280399b26c4b6f02e89"
+  },
+  "services/printer/windows.py": {
+    "mtime": 1785621427.9302895,
+    "seen": 1789771753.625597,
+    "ast_hash": "6849399150484d8a5325b5298246a338",
+    "semantic_hash": "6849399150484d8a5325b5298246a338"
+  },
+  "services/printerService.py": {
+    "mtime": 1789492525.975661,
+    "seen": 1789771753.625599,
+    "ast_hash": "7f3777020ec60e175e140ee4d4f339fb",
+    "semantic_hash": "7f3777020ec60e175e140ee4d4f339fb"
+  },
+  "services/rascunhosPedido.py": {
+    "mtime": 1787868657.8061163,
+    "seen": 1789771753.6256008,
+    "ast_hash": "4561b6ebff269a23022f6c1660d30a31",
+    "semantic_hash": "4561b6ebff269a23022f6c1660d30a31"
+  },
+  "services/rede/__init__.py": {
+    "mtime": 1785092618.8608012,
+    "seen": 1789771753.6256037,
+    "ast_hash": "da77c684a9b7f0d08ec75d661c23e497",
+    "semantic_hash": "da77c684a9b7f0d08ec75d661c23e497"
+  },
+  "services/rede/alteracoesComandas.py": {
+    "mtime": 1789501816.447712,
+    "seen": 1789771753.6256056,
+    "ast_hash": "4a201b18e8ff4ef436d5f2a7009a9cfa",
+    "semantic_hash": "4a201b18e8ff4ef436d5f2a7009a9cfa"
+  },
+  "services/rede/baixaComandas.py": {
+    "mtime": 1785589113.6915233,
+    "seen": 1789771753.6256075,
+    "ast_hash": "bf8c2b99fcec15a7d1b9aa545c5c2147",
+    "semantic_hash": "bf8c2b99fcec15a7d1b9aa545c5c2147"
+  },
+  "services/rede/caminhos.py": {
+    "mtime": 1789434615.4760337,
+    "seen": 1789771753.6256094,
+    "ast_hash": "3ca40ddf297342a674c34781f891a6ce",
+    "semantic_hash": "3ca40ddf297342a674c34781f891a6ce"
+  },
+  "services/rede/clientes.py": {
+    "mtime": 1789495888.901856,
+    "seen": 1789771753.6256108,
+    "ast_hash": "a69bc5e77bba259ebf644a77ed492ede",
+    "semantic_hash": "a69bc5e77bba259ebf644a77ed492ede"
+  },
+  "services/rede/contagemCaixa.py": {
+    "mtime": 1785686726.7924087,
+    "seen": 1789771753.6256146,
+    "ast_hash": "ca7bad11f75ad1b49ce83f9068ed35d9",
+    "semantic_hash": "ca7bad11f75ad1b49ce83f9068ed35d9"
+  },
+  "services/rede/descoberta.py": {
+    "mtime": 1789436285.1006696,
+    "seen": 1789771753.6256166,
+    "ast_hash": "4862035eb4c4cfe4351e5bb7f4b406f1",
+    "semantic_hash": "4862035eb4c4cfe4351e5bb7f4b406f1"
+  },
+  "services/rede/despesasCaixa.py": {
+    "mtime": 1787683018.0793045,
+    "seen": 1789771753.6256185,
+    "ast_hash": "1cb61bf8b872b880fe2745e9dec990ff",
+    "semantic_hash": "1cb61bf8b872b880fe2745e9dec990ff"
+  },
+  "services/rede/edicoesCaixa.py": {
+    "mtime": 1788543352.2580974,
+    "seen": 1789771753.62562,
+    "ast_hash": "84ffca2dd25f977478ce92e5f60dbbce",
+    "semantic_hash": "84ffca2dd25f977478ce92e5f60dbbce"
+  },
+  "services/rede/eventos.py": {
+    "mtime": 1786146035.5048392,
+    "seen": 1789771753.6256218,
+    "ast_hash": "54902680a621a1bcd2ded5bafab316db",
+    "semantic_hash": "54902680a621a1bcd2ded5bafab316db"
+  },
+  "services/rede/extrasCaixa.py": {
+    "mtime": 1785690899.030623,
+    "seen": 1789771753.6256237,
+    "ast_hash": "f83e2321cc619580c62bcf7d04c7a951",
+    "semantic_hash": "f83e2321cc619580c62bcf7d04c7a951"
+  },
+  "services/rede/fechamentoCache.py": {
+    "mtime": 1785191040.1859293,
+    "seen": 1789771753.6256256,
+    "ast_hash": "12bab04127d06c7cb88fc672a2cfb377",
+    "semantic_hash": "12bab04127d06c7cb88fc672a2cfb377"
+  },
+  "services/rede/historicoEnderecos.py": {
+    "mtime": 1789602122.3775656,
+    "seen": 1789771753.6256273,
+    "ast_hash": "8797b97492f03031699a79237f225cf6",
+    "semantic_hash": "8797b97492f03031699a79237f225cf6"
+  },
+  "services/rede/historicoEventos.py": {
+    "mtime": 1789435697.5519655,
+    "seen": 1789771753.6256292,
+    "ast_hash": "8b545373bb252b3fd64e9a1e5bf222d8",
+    "semantic_hash": "8b545373bb252b3fd64e9a1e5bf222d8"
+  },
+  "services/rede/impressoraFixada.py": {
+    "mtime": 1785353774.4435637,
+    "seen": 1789771753.6256313,
+    "ast_hash": "76b21fc6b07dd001e17be0710b2ac8df",
+    "semantic_hash": "76b21fc6b07dd001e17be0710b2ac8df"
+  },
+  "services/rede/indicePedidos.py": {
+    "mtime": 1787611654.640145,
+    "seen": 1789771753.6256332,
+    "ast_hash": "71d9e0d2b2c7f3a0223a91386c1c99b8",
+    "semantic_hash": "71d9e0d2b2c7f3a0223a91386c1c99b8"
+  },
+  "services/rede/indiceRuas.py": {
+    "mtime": 1789482778.2491696,
+    "seen": 1789771753.6256351,
+    "ast_hash": "e03d1bb4fe051a2f73313992069db454",
+    "semantic_hash": "e03d1bb4fe051a2f73313992069db454"
+  },
+  "services/rede/localizacaoServidor.py": {
+    "mtime": 1789492537.8081164,
+    "seen": 1789771753.6256373,
+    "ast_hash": "9ce2e9cac5db6c26582e5a1079802067",
+    "semantic_hash": "9ce2e9cac5db6c26582e5a1079802067"
+  },
+  "services/rede/redeService.py": {
+    "mtime": 1789492537.8101816,
+    "seen": 1789771753.625639,
+    "ast_hash": "edfa970a9a15d2d61354eab3dd87b785",
+    "semantic_hash": "edfa970a9a15d2d61354eab3dd87b785"
+  },
+  "services/rede/relogio.py": {
+    "mtime": 1786146035.5058393,
+    "seen": 1789771753.6256404,
+    "ast_hash": "953c409d038c915c7e049be50bc0f347",
+    "semantic_hash": "953c409d038c915c7e049be50bc0f347"
+  },
+  "services/rede/seguranca.py": {
+    "mtime": 1789434610.313015,
+    "seen": 1789771753.625642,
+    "ast_hash": "3d424c4c8d47b2589db68e31bfe88915",
+    "semantic_hash": "3d424c4c8d47b2589db68e31bfe88915"
+  },
+  "services/rede/senhaDono.py": {
+    "mtime": 1789435938.0956995,
+    "seen": 1789771753.6256447,
+    "ast_hash": "4588fc01dde7c87df77bf8fbac3086d3",
+    "semantic_hash": "4588fc01dde7c87df77bf8fbac3086d3"
+  },
+  "services/rede/sequenciaComandas.py": {
+    "mtime": 1787611654.641145,
+    "seen": 1789771753.6256466,
+    "ast_hash": "0c193470f5a5273329ceabf5043a2e63",
+    "semantic_hash": "0c193470f5a5273329ceabf5043a2e63"
+  },
+  "services/rede/tombstones.py": {
+    "mtime": 1785353774.4445639,
+    "seen": 1789771753.6256492,
+    "ast_hash": "f635c0a08ec4d36f3f168013018de6ee",
+    "semantic_hash": "f635c0a08ec4d36f3f168013018de6ee"
+  },
+  "services/rede/usuarios.py": {
+    "mtime": 1789435938.096392,
+    "seen": 1789771753.6256514,
+    "ast_hash": "8a1dcc6d6696c2094b5be1edc3da56e6",
+    "semantic_hash": "8a1dcc6d6696c2094b5be1edc3da56e6"
+  },
+  "services/redeQml.py": {
+    "mtime": 1789448728.1552083,
+    "seen": 1789771753.6256537,
+    "ast_hash": "b960a5f70a3f11a402fd594de7b8871f",
+    "semantic_hash": "b960a5f70a3f11a402fd594de7b8871f"
+  },
+  "services/requisicaoHttp.py": {
+    "mtime": 1789602335.0314224,
+    "seen": 1789771753.6256561,
+    "ast_hash": "c11005b848ebff282c5ca3d7dde245ff",
+    "semantic_hash": "c11005b848ebff282c5ca3d7dde245ff"
+  },
+  "services/splashInicializacao.py": {
+    "mtime": 1786153965.2679565,
+    "seen": 1789771753.6256583,
+    "ast_hash": "48618342db14aab5ae05b84d822e5e83",
+    "semantic_hash": "48618342db14aab5ae05b84d822e5e83"
+  },
+  "services/statusInicializacaoService.py": {
+    "mtime": 1786148274.0711024,
+    "seen": 1789771753.6256607,
+    "ast_hash": "4951505d64fa29982c0c68f5eb787a4e",
+    "semantic_hash": "4951505d64fa29982c0c68f5eb787a4e"
+  },
+  "services/sugestoesEndereco.py": {
+    "mtime": 1789602302.3211384,
+    "seen": 1789771753.6256633,
+    "ast_hash": "f9c967a0b590d4768c8b5cf8d73211bd",
+    "semantic_hash": "f9c967a0b590d4768c8b5cf8d73211bd"
+  },
+  "services/validacaoEndereco.py": {
+    "mtime": 1789602270.8548634,
+    "seen": 1789771753.6256654,
+    "ast_hash": "a19e2c7eeeaaa250a14b0a8a94f9a429",
+    "semantic_hash": "a19e2c7eeeaaa250a14b0a8a94f9a429"
+  },
+  "architecture/EXPLAIN.md": {
+    "mtime": 1789435764.2287753,
+    "seen": 1789771753.625668,
+    "ast_hash": "313ab451dd75fb72502a7fa33b2c1809",
+    "semantic_hash": "313ab451dd75fb72502a7fa33b2c1809"
+  },
+  "design/Paleta Forno.html": {
+    "mtime": 1786168492.3147829,
+    "seen": 1789771753.6256704,
+    "ast_hash": "8924b6c75f199678a051dca6d3aac913",
+    "semantic_hash": "8924b6c75f199678a051dca6d3aac913"
+  },
+  "docker/docker-compose.yml": {
+    "mtime": 1785646491.844308,
+    "seen": 1789771753.6256733,
+    "ast_hash": "0e2873e1d9c3fad614657e3d6c2d19cc",
+    "semantic_hash": "0e2873e1d9c3fad614657e3d6c2d19cc"
+  },
+  "qml/estilo/fontes/OFL-Caprasimo.txt": {
+    "mtime": 1786208945.7443883,
+    "seen": 1789771753.6256757,
+    "ast_hash": "e50ca415d3f5667a04b7db9a1af6f415",
+    "semantic_hash": "e50ca415d3f5667a04b7db9a1af6f415"
+  },
+  "qml/estilo/fontes/OFL-Figtree.txt": {
+    "mtime": 1786208945.481054,
+    "seen": 1789771753.625678,
+    "ast_hash": "9d1b2335c80d1d9848f6918fad9c8872",
+    "semantic_hash": "9d1b2335c80d1d9848f6918fad9c8872"
+  },
+  "design/Food-Color-Palette-6-768x768.webp": {
+    "mtime": 1786507778.8499513,
+    "seen": 1789771753.6256807,
+    "ast_hash": "ff098511d7f0a4fd8275d04e0b4b00b1",
+    "semantic_hash": "ff098511d7f0a4fd8275d04e0b4b00b1"
+  },
+  "CLAUDE.md": {
+    "mtime": 1789772361.4623177,
+    "seen": 1789772769.8079286,
+    "ast_hash": "f3e179e8d391d1546a28555bcc368bea",
+    "semantic_hash": ""
+  },
+  "README.md": {
+    "mtime": 1789435764.2283006,
+    "seen": 1789772769.8079321,
+    "ast_hash": "c2de8bae9c202763f1c8e1bf0ba4a424",
+    "semantic_hash": ""
+  }
+}
