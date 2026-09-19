@@ -141,7 +141,8 @@ Popup {
         for (var i = 0; i < itens.length; i++) {
             modeloOpcoes.append({
                 "nome": itens[i].nome,
-                "valor": Extras.precoDe(itens[i])
+                "valor": Extras.precoDe(itens[i]),
+                "valorMetade": Extras.precoMetadeDe(itens[i])
             });
         }
     }
@@ -171,10 +172,11 @@ Popup {
             etapa = "lista";
     }
 
-    function escolherItem(nome, valor) {
+    function escolherItem(nome, valor, valorMetade) {
         itemEscolhido = {
             "nome": nome,
-            "valor": valor
+            "valor": valor,
+            "valorMetade": valorMetade
         };
         quantidade = 1;
 
@@ -193,9 +195,14 @@ Popup {
     }
 
     // `sabor` vazio = pizza inteira (ver comandaTextoService.
-    // SUFIXO_ADICIONAL_INTEIRA).
+    // SUFIXO_ADICIONAL_INTEIRA). Um sabor só, numa pizza de vários, é uma
+    // METADE e leva o preço de metade; a pizza inteira, ou a pizza de um
+    // sabor só (onde o sabor é ela toda), leva o preço de inteira.
     function definirDestino(sabor) {
-        itemEscolhido = Extras.comSabor(itemEscolhido, sabor);
+        var comSabor = Extras.comSabor(itemEscolhido, sabor);
+        if (perguntaOnde && sabor !== "")
+            comSabor.valor = itemEscolhido.valorMetade;
+        itemEscolhido = comSabor;
         if (ehAcai) {
             etapa = "quantidade";
             return;
@@ -347,7 +354,7 @@ Popup {
                     width: ListView.view.width
                     height: 48
                     padding: Estilo.global.padding.md
-                    onClicked: popupExtras.escolherItem(model.nome, model.valor)
+                    onClicked: popupExtras.escolherItem(model.nome, model.valor, model.valorMetade)
 
                     contentItem: Row {
                         spacing: Estilo.global.spacing.md
@@ -362,12 +369,22 @@ Popup {
                             anchors.verticalCenter: parent.verticalCenter
                         }
 
-                        Text {
-                            text: model.valor
-                            font.pixelSize: Estilo.global.fontSize.lg
-                            font.bold: true
-                            color: Estilo.action.confirm.base
+                        Column {
                             anchors.verticalCenter: parent.verticalCenter
+
+                            Text {
+                                text: model.valor
+                                font.pixelSize: Estilo.global.fontSize.lg
+                                font.bold: true
+                                color: Estilo.action.confirm.base
+                            }
+
+                            Text {
+                                visible: popupExtras.perguntaOnde && model.valorMetade !== model.valor
+                                text: "metade " + model.valorMetade
+                                font.pixelSize: Estilo.global.fontSize.sm
+                                color: Estilo.global.textSecondary
+                            }
                         }
                     }
 

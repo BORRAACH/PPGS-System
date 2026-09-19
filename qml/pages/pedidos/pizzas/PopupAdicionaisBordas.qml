@@ -9,9 +9,12 @@ import "../../../components"
 //   categoria -> itens -> pizzas -> [sabores, só p/ adicional em pizza
 //                                    meio a meio] -> atribui e fecha
 //
-// Bordas valem para a pizza inteira; adicionais valem para um sabor
-// específico dela (ver comandaTextoService.montar_grupos, que imprime a
-// borda abaixo de todos os sabores e o adicional abaixo do sabor a que foi
+// Bordas valem para a pizza inteira. Adicionais têm dois preços (ver
+// services/cardapioService.py, pizzaAdicionais): o de METADE, quando é
+// marcado um sabor só de uma pizza de vários, e o de INTEIRA, quando são
+// marcados dois ou mais — aí o adicional vai para a pizza toda, com sabor
+// vazio (ver comandaTextoService.montar_grupos: a borda e o adicional inteiro
+// saem abaixo de todos os sabores, o de metade abaixo do sabor a que foi
 // atribuído).
 Popup {
     id: popupAdicionaisBordas
@@ -29,6 +32,8 @@ Popup {
     property string categoriaAtual: ""
     property var itemSelecionado: null
     property int indicePizzaSelecionada: -1
+    // Nomes dos sabores marcados na etapa "sabores".
+    property var saboresMarcados: []
     property bool adicionaisCarregados: false
 
     modal: true
@@ -47,6 +52,7 @@ Popup {
         categoriaAtual = "";
         itemSelecionado = null;
         indicePizzaSelecionada = -1;
+        saboresMarcados = [];
         carregarAdicionais();
     }
 
@@ -89,7 +95,14 @@ Popup {
                 modeloBordas.append(bordas[i]);
             }
             for (var j = 0; j < adicionais.length; j++) {
-                modeloAdicionais.append(adicionais[j]);
+                // Sem preço de metade cadastrado, a metade custa o mesmo que a
+                // inteira. Preenchido aqui para todo item ter o mesmo papel
+                // no ListModel, que não aceita papel ausente em alguns itens.
+                modeloAdicionais.append({
+                    "nome": adicionais[j].nome,
+                    "valor": adicionais[j].valor,
+                    "valorMetade": adicionais[j].valorMetade || adicionais[j].valor
+                });
             }
             adicionaisCarregados = true;
         } catch (e) {
@@ -112,10 +125,11 @@ Popup {
         etapa = "itens";
     }
 
-    function selecionarItem(nome, valorTexto) {
+    function selecionarItem(nome, valorTexto, valorMetadeTexto) {
         itemSelecionado = {
             "nome": nome,
-            "valorNum": parseValor(valorTexto)
+            "valorNum": parseValor(valorTexto),
+            "valorMetadeNum": parseValor(valorMetadeTexto || valorTexto)
         };
         etapa = "pizzas";
     }
@@ -134,19 +148,47 @@ Popup {
 
         if (pizza.sabores.length > 1) {
             indicePizzaSelecionada = indice;
+            saboresMarcados = [];
             etapa = "sabores";
             return;
         }
 
-        // Só um sabor: não há o que escolher, atribui direto a ele.
+        // Só um sabor: não há o que escolher, atribui direto a ele — que é a
+        // pizza toda, então com o preço de inteira.
         if (typeof onAtribuirAdicional === "function")
             onAtribuirAdicional(indice, pizza.sabores[0].nome, itemSelecionado);
         popupAdicionaisBordas.close();
     }
 
-    function selecionarSabor(nomeSabor) {
-        if (typeof onAtribuirAdicional === "function")
-            onAtribuirAdicional(indicePizzaSelecionada, nomeSabor, itemSelecionado);
+    function alternarSabor(nomeSabor) {
+        var lista = saboresMarcados.slice();
+        var posicao = lista.indexOf(nomeSabor);
+        if (posicao >= 0)
+            lista.splice(posicao, 1);
+        else
+            lista.push(nomeSabor);
+        saboresMarcados = lista;
+    }
+
+    // Um sabor marcado é uma metade; dois ou mais, a pizza inteira (sabor
+    // vazio, ver o topo do arquivo).
+    function confirmarSabores() {
+        if (saboresMarcados.length === 0)
+            return;
+
+        if (typeof onAtribuirAdicional === "function") {
+            if (saboresMarcados.length === 1) {
+                onAtribuirAdicional(indicePizzaSelecionada, saboresMarcados[0], {
+                    "nome": itemSelecionado.nome,
+                    "valorNum": itemSelecionado.valorMetadeNum
+                });
+            } else {
+                onAtribuirAdicional(indicePizzaSelecionada, "", {
+                    "nome": itemSelecionado.nome,
+                    "valorNum": itemSelecionado.valorNum
+                });
+            }
+        }
         popupAdicionaisBordas.close();
     }
 
@@ -280,7 +322,7 @@ Popup {
                     width: ListView.view.width
                     height: 48
                     padding: Estilo.global.padding.md
-                    onClicked: popupAdicionaisBordas.selecionarItem(model.nome, model.valor)
+                    onClicked: popupAdicionaisBordas.selecionarItem(model.nome, model.valor, model.valorMetade)
 
                     contentItem: Row {
                         spacing: Estilo.global.spacing.md
@@ -290,17 +332,27 @@ Popup {
                             font.pixelSize: Estilo.global.fontSize.lg
                             font.bold: true
                             color: Estilo.global.text
-                            width: parent.width - 90
+                            width: parent.width - 120
                             elide: Text.ElideRight
                             anchors.verticalCenter: parent.verticalCenter
                         }
 
-                        Text {
-                            text: "R$ " + model.valor
-                            font.pixelSize: Estilo.global.fontSize.lg
-                            color: Estilo.action.confirm.base
-                            font.bold: true
+                        Column {
                             anchors.verticalCenter: parent.verticalCenter
+
+                            Text {
+                                text: "R$ " + model.valor
+                                font.pixelSize: Estilo.global.fontSize.lg
+                                color: Estilo.action.confirm.base
+                                font.bold: true
+                            }
+
+                            Text {
+                                visible: popupAdicionaisBordas.categoriaAtual === "adicionais" && model.valorMetade !== model.valor
+                                text: "metade R$ " + model.valorMetade
+                                font.pixelSize: Estilo.global.fontSize.sm
+                                color: Estilo.global.textSecondary
+                            }
                         }
                     }
 
@@ -351,6 +403,15 @@ Popup {
             }
 
             // ---------- ETAPA 4: sabores da pizza escolhida (só p/ adicional) ----------
+            Text {
+                visible: popupAdicionaisBordas.etapa === "sabores"
+                width: parent.width
+                text: "Marque um sabor para pôr o adicional só naquela metade, ou dois ou mais para pôr na pizza inteira."
+                font.pixelSize: Estilo.global.fontSize.sm
+                color: Estilo.global.textSecondary
+                wrapMode: Text.Wrap
+            }
+
             ListView {
                 visible: popupAdicionaisBordas.etapa === "sabores"
                 width: parent.width
@@ -364,25 +425,39 @@ Popup {
                 }
 
                 delegate: Button {
+                    readonly property bool marcado: popupAdicionaisBordas.saboresMarcados.indexOf(modelData.nome) >= 0
+
                     width: ListView.view.width
                     height: 48
                     padding: Estilo.global.padding.md
-                    onClicked: popupAdicionaisBordas.selecionarSabor(modelData.nome)
+                    onClicked: popupAdicionaisBordas.alternarSabor(modelData.nome)
 
-                    contentItem: Text {
-                        text: modelData.nome
-                        font.pixelSize: Estilo.global.fontSize.lg
-                        font.bold: true
-                        color: Estilo.global.text
-                        elide: Text.ElideRight
-                        verticalAlignment: Text.AlignVCenter
+                    contentItem: Row {
+                        spacing: Estilo.global.spacing.md
+
+                        Icone {
+                            nome: marcado ? "fa6s.square-check" : "fa6s.square"
+                            cor: marcado ? Estilo.category.adicional.base : Estilo.global.textSecondary
+                            tamanho: 18
+                            anchors.verticalCenter: parent.verticalCenter
+                        }
+
+                        Text {
+                            text: modelData.nome
+                            font.pixelSize: Estilo.global.fontSize.lg
+                            font.bold: true
+                            color: Estilo.global.text
+                            width: parent.width - 30
+                            elide: Text.ElideRight
+                            anchors.verticalCenter: parent.verticalCenter
+                        }
                     }
 
                     background: Rectangle {
                         radius: Estilo.global.radius.md
                         color: parent.down ? Estilo.global.surfacePressed : (parent.hovered ? Estilo.global.surfaceHover : Estilo.global.surface)
-                        border.color: Estilo.global.border
-                        border.width: Estilo.global.borderWidth.hairline
+                        border.color: marcado ? Estilo.category.adicional.base : Estilo.global.border
+                        border.width: marcado ? 2 : Estilo.global.borderWidth.hairline
                     }
                 }
             }
@@ -410,6 +485,28 @@ Popup {
                     background: Rectangle {
                         radius: Estilo.global.radius.pill
                         color: parent.down ? Estilo.action.back.pressed : (parent.hovered ? Estilo.action.back.hover : Estilo.action.danger.base)
+                    }
+                }
+
+                Button {
+                    visible: popupAdicionaisBordas.etapa === "sabores"
+                    enabled: popupAdicionaisBordas.saboresMarcados.length > 0
+                    padding: Estilo.global.padding.md
+                    width: 150
+                    onClicked: popupAdicionaisBordas.confirmarSabores()
+
+                    contentItem: Text {
+                        text: popupAdicionaisBordas.saboresMarcados.length > 1 ? "Pizza inteira" : "Metade"
+                        font.family: Estilo.global.fontFamily.title
+                        color: Estilo.global.textOnAccent
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+
+                    background: Rectangle {
+                        radius: Estilo.global.radius.pill
+                        opacity: parent.enabled ? 1 : Estilo.global.opacity.disabled
+                        color: parent.down ? Estilo.category.adicional.pressed : (parent.hovered ? Estilo.category.adicional.hover : Estilo.category.adicional.base)
                     }
                 }
 

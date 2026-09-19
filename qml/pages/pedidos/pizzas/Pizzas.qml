@@ -174,7 +174,7 @@ Page {
 
         var adicionais = pizza.adicionais || [];
         for (var i = 0; i < adicionais.length; i++) {
-            partes.push("+ " + adicionais[i].nome + " (" + adicionais[i].sabor + ")");
+            partes.push("+ " + adicionais[i].nome + " (" + (adicionais[i].sabor || "pizza inteira") + ")");
         }
         return partes.length > 0 ? " — " + partes.join(", ") : "";
     }

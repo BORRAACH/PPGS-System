@@ -37,6 +37,20 @@ function precoDe(entrada) {
     return precos.length > 0 ? precos[0].valor : "";
 }
 
+// O preço de um adicional de pizza posto só numa METADE (ver
+// services/cardapioService.py, campo "valorMetade" de pizzaAdicionais). Casa
+// pela chave, e não pelo rótulo, pelo motivo dito em
+// buscaCardapio._precos_do_item. Sem preço de metade cadastrado, vale o da
+// pizza inteira — o comportamento de antes da separação.
+function precoMetadeDe(entrada) {
+    var precos = (entrada && entrada.precos) || [];
+    for (var i = 0; i < precos.length; i++) {
+        if (precos[i].chave === "valorMetade")
+            return precos[i].valor;
+    }
+    return precoDe(entrada);
+}
+
 // O item escolhido no cardápio, carimbado com o destino dentro do pedido.
 //
 // `sabor` VAZIO é o adicional que vale para o item inteiro (ver

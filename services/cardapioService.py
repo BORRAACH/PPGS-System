@@ -107,7 +107,12 @@ CATEGORIAS = [
         "numerado": False,
         "campos": [
             {"chave": "nome", "rotulo": "Nome do adicional", "tipo": TEXTO, "obrigatorio": True, "curto": ""},
-            {"chave": "valor", "rotulo": "Preço", "tipo": PRECO, "obrigatorio": True, "curto": ""},
+            # "valor" continua sendo o da pizza INTEIRA (o primeiro preço, que
+            # é o que precoDe em MontagemExtras.js lê); o da metade vem em
+            # "valorMetade" e é opcional: sem ele a metade custa o mesmo que a
+            # inteira, que era o comportamento antes da separação.
+            {"chave": "valor", "rotulo": "Preço (pizza inteira)", "tipo": PRECO, "obrigatorio": True, "curto": "Inteira"},
+            {"chave": "valorMetade", "rotulo": "Preço (metade da pizza)", "tipo": PRECO, "obrigatorio": False, "curto": "Metade"},
         ],
     },
     {
