@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import estilo 1.0
+import "../pages/configuracoes/usuarios" as Usuarios
 
 Rectangle {
     id: sideBar
@@ -23,6 +24,10 @@ Rectangle {
     // Poucos tons mais escuro que o fundo das páginas (#f8f9fa, usado em
     // Balcao.qml, Pedido.qml, Entregarega.qml etc.), em vez de uma cor solta.
     color: Estilo.global.chrome
+
+    Usuarios.PopupSenhaDono {
+        id: popupSenhaEstatistica
+    }
 
     ColumnLayout {
         // Espaçador Flexível
@@ -163,10 +168,26 @@ Rectangle {
                         // erro de navegação no meio do atendimento.
                         implicitHeight: Math.max(Responsivo.alvoToque, 24 + Estilo.global.padding.md * 2)
                         onClicked: {
-                            if (sideBar.stackView && sideBar.stackView.currentItem && sideBar.stackView.currentItem.objectName !== nomeTela)
-                                sideBar.stackView.replace(null, pagina, {
-                            }, StackView.Immediate);
+                            if (!sideBar.stackView || !sideBar.stackView.currentItem || sideBar.stackView.currentItem.objectName === nomeTela)
+                                return;
 
+                            var destino = pagina;
+                            // A Estatística pede a senha do dono a cada
+                            // entrada: sair da tela a destrói (replace), então
+                            // voltar sempre passa por aqui de novo.
+                            if (nomeTela === "telaEstatistica") {
+                                popupSenhaEstatistica.solicitar("Abrir a Estatística", function (senha) {
+                                    if (!usuariosController.autorizarComSenhaDono(senha, "abrir_estatistica"))
+                                        return false;
+                                    sideBar.stackView.replace(null, destino, {
+                                    }, StackView.Immediate);
+                                    return true;
+                                });
+                                return;
+                            }
+
+                            sideBar.stackView.replace(null, destino, {
+                            }, StackView.Immediate);
                         }
 
                         ToolTip {

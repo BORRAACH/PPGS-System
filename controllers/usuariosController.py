@@ -442,6 +442,15 @@ class UsuariosController(QObject):
         print(f"[UsuariosController] '{acao}' recusado: senha do dono incorreta.")
         return False
 
+    @pyqtSlot(str, str, result=bool)
+    @protegido(False)
+    def autorizarComSenhaDono(self, senha, acao):
+        """Confere a senha do dono para UMA ação fora do cadastro — hoje, abrir
+        a tela de Estatística (ver LateralBar.qml). Mesma regra e mesma trilha
+        de _autorizar_escrita: sem senha definida passa, registrando no
+        histórico; senha errada é recusada e registrada."""
+        return self._autorizar_escrita(senha, acao)
+
     @pyqtSlot(result=bool)
     @protegido(False)
     def senhaDonoDefinida(self):
