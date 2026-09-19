@@ -706,5 +706,17 @@
     "seen": 1789771753.6256807,
     "ast_hash": "ff098511d7f0a4fd8275d04e0b4b00b1",
     "semantic_hash": "ff098511d7f0a4fd8275d04e0b4b00b1"
+  },
+  "CLAUDE.md": {
+    "mtime": 1789772361.4623177,
+    "seen": 1789772769.8079286,
+    "ast_hash": "f3e179e8d391d1546a28555bcc368bea",
+    "semantic_hash": ""
+  },
+  "README.md": {
+    "mtime": 1789435764.2283006,
+    "seen": 1789772769.8079321,
+    "ast_hash": "c2de8bae9c202763f1c8e1bf0ba4a424",
+    "semantic_hash": ""
   }
 }

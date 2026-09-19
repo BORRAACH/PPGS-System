@@ -1,9 +1,9 @@
 {
   ".claude/settings.local.json": {
-    "mtime": 1784921790.738814,
-    "seen": 1789771753.6254134,
-    "ast_hash": "1195e1b2d37e2af599e6caf09e0a7b9b",
-    "semantic_hash": "1195e1b2d37e2af599e6caf09e0a7b9b"
+    "mtime": 1789772777.6603692,
+    "seen": 1789776613.793258,
+    "ast_hash": "e21331126e08545ac162ceda17fc44a5",
+    "semantic_hash": ""
   },
   "Config/__init__.py": {
     "mtime": 1784954937.9896524,
@@ -114,10 +114,10 @@
     "semantic_hash": "67c71b7905081d52ffa5878759a60107"
   },
   "controllers/usuariosController.py": {
-    "mtime": 1789435938.0966847,
-    "seen": 1789771753.6254585,
-    "ast_hash": "095fe8c8bc35b3145c9b5d73b350680c",
-    "semantic_hash": "095fe8c8bc35b3145c9b5d73b350680c"
+    "mtime": 1789774119.5260215,
+    "seen": 1789776613.7933154,
+    "ast_hash": "2d72bd2d4058748649eaeb309437dcc2",
+    "semantic_hash": ""
   },
   "controllers/validacaoEnderecoController.py": {
     "mtime": 1789602381.6554143,
@@ -288,10 +288,10 @@
     "semantic_hash": "d8a468378e378c27c25c7fe64241dc9c"
   },
   "qml/components/MontagemExtras.js": {
-    "mtime": 1788143345.8776944,
-    "seen": 1789771753.625533,
-    "ast_hash": "26bac34cba219d88149cf57e4f78ad10",
-    "semantic_hash": "26bac34cba219d88149cf57e4f78ad10"
+    "mtime": 1789776363.5173726,
+    "seen": 1789776613.7933881,
+    "ast_hash": "2e6d0229c69f90878e1bfffba6c14a61",
+    "semantic_hash": ""
   },
   "qml/components/ResumoExtras.js": {
     "mtime": 1788219515.8483758,
@@ -342,10 +342,10 @@
     "semantic_hash": "48f745f6845f2096cd348a48e69c7e1f"
   },
   "services/cardapioService.py": {
-    "mtime": 1788193986.4800873,
-    "seen": 1789771753.625552,
-    "ast_hash": "ad07acf8c9fb10c94e3761a8bdd0404b",
-    "semantic_hash": "ad07acf8c9fb10c94e3761a8bdd0404b"
+    "mtime": 1789776355.5302522,
+    "seen": 1789776613.7934117,
+    "ast_hash": "3a05cd97eb3429623ddae99e4f4392e0",
+    "semantic_hash": ""
   },
   "services/cnefe.py": {
     "mtime": 1789602097.5931084,
@@ -717,6 +717,12 @@
     "mtime": 1789435764.2283006,
     "seen": 1789772769.8079321,
     "ast_hash": "c2de8bae9c202763f1c8e1bf0ba4a424",
+    "semantic_hash": ""
+  },
+  ".claude/settings.json": {
+    "mtime": 1789773329.3570185,
+    "seen": 1789776613.7932463,
+    "ast_hash": "625dd7cf6bf02ea2fa0e39fc1e9735ff",
     "semantic_hash": ""
   }
 }
