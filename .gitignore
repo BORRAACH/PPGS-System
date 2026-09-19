@@ -62,6 +62,8 @@ Config/chave_local.bin
 Config/servidor_designado.json
 Config/localizacao_servidor.json
 
+cloned_repositories
+
 # Cache do rope (motor de refatoracao usado por editores Python) — banco
 # local reconstruido sozinho, nao codigo-fonte.
 .ropeproject/
