@@ -53,6 +53,7 @@ try:
     from controllers.usuariosController import UsuariosController
     from controllers.rascunhosController import RascunhosController
     from controllers.clientesController import ClientesController
+    from controllers.taxasBairroController import TaxasBairroController
     from controllers.rotasController import RotasController
     from controllers.validacaoEnderecoController import ValidacaoEnderecoController
     from services.rede import rede
@@ -240,6 +241,8 @@ if __name__ == "__main__":
     # próprias máquinas e replicado pela malha — ver services/rede/clientes.py.
     clientesController = ClientesController()
     engine.rootContext().setContextProperty("clientesController", clientesController)
+    taxasBairroController = TaxasBairroController()
+    engine.rootContext().setContextProperty("taxasBairroController", taxasBairroController)
     # Pedidos começados e não finalizados, listados na faixa do topo de Balcão e
     # Entrega (ver services/rascunhosPedido.py). Controller próprio porque a
     # faixa é uma só, compartilhada pelas duas telas.

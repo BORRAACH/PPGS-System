@@ -28,6 +28,10 @@ Page {
     property string trocoInicial: ""
     property string statusPagamentoInicial: ""
     property string taxaEntregaInicial: ""
+    // Última taxa posta no campo pelo cadastro de bairros (ver
+    // controllers/taxasBairroController.py). O autofill só troca o campo se ele
+    // está vazio ou ainda tem esse valor — nunca uma taxa digitada à mão.
+    property string _taxaAutomatica: ""
     property var itensIniciais: []
     // Nome do arquivo da comanda original quando esta tela foi aberta pela
     // Consulta para editar uma comanda existente ("" = comanda nova). Ao
@@ -796,6 +800,7 @@ Page {
             function _imprimirAutorizado(dadosPedido) {
                 var sucesso = entregaController.enviarPedido(dadosPedido, spinnerCopias.value);
                 if (sucesso) {
+                    guardarTaxaDoBairro(dadosPedido.taxaEntrega);
                     concluirEdicao(dadosPedido.usuario);
                     limparFormularioPedido();
                     telaEntrega.mostrarNotificacao(dadosPedido.teste ? "Comanda de teste impressa." : "Pedido salvo com sucesso!", true);
@@ -814,6 +819,7 @@ Page {
             function _lancarAutorizado(dadosPedido) {
                 var sucesso = entregaController.lancarPedido(dadosPedido);
                 if (sucesso) {
+                    guardarTaxaDoBairro(dadosPedido.taxaEntrega);
                     concluirEdicao(dadosPedido.usuario);
                     limparFormularioPedido();
                     telaEntrega.mostrarNotificacao(dadosPedido.teste ? "Comanda de teste registrada (não aparece na Consulta)." : "Comanda lançada com sucesso!", true);
@@ -894,11 +900,43 @@ Page {
                 zerarCampos();
             }
 
+            // Outra máquina definiu a taxa do bairro que está na tela agora.
+            Connections {
+                target: taxasBairroController
+
+                function onTaxasAtualizadas() {
+                    conteudoEntrega.aplicarTaxaDoBairro();
+                }
+            }
+
+            // Preenche a taxa com a guardada para o bairro digitado. Respeita o
+            // que o atendente escreveu (ou o rascunho/comanda trouxe): só troca
+            // campo vazio ou ainda com o valor do autofill anterior.
+            function aplicarTaxaDoBairro() {
+                var atual = camposPagamento.taxaEntrega;
+                if (atual !== "" && atual !== telaEntrega._taxaAutomatica)
+                    return;
+                var taxa = taxasBairroController.taxaDoBairro(validadorEndereco.bairro);
+                if (taxa === atual)
+                    return;
+                camposPagamento.taxaEntrega = taxa;
+                telaEntrega._taxaAutomatica = taxa;
+            }
+
+            // Guarda (e propaga pela malha) a taxa confirmada para o bairro atual.
+            function guardarTaxaDoBairro(valor) {
+                if (valor === "" || validadorEndereco.bairro === "")
+                    return;
+                if (taxasBairroController.salvarTaxa(validadorEndereco.bairro, valor))
+                    telaEntrega._taxaAutomatica = valor;
+            }
+
             // Só os CAMPOS. Compartilhada pelas duas acima para não existirem
             // duas listas de campos a zerar — a segunda esqueceria o campo
             // novo criado depois.
             function zerarCampos() {
                 telaEntrega.manterBaixaAoSalvar = false;
+                telaEntrega._taxaAutomatica = "";
                 inputTelefone.text = "";
                 validadorEndereco.limpar();
                 inputObservacao.text = "";
@@ -1128,6 +1166,7 @@ Page {
                         // bairro errado, e o cartão fica aberto com o
                         // "Confirmar" até o atendente conferir e corrigir.
                         confirmacaoAutomatica: false
+                        onBairroChanged: conteudoEntrega.aplicarTaxaDoBairro()
 
                         // Comanda reaberta pela Consulta. O rascunho e o
                         // autofill por telefone chamam preencher() direto.
@@ -1296,6 +1335,9 @@ Page {
                             trocoInicial: telaEntrega.trocoInicial
                             statusPagamentoInicial: telaEntrega.statusPagamentoInicial
                             mostrarTaxaEntrega: true
+                            onTaxaConfirmada: function(valor) {
+                                conteudoEntrega.guardarTaxaDoBairro(valor);
+                            }
                             taxaEntregaInicial: telaEntrega.taxaEntregaInicial
                             obterCampoAnterior: function() {
                                 return ultimoCampoValor();

@@ -75,6 +75,10 @@ Row {
     property alias formaPagamento: comboFormaPagamento.currentText
     property alias troco: inputTroco.text
     property alias taxaEntrega: inputTaxaEntrega.text
+    // taxaEditada: o atendente digitou no campo (não vale preenchimento por
+    // código). taxaConfirmada: saiu do campo com o valor já formatado.
+    signal taxaEditada()
+    signal taxaConfirmada(string valor)
     property alias pago: btnStatusPagamento.pago
     // Pra LinhaPedido.qml saber pra onde ir ao dar Tab na última linha da
     // lista, e pro spinner de cópias saber pra onde ir no Shift+Tab.
@@ -176,7 +180,11 @@ Row {
             KeyNavigation.tab: camposPagamento.mostrarTaxaEntrega ? inputTaxaEntrega : (btnStatusPagamento.visible ? btnStatusPagamento : camposPagamento.proximoCampo)
             KeyNavigation.backtab: comboFormaPagamento
             Keys.onReturnPressed: (camposPagamento.mostrarTaxaEntrega ? inputTaxaEntrega : (btnStatusPagamento.visible ? btnStatusPagamento : camposPagamento.proximoCampo)).forceActiveFocus()
-            onEditingFinished: text = Moeda.formatar(text)
+            onTextEdited: camposPagamento.taxaEditada()
+            onEditingFinished: {
+                text = Moeda.formatar(text);
+                camposPagamento.taxaConfirmada(text);
+            }
 
             validator: Moeda.validador
 
