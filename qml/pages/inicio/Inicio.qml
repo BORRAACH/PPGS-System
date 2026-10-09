@@ -1,6 +1,5 @@
 import QtQuick
 import QtQuick.Controls
-import QtQuick.Effects
 import estilo 1.0
 import "../../components"
 
@@ -84,17 +83,6 @@ Item {
                     border.color: btnBalcao.hovered ? Estilo.orderType.balcao.base : Estilo.orderType.balcao.border
                     border.width: Estilo.global.borderWidth.thick
                     radius: Estilo.global.radius.lg
-
-                    MultiEffect {
-                        anchors.fill: parent
-                        source: bgBalcao
-                        shadowEnabled: true
-                        shadowColor: Estilo.global.shadow
-                        shadowBlur: btnBalcao.hovered ? Estilo.global.elevation.lg.blur : Estilo.global.elevation.sm.blur
-                        shadowVerticalOffset: btnBalcao.pressed ? Estilo.global.elevation.sm.deslocamento : (btnBalcao.hovered ? Estilo.global.elevation.lg.deslocamento : Estilo.global.elevation.md.deslocamento)
-                        shadowHorizontalOffset: 0
-                        z: -1
-                    }
                 }
 
                 contentItem: Column {
@@ -137,17 +125,6 @@ Item {
                     border.color: btnEntrega.hovered ? Estilo.orderType.entrega.base : Estilo.orderType.entrega.border
                     border.width: Estilo.global.borderWidth.thick
                     radius: Estilo.global.radius.lg
-
-                    MultiEffect {
-                        anchors.fill: parent
-                        source: bgEntrega
-                        shadowEnabled: true
-                        shadowColor: Estilo.global.shadow
-                        shadowBlur: btnEntrega.hovered ? Estilo.global.elevation.lg.blur : Estilo.global.elevation.sm.blur
-                        shadowVerticalOffset: btnEntrega.pressed ? Estilo.global.elevation.sm.deslocamento : (btnEntrega.hovered ? Estilo.global.elevation.lg.deslocamento : Estilo.global.elevation.md.deslocamento)
-                        shadowHorizontalOffset: 0
-                        z: -1
-                    }
                 }
 
                 contentItem: Column {
@@ -190,17 +167,6 @@ Item {
                     border.color: btnSalao.hovered ? Estilo.orderType.mesa.base : Estilo.orderType.mesa.border
                     border.width: Estilo.global.borderWidth.thick
                     radius: Estilo.global.radius.lg
-
-                    MultiEffect {
-                        anchors.fill: parent
-                        source: bgSalao
-                        shadowEnabled: true
-                        shadowColor: Estilo.global.shadow
-                        shadowBlur: btnSalao.hovered ? Estilo.global.elevation.lg.blur : Estilo.global.elevation.sm.blur
-                        shadowVerticalOffset: btnSalao.pressed ? Estilo.global.elevation.sm.deslocamento : (btnSalao.hovered ? Estilo.global.elevation.lg.deslocamento : Estilo.global.elevation.md.deslocamento)
-                        shadowHorizontalOffset: 0
-                        z: -1
-                    }
                 }
 
                 contentItem: Column {

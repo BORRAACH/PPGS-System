@@ -112,8 +112,6 @@ QtObject {
     // ===== Cores com alfa =====
     // scrim atrás de modal — carvão a 60%
     readonly property color overlay: "#991b1611"
-    // sombra projetada de cartão — carvão a 12%
-    readonly property color shadow: "#1f1b1611"
     // Fundos-tinta dos cartões do Início: o mesmo acento em 4%, 12% e 21%. A
     // transparência é intencional ali — o acento vaza pelo fundo da página.
     readonly property color ouro500Alpha04: "#0ac68c24"

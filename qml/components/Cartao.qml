@@ -1,9 +1,8 @@
 import QtQuick
-import QtQuick.Effects
 import estilo 1.0
 
 // Card de superfície com kicker/título/corpo/meta — anatomia do .card do
-// Organic (components/cards.html), com elevação opcional (Estilo.global.elevation.*).
+// Organic (components/cards.html), no estilo flat: sem sombra, só borda.
 Rectangle {
     id: root
 
@@ -11,22 +10,13 @@ Rectangle {
     property string titulo: ""
     property string corpo: ""
     property string meta: ""
-    property var elevacao: null // Estilo.global.elevation.{sm,md,lg}, opcional
 
     color: Estilo.global.surface
+    border.color: Estilo.global.borderCard
+    border.width: Estilo.global.borderWidth.hairline
     radius: Estilo.global.radius.lg
     implicitWidth: 220
     implicitHeight: coluna.implicitHeight + Estilo.global.padding.lg * 2
-
-    MultiEffect {
-        anchors.fill: parent
-        source: root
-        shadowEnabled: root.elevacao !== null
-        shadowColor: Estilo.global.shadow
-        shadowBlur: root.elevacao ? root.elevacao.blur : 0
-        shadowVerticalOffset: root.elevacao ? root.elevacao.deslocamento : 0
-        z: -1
-    }
 
     Column {
         id: coluna

@@ -202,22 +202,11 @@ Popup {
                         // O foco de teclado é controlado pelo popup, então o
                         // botão não deve capturá-lo e quebrar a ordem do TAB.
                         focusPolicy: Qt.NoFocus
-                        // O item em foco cresce, em vez de encolher por causa
-                        // da borda desenhada para dentro do retângulo.
-                        scale: emFoco ? 1.1 : 1
-                        z: emFoco ? 1 : 0
                         onHoveredChanged: {
                             if (hovered)
                                 popupSelecaoPedido.indiceFoco = index;
                         }
                         onClicked: popupSelecaoPedido.acionarItem(index)
-
-                        Behavior on scale {
-                            NumberAnimation {
-                                duration: Estilo.global.motion.instant
-                                easing.type: Easing.OutQuad
-                            }
-                        }
 
                         contentItem: Column {
                             anchors.centerIn: parent
@@ -268,19 +257,11 @@ Popup {
             width: Math.min(gradeCategorias.width, 200)
             anchors.horizontalCenter: parent.horizontalCenter
             focusPolicy: Qt.NoFocus
-            scale: emFoco ? 1.1 : 1
             onHoveredChanged: {
                 if (hovered)
                     popupSelecaoPedido.indiceFoco = modeloCategorias.count;
             }
             onClicked: popupSelecaoPedido.close()
-
-            Behavior on scale {
-                NumberAnimation {
-                    duration: Estilo.global.motion.instant
-                    easing.type: Easing.OutQuad
-                }
-            }
 
             contentItem: Text {
                 text: btnCancelar.text
