@@ -36,10 +36,10 @@
     "semantic_hash": "2ca7dd8180df5371d16254878b57d56a"
   },
   "Config/impressoraWindows.py": {
-    "mtime": 1785621441.1353266,
-    "seen": 1789771753.6254327,
-    "ast_hash": "c9201dac24f1aa0bb6ccb42cf085e9d1",
-    "semantic_hash": "c9201dac24f1aa0bb6ccb42cf085e9d1"
+    "mtime": 1791588051.691877,
+    "seen": 1791588256.0073922,
+    "ast_hash": "eb1d931c2630f4cff8486b0d1297aeaa",
+    "semantic_hash": ""
   },
   "Config/logConfig.py": {
     "mtime": 1785284377.7527645,
@@ -264,9 +264,9 @@
     "semantic_hash": "57d31e4b8f30e0b306e325a63ea80a5a"
   },
   "main.py": {
-    "mtime": 1791586566.4674184,
-    "seen": 1791586780.778656,
-    "ast_hash": "94fe8fce82871cea11db9e5b9262cdba",
+    "mtime": 1791588070.6348913,
+    "seen": 1791588256.0075014,
+    "ast_hash": "72eb23dc1c2ca23e9ec979d3f07d4859",
     "semantic_hash": ""
   },
   "pyproject.toml": {
@@ -438,10 +438,10 @@
     "semantic_hash": "d41d8cd98f00b204e9800998ecf8427e"
   },
   "services/printer/__init__.py": {
-    "mtime": 1784765849.2131994,
-    "seen": 1789771753.6255841,
-    "ast_hash": "0b08117709e8b3d02b74ef458dbadff7",
-    "semantic_hash": "0b08117709e8b3d02b74ef458dbadff7"
+    "mtime": 1791587993.4432037,
+    "seen": 1791588256.007575,
+    "ast_hash": "84d8950090aca339e1f281ddeccbfc82",
+    "semantic_hash": ""
   },
   "services/printer/__main__.py": {
     "mtime": 1784747556.1997998,
@@ -450,16 +450,16 @@
     "semantic_hash": "0349ae7ee98091aa509c73f271031e8d"
   },
   "services/printer/info.py": {
-    "mtime": 1784765843.58787,
-    "seen": 1789771753.6255875,
-    "ast_hash": "8b1d2d9b944cb6d62694d2c3be80c5bb",
-    "semantic_hash": "8b1d2d9b944cb6d62694d2c3be80c5bb"
+    "mtime": 1791587986.5531728,
+    "seen": 1791588256.0075817,
+    "ast_hash": "bd19a4a80a932a1480739587581e2f35",
+    "semantic_hash": ""
   },
   "services/printer/linux.py": {
-    "mtime": 1785621537.5945966,
-    "seen": 1789771753.6255903,
-    "ast_hash": "563620c4d3c1d5fdcabe15588049e138",
-    "semantic_hash": "563620c4d3c1d5fdcabe15588049e138"
+    "mtime": 1791588000.7103524,
+    "seen": 1791588256.0075855,
+    "ast_hash": "60ccde5b173d735cdf67391f27bd157b",
+    "semantic_hash": ""
   },
   "services/printer/modelos.py": {
     "mtime": 1785201382.73583,
@@ -468,16 +468,16 @@
     "semantic_hash": "86fc1800c1d88280399b26c4b6f02e89"
   },
   "services/printer/windows.py": {
-    "mtime": 1785621427.9302895,
-    "seen": 1789771753.625597,
-    "ast_hash": "6849399150484d8a5325b5298246a338",
-    "semantic_hash": "6849399150484d8a5325b5298246a338"
+    "mtime": 1791588025.9865954,
+    "seen": 1791588256.0075927,
+    "ast_hash": "b9c5f209aadcbb75dd84d2fced2f835a",
+    "semantic_hash": ""
   },
   "services/printerService.py": {
-    "mtime": 1789492525.975661,
-    "seen": 1789771753.625599,
-    "ast_hash": "7f3777020ec60e175e140ee4d4f339fb",
-    "semantic_hash": "7f3777020ec60e175e140ee4d4f339fb"
+    "mtime": 1791587993.4430635,
+    "seen": 1791588256.007597,
+    "ast_hash": "0f64119bb9a4f57e560af74deb305329",
+    "semantic_hash": ""
   },
   "services/rascunhosPedido.py": {
     "mtime": 1787868657.8061163,
@@ -594,10 +594,10 @@
     "semantic_hash": "9ce2e9cac5db6c26582e5a1079802067"
   },
   "services/rede/redeService.py": {
-    "mtime": 1789492537.8101816,
-    "seen": 1789771753.625639,
-    "ast_hash": "edfa970a9a15d2d61354eab3dd87b785",
-    "semantic_hash": "edfa970a9a15d2d61354eab3dd87b785"
+    "mtime": 1791588085.075499,
+    "seen": 1791588256.007649,
+    "ast_hash": "279168f167a424ac047136b771304340",
+    "semantic_hash": ""
   },
   "services/rede/relogio.py": {
     "mtime": 1786146035.5058393,

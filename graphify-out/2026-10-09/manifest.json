@@ -264,9 +264,9 @@
     "semantic_hash": "57d31e4b8f30e0b306e325a63ea80a5a"
   },
   "main.py": {
-    "mtime": 1790610407.957072,
-    "seen": 1791586147.318142,
-    "ast_hash": "d60476436eb9aef697457c1ce61ba367",
+    "mtime": 1791586566.4674184,
+    "seen": 1791586780.778656,
+    "ast_hash": "94fe8fce82871cea11db9e5b9262cdba",
     "semantic_hash": ""
   },
   "pyproject.toml": {
@@ -729,6 +729,18 @@
     "mtime": 1790297523.721803,
     "seen": 1791586147.3182292,
     "ast_hash": "06b1e9599efdae51f5f0d0c30212cdb5",
+    "semantic_hash": ""
+  },
+  "controllers/taxasBairroController.py": {
+    "mtime": 1791586562.9256718,
+    "seen": 1791586780.7786202,
+    "ast_hash": "ccb0f5f59f7267f9d275ee06a4722447",
+    "semantic_hash": ""
+  },
+  "services/rede/taxasBairro.py": {
+    "mtime": 1791586562.8626702,
+    "seen": 1791586780.7787473,
+    "ast_hash": "4a6228728481fe7d6606c9d4dca917cb",
     "semantic_hash": ""
   }
 }
