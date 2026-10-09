@@ -490,6 +490,25 @@ Page {
                 formulario.descartarConteudo();
         }
 
+        onNovoPedido: {
+            // Grava o que está aberto (vazio não vira card) e confirma a edição
+            // pendente, porque o formulário vai ser esvaziado em seguida.
+            telaBalcao.salvarRascunho(true);
+
+            // O id sai ANTES de esvaziar: o autosave roda a cada 3 segundos, e
+            // com o id antigo ele regravaria o formulário em branco por cima do
+            // pedido que acabou de ser guardado.
+            telaBalcao.rascunhoId = "";
+
+            var formulario = telaBalcao._formulario();
+            if (formulario) {
+                formulario.descartarConteudo();
+                formulario.inputNomeCliente.forceActiveFocus();
+            }
+            faixaRascunhosBalcao.rascunhoAtualId = "";
+            faixaRascunhosBalcao.recarregar();
+        }
+
         onRetomar: function (id, tipo) {
             if (id === telaBalcao.rascunhoId)
                 return;

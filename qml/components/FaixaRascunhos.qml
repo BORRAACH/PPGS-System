@@ -20,10 +20,10 @@ import estilo 1.0
 // mesmo desenho do callback de PopupAutorizacao — quem tem o formulário na mão
 // é a tela, não a faixa.
 //
-// Sem botão de "novo pedido", ao contrário da faixa do Salão: começar outro
-// pedido é sair da tela e voltar, que já devolve o formulário em branco (a
-// barra lateral recria a página) — e o rascunho de agora continua na faixa,
-// porque sair salva em vez de descartar.
+// O card "Novo pedido" à esquerda começa outro pedido da MESMA modalidade sem
+// largar o atual: a tela grava o rascunho de agora (ele continua na faixa) e
+// devolve o formulário em branco. É o que permite tirar dois pedidos de
+// entrega, por exemplo, ao mesmo tempo.
 Item {
     id: faixa
 
@@ -47,6 +47,10 @@ Item {
     // está aberto no formulário, e só ela tem como esvaziá-lo — a faixa não
     // alcança os campos (mesmo desenho de `retomar`).
     signal descartado(string id)
+
+    // O card "Novo pedido" foi clicado. A tela grava o pedido aberto e esvazia
+    // o formulário (mesmo desenho de `retomar`: a faixa não alcança os campos).
+    signal novoPedido()
 
     function recarregar() {
         faixa.rascunhos = rascunhosController.listarRascunhos();
@@ -107,16 +111,63 @@ Item {
 
         Text {
             anchors.centerIn: parent
+            anchors.horizontalCenterOffset: cardNovo.width / 2
             visible: faixa.rascunhos.length === 0
             text: "Nenhum pedido em andamento."
             font.italic: true
             color: Estilo.global.textSecondary
         }
 
+        Rectangle {
+            id: cardNovo
+
+            anchors.left: parent.left
+            anchors.top: parent.top
+            anchors.bottom: parent.bottom
+            anchors.margins: 8
+            width: Responsivo.compacto ? 96 : 120
+            radius: Estilo.global.radius.md
+            color: areaNovo.containsMouse ? Estilo.global.surfaceHover : Estilo.global.background
+            border.color: faixa._cor(faixa.tipoAtual)
+            border.width: 1
+
+            MouseArea {
+                id: areaNovo
+
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: faixa.novoPedido()
+            }
+
+            Column {
+                anchors.centerIn: parent
+                spacing: 4
+
+                Icone {
+                    nome: "fa6s.plus"
+                    cor: faixa._cor(faixa.tipoAtual)
+                    tamanho: Estilo.global.fontSize.lg
+                    anchors.horizontalCenter: parent.horizontalCenter
+                }
+
+                Text {
+                    text: "Novo pedido"
+                    font.pixelSize: Estilo.global.fontSize.sm
+                    font.family: Estilo.global.fontFamily.title
+                    color: faixa._cor(faixa.tipoAtual)
+                    anchors.horizontalCenter: parent.horizontalCenter
+                }
+            }
+        }
+
         ListView {
             id: listaRascunhos
 
-            anchors.fill: parent
+            anchors.left: cardNovo.right
+            anchors.right: parent.right
+            anchors.top: parent.top
+            anchors.bottom: parent.bottom
             anchors.margins: 8
             orientation: ListView.Horizontal
             spacing: Estilo.global.spacing.md

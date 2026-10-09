@@ -481,6 +481,25 @@ Page {
                 formulario.descartarConteudo();
         }
 
+        onNovoPedido: {
+            // Grava o que está aberto (vazio não vira card) e confirma a edição
+            // pendente, porque o formulário vai ser esvaziado em seguida.
+            telaEntrega.salvarRascunho(true);
+
+            // O id sai ANTES de esvaziar: o autosave roda a cada 3 segundos, e
+            // com o id antigo ele regravaria o formulário em branco por cima do
+            // pedido que acabou de ser guardado.
+            telaEntrega.rascunhoId = "";
+
+            var formulario = telaEntrega._formulario();
+            if (formulario) {
+                formulario.descartarConteudo();
+                formulario.inputTelefone.forceActiveFocus();
+            }
+            faixaRascunhosEntrega.rascunhoAtualId = "";
+            faixaRascunhosEntrega.recarregar();
+        }
+
         onRetomar: function (id, tipo) {
             if (id === telaEntrega.rascunhoId)
                 return;
