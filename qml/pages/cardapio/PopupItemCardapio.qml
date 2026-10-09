@@ -86,7 +86,8 @@ Popup {
             if (campo.chave === "nome")
                 nomeInformado = valor;
 
-            item[campo.chave] = valor;
+            // O campo mostra "R$ 24,00"; o cardápio guarda "24,00".
+            item[campo.chave] = campo.tipo === "preco" ? Moeda.formatarSemSimbolo(valor) : valor;
         }
 
         // Dois itens com o mesmo nome ficariam indistinguíveis na busca das
@@ -218,24 +219,37 @@ Popup {
                             placeholderTextColor: Estilo.global.textPlaceholder
                             placeholderText: blocoCampo.preco ? "0,00" : ""
                             onTextChanged: raiz.valores[blocoCampo.chave] = text
-                            onAccepted: raiz.confirmar()
+                            // Preço já formatado ("R$ 24,00"). Vazio não conta:
+                            // apagar o preço é uma edição legítima.
+                            readonly property bool formatado: blocoCampo.preco && text.indexOf("R$") === 0
+
+                            // Enter num preço ainda em edição só o formata; o
+                            // Enter seguinte (já formatado) confirma o
+                            // formulário, como nos demais campos.
+                            onAccepted: {
+                                if (blocoCampo.preco && text !== "" && !formatado) {
+                                    text = Moeda.formatar(text);
+                                    return;
+                                }
+                                raiz.confirmar();
+                            }
                             Component.onCompleted: {
+                                // O item editado chega como "24,00"; o campo
+                                // o mostra já com a máscara.
+                                if (blocoCampo.preco)
+                                    text = Moeda.formatar(model.valor);
+
                                 if (index === 0)
                                     campoLinha.forceActiveFocus();
                             }
 
-                            // Preço digitado vira "24,00" ao sair do campo —
-                            // até aqui "24" ficava "24" na tela e só era
-                            // normalizado lá no Python, ao gravar (ver
-                            // cardapioService.normalizar_preco). O disco ficava
-                            // certo e a tela mentia: quem conferia a lista via
-                            // um preço sem centavos e não sabia se tinha
-                            // esquecido de digitá-los.
-                            //
-                            // SEM o "R$ ", ao contrário dos campos de valor do
-                            // resto do app: o cardápio guarda o preço nu em
-                            // data/cardapio/*.json, e é esse texto que volta
-                            // para cá ao editar o item.
+                            // Preço vira "R$ 24,00" ao confirmar (Enter) ou ao
+                            // sair do campo, e volta ao número puro ("24") ao
+                            // ser clicado ou receber o foco, até ser confirmado
+                            // de novo — ver Moeda.formatar / Moeda.paraEdicao.
+                            // A máscara é só de tela: confirmar() grava o
+                            // preço sem o "R$ ", como o disco sempre guardou
+                            // (ver cardapioService.normalizar_preco).
                             //
                             // Em onActiveFocusChanged, e não em
                             // onEditingFinished: este último só dispara com
@@ -249,14 +263,25 @@ Popup {
                                 if (activeFocus) {
                                     // Quem entra num preço já preenchido vem
                                     // trocá-lo, não emendar dígitos no fim.
+                                    campoLinha.text = Moeda.paraEdicao(campoLinha.text);
                                     campoLinha.selectAll();
                                     return;
                                 }
 
-                                campoLinha.text = Moeda.formatarSemSimbolo(campoLinha.text);
+                                campoLinha.text = Moeda.formatar(campoLinha.text);
                             }
 
-                            // Aceita o que formatarSemSimbolo escreve e barra
+                            // Clicar num campo que já está em foco (o Enter o
+                            // deixa formatado e focado) também devolve o número
+                            // puro — onActiveFocusChanged não dispara aí.
+                            onPressed: {
+                                if (formatado) {
+                                    campoLinha.text = Moeda.paraEdicao(campoLinha.text);
+                                    campoLinha.selectAll();
+                                }
+                            }
+
+                            // Aceita o que Moeda.formatar escreve e barra
                             // letra no campo de preço. Ver estilo/Moeda.qml
                             // para por que não é um DoubleValidator.
                             validator: blocoCampo.preco ? Moeda.validador : null
