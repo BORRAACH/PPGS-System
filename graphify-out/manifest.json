@@ -126,10 +126,10 @@
     "semantic_hash": "b3363ac2f8c213a7b13a017a7ab02760"
   },
   "data/cardapio/.sync/versoes.json": {
-    "mtime": 1789422214.1671505,
-    "seen": 1789771753.6254647,
-    "ast_hash": "71eb93d582c8cde8427d65d811c65e38",
-    "semantic_hash": "71eb93d582c8cde8427d65d811c65e38"
+    "mtime": 1789779289.5099666,
+    "seen": 1791586147.3181098,
+    "ast_hash": "b067126f79befea69c5fcd83e9fab292",
+    "semantic_hash": ""
   },
   "data/cardapio/acai.json": {
     "mtime": 1785340127.334319,
@@ -138,10 +138,10 @@
     "semantic_hash": "4c6bb5edcef703c19589948f8125c7c1"
   },
   "data/cardapio/adicionais.json": {
-    "mtime": 1787808931.1907682,
-    "seen": 1789771753.6254697,
-    "ast_hash": "2f6c351a7fde50706d5f60e420045ed0",
-    "semantic_hash": "2f6c351a7fde50706d5f60e420045ed0"
+    "mtime": 1789779289.4855256,
+    "seen": 1791586147.3181152,
+    "ast_hash": "1d300fda2753a41881e94b90c7035add",
+    "semantic_hash": ""
   },
   "data/cardapio/adicionaisLanches.json": {
     "mtime": 1787806162.7731295,
@@ -264,10 +264,10 @@
     "semantic_hash": "57d31e4b8f30e0b306e325a63ea80a5a"
   },
   "main.py": {
-    "mtime": 1789501964.4151912,
-    "seen": 1789771753.6255226,
-    "ast_hash": "62f5a7193962ebf2ee5ca8bf44ed43d3",
-    "semantic_hash": "62f5a7193962ebf2ee5ca8bf44ed43d3"
+    "mtime": 1791586566.4674184,
+    "seen": 1791586780.778656,
+    "ast_hash": "94fe8fce82871cea11db9e5b9262cdba",
+    "semantic_hash": ""
   },
   "pyproject.toml": {
     "mtime": 1789436839.9662185,
@@ -723,6 +723,24 @@
     "mtime": 1789773329.3570185,
     "seen": 1789776613.7932463,
     "ast_hash": "625dd7cf6bf02ea2fa0e39fc1e9735ff",
+    "semantic_hash": ""
+  },
+  "CONTEXTO_CLAUDE_WEB.md": {
+    "mtime": 1790297523.721803,
+    "seen": 1791586147.3182292,
+    "ast_hash": "06b1e9599efdae51f5f0d0c30212cdb5",
+    "semantic_hash": ""
+  },
+  "controllers/taxasBairroController.py": {
+    "mtime": 1791586562.9256718,
+    "seen": 1791586780.7786202,
+    "ast_hash": "ccb0f5f59f7267f9d275ee06a4722447",
+    "semantic_hash": ""
+  },
+  "services/rede/taxasBairro.py": {
+    "mtime": 1791586562.8626702,
+    "seen": 1791586780.7787473,
+    "ast_hash": "4a6228728481fe7d6606c9d4dca917cb",
     "semantic_hash": ""
   }
 }
