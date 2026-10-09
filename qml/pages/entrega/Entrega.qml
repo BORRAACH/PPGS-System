@@ -842,6 +842,17 @@ Page {
             // é conferido agora, e não guardado de quando o telefone foi
             // digitado: o número pode ter sido corrigido depois.
             function confirmarSalvarEnderecoEProsseguir(acao, dadosPedido) {
+                // Imprimir com taxa de entrega vazia ou zero pergunta antes:
+                // costuma ser esquecimento, e a comanda sai sem cobrar a entrega.
+                // "Lançar" não pergunta (é registro, não vai ao papel).
+                if (acao === "imprimir" && Moeda.paraNumero(dadosPedido.taxaEntrega) <= 0) {
+                    dialogoTaxaNula.abrirPara(acao, dadosPedido);
+                    return ;
+                }
+                verificarEnderecoEProsseguir(acao, dadosPedido);
+            }
+
+            function verificarEnderecoEProsseguir(acao, dadosPedido) {
                 // Endereço que não ficou pronto (não validado, faltando número,
                 // complemento de condomínio ou CEP) pergunta antes. Não
                 // bloqueia: "Prosseguir assim mesmo" segue — rua nova que o mapa
@@ -1563,6 +1574,49 @@ Page {
                         prosseguirImprimir(dadosPedido);
                     else
                         prosseguirLancar(dadosPedido);
+                }
+            }
+
+            // Aberto por confirmarSalvarEnderecoEProsseguir() ao imprimir com a
+            // taxa de entrega vazia ou zero. "Voltar" devolve o foco ao campo da
+            // taxa; "Imprimir assim mesmo" segue para as demais checagens.
+            Dialogo {
+                id: dialogoTaxaNula
+
+                property string acaoPendente: ""
+                property var dados: null
+
+                function abrirPara(acao, dadosPedido) {
+                    acaoPendente = acao;
+                    dados = dadosPedido;
+                    open();
+                }
+
+                titulo: "Taxa de entrega zerada"
+                corpo: "A taxa de entrega está vazia ou igual a R$ 0,00. Deseja imprimir a comanda mesmo assim?"
+                nomeIcone: "fa6s.triangle-exclamation"
+
+                Botao {
+                    text: "Voltar"
+                    variante: "primario"
+                    tom: Estilo.screen.entrega
+                    onClicked: {
+                        dialogoTaxaNula.close();
+                        // Depois do fechamento, que devolve o foco a quem o tinha.
+                        Qt.callLater(function () { camposPagamento.focarTaxaEntrega(); });
+                    }
+                }
+
+                Botao {
+                    text: "Imprimir assim mesmo"
+                    variante: "ghost"
+                    tom: Estilo.action.confirm
+                    onClicked: {
+                        var acao = dialogoTaxaNula.acaoPendente;
+                        var dadosPedido = dialogoTaxaNula.dados;
+                        dialogoTaxaNula.close();
+                        verificarEnderecoEProsseguir(acao, dadosPedido);
+                    }
                 }
             }
 

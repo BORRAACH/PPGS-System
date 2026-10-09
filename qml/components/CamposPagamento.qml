@@ -85,6 +85,13 @@ Row {
     property alias primeiroCampo: comboFormaPagamento
     property alias ultimoCampo: btnStatusPagamento
 
+    // Leva o foco ao campo da taxa de entrega (Entrega pede quando a taxa
+    // está zerada na hora de imprimir).
+    function focarTaxaEntrega() {
+        inputTaxaEntrega.forceActiveFocus();
+        inputTaxaEntrega.selectAll();
+    }
+
     // Restaura os campos ao estado inicial — usado ao limpar o formulário
     // depois de lançar/imprimir um pedido.
     function redefinirPadrao() {
