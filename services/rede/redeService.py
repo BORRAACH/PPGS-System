@@ -57,6 +57,12 @@ _MAXIMO_PEDIDOS_ENTRADA = 3
 # abaixo é o que impede que uma base curta vire tráfego/log constante contra
 # peers que não respondem.
 _INTERVALO_RECONEXAO_MS = 5000
+
+# Quanto tempo uma comanda já pedida a um peer no catch-up não é pedida a outro.
+# Com N peers todos oferecem as mesmas comandas que faltam, e sem isto cada uma
+# era baixada N vezes. Passado o prazo sem a comanda chegar (o peer caiu, a
+# mensagem se perdeu), o próximo catch-up pede de novo.
+_PRAZO_PEDIDO_CATCHUP_S = 30.0
 # Teto do backoff entre tentativas pro mesmo peer. Nem todo anúncio que a
 # descoberta entrega corresponde a uma instância que ainda existe: cada
 # execução do app tem um id novo, então processos curtos (os scripts de
@@ -219,6 +225,7 @@ class RedeService(QObject):
         # no CPython (GIL), não precisa de lock pra essa checagem simples
         # de "pula este ciclo se o anterior ainda não terminou".
         self._detectando_impressora_local = False
+        self._pedidos_catchup = {}  # arquivo -> instante em que foi pedido a algum peer (ver _PRAZO_PEDIDO_CATCHUP_S)
         self._tem_impressora = False
         # {"nome", "modelo", "fabricante", "tipoPorta", "porta"} da
         # impressora local, ou None — só preenchido quando _tem_impressora.
@@ -1111,8 +1118,14 @@ class RedeService(QObject):
             # propósito" (ver services/rede/tombstones.py).
             apagados_localmente = set(tombstones.carregar("pedidos"))
             faltando = arquivos_remotos - set(self._listar_arquivos_locais()) - apagados_localmente
-            print(f"[RedeService] Catch-up: o peer tem {len(arquivos_remotos)} comanda(s); {len(faltando)} faltam aqui.")
+            agora = time.monotonic()
+            self._pedidos_catchup = {n: t for n, t in self._pedidos_catchup.items() if agora - t < _PRAZO_PEDIDO_CATCHUP_S}
+            ja_pedidos = faltando & self._pedidos_catchup.keys()
+            faltando -= ja_pedidos
+            print(f"[RedeService] Catch-up: o peer tem {len(arquivos_remotos)} comanda(s); {len(faltando)} faltam aqui"
+                  + (f" ({len(ja_pedidos)} já pedidas a outro peer)." if ja_pedidos else "."))
             for nome in faltando:
+                self._pedidos_catchup[nome] = agora
                 self._enviar(socket, {"tipo": "pedir_arquivo", "arquivo": nome})
 
         elif tipo == "pedir_arquivo":
