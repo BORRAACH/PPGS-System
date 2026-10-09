@@ -26,7 +26,7 @@ _EVENTO_COMANDA_NUMERADA = "comanda_numerada"
 # (ver services/rede/localizacaoServidor.py e services/sugestoesEndereco.py).
 _EVENTO_LOCALIZACAO_SERVIDOR = "localizacao_servidor"
 
-_INTERVALO_CHECAGEM_IMPRESSORA_MS = 30000
+_INTERVALO_CHECAGEM_IMPRESSORA_MS = 120000
 _TIMEOUT_IMPRESSAO_MS = 10000
 # Quanto se espera um socket fechar o handshake da malha (ver
 # services/rede/seguranca.py) antes de desistir dele. Cobre dois casos
@@ -1478,7 +1478,7 @@ class RedeService(QObject):
     @protegido()
     def verificarImpressoraLocal(self):
         """Força uma nova checagem da impressora local agora, em vez de
-        esperar o próximo tique de _timer_impressora (30s) — usado pelo
+        esperar o próximo tique de _timer_impressora (2 min) — usado pelo
         botão "Atualizar" de Rede.qml, pro caso comum de acabar de plugar a
         Bematech na USB e querer que ESTA máquina já seja reeleita a
         principal, sem esperar. O resultado (e a reeleição, se mudar
@@ -1486,13 +1486,13 @@ class RedeService(QObject):
         _ao_verificar_impressora_local/_recalcular_maquina_impressora — e
         Rede.qml já está escutando impressoraPrincipalMudou pra atualizar
         sozinha quando isso acontecer."""
-        self._detectar_impressora_local()
+        self._detectar_impressora_local(forcar=True)
 
-    def _detectar_impressora_local(self):
+    def _detectar_impressora_local(self, forcar=False):
         # Evita empilhar detecções concorrentes: lpstat/PowerShell (ver
         # services/printer/linux.py e windows.py) têm timeout de até 10-20s
         # cada, e numa máquina fraca a checagem inteira pode facilmente
-        # passar do intervalo de 30s do próprio timer — sem essa trava, cada
+        # passar do intervalo do próprio timer — sem essa trava, cada
         # tique perdido soma mais uma thread concorrente brigando por CPU
         # (e todas fazendo praticamente o mesmo trabalho), o tipo de coisa
         # que trava um computador fraco em vez de só deixar a informação
@@ -1501,17 +1501,17 @@ class RedeService(QObject):
             print("[RedeService] Detecção de impressora local anterior ainda em andamento — pulando este ciclo.")
             return
         self._detectando_impressora_local = True
-        threading.Thread(target=self._detectar_impressora_em_thread, daemon=True).start()
+        threading.Thread(target=self._detectar_impressora_em_thread, args=(forcar,), daemon=True).start()
 
-    def _detectar_impressora_em_thread(self):
+    def _detectar_impressora_em_thread(self, forcar=False):
         try:
-            self._detectar_impressora_em_thread_interno()
+            self._detectar_impressora_em_thread_interno(forcar)
         finally:
             self._detectando_impressora_local = False
 
-    def _detectar_impressora_em_thread_interno(self):
+    def _detectar_impressora_em_thread_interno(self, forcar=False):
         try:
-            impressora = self._printer_service.localizar_impressora()
+            impressora = self._printer_service.localizar_impressora(forcar=forcar)
         except Exception as erro:
             # Qualquer falha aqui (SO não suportado, CUPS/PowerShell com
             # saída inesperada etc.) vira "sem impressora" em vez de

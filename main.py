@@ -58,6 +58,7 @@ try:
     from controllers.validacaoEnderecoController import ValidacaoEnderecoController
     from services.rede import rede
     from services import limpezaServidorAntigo
+    from services.printer import invalidar_cache as invalidar_cache_impressoras
     from services.sugestoesEndereco import sugestoes_endereco
     from services.iconProvider import IconProvider
     from services import redeQml
@@ -154,7 +155,12 @@ def _tarefas_de_fundo():
     # sozinho mesmo reconhecendo o hardware. Melhor esforço: se não achar
     # impressora nenhuma, ou a configuração falhar por qualquer motivo, só
     # loga um aviso e o app continua normalmente sem impressora configurada.
-    impressoraWindows.garantir_impressora_bematech()
+    if impressoraWindows.garantir_impressora_bematech():
+        # A fila acabou de ser criada/corrigida: a varredura que a detecção da
+        # rede possa ter feito um instante antes não a enxergou, e o próximo
+        # ciclo dela é só daqui a minutos.
+        invalidar_cache_impressoras()
+        rede.verificarImpressoraLocal()
 
     # Loga nome/porta/tipo_porta de cada impressora instalada (ver
     # Config/diagnosticar_impressora.py) — mesma info que services/printer/
@@ -197,11 +203,9 @@ if __name__ == "__main__":
     # não.
     fontes.aplicar(app)
 
-    # Logo depois de aplicar as fontes, e ainda na thread da interface: a lista
-    # de famílias é lida uma vez aqui pra ficar pronta pras threads que vão
-    # precisar dela sem poder consultá-la (a detecção de impressora e a
-    # impressão em si). Ver comandaImagemService.familias_locais.
-    comandaImagemService.aquecer_familias()
+    # A lista de famílias de fonte (comandaImagemService.aquecer_familias) é
+    # lida na thread da interface logo depois que a janela abre — ver mais
+    # abaixo, antes de a rede subir.
 
     engine = QQmlApplicationEngine()
 
@@ -323,6 +327,11 @@ if __name__ == "__main__":
     # loop de eventos primeiro, para o primeiro frame ser desenhado antes de
     # qualquer uma dessas tarefas começar.
     QTimer.singleShot(0, _mostrar_resultado_da_atualizacao)
+    # Antes da rede, de propósito: a detecção de impressora (thread da rede) lê a
+    # lista de fontes que isto guarda, e as duas tarefas rodam em ordem na
+    # thread da interface. Fora do caminho até o primeiro frame: são ~0,15s de
+    # QFontDatabase + qtawesome que a janela não precisa para aparecer.
+    QTimer.singleShot(0, comandaImagemService.aquecer_familias)
     QTimer.singleShot(0, _iniciar_rede)
     # Sem localização da pizzaria conhecida, a máquina que a define a detecta
     # pela internet — uma chamada só, e nunca por cima de uma já definida.

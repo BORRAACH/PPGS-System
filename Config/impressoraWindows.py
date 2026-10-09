@@ -233,20 +233,81 @@ def _configurar_porta_serial(porta_com: str) -> None:
     _log(f"Porta {porta_com} configurada em 9600 8N1, sem controle de fluxo por hardware.")
 
 
-def garantir_impressora_bematech() -> None:
+def _estado_nativo():
+    """Olha o estado SEM subir o PowerShell (~1s e ~60 MB só para abrir), lendo o
+    registro e o spooler. Devolve o dicionário no formato do script PowerShell
+    quando dá para decidir que não há nada a fazer:
+
+    - a fila existe e aponta para a COM que o Windows deu ao aparelho:
+      "impressoraJaExistia".
+
+    Qualquer dúvida (aparelho não encontrado, fila ausente ou em outra porta,
+    mais de uma porta registrada, erro de leitura) devolve None e quem chama
+    roda o PowerShell, que é quem consegue criar/corrigir a fila. As chaves de
+    um aparelho desconectado continuam no registro; por isso só vale o atalho
+    quando TODAS as portas registradas coincidem com a da fila."""
+    try:
+        import winreg
+        import win32print
+
+        portas = set()
+        try:
+            base = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, rf"SYSTEM\CurrentControlSet\Enum\USB\VID_{VENDOR_ID}&PID_{PRODUCT_ID}")
+        except OSError:
+            # Sem chave com este nome não dá para concluir "nunca conectado":
+            # aparelho composto aparece como VID_xxxx&PID_xxxx&MI_00. Deixa
+            # para o PowerShell, que enxerga todos.
+            return None
+        with base:
+            for i in range(winreg.QueryInfoKey(base)[0]):
+                instancia = winreg.EnumKey(base, i)
+                try:
+                    with winreg.OpenKey(base, rf"{instancia}\Device Parameters") as parametros:
+                        portas.add(str(winreg.QueryValueEx(parametros, "PortName")[0]).upper())
+                except OSError:
+                    return None
+        if len(portas) != 1:
+            return None
+        porta = portas.pop()
+
+        for fila in win32print.EnumPrinters(win32print.PRINTER_ENUM_LOCAL, None, 2):
+            if fila.get("pPrinterName") == NOME_IMPRESSORA:
+                if (fila.get("pPortName") or "").split(",")[0].upper() == porta:
+                    return {"dispositivoEncontrado": True, "portaCom": porta, "impressoraJaExistia": True, "erro": None}
+                return None
+        return None
+    except Exception:
+        return None
+
+
+def garantir_impressora_bematech() -> bool:
     """Localiza a Bematech MP-4200 TH nas portas USB e garante que existe
     uma fila de impressão Windows configurada pra ela. Não faz nada fora
     do Windows. Nunca levanta exceção — qualquer falha vira só um aviso no
     console, e a função retorna normalmente (main.py e
     BalcaoController.consultarImpressoraAtual seguem em frente do mesmo
-    jeito, com ou sem impressora encontrada)."""
-    if sys.platform != "win32":
-        return
+    jeito, com ou sem impressora encontrada).
 
+    Devolve True quando criou ou corrigiu a fila — quem chama deve então
+    descartar a varredura de impressoras guardada."""
+    if sys.platform != "win32":
+        return False
+
+    dados = _estado_nativo()
+    if dados is not None:
+        _logar_resultado(dados)
+        if dados.get("portaCom"):
+            _configurar_porta_serial(dados["portaCom"])
+        return False
+
+    return _garantir_via_powershell()
+
+
+def _garantir_via_powershell() -> bool:
     executavel = _executavel_powershell()
     if not executavel:
         _log("Nenhum executável de PowerShell encontrado (powershell/pwsh) — não dá pra configurar a impressora automaticamente.")
-        return
+        return False
 
     try:
         resultado = subprocess.run(
@@ -262,24 +323,25 @@ def garantir_impressora_bematech() -> None:
         )
     except (subprocess.TimeoutExpired, OSError) as erro:
         _log(f"Falha ao rodar o PowerShell ({erro}) — seguindo sem configurar a impressora.")
-        return
+        return False
 
     saida = (resultado.stdout or "").strip()
     if not saida:
         _log(f"PowerShell não retornou nada (stderr: {resultado.stderr.strip()!r}) — seguindo sem configurar a impressora.")
-        return
+        return False
 
     try:
         dados = json.loads(saida)
     except json.JSONDecodeError as erro:
         _log(f"Saída inesperada do PowerShell ({erro}): {saida[:300]!r}")
-        return
+        return False
 
     _logar_resultado(dados)
 
     porta = dados.get("portaCom")
     if porta:
         _configurar_porta_serial(porta)
+    return bool(dados.get("impressoraCriada") or dados.get("impressoraCorrigida"))
 
 
 if __name__ == "__main__":

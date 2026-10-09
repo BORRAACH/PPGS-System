@@ -120,6 +120,105 @@ def _executar_powershell():
         return ""
 
 
+# Bits de PRINTER_INFO_2.Status / Attributes (winspool.h). Escritos aqui, e não
+# lidos de win32print, só para este bloco ser legível sem o pywin32 à mão.
+_STATUS_PAUSADO = 0x00000001
+_STATUS_OFFLINE = 0x00000080
+_STATUS_IMPRIMINDO = 0x00000400
+_ATRIBUTO_OFFLINE = 0x00000400
+_CHAVE_PORTAS_TCP = r"SYSTEM\CurrentControlSet\Control\Print\Monitors\Standard TCP/IP Port\Ports"
+
+
+def _porta_tcp(nome_porta: str):
+    """(host, número) de uma porta "Standard TCP/IP Port", lidos do registro —
+    o mesmo que Get-PrinterPort devolve em PrinterHostAddress/PortNumber. ("", None)
+    para qualquer porta que não seja dessas (USB, COM, WSD...)."""
+    try:
+        import winreg
+
+        with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, f"{_CHAVE_PORTAS_TCP}\\{nome_porta}") as chave:
+            try:
+                host = str(winreg.QueryValueEx(chave, "IPAddress")[0] or "")
+            except OSError:
+                host = ""
+            try:
+                numero = int(winreg.QueryValueEx(chave, "PortNumber")[0])
+            except (OSError, ValueError, TypeError):
+                numero = None
+            return host, numero
+    except OSError:
+        return "", None
+
+
+def _fabricante_do_driver(win32print, nome_impressora: str) -> str:
+    """Fabricante do driver (DRIVER_INFO_6), ou "" se não der para ler."""
+    try:
+        manipulador = win32print.OpenPrinter(nome_impressora)
+        try:
+            return str(win32print.GetPrinterDriver(manipulador, None, 6).get("MfgName") or "")
+        finally:
+            win32print.ClosePrinter(manipulador)
+    except Exception:
+        return ""
+
+
+def _coletar_nativo():
+    """As impressoras pelo spooler (win32print + registro), no mesmo formato de
+    dicionário que o script PowerShell devolve. É a via padrão: o PowerShell
+    leva ~1s só para subir e o script ainda consulta quatro cmdlets por
+    impressora, a cada ciclo de detecção. Levanta qualquer erro — quem chama
+    cai no PowerShell."""
+    import win32print
+
+    brutos = win32print.EnumPrinters(win32print.PRINTER_ENUM_LOCAL | win32print.PRINTER_ENUM_CONNECTIONS, None, 2)
+    try:
+        padrao = win32print.GetDefaultPrinter()
+    except RuntimeError:
+        padrao = ""
+
+    itens = []
+    for bruto in brutos:
+        nome = bruto.get("pPrinterName", "")
+        porta = (bruto.get("pPortName") or "").split(",")[0]
+        status = int(bruto.get("Status") or 0)
+        fora_de_linha = bool(int(bruto.get("Attributes") or 0) & _ATRIBUTO_OFFLINE) or bool(status & _STATUS_OFFLINE)
+        host, numero = _porta_tcp(porta)
+        itens.append({
+            "Nome": nome,
+            "Driver": bruto.get("pDriverName", ""),
+            "PortName": porta,
+            "PortaHost": host,
+            "PortaNumero": numero,
+            # Mesmos códigos de Win32_Printer.PrinterStatus: 7 offline, 4 imprimindo, 3 ociosa.
+            "Status": 7 if fora_de_linha else (4 if status & _STATUS_IMPRIMINDO else 3),
+            "ForaDeLinha": fora_de_linha,
+            "Pausada": bool(status & _STATUS_PAUSADO),
+            "Padrao": nome == padrao,
+            "DriverFabricante": _fabricante_do_driver(win32print, nome),
+            "Comentario": bruto.get("pComment", ""),
+            "Localizacao": bruto.get("pLocation", ""),
+        })
+    return itens
+
+
+def _coletar_via_powershell():
+    saida = _executar_powershell()
+    if not saida.strip():
+        print("[printer/windows] Consulta ao Win32_Printer via PowerShell não retornou nada.")
+        return []
+
+    try:
+        dados = json.loads(saida)
+    except json.JSONDecodeError as erro:
+        print(f"[printer/windows] Saída do PowerShell não é JSON válido ({erro}): {saida[:300]!r}")
+        return []
+
+    # Get-CimInstance com resultado único vira objeto solto, não lista.
+    if isinstance(dados, dict):
+        dados = [dados]
+    return dados
+
+
 def _classificar_porta(nome_porta, host_porta=""):
     alvo = nome_porta or ""
     for padrao, tipo in _PADROES_TIPO_PORTA:
@@ -236,28 +335,22 @@ def _consultar_status_esc_pos(nome_impressora: str):
 
 
 def coletar_impressoras():
-    """Coleta informações das impressoras instaladas via PowerShell (Win32_Printer).
-
-    Precisa do PowerShell (padrão em qualquer Windows atual). Se não
-    encontrar o executável, ou a chamada falhar/retornar algo que não seja
-    JSON válido, retorna lista vazia.
+    """Coleta informações das impressoras instaladas. Pelo spooler (win32print)
+    quando disponível; se isso falhar por qualquer motivo, cai no PowerShell
+    (Win32_Printer), que precisa estar no PATH. Se nenhum dos dois funcionar,
+    retorna lista vazia.
     """
-    saida = _executar_powershell()
-    if not saida.strip():
-        print("[printer/windows] Consulta ao Win32_Printer via PowerShell não retornou nada.")
-        return []
-
     try:
-        dados = json.loads(saida)
-    except json.JSONDecodeError as erro:
-        print(f"[printer/windows] Saída do PowerShell não é JSON válido ({erro}): {saida[:300]!r}")
-        return []
+        dados = _coletar_nativo()
+        origem = "win32print"
+    except Exception as erro:
+        print(f"[printer/windows] Consulta nativa ao spooler falhou ({erro!r}) — usando o PowerShell.")
+        dados = _coletar_via_powershell()
+        origem = "Win32_Printer"
+        if not dados:
+            return []
 
-    # Get-CimInstance com resultado único vira objeto solto, não lista.
-    if isinstance(dados, dict):
-        dados = [dados]
-
-    print(f"[printer/windows] {len(dados)} impressora(s) encontrada(s) via Win32_Printer.")
+    print(f"[printer/windows] {len(dados)} impressora(s) encontrada(s) via {origem}.")
 
     impressoras = []
     for item in dados:

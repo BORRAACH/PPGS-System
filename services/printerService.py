@@ -54,13 +54,16 @@ class PrinterService:
     def __init__(self, nome_impressora: str | None = None):
         self.nome_impressora = nome_impressora
 
-    def localizar_impressora(self):
+    def localizar_impressora(self, forcar=False):
         """Retorna a `InfoImpressora` configurada, ou None se não encontrada.
+
+        `forcar=True` ignora a varredura guardada e consulta o sistema de novo
+        (ver services/printer/info.py).
 
         Se `nome_impressora` não foi informado, usa a impressora padrão do
         sistema (`padrao=True`), se houver alguma instalada.
         """
-        impressoras = coletar_informacoes_impressoras()
+        impressoras = (coletar_informacoes_impressoras(max_idade=0) if forcar else coletar_informacoes_impressoras())
 
         if self.nome_impressora:
             for impressora in impressoras:

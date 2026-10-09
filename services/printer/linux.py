@@ -291,7 +291,13 @@ def coletar_impressoras():
     # None = "lpinfo" indisponível, não deu pra confirmar liveness nenhuma
     # (ver _dispositivos_conectados_agora) — distinto de um set vazio, que
     # significa "confirmado: nenhum dispositivo usb/serial visto agora".
-    dispositivos_vivos = _dispositivos_conectados_agora()
+    #
+    # SÓ é consultado se alguma fila é usb: o `lpinfo -v` faz um scan de
+    # backends (~2,6s medido) e as demais filas (serial, rede) nem olham o
+    # resultado.
+    dispositivos_vivos = None
+    if any(_classificar_porta(dispositivos.get(nome, "")) == "usb" for nome in nomes):
+        dispositivos_vivos = _dispositivos_conectados_agora()
     print(f"[printer/linux] {len(nomes)} impressora(s) encontrada(s) via CUPS: {', '.join(nomes)} (padrão: {padrao or 'nenhuma'}).")
 
     impressoras = []
