@@ -81,7 +81,10 @@ except ImportError as erro:
     modulo = erro.name or "<desconhecido>"
     pacote = modulo
     for nome_pacote, nomes_modulos, _plataforma in preConfig._DEPENDENCIAS_PIP:
-        if any(modulo == m or modulo.startswith(m.split(".")[0] + ".") for m in nomes_modulos):
+        if any(
+            modulo == m or modulo.startswith(m.split(".")[0] + ".")
+            for m in nomes_modulos
+        ):
             pacote = nome_pacote
             break
 
@@ -96,7 +99,9 @@ except ImportError as erro:
 
     dica_distro = preConfig._dica_pacote_da_distro(pacote)
     if dica_distro:
-        print(f"[main] No Linux, o caminho mais confiável é instalar pela distribuição: {dica_distro}")
+        print(
+            f"[main] No Linux, o caminho mais confiável é instalar pela distribuição: {dica_distro}"
+        )
     print(f"[main] Alternativa: pip install {pacote}")
     sys.exit(1)
 
@@ -163,7 +168,9 @@ def _tarefas_de_fundo():
     # listar_impressoras() já loga o detalhe; aqui só interessa se achou
     # alguma, para a tela poder dizer algo útil em vez de "pronto".
     if impressoras:
-        status.concluida("impressora", f"{len(impressoras)} impressora(s) encontrada(s)")
+        status.concluida(
+            "impressora", f"{len(impressoras)} impressora(s) encontrada(s)"
+        )
     else:
         status.falhou("impressora", "Nenhuma impressora encontrada")
 
@@ -210,7 +217,9 @@ if __name__ == "__main__":
     # Exposto ao QML para montar caminhos absolutos (ex: data/cardapio/*.json)
     # a partir da raiz do projeto, em vez de caminhos relativos "../../../.."
     # que quebram se um arquivo .qml mudar de pasta.
-    engine.rootContext().setContextProperty("raizProjeto", QUrl.fromLocalFile(base_dir + os.sep))
+    engine.rootContext().setContextProperty(
+        "raizProjeto", QUrl.fromLocalFile(base_dir + os.sep)
+    )
 
     # Ícones (qml/components/Icone.qml) via "image://qtaicon/<nome>" — ver
     # services/iconProvider.py.
@@ -225,13 +234,19 @@ if __name__ == "__main__":
     consultaController = ConsultaController()
     engine.rootContext().setContextProperty("consultaController", consultaController)
     fechamentoController = FechamentoController()
-    engine.rootContext().setContextProperty("fechamentoController", fechamentoController)
+    engine.rootContext().setContextProperty(
+        "fechamentoController", fechamentoController
+    )
     # Estatísticas diárias gravadas a cada "Fechar Caixa" e a página de
     # Estatística (ver services/estatisticasService.py).
     estatisticasController = EstatisticasController(fechamentoController)
-    engine.rootContext().setContextProperty("estatisticasController", estatisticasController)
+    engine.rootContext().setContextProperty(
+        "estatisticasController", estatisticasController
+    )
     comandaEstiloController = ComandaEstiloController()
-    engine.rootContext().setContextProperty("comandaEstiloController", comandaEstiloController)
+    engine.rootContext().setContextProperty(
+        "comandaEstiloController", comandaEstiloController
+    )
     # Cadastro de quem pode autorizar edição/exclusão de comanda, e o guarda
     # que confere o código (ver controllers/usuariosController.py). Controller
     # próprio porque Consulta e Fechamento consomem os dois lados disto.
@@ -269,7 +284,9 @@ if __name__ == "__main__":
     engine.rootContext().setContextProperty("statusController", status)
     # Sugestões de rua/bairro da Entrega, direto do Photon e do índice de ruas
     # replicado pela malha (ver services/sugestoesEndereco.py).
-    engine.rootContext().setContextProperty("sugestoesEnderecoController", sugestoes_endereco)
+    engine.rootContext().setContextProperty(
+        "sugestoesEnderecoController", sugestoes_endereco
+    )
     # Comparação de rotas de entrega da tela Mapa: grafo das ruas baixado do
     # OSM e buscas A* numa thread (ver services/grafoRuas.py).
     rotasController = RotasController()
@@ -277,7 +294,9 @@ if __name__ == "__main__":
     # Validação do endereço de entrega por CEP (Photon → Nominatim → ViaCEP) e
     # zona de entrega pelo grafo de ruas (ver services/validacaoEndereco.py).
     validacaoEnderecoController = ValidacaoEnderecoController()
-    engine.rootContext().setContextProperty("validacaoEnderecoController", validacaoEnderecoController)
+    engine.rootContext().setContextProperty(
+        "validacaoEnderecoController", validacaoEnderecoController
+    )
 
     engine.addImportPath(qml_dir)
 
