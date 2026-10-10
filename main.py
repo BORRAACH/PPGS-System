@@ -54,6 +54,7 @@ try:
     from controllers.rascunhosController import RascunhosController
     from controllers.clientesController import ClientesController
     from controllers.taxasBairroController import TaxasBairroController
+    from controllers.temaController import TemaController
     from controllers.rotasController import RotasController
     from controllers.validacaoEnderecoController import ValidacaoEnderecoController
     from services.rede import rede
@@ -262,6 +263,10 @@ if __name__ == "__main__":
     engine.rootContext().setContextProperty("clientesController", clientesController)
     taxasBairroController = TaxasBairroController()
     engine.rootContext().setContextProperty("taxasBairroController", taxasBairroController)
+    # Tema visual desta máquina (Configurações > Aparência). Precisa existir
+    # antes do engine.load(): o Estilo.qml o lê ao nascer.
+    temaController = TemaController()
+    engine.rootContext().setContextProperty("temaController", temaController)
     # Pedidos começados e não finalizados, listados na faixa do topo de Balcão e
     # Entrega (ver services/rascunhosPedido.py). Controller próprio porque a
     # faixa é uma só, compartilhada pelas duas telas.

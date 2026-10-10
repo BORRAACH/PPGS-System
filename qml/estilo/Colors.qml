@@ -120,6 +120,11 @@ QtObject {
     readonly property color terracota500Alpha04: "#0abb3e00"
     readonly property color terracota500Alpha12: "#1fbb3e00"
     readonly property color terracota500Alpha21: "#36bb3e00"
+    // Índigo a 4%, 12% e 21%: o mesmo papel das variantes de água, para o tema
+    // secundário (que só usa as cores do ppgs-site) tingir os cartões de Salão.
+    readonly property color indigo500Alpha04: "#0a2b5f96"
+    readonly property color indigo500Alpha12: "#1f2b5f96"
+    readonly property color indigo500Alpha21: "#362b5f96"
     readonly property color oliva400Alpha04: "#0a5f8d37"
     readonly property color oliva400Alpha12: "#1f5f8d37"
     readonly property color oliva400Alpha21: "#365f8d37"
