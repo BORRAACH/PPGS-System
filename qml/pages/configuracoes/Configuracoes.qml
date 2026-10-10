@@ -5,6 +5,7 @@ import estilo 1.0
 import "../../components"
 import "impressora"
 import "usuarios"
+import "aparencia"
 
 // Tela de Configurações — coluna de seções à esquerda, conteúdo da seção
 // escolhida à direita, no formato das telas de preferências de IDE. Cada
@@ -31,7 +32,8 @@ Page {
     // correspondente na área de conteúdo.
     readonly property var secoes: [
         { "chave": "impressao", "titulo": "Estilo de impressão", "icone": "fa6s.receipt" },
-        { "chave": "usuarios", "titulo": "Usuários", "icone": "fa6s.user-lock" }
+        { "chave": "usuarios", "titulo": "Usuários", "icone": "fa6s.user-lock" },
+        { "chave": "aparencia", "titulo": "Aparência", "icone": "fa6s.palette" }
     ]
     property string secaoAtual: "impressao"
 
@@ -295,6 +297,11 @@ Page {
 
                     GerenciarUsuarios {
                         visible: telaConfiguracoes.secaoAtual === "usuarios"
+                        Layout.fillWidth: true
+                    }
+
+                    Aparencia {
+                        visible: telaConfiguracoes.secaoAtual === "aparencia"
                         Layout.fillWidth: true
                     }
                 }
