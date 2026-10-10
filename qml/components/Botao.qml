@@ -24,9 +24,23 @@ Button {
     background: Rectangle {
         radius: Estilo.global.radius.pill
         color: root.preenchido ? (root.down ? root.tom.pressed : (root.hovered ? root.tom.hover : root.tom.base)) : (root.variante === "secundario" ? Estilo.global.surface : (root.down ? Estilo.global.surfacePressed : (root.hovered ? Estilo.global.surfaceHover : "transparent")))
-        border.color: root.variante === "secundario" ? (root.down ? root.tom.pressed : (root.hovered ? root.tom.hover : root.tom.base)) : "transparent"
-        border.width: root.variante === "secundario" ? Estilo.global.borderWidth.hairline : 0
+        // Tema comanda (secundário): botão preenchido também leva borda, e os
+        // que têm fundo (preenchido/secundário) projetam a sombra dura.
+        readonly property bool comBorda: root.variante === "secundario" || (Estilo.global.filledButtonBorder && root.preenchido && root.variante !== "icone")
+        border.color: root.variante === "secundario" ? (Estilo.global.filledButtonBorder ? Estilo.global.borderStrong : (root.down ? root.tom.pressed : (root.hovered ? root.tom.hover : root.tom.base))) : (comBorda ? Estilo.global.borderStrong : "transparent")
+        border.width: comBorda ? Estilo.global.borderWidth.hairline : 0
         opacity: root.enabled ? 1 : Estilo.global.opacity.disabled
+
+        Rectangle {
+            z: -1
+            visible: Estilo.global.shadowOffset > 0 && root.variante !== "ghost" && root.variante !== "icone" && root.enabled
+            x: root.down ? 1 : Estilo.global.shadowOffset
+            y: root.down ? 1 : Estilo.global.shadowOffset
+            width: parent.width
+            height: parent.height
+            radius: parent.radius
+            color: Estilo.global.shadowColor
+        }
     }
 
     contentItem: Row {

@@ -18,6 +18,18 @@ Rectangle {
     implicitWidth: 220
     implicitHeight: coluna.implicitHeight + Estilo.global.padding.lg * 2
 
+    // Sombra dura do tema comanda (desligada no Forno: offset 0).
+    Rectangle {
+        z: -1
+        visible: Estilo.global.shadowOffset > 0
+        x: Estilo.global.shadowOffset
+        y: Estilo.global.shadowOffset
+        width: parent.width
+        height: parent.height
+        radius: parent.radius
+        color: Estilo.global.shadowColor
+    }
+
     Column {
         id: coluna
 
