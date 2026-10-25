@@ -302,6 +302,12 @@ def garantir_dependencias() -> None:
     pela impressão."""
     _configurar_estilo_qt_quick()
 
+    # Instalação empacotada: o runtime já traz tudo (ver launcher/montar_runtime.py)
+    # e o diretório de instalação não é gravável por pip. Faltar algo ali é
+    # defeito do runtime, que o import de main.py reporta com a mensagem certa.
+    if os.environ.get("PIZZARIA_EMPACOTADO"):
+        return
+
     dependencias = _dependencias_aplicaveis()
     faltando = [
         (pacote, modulos)

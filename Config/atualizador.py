@@ -198,6 +198,14 @@ def verificar_atualizacoes():
     (logs/app.log, ver Config/logConfig.py), que é sempre recuperável: o
     app abre normal e a atualização é tentada de novo na próxima abertura,
     já com o código novo se ele tiver entrado."""
+    # Instalação empacotada (launcher/bootstrap.py): não há .git aqui, e quem
+    # busca, valida e instala versões é o bootstrap, ANTES de este processo
+    # existir. Tudo o que sobra para o app é contar qual versão está rodando.
+    if os.environ.get("PIZZARIA_EMPACOTADO"):
+        versao = os.environ.get("PIZZARIA_VERSAO", "").strip()
+        _registrar(f"Versão {versao}" if versao else "Instalação empacotada")
+        return _qapplication_existente()
+
     try:
         quantidade, branch, upstream, resumo = checar_atualizacoes()
         if not quantidade:

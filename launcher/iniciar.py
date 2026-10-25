@@ -12,6 +12,18 @@ Só usa a biblioteca padrão, de propósito: ele precisa conseguir avisar que o
 Python/PyQt6 está faltando, e não daria para fazer isso dependendo justamente
 do que pode estar faltando.
 
+Há dois modos, escolhidos pelo que existe ao lado do executável:
+
+  - Instalação empacotada (lib\\bootstrap.py + runtime\\ ao lado do .exe): o .exe
+    só passa a vez para o bootstrap, rodando com o Python embutido. É ele quem
+    atualiza (pacote assinado), abre a versão ativa e faz rollback. Ver
+    launcher/bootstrap.py e launcher/instalador.iss.
+  - Checkout com main.py (o que está descrito acima): procura o Python do
+    sistema e roda o main.py do disco, com a atualização por git de sempre.
+
+Por isso este arquivo quase nunca muda — e é isso que permite publicar versões
+novas sem recompilar o .exe.
+
 Para gerar o .exe, ver launcher/gerar_exe.bat (roda no Windows).
 """
 
@@ -101,7 +113,73 @@ def _avisar(mensagem):
         pass
 
 
+_COD_REINICIAR = 75
+
+
+def _pasta_do_exe():
+    if getattr(sys, "frozen", False):
+        return os.path.dirname(os.path.abspath(sys.executable))
+    return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def _trocar_runtime(pasta):
+    """Põe runtime.novo\\ no lugar de runtime\\ (preparado pelo bootstrap).
+
+    A troca é feita aqui, e não lá, porque o bootstrap roda de dentro de
+    runtime\\ e o Windows não deixa renomear uma pasta com arquivos em uso.
+    runtime.antigo\\ fica até a próxima troca, para dar para voltar à mão."""
+    import shutil
+
+    novo = os.path.join(pasta, "runtime.novo")
+    if not os.path.isdir(novo):
+        return
+
+    atual = os.path.join(pasta, "runtime")
+    antigo = os.path.join(pasta, "runtime.antigo")
+    shutil.rmtree(antigo, ignore_errors=True)
+    try:
+        if os.path.isdir(atual):
+            os.replace(atual, antigo)
+        os.replace(novo, atual)
+    except OSError as erro:
+        # Desfaz o que deu, para nunca ficar sem runtime nenhum.
+        if not os.path.isdir(atual) and os.path.isdir(antigo):
+            os.replace(antigo, atual)
+        _avisar(f"Não consegui atualizar os componentes do sistema:\n\n{erro}")
+
+
+def _executar_empacotado(pasta):
+    """Passa a vez para lib\\bootstrap.py com o Python embutido."""
+    bootstrap = os.path.join(pasta, "lib", "bootstrap.py")
+    for _ in range(3):
+        _trocar_runtime(pasta)
+
+        python = None
+        for nome in ("pythonw.exe", "python.exe"):
+            candidato = os.path.join(pasta, "runtime", nome)
+            if os.path.isfile(candidato):
+                python = candidato
+                break
+        if python is None:
+            _avisar("Os componentes do sistema (pasta runtime) não foram encontrados.\n\nReinstale o programa.")
+            return 1
+
+        try:
+            codigo = subprocess.Popen([python, bootstrap], cwd=pasta).wait()
+        except OSError as erro:
+            _avisar(f"Não foi possível iniciar o sistema:\n\n{erro}")
+            return 1
+
+        if codigo != _COD_REINICIAR:
+            return codigo
+    return 1
+
+
 def main():
+    pasta = _pasta_do_exe()
+    if os.path.isfile(os.path.join(pasta, "lib", "bootstrap.py")):
+        return _executar_empacotado(pasta)
+
     raiz = _raiz_do_projeto()
     if raiz is None:
         _avisar(
