@@ -67,3 +67,8 @@ cloned_repositories
 # Cache do rope (motor de refatoracao usado por editores Python) — banco
 # local reconstruido sozinho, nao codigo-fonte.
 .ropeproject/
+
+# Saída de launcher/montar_runtime.py (runtime do Windows, ~110 MB).
+dist-runtime/
+dist-release/
+dist-instalacao/
