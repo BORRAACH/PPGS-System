@@ -12,10 +12,10 @@
     "semantic_hash": "d41d8cd98f00b204e9800998ecf8427e"
   },
   "Config/atualizador.py": {
-    "mtime": 1789435764.2276711,
-    "seen": 1789771753.6254222,
-    "ast_hash": "648e048cf529e7af570a7b99439c9bf9",
-    "semantic_hash": "648e048cf529e7af570a7b99439c9bf9"
+    "mtime": 1792943617.4243248,
+    "seen": 1792944201.3819308,
+    "ast_hash": "b6507d8d48f157ddbcbfe9ad733341da",
+    "semantic_hash": ""
   },
   "Config/configurar_impressora_bematech.py": {
     "mtime": 1785621570.144688,
@@ -42,10 +42,10 @@
     "semantic_hash": ""
   },
   "Config/logConfig.py": {
-    "mtime": 1785284377.7527645,
-    "seen": 1789771753.625435,
-    "ast_hash": "d586b8294f472ead68d3df853c728e41",
-    "semantic_hash": "d586b8294f472ead68d3df853c728e41"
+    "mtime": 1792943099.9779732,
+    "seen": 1792944201.3819435,
+    "ast_hash": "6adaf4abbd68be543123b7631cc5ad0b",
+    "semantic_hash": ""
   },
   "Config/mesclarCardapio.py": {
     "mtime": 1785117398.5570548,
@@ -54,16 +54,16 @@
     "semantic_hash": "1033371d9004ed0cbe7c08d3f78c89e7"
   },
   "Config/preConfig.py": {
-    "mtime": 1789436848.436784,
-    "seen": 1789771753.625439,
-    "ast_hash": "2503d250d304d7c54d685be0f8074c2f",
-    "semantic_hash": "2503d250d304d7c54d685be0f8074c2f"
+    "mtime": 1792943617.42472,
+    "seen": 1792944201.3819478,
+    "ast_hash": "907f39c56f2c6f0d39fdefa280609d25",
+    "semantic_hash": ""
   },
   "controllers/balcaoController.py": {
-    "mtime": 1789425572.8889933,
-    "seen": 1789771753.6254404,
-    "ast_hash": "086bbd11f4dcab8376ca79f4e3577e51",
-    "semantic_hash": "086bbd11f4dcab8376ca79f4e3577e51"
+    "mtime": 1792943099.9873245,
+    "seen": 1792944201.3819504,
+    "ast_hash": "ee859693ea13fddd92894e4cc889b957",
+    "semantic_hash": ""
   },
   "controllers/clientesController.py": {
     "mtime": 1789495888.903071,
@@ -72,16 +72,16 @@
     "semantic_hash": "9796defcb855e6a8286046909c3a51eb"
   },
   "controllers/consultaController.py": {
-    "mtime": 1789495888.8982615,
-    "seen": 1789771753.6254447,
-    "ast_hash": "a70cc717a0a309e2bdbac4ad6f2535a8",
-    "semantic_hash": "a70cc717a0a309e2bdbac4ad6f2535a8"
+    "mtime": 1792943099.9793646,
+    "seen": 1792944201.381955,
+    "ast_hash": "d0f0e38bff8e3c1b2b26037224722eb5",
+    "semantic_hash": ""
   },
   "controllers/entregaController.py": {
-    "mtime": 1789602132.2243998,
-    "seen": 1789771753.6254475,
-    "ast_hash": "ff760adacc230486786cd265469475d9",
-    "semantic_hash": "ff760adacc230486786cd265469475d9"
+    "mtime": 1792943099.9854813,
+    "seen": 1792944201.3819573,
+    "ast_hash": "6cf05612fa48caf4ab9010264703297b",
+    "semantic_hash": ""
   },
   "controllers/estatisticasController.py": {
     "mtime": 1789501929.943954,
@@ -90,10 +90,10 @@
     "semantic_hash": "07c1ebe4e0dd51745a7a1eb71f1fe020"
   },
   "controllers/fechamentoController.py": {
-    "mtime": 1789501964.413601,
-    "seen": 1789771753.6254501,
-    "ast_hash": "95adb285812b2f42b1dcc005867902b2",
-    "semantic_hash": "95adb285812b2f42b1dcc005867902b2"
+    "mtime": 1792943099.9931,
+    "seen": 1792944201.381961,
+    "ast_hash": "cb5757e81bfedfd062619181fc63a463",
+    "semantic_hash": ""
   },
   "controllers/rascunhosController.py": {
     "mtime": 1787868657.8041162,
@@ -108,10 +108,10 @@
     "semantic_hash": "feff1dcb16fe106dc5dc5e94174def00"
   },
   "controllers/salaoController.py": {
-    "mtime": 1789519316.715611,
-    "seen": 1789771753.6254566,
-    "ast_hash": "67c71b7905081d52ffa5878759a60107",
-    "semantic_hash": "67c71b7905081d52ffa5878759a60107"
+    "mtime": 1792943099.9888535,
+    "seen": 1792944201.3819664,
+    "ast_hash": "ba88ebd3908b5b86cb34b20b79c84a3c",
+    "semantic_hash": ""
   },
   "controllers/usuariosController.py": {
     "mtime": 1789774119.5260215,
@@ -258,15 +258,15 @@
     "semantic_hash": "499110084e1d31e51c6a8bed808a434f"
   },
   "launcher/iniciar.py": {
-    "mtime": 1786154755.3324037,
-    "seen": 1789771753.62552,
-    "ast_hash": "57d31e4b8f30e0b306e325a63ea80a5a",
-    "semantic_hash": "57d31e4b8f30e0b306e325a63ea80a5a"
+    "mtime": 1792943743.5115147,
+    "seen": 1792944201.3820074,
+    "ast_hash": "9c3651051b769b5fcd76628dc8830106",
+    "semantic_hash": ""
   },
   "main.py": {
-    "mtime": 1791589172.7192013,
-    "seen": 1791676607.7622483,
-    "ast_hash": "8634f0bf09db2352a445bb739f153b21",
+    "mtime": 1792943100.0075781,
+    "seen": 1792944201.382012,
+    "ast_hash": "cbb5c48c70478953a838dc6ff9de4350",
     "semantic_hash": ""
   },
   "pyproject.toml": {
@@ -336,15 +336,15 @@
     "semantic_hash": "c0dc8272544cca3c37cb2d7eca777249"
   },
   "services/buscaCardapio.py": {
-    "mtime": 1788193968.1376822,
-    "seen": 1789771753.6255498,
-    "ast_hash": "48f745f6845f2096cd348a48e69c7e1f",
-    "semantic_hash": "48f745f6845f2096cd348a48e69c7e1f"
+    "mtime": 1792943099.9840283,
+    "seen": 1792944201.3820345,
+    "ast_hash": "d322ce0ea6fc2deb50d3e4a7a63cadd2",
+    "semantic_hash": ""
   },
   "services/cardapioService.py": {
-    "mtime": 1789776355.5302522,
-    "seen": 1789776613.7934117,
-    "ast_hash": "3a05cd97eb3429623ddae99e4f4392e0",
+    "mtime": 1792943099.9811318,
+    "seen": 1792944201.382037,
+    "ast_hash": "b350f63251ac63fc914d48c7b59a5dbf",
     "semantic_hash": ""
   },
   "services/cnefe.py": {
@@ -354,10 +354,10 @@
     "semantic_hash": "83ebdca751d8ce90517648ec3106102a"
   },
   "services/cofreLocal.py": {
-    "mtime": 1789434501.7739482,
-    "seen": 1789771753.625556,
-    "ast_hash": "86bef8cb1a4c5d2a360a37b91c62f9af",
-    "semantic_hash": "86bef8cb1a4c5d2a360a37b91c62f9af"
+    "mtime": 1792943093.5748844,
+    "seen": 1792944201.382041,
+    "ast_hash": "75276f426e68110a8c6c512e8e14cfb7",
+    "semantic_hash": ""
   },
   "services/comandaComparacaoService.py": {
     "mtime": 1789495888.898155,
@@ -366,10 +366,10 @@
     "semantic_hash": "c4d2615111505e806d955c0c5e464d4d"
   },
   "services/comandaEstiloService.py": {
-    "mtime": 1789495888.8960633,
-    "seen": 1789771753.6255603,
-    "ast_hash": "5bc4f339192ef8b40349698090f90a9c",
-    "semantic_hash": "5bc4f339192ef8b40349698090f90a9c"
+    "mtime": 1792943099.9907594,
+    "seen": 1792944201.3820443,
+    "ast_hash": "06cefe759f0ea6c5d82ef343739007a4",
+    "semantic_hash": ""
   },
   "services/comandaImagemService.py": {
     "mtime": 1789519277.336462,
@@ -480,10 +480,10 @@
     "semantic_hash": ""
   },
   "services/rascunhosPedido.py": {
-    "mtime": 1787868657.8061163,
-    "seen": 1789771753.6256008,
-    "ast_hash": "4561b6ebff269a23022f6c1660d30a31",
-    "semantic_hash": "4561b6ebff269a23022f6c1660d30a31"
+    "mtime": 1792943099.9760196,
+    "seen": 1792944201.382072,
+    "ast_hash": "ec35dd4e67c26967caa05f68d9653aa5",
+    "semantic_hash": ""
   },
   "services/rede/__init__.py": {
     "mtime": 1785092618.8608012,
@@ -504,10 +504,10 @@
     "semantic_hash": "bf8c2b99fcec15a7d1b9aa545c5c2147"
   },
   "services/rede/caminhos.py": {
-    "mtime": 1789434615.4760337,
-    "seen": 1789771753.6256094,
-    "ast_hash": "3ca40ddf297342a674c34781f891a6ce",
-    "semantic_hash": "3ca40ddf297342a674c34781f891a6ce"
+    "mtime": 1792943093.5747082,
+    "seen": 1792944201.3820791,
+    "ast_hash": "f3c4c60d9f0b850750d1f2dd2829a039",
+    "semantic_hash": ""
   },
   "services/rede/clientes.py": {
     "mtime": 1789495888.901856,
@@ -570,10 +570,10 @@
     "semantic_hash": "8b545373bb252b3fd64e9a1e5bf222d8"
   },
   "services/rede/impressoraFixada.py": {
-    "mtime": 1785353774.4435637,
-    "seen": 1789771753.6256313,
-    "ast_hash": "76b21fc6b07dd001e17be0710b2ac8df",
-    "semantic_hash": "76b21fc6b07dd001e17be0710b2ac8df"
+    "mtime": 1792943093.5754867,
+    "seen": 1792944201.382095,
+    "ast_hash": "d8ba087ea8f4e0362fbe985774d064f1",
+    "semantic_hash": ""
   },
   "services/rede/indicePedidos.py": {
     "mtime": 1787611654.640145,
@@ -588,10 +588,10 @@
     "semantic_hash": "e03d1bb4fe051a2f73313992069db454"
   },
   "services/rede/localizacaoServidor.py": {
-    "mtime": 1789492537.8081164,
-    "seen": 1789771753.6256373,
-    "ast_hash": "9ce2e9cac5db6c26582e5a1079802067",
-    "semantic_hash": "9ce2e9cac5db6c26582e5a1079802067"
+    "mtime": 1792943093.5758097,
+    "seen": 1792944201.3821,
+    "ast_hash": "1b076ae1cab446d60b0a2536672b1e02",
+    "semantic_hash": ""
   },
   "services/rede/redeService.py": {
     "mtime": 1791588085.075499,
@@ -606,10 +606,10 @@
     "semantic_hash": "953c409d038c915c7e049be50bc0f347"
   },
   "services/rede/seguranca.py": {
-    "mtime": 1789434610.313015,
-    "seen": 1789771753.625642,
-    "ast_hash": "3d424c4c8d47b2589db68e31bfe88915",
-    "semantic_hash": "3d424c4c8d47b2589db68e31bfe88915"
+    "mtime": 1792943093.575669,
+    "seen": 1792944201.3821056,
+    "ast_hash": "78b0c4550aa502bb34e9aa21a1e08483",
+    "semantic_hash": ""
   },
   "services/rede/senhaDono.py": {
     "mtime": 1789435938.0956995,
@@ -747,6 +747,42 @@
     "mtime": 1791589172.7070336,
     "seen": 1791676607.7621934,
     "ast_hash": "5383a7fa5a4fe527048d0eacbeb3aa48",
+    "semantic_hash": ""
+  },
+  "Config/caminhos.py": {
+    "mtime": 1792943093.2996738,
+    "seen": 1792944201.3819346,
+    "ast_hash": "b605976f822fc0fa4bc08107e0d5d78e",
+    "semantic_hash": ""
+  },
+  "launcher/bootstrap.py": {
+    "mtime": 1792943682.093658,
+    "seen": 1792944201.382005,
+    "ast_hash": "f5f5a6a42172ae40e9af15f4fbcd0d57",
+    "semantic_hash": ""
+  },
+  "launcher/montar_runtime.py": {
+    "mtime": 1792943706.3582623,
+    "seen": 1792944201.3820095,
+    "ast_hash": "d86e6d39f00f826e94d1d76085bc6781",
+    "semantic_hash": ""
+  },
+  "scripts/assinar_release.py": {
+    "mtime": 1792943706.3623388,
+    "seen": 1792944201.3820283,
+    "ast_hash": "fec7499259489e11db0697eaca672afe",
+    "semantic_hash": ""
+  },
+  "scripts/montar_instalacao.py": {
+    "mtime": 1792943782.1306765,
+    "seen": 1792944201.382031,
+    "ast_hash": "88e893759b612995bf5270a1614f0806",
+    "semantic_hash": ""
+  },
+  ".github/workflows/release.yml": {
+    "mtime": 1792943782.1323457,
+    "seen": 1792944201.3821223,
+    "ast_hash": "c4967dc57238a5e1665ab4751332ed8a",
     "semantic_hash": ""
   }
 }
