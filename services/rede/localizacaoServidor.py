@@ -49,7 +49,7 @@ def _limite_entrega(valor) -> int:
 
 
 def _caminho_arquivo() -> str:
-    return os.path.join(caminhos.raiz_projeto(), "Config", _ARQUIVO)
+    return os.path.join(caminhos.raiz_dados(), "Config", _ARQUIVO)
 
 
 def normalizar_registro(dados) -> dict:

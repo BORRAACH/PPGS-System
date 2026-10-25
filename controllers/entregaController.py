@@ -1,4 +1,6 @@
 import os
+
+from Config import caminhos as _caminhos
 import uuid
 from datetime import datetime
 
@@ -37,8 +39,7 @@ def _endereco_para_qr(rua, numero, bairro, cidade, uf, cep):
 class EntregaController(QObject):
     def __init__(self):
         super().__init__()
-        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        self.pasta_pedidos = os.path.join(base_dir, "pedidos")
+        self.pasta_pedidos = _caminhos.dados("pedidos")
         os.makedirs(self.pasta_pedidos, exist_ok=True)
         # Nome do último .txt gravado — ver ultimoArquivoSalvo().
         self._ultimo_arquivo = ""

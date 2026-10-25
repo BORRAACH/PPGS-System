@@ -164,7 +164,7 @@ Page {
 
     function carregarLanches() {
         var xhr = new XMLHttpRequest();
-        xhr.open("GET", Qt.resolvedUrl(raizProjeto + "data/cardapio/lanches.json"));
+        xhr.open("GET", Qt.resolvedUrl(raizDados + "data/cardapio/lanches.json"));
         xhr.onreadystatechange = function() {
             if (xhr.readyState === XMLHttpRequest.DONE) {
                 if (xhr.status === 200 || xhr.status === 0) {

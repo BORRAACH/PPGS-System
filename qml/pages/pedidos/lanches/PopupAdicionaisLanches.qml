@@ -66,7 +66,7 @@ Popup {
             return;
 
         var xhr = new XMLHttpRequest();
-        xhr.open("GET", Qt.resolvedUrl(raizProjeto + "data/cardapio/adicionaisLanches.json"), false);
+        xhr.open("GET", Qt.resolvedUrl(raizDados + "data/cardapio/adicionaisLanches.json"), false);
         xhr.send();
         if (xhr.status !== 200 && xhr.status !== 0)
             return;

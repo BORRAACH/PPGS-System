@@ -77,7 +77,7 @@ def _pasta_dados_usuario() -> str:
 
 
 def _caminho_windows() -> str:
-    return os.environ.get("PIZZARIA_COFRE_ARQUIVO") or os.path.join(caminhos.raiz_projeto(), "Config", "chave_local.bin")
+    return os.environ.get("PIZZARIA_COFRE_ARQUIVO") or os.path.join(caminhos.raiz_dados(), "Config", "chave_local.bin")
 
 
 def _caminho_arquivo() -> str:

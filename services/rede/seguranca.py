@@ -115,7 +115,7 @@ class ErroSeguranca(Exception):
 def _caminho_chave() -> str:
     # A variável de ambiente existe só para os testes rodarem várias
     # "máquinas" no mesmo computador, cada uma com a sua chave.
-    return os.environ.get("PIZZARIA_CHAVE_MALHA_ARQUIVO") or os.path.join(caminhos.raiz_projeto(), "Config", _ARQUIVO_CHAVE)
+    return os.environ.get("PIZZARIA_CHAVE_MALHA_ARQUIVO") or os.path.join(caminhos.raiz_dados(), "Config", _ARQUIVO_CHAVE)
 
 
 def carregar_chave() -> bytes | None:

@@ -239,7 +239,7 @@ Page {
     function carregarPrecosPromocionais() {
         var arquivo = arquivoPromocaoAtual();
         var xhr = new XMLHttpRequest();
-        xhr.open("GET", Qt.resolvedUrl(raizProjeto + "data/cardapio/promocoes/" + arquivo), false);
+        xhr.open("GET", Qt.resolvedUrl(raizDados + "data/cardapio/promocoes/" + arquivo), false);
         xhr.send();
         if (xhr.status !== 200 && xhr.status !== 0)
             return {};
@@ -262,7 +262,7 @@ Page {
     function carregarPizzas() {
         var promocoes = usarPromocoes ? carregarPrecosPromocionais() : {};
         var xhr = new XMLHttpRequest();
-        xhr.open("GET", Qt.resolvedUrl(raizProjeto + "data/cardapio/pizzas.json"));
+        xhr.open("GET", Qt.resolvedUrl(raizDados + "data/cardapio/pizzas.json"));
         xhr.onreadystatechange = function () {
             if (xhr.readyState === XMLHttpRequest.DONE) {
                 if (xhr.status === 200 || xhr.status === 0) {

@@ -30,6 +30,8 @@ import base64
 import hashlib
 import json
 import os
+
+from Config import caminhos as _caminhos
 import re
 
 from PyQt6.QtCore import QObject, pyqtSignal, pyqtSlot
@@ -220,12 +222,12 @@ CATEGORIAS = [
 _PRECO = re.compile(r"^(?:R\$\s*)?(\d{1,5})(?:[.,](\d{1,2}))?$")
 
 
-def _raiz_projeto():
-    return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+def _raiz_dados():
+    return _caminhos.RAIZ_DADOS
 
 
 def _caminho_arquivo(categoria):
-    return os.path.join(_raiz_projeto(), "data", "cardapio", categoria["arquivo"])
+    return os.path.join(_raiz_dados(), "data", "cardapio", categoria["arquivo"])
 
 
 # Versão (idEvento, ver services/rede/relogio.py) da última gravação
@@ -235,7 +237,7 @@ def _caminho_arquivo(categoria):
 # arquivos de cardápio de verdade, mesmo padrão de pasta ".sync/" que
 # services/rede/tombstones.py já usa dentro de pedidos/.
 def _pasta_sincronizacao():
-    return os.path.join(_raiz_projeto(), "data", "cardapio", ".sync")
+    return os.path.join(_raiz_dados(), "data", "cardapio", ".sync")
 
 
 def _caminho_versoes():

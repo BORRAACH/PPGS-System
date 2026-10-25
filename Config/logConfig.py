@@ -22,6 +22,8 @@ import functools
 import logging
 import logging.handlers
 import os
+
+from Config import caminhos as _caminhos
 import sys
 import threading
 import traceback
@@ -72,12 +74,12 @@ class _EscritaParaLog:
         return False
 
 
-def _raiz_projeto():
-    return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+def _raiz_dados():
+    return _caminhos.RAIZ_DADOS
 
 
 def caminho_arquivo_log():
-    return os.path.join(_raiz_projeto(), "logs", _NOME_ARQUIVO)
+    return os.path.join(_raiz_dados(), "logs", _NOME_ARQUIVO)
 
 
 def configurar_logging():

@@ -37,6 +37,8 @@ relevância (prefixo, pedaço do nome, ingrediente).
 import bisect
 import json
 import os
+
+from Config import caminhos as _caminhos
 import threading
 import unicodedata
 from datetime import date
@@ -58,8 +60,7 @@ _LIMITE_PADRAO = 40
 
 
 def _pasta_cardapio():
-    raiz = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    return os.path.join(raiz, "data", "cardapio")
+    return _caminhos.dados("data", "cardapio")
 
 
 def _arquivo_promocao_do_dia():

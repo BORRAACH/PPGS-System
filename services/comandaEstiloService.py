@@ -41,6 +41,8 @@ import json
 import math
 import os
 
+from Config import caminhos as _caminhos
+
 from PyQt6.QtCore import QObject, pyqtSignal, pyqtSlot
 
 from Config.logConfig import protegido
@@ -699,12 +701,12 @@ def _padrao():
     return config
 
 
-def _raiz_projeto():
-    return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+def _raiz_dados():
+    return _caminhos.RAIZ_DADOS
 
 
 def _caminho_arquivo():
-    return os.path.join(_raiz_projeto(), "Config", "estilo_impressao.json")
+    return os.path.join(_raiz_dados(), "Config", "estilo_impressao.json")
 
 
 def _mesclar_campos(destino, campos_lidos):

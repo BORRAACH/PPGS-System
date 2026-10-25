@@ -21,15 +21,19 @@ replicadas."""
 import json
 import os
 
+from Config import caminhos as _caminhos
 
-def raiz_projeto() -> str:
-    return os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+def raiz_dados() -> str:
+    """Raiz dos dados da máquina (pedidos/, Config/*.json, data/). Vem de
+    Config/caminhos.py, que é o único lugar que sabe onde ela fica."""
+    return _caminhos.RAIZ_DADOS
 
 
 def pasta_pedidos() -> str:
     """Pasta com as comandas (.txt) — a mesma que ConsultaController,
     FechamentoController e SalaoController usam."""
-    return os.path.join(raiz_projeto(), "pedidos")
+    return os.path.join(raiz_dados(), "pedidos")
 
 
 def pasta_sincronizacao() -> str:

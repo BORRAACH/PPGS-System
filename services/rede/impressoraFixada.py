@@ -16,7 +16,7 @@ from services.rede import caminhos
 
 
 def _caminho_arquivo():
-    return os.path.join(caminhos.raiz_projeto(), "Config", "impressora_fixada.json")
+    return os.path.join(caminhos.raiz_dados(), "Config", "impressora_fixada.json")
 
 
 def carregar_nome_fixado():

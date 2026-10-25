@@ -29,6 +29,8 @@ saiu de lá."""
 
 import json
 import os
+
+from Config import caminhos as _caminhos
 import uuid
 from datetime import datetime, timedelta
 
@@ -41,15 +43,15 @@ _ROTULO = "rascunhosPedido"
 RETENCAO_DIAS = 7
 
 
-def _raiz_projeto():
-    return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+def _raiz_dados():
+    return _caminhos.RAIZ_DADOS
 
 
 def pasta():
     """`pedidos/rascunhos/`. Criada na hora do uso, não na importação: este
     módulo é importado por scripts e testes que nem sempre querem tocar o disco
     do projeto."""
-    caminho = os.path.join(_raiz_projeto(), "pedidos", "rascunhos")
+    caminho = os.path.join(_raiz_dados(), "pedidos", "rascunhos")
     os.makedirs(caminho, exist_ok=True)
     return caminho
 

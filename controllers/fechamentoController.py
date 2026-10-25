@@ -1,6 +1,8 @@
 import hashlib
 import json
 import os
+
+from Config import caminhos as _caminhos
 import unicodedata
 from datetime import datetime, timedelta
 
@@ -165,8 +167,7 @@ class FechamentoController(QObject):
 
     def __init__(self):
         super().__init__()
-        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        self.pasta_pedidos = os.path.join(base_dir, "pedidos")
+        self.pasta_pedidos = _caminhos.dados("pedidos")
 
         rede.registrarEvento(_EVENTO_FECHAMENTO_ATUALIZADO, self._ao_receber_fechamento_remoto)
         rede.registrarEvento(_EVENTO_COMANDA_BAIXADA, self._ao_receber_baixa_remota)

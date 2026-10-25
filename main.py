@@ -1,4 +1,8 @@
-from Config import logConfig
+from Config import caminhos, logConfig
+
+# Antes do log: com a pasta de dados separada do código (PIZZARIA_DADOS), o
+# cardápio de série precisa estar lá antes de qualquer tela ler.
+caminhos.semear_dados()
 
 # O mais cedo possível — antes até do preConfig, senão os prints dele
 # escapam do log. Redireciona stdout/stderr para logs/app.log (além do
@@ -224,6 +228,11 @@ if __name__ == "__main__":
     # que quebram se um arquivo .qml mudar de pasta.
     engine.rootContext().setContextProperty(
         "raizProjeto", QUrl.fromLocalFile(base_dir + os.sep)
+    )
+    # Mesma ideia, para o que é dado da máquina (hoje o cardápio): é outra
+    # pasta quando PIZZARIA_DADOS está definida (ver Config/caminhos.py).
+    engine.rootContext().setContextProperty(
+        "raizDados", QUrl.fromLocalFile(caminhos.RAIZ_DADOS + os.sep)
     )
 
     # Ícones (qml/components/Icone.qml) via "image://qtaicon/<nome>" — ver

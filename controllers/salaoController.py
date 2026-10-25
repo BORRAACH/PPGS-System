@@ -1,5 +1,7 @@
 import json
 import os
+
+from Config import caminhos as _caminhos
 import uuid
 from collections import Counter
 from datetime import datetime
@@ -158,8 +160,7 @@ class SalaoController(QObject):
 
     def __init__(self):
         super().__init__()
-        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        self.pasta_pedidos = os.path.join(base_dir, "pedidos")
+        self.pasta_pedidos = _caminhos.dados("pedidos")
         self.pasta_mesas = os.path.join(self.pasta_pedidos, "mesas")
         os.makedirs(self.pasta_mesas, exist_ok=True)
 
