@@ -293,6 +293,15 @@ def _categoria(chave):
     return None
 
 
+# combos.json viaja pela mesma sincronização do cardápio (versão por arquivo,
+# gossip, reconciliação), mas NÃO é uma categoria editável pelo formulário
+# genérico — por isso fica fora de CATEGORIAS, que alimenta a tela, a busca do
+# Ctrl+S e a lista de campos. As rotinas de sincronização abaixo enxergam as
+# duas coisas por _FONTES_SINCRONIZADAS.
+_FONTE_COMBOS = {"chave": "combos", "arquivo": "combos.json"}
+_FONTES_SINCRONIZADAS = CATEGORIAS + [_FONTE_COMBOS]
+
+
 def _categorias_por_arquivo(nome_arquivo):
     """Caminho inverso de _categoria: a partir de "pizzas.json" (nome que
     chega no evento "cardapio_alterado" de outra máquina, ver
@@ -302,7 +311,7 @@ def _categorias_por_arquivo(nome_arquivo):
     Devolve uma lista porque um arquivo pode conter mais de uma categoria
     (as duas seções de acai.json): quando ele chega da rede, a tela precisa
     recarregar as duas, não só a primeira encontrada."""
-    return [categoria for categoria in CATEGORIAS if categoria["arquivo"] == nome_arquivo]
+    return [categoria for categoria in _FONTES_SINCRONIZADAS if categoria["arquivo"] == nome_arquivo]
 
 
 def _ler_caminho(item, caminho):
@@ -538,7 +547,7 @@ class CardapioController(QObject):
 
     def _resumo_cardapio(self):
         itens = {}
-        for categoria in CATEGORIAS:
+        for categoria in _FONTES_SINCRONIZADAS:
             if categoria["arquivo"] in itens:
                 continue
             versao = _versao_arquivo(categoria["arquivo"])
@@ -764,3 +773,50 @@ class CardapioController(QObject):
             if categoria is not None:
                 self._publicar_cardapio_alterado(categoria)
         return erro
+
+    # ---------- Combos promocionais (ver services/combosService.py) ----------
+
+    @pyqtSlot(result="QVariantList")
+    @protegido([])
+    def listarCombos(self):
+        from services import combosService
+
+        return combosService.carregar()
+
+    @pyqtSlot("QVariantList", result=str)
+    @protegido("Falha inesperada ao salvar os combos — ver logs/app.log.")
+    def salvarCombos(self, combos):
+        """Devolve "" se gravou, ou a mensagem de erro para a tela."""
+        from services import combosService
+
+        erro = combosService.salvar(combos)
+        if not erro:
+            self.cardapioAlterado.emit(_FONTE_COMBOS["chave"])
+            self._publicar_cardapio_alterado(_FONTE_COMBOS)
+        return erro
+
+    @pyqtSlot("QVariantList", str, result="QVariantMap")
+    @protegido({"aplicado": None, "conflito": []})
+    def calcularCombos(self, itens, escolhido):
+        """Desconto de combo de um pedido — ver combosService.calcular.
+        `itens` são as linhas do pedido {pedido, valor, borda, adicionais}."""
+        from services import combosService
+
+        return combosService.calcular(itens, escolhido=escolhido or "")
+
+    @pyqtSlot("QVariantList", result="QVariantList")
+    @protegido([])
+    def disponibilidadeCombosHoje(self, combos):
+        """Para cada combo da lista (na mesma ordem), se ele vale HOJE.
+        Recebe a lista da tela, e não a do disco, para a aba Combos mostrar
+        "indisponível" também nas edições ainda não aplicadas."""
+        from datetime import date
+
+        from services import combosService
+
+        hoje = date.today()
+        resultado = []
+        for combo in combos:
+            normalizado = combosService._normalizar_combo(combo)
+            resultado.append(normalizado is not None and combosService.combo_disponivel_em(normalizado, hoje))
+        return resultado

@@ -262,11 +262,28 @@ def valor_para_float(valor_texto):
         return 0.0
 
     limpo = valor_texto.replace("R$", "").strip()
+    # Valor negativo ("-R$ 19,90", só a linha de desconto de combo tem) —
+    # sem isto o float() falhava e o desconto virava R$ 0,00 em silêncio.
+    negativo = limpo.startswith("-")
+    limpo = limpo.lstrip("-").strip()
     limpo = limpo.replace(".", "").replace(",", ".")
     try:
-        return float(limpo)
+        valor = float(limpo)
     except ValueError:
         return 0.0
+    return -valor if negativo else valor
+
+
+# Nome da linha que o desconto de combo ocupa na comanda (ver
+# combosService.com_desconto). Sem "(...)" no fim de propósito:
+# dividir_sabores leria isso como o tamanho de uma pizza.
+PREFIXO_DESCONTO_COMBO = "Desconto combo"
+
+
+def eh_desconto_combo(pedido_texto):
+    """True se a linha é o desconto de um combo, e não um produto vendido.
+    Compara sem caixa: no cupom impresso o nome sai em caixa alta."""
+    return str(pedido_texto or "").strip().casefold().startswith(PREFIXO_DESCONTO_COMBO.casefold())
 
 
 # Prefixos que marcam as linhas extras impressas abaixo de um item (ver
