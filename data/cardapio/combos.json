@@ -1,0 +1,27 @@
+[
+  {
+    "id": "abc17c90",
+    "nome": "Segunda a quinta",
+    "valor": "69,90",
+    "quantidade": 2,
+    "tamanho": "Grande",
+    "pizzas": [
+      "Dois Queijos",
+      "Calabresa",
+      "Catu Brócolis",
+      "Catu Frango"
+    ],
+    "ativo": true,
+    "agenda": {
+      "dias": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "inicio": "",
+      "fim": "",
+      "datas": []
+    }
+  }
+]
