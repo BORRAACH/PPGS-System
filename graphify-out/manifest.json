@@ -60,9 +60,9 @@
     "semantic_hash": ""
   },
   "controllers/balcaoController.py": {
-    "mtime": 1792943099.9873245,
-    "seen": 1792944201.3819504,
-    "ast_hash": "ee859693ea13fddd92894e4cc889b957",
+    "mtime": 1793116502.1158755,
+    "seen": 1793118374.8457458,
+    "ast_hash": "468ec756b81d354ff4a07437333eb376",
     "semantic_hash": ""
   },
   "controllers/clientesController.py": {
@@ -78,28 +78,28 @@
     "semantic_hash": ""
   },
   "controllers/entregaController.py": {
-    "mtime": 1792943099.9854813,
-    "seen": 1792944201.3819573,
-    "ast_hash": "6cf05612fa48caf4ab9010264703297b",
+    "mtime": 1793116502.1163745,
+    "seen": 1793118374.8457522,
+    "ast_hash": "661704fddea891b13233a9f4f566f879",
     "semantic_hash": ""
   },
   "controllers/estatisticasController.py": {
-    "mtime": 1789501929.943954,
-    "seen": 1789771753.6254485,
-    "ast_hash": "07c1ebe4e0dd51745a7a1eb71f1fe020",
-    "semantic_hash": "07c1ebe4e0dd51745a7a1eb71f1fe020"
+    "mtime": 1793116502.117129,
+    "seen": 1793118374.8457546,
+    "ast_hash": "e26eba72fffb51582706b6b03d8ac315",
+    "semantic_hash": ""
   },
   "controllers/fechamentoController.py": {
-    "mtime": 1792943099.9931,
-    "seen": 1792944201.381961,
-    "ast_hash": "cb5757e81bfedfd062619181fc63a463",
+    "mtime": 1793116502.1169357,
+    "seen": 1793118374.8457575,
+    "ast_hash": "787ab46f61a26b886387a2ae8d3e572f",
     "semantic_hash": ""
   },
   "controllers/rascunhosController.py": {
-    "mtime": 1787868657.8041162,
-    "seen": 1789771753.6254523,
-    "ast_hash": "a019f6a6a406c107fce48fbb7192348e",
-    "semantic_hash": "a019f6a6a406c107fce48fbb7192348e"
+    "mtime": 1793116502.1172364,
+    "seen": 1793118374.84576,
+    "ast_hash": "ef2860db2d644205000e426e58eb6fa9",
+    "semantic_hash": ""
   },
   "controllers/rotasController.py": {
     "mtime": 1789450456.0235736,
@@ -126,9 +126,9 @@
     "semantic_hash": "b3363ac2f8c213a7b13a017a7ab02760"
   },
   "data/cardapio/.sync/versoes.json": {
-    "mtime": 1789779289.5099666,
-    "seen": 1791586147.3181098,
-    "ast_hash": "b067126f79befea69c5fcd83e9fab292",
+    "mtime": 1793118006.4254642,
+    "seen": 1793118374.8457696,
+    "ast_hash": "85169943e26a4160d638f4dfca707ed2",
     "semantic_hash": ""
   },
   "data/cardapio/acai.json": {
@@ -282,10 +282,10 @@
     "semantic_hash": "1fbeecee617d4da52befab57a18ce94e"
   },
   "qml/components/EdicaoComanda.js": {
-    "mtime": 1789495888.8992429,
-    "seen": 1789771753.6255312,
-    "ast_hash": "d8a468378e378c27c25c7fe64241dc9c",
-    "semantic_hash": "d8a468378e378c27c25c7fe64241dc9c"
+    "mtime": 1793116509.8981934,
+    "seen": 1793118374.845811,
+    "ast_hash": "5715eba8c4b8d33f8d5918140c0176d9",
+    "semantic_hash": ""
   },
   "qml/components/MontagemExtras.js": {
     "mtime": 1789776363.5173726,
@@ -342,9 +342,9 @@
     "semantic_hash": ""
   },
   "services/cardapioService.py": {
-    "mtime": 1792943099.9811318,
-    "seen": 1792944201.382037,
-    "ast_hash": "b350f63251ac63fc914d48c7b59a5dbf",
+    "mtime": 1793117329.841837,
+    "seen": 1793118374.8458283,
+    "ast_hash": "95f1ea757d752b51c03baa957e236da8",
     "semantic_hash": ""
   },
   "services/cnefe.py": {
@@ -390,10 +390,10 @@
     "semantic_hash": "182dbf4220528aa12548346c6e83795a"
   },
   "services/comandaTextoService.py": {
-    "mtime": 1789519442.5480037,
-    "seen": 1789771753.6255682,
-    "ast_hash": "ea431be0039087f03300bf9fbd72e9d8",
-    "semantic_hash": "ea431be0039087f03300bf9fbd72e9d8"
+    "mtime": 1793116502.110797,
+    "seen": 1793118374.8458405,
+    "ast_hash": "941a42192be3ec5fe163c13de1c9a097",
+    "semantic_hash": ""
   },
   "services/enderecoFormatado.py": {
     "mtime": 1789482757.5885127,
@@ -783,6 +783,18 @@
     "mtime": 1792943782.1323457,
     "seen": 1792944201.3821223,
     "ast_hash": "c4967dc57238a5e1665ab4751332ed8a",
+    "semantic_hash": ""
+  },
+  "data/cardapio/combos.json": {
+    "mtime": 1793118006.408708,
+    "seen": 1793118374.845779,
+    "ast_hash": "9de2608ad344d516c72c986116ed8e10",
+    "semantic_hash": ""
+  },
+  "services/combosService.py": {
+    "mtime": 1793116687.475714,
+    "seen": 1793118374.8458426,
+    "ast_hash": "02a08e20c2ada8d2ddf3fc3fc40601c5",
     "semantic_hash": ""
   }
 }
