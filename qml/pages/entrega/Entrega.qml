@@ -632,6 +632,7 @@ Page {
                     "formaPagamento": camposPagamento.formaPagamento,
                     "troco": camposPagamento.formaPagamento === "Dinheiro" ? camposPagamento.troco : "",
                     "statusPagamento": camposPagamento.pago ? "PG" : "NP",
+                    "comboEscolhido": resumoComanda.comboEscolhido,
                     "taxaEntrega": camposPagamento.taxaEntrega
                 };
             }
@@ -1557,6 +1558,8 @@ Page {
                     }
 
                     ResumoComanda {
+                        id: resumoComanda
+                        aplicarCombos: true
                         Layout.fillWidth: true
                         itens: modeloPedidos
                         corDestaque: Estilo.screen.entrega.accent

@@ -11,6 +11,7 @@ from Config import impressoraWindows
 from Config.logConfig import protegido
 from services import comandaEstiloService as estilo
 from services import comandaSequencialService as sequencial
+from services import combosService
 from services import comandaTextoService as texto
 from services.printerService import PrinterService
 from services.rede import rede
@@ -59,7 +60,7 @@ class BalcaoController(QObject):
         teste = bool(dados.get("teste", False))
         cliente = "Teste" if teste else dados.get("cliente", "")
         usuario = "" if teste else str(dados.get("usuario", "") or "").strip()
-        itens = dados.get("itens", [])
+        itens = combosService.com_desconto(dados.get("itens", []), dados.get("comboEscolhido", ""))
         forma_pagamento = dados.get("formaPagamento", "")
         troco = dados.get("troco", "")
         status_pagamento = dados.get("statusPagamento", "NP")

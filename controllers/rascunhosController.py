@@ -22,10 +22,11 @@ def _valor_total_itens(itens):
     """Soma o valor dos itens do rascunho. Mesma conta de
     salaoController._valor_total_itens, com o mesmo valor_para_float — o total
     do card tem de bater com o que a comanda vai imprimir."""
+    from services import combosService
+
     total = 0.0
-    for item in itens or []:
-        if isinstance(item, dict):
-            total += texto.valor_para_float(item.get("valor", ""))
+    for item in combosService.com_desconto([i for i in itens or [] if isinstance(i, dict)]):
+        total += texto.valor_para_float(item.get("valor", ""))
     return total
 
 

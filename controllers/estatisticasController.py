@@ -90,6 +90,7 @@ class EstatisticasController(QObject):
                 "itens": [
                     {"pedido": item.get("pedido", ""), "valor": texto.valor_para_float(item.get("valor"))}
                     for item in fechamento._itens_da_comanda(conteudo)
+                    if not texto.eh_desconto_combo(item.get("pedido", ""))
                 ],
                 "taxaEntrega": texto.valor_para_float(parser.extrair_campo(parser.PADRAO_TAXA_ENTREGA, conteudo)) if tipo == "Entrega" else 0.0,
                 "bairro": parser.extrair_campo(parser.PADRAO_BAIRRO, conteudo) if tipo == "Entrega" else "",

@@ -9,6 +9,7 @@ from PyQt6.QtCore import QObject, pyqtSlot
 from Config.logConfig import protegido
 from services import comandaEstiloService as estilo
 from services import comandaSequencialService as sequencial
+from services import combosService
 from services import comandaTextoService as texto
 from services.rede import rede
 from services.sugestoesEndereco import sugestoes_endereco
@@ -77,7 +78,7 @@ class EntregaController(QObject):
         cidade = str(dados.get("cidade", "") or "").strip()
         uf = str(dados.get("uf", "") or "").strip()
         observacaoGeral = dados.get("observacaoGeral", "")
-        itens = dados.get("itens", [])
+        itens = combosService.com_desconto(dados.get("itens", []), dados.get("comboEscolhido", ""))
         forma_pagamento = dados.get("formaPagamento", "")
         troco = dados.get("troco", "")
         status_pagamento = dados.get("statusPagamento", "NP")

@@ -31,6 +31,15 @@ function abrir(pilhaPrincipal, nomeArquivo, manterBaixa) {
     if (!dados || !dados.itens)
         return false;
 
+    // A linha de desconto de combo não volta para o formulário: ela é
+    // recalculada ao salvar (services/combosService.com_desconto). Reabri-la
+    // como item comum descontaria duas vezes. O prefixo é o de
+    // comandaTextoService.PREFIXO_DESCONTO_COMBO; no cupom ele sai em caixa
+    // alta, daí a comparação sem caixa.
+    dados.itens = dados.itens.filter(function (item) {
+        return String(item.pedido || "").trim().toLowerCase().indexOf("desconto combo") !== 0;
+    });
+
     // Comanda de Mesa já fechada (com a divisão da conta já impressa) não
     // tem como reabrir de volta num formulário estruturado — nem Balcao.qml
     // nem Entrega.qml sabem o que fazer com "mesa"/divisão. Quem chama já

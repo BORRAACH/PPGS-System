@@ -655,7 +655,8 @@ Page {
                     "itens": itens,
                     "formaPagamento": camposPagamento.formaPagamento,
                     "troco": camposPagamento.formaPagamento === "Dinheiro" ? camposPagamento.troco : "",
-                    "statusPagamento": camposPagamento.pago ? "PG" : "NP"
+                    "statusPagamento": camposPagamento.pago ? "PG" : "NP",
+                    "comboEscolhido": resumoComanda.comboEscolhido
                 };
             }
 
@@ -1362,6 +1363,8 @@ Page {
                     }
 
                     ResumoComanda {
+                        id: resumoComanda
+                        aplicarCombos: true
                         Layout.preferredWidth: conteudoBalcao.larguraResumo
                         Layout.alignment: Qt.AlignHCenter | Qt.AlignVCenter
                         itens: modeloPedidos

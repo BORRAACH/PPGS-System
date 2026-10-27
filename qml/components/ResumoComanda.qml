@@ -28,6 +28,82 @@ Rectangle {
     property string taxaEntrega: ""
     property bool mostrarTaxaEntrega: false
 
+    // --- COMBOS PROMOCIONAIS ---
+    // Liga o cálculo de desconto de combo sobre `itens` (ver
+    // services/combosService.py). Só Balcão e Entrega ligam: lá o desconto
+    // ainda não existe e o cupom o cria ao salvar. Consulta e Fechamento
+    // mostram comandas já gravadas, onde o desconto JÁ É uma linha de item
+    // (comandaTextoService.PREFIXO_DESCONTO_COMBO) e recalculá-lo descontaria
+    // duas vezes.
+    property bool aplicarCombos: false
+    // Combo que o atendente elegeu quando mais de um concorre; "" = nenhuma
+    // escolha ainda. Quem monta o pedido a repassa ao controller (dados.comboEscolhido).
+    property string comboEscolhido: ""
+    // {aplicado, conflito} de cardapioController.calcularCombos
+    property var resultadoCombos: ({"aplicado": null, "conflito": []})
+    readonly property real valorDesconto: resultadoCombos.aplicado ? resultadoCombos.aplicado.desconto : 0
+    readonly property bool aguardandoEscolhaDeCombo: !resultadoCombos.aplicado && resultadoCombos.conflito.length > 0 && comboEscolhido !== "nenhum"
+    // Evita reabrir o popup a cada edição do pedido: só reabre quando o
+    // CONJUNTO de combos concorrentes muda.
+    property string _conflitoJaPerguntado: ""
+
+    function _itensParaCombos() {
+        var lista = [];
+        if (!aplicarCombos || !itens || itens.count === undefined)
+            return lista;
+
+        for (var i = 0; i < itens.count; i++) {
+            var item = itens.get(i);
+            if (item.pedido !== "")
+                lista.push({"pedido": item.pedido, "valor": item.valor, "borda": item.borda || "", "adicionais": item.adicionais || ""});
+
+        }
+        return lista;
+    }
+
+    function recalcularCombos() {
+        if (!aplicarCombos) {
+            resultadoCombos = {"aplicado": null, "conflito": []};
+            return;
+        }
+        resultadoCombos = cardapioController.calcularCombos(_itensParaCombos(), comboEscolhido);
+        if (aguardandoEscolhaDeCombo) {
+            var chave = resultadoCombos.conflito.map(function (c) {
+                return c.id;
+            }).join(",");
+            if (chave !== _conflitoJaPerguntado) {
+                _conflitoJaPerguntado = chave;
+                popupEscolhaCombo.opcoes = resultadoCombos.conflito;
+                popupEscolhaCombo.open();
+            }
+        } else if (resultadoCombos.conflito.length === 0) {
+            _conflitoJaPerguntado = "";
+            if (comboEscolhido !== "")
+                comboEscolhido = "";
+        }
+    }
+
+    onComboEscolhidoChanged: recalcularCombos()
+    onAplicarCombosChanged: recalcularCombos()
+    Component.onCompleted: recalcularCombos()
+
+    // Qualquer mudança no pedido (linha nova, valor editado, borda,
+    // adicional) pode mudar o desconto.
+    Connections {
+        target: root.aplicarCombos ? root.itens : null
+        ignoreUnknownSignals: true
+        function onCountChanged() { root.recalcularCombos(); }
+        function onDataChanged() { root.recalcularCombos(); }
+    }
+
+    PopupEscolhaCombo {
+        id: popupEscolhaCombo
+
+        onEscolhido: function (id) {
+            root.comboEscolhido = id;
+        }
+    }
+
     // Mostra tudo o que a comanda tem, em vez do resumo de uma linha por
     // item. Os campos abaixo só aparecem neste modo — no modo padrão quem
     // exibe cliente/telefone/endereço é o próprio formulário ao lado.
@@ -172,7 +248,7 @@ Rectangle {
     }
     readonly property bool temDadosCliente: detalhado && (cliente !== "" || telefone !== "" || endereco !== "" || bairro !== "" || observacaoGeral !== "" || mesa !== "")
     readonly property real valorTaxa: mostrarTaxaEntrega ? _valorNumero(taxaEntrega) : 0
-    readonly property real valorTotal: valorItens + valorTaxa
+    readonly property real valorTotal: valorItens - valorDesconto + valorTaxa
     readonly property bool ehDinheiro: formaPagamento === "Dinheiro" && troco !== ""
     readonly property real trocoADar: _valorNumero(troco) - valorTotal
 
@@ -689,6 +765,56 @@ Rectangle {
 
             }
 
+        }
+
+        // --- Desconto de combo ---
+        Item {
+            width: parent.width
+            height: visible ? Math.max(textoDescontoNome.implicitHeight, textoDescontoValor.implicitHeight) : 0
+            visible: root.valorDesconto > 0
+
+            Text {
+                id: textoDescontoNome
+
+                anchors.left: parent.left
+                anchors.right: textoDescontoValor.left
+                anchors.rightMargin: 8
+                text: root.resultadoCombos.aplicado ? "Combo: " + root.resultadoCombos.aplicado.nome + (root.resultadoCombos.aplicado.grupos > 1 ? " x" + root.resultadoCombos.aplicado.grupos : "") : ""
+                font.pixelSize: Estilo.global.fontSize.md
+                color: Estilo.action.confirm.base
+                elide: Text.ElideRight
+            }
+
+            Text {
+                id: textoDescontoValor
+
+                anchors.right: parent.right
+                text: "−" + root._formatarMoeda(root.valorDesconto)
+                font.pixelSize: Estilo.global.fontSize.md
+                font.bold: true
+                color: Estilo.action.confirm.base
+            }
+        }
+
+        // Combos concorrentes sem escolha (popup fechado com Esc): avisa e
+        // deixa reabrir, para o desconto não sumir sem o atendente perceber.
+        Text {
+            width: parent.width
+            visible: root.aguardandoEscolhaDeCombo
+            text: "Há combos disponíveis — toque para escolher"
+            font.pixelSize: Estilo.global.fontSize.md
+            font.bold: true
+            color: Estilo.action.confirm.base
+            wrapMode: Text.WordWrap
+
+            MouseArea {
+                anchors.fill: parent
+                cursorShape: Qt.PointingHandCursor
+                onClicked: {
+                    popupEscolhaCombo.opcoes = root.resultadoCombos.conflito;
+                    popupEscolhaCombo.open();
+                }
+            }
         }
 
         Rectangle {

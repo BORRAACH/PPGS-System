@@ -937,7 +937,7 @@ class FechamentoController(QObject):
             # venda do caixa deste dia.
             for item_pedido in itens:
                 nome = (item_pedido.get("pedido") or "").strip()
-                if not nome:
+                if not nome or texto.eh_desconto_combo(nome):
                     continue
                 contagem = produtos.setdefault(nome, [0, 0.0])
                 contagem[0] += 1
