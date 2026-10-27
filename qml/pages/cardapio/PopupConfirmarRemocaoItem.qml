@@ -15,6 +15,9 @@ Popup {
 
     property int indiceAlvo: -1
     property string nomeAlvo: ""
+    // Textos padrão são os de item de cardápio; a aba Combos troca os dois.
+    property string titulo: "Remover este item do cardápio?"
+    property string aviso: "Ele deixa de aparecer nas telas de pedido. Comandas já feitas não mudam."
 
     signal confirmada(int indice)
 
@@ -55,7 +58,7 @@ Popup {
             }
 
             Text {
-                text: "Remover este item do cardápio?"
+                text: popupConfirmarRemocao.titulo
                 font.pixelSize: Estilo.global.fontSize.xl
                 font.bold: true
                 color: Estilo.global.text
@@ -72,7 +75,7 @@ Popup {
         }
 
         Text {
-            text: "Ele deixa de aparecer nas telas de pedido. Comandas já feitas não mudam."
+            text: popupConfirmarRemocao.aviso
             font.pixelSize: Estilo.global.fontSize.sm
             color: Estilo.global.textSecondary
             width: 320

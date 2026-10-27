@@ -35,7 +35,19 @@ Page {
     // gravada em disco: só é substituída depois de uma gravação bem-sucedida.
     property var itens: []
     readonly property var categoriaAtual: indiceCategoria >= 0 && indiceCategoria < categorias.length ? categorias[indiceCategoria] : null
-    readonly property color corDestaque: categoriaAtual ? telaCardapio.corDaCategoria(categoriaAtual.chave) : Estilo.global.text
+    // Aba "Combos" (services/combosService.py): não é uma categoria de
+    // cardápio — tem formato e tela próprios —, mas segue a mesma regra de
+    // edição: mexe em memória e só vai ao disco (e à malha) em
+    // aplicarAlteracoes(). Enquanto está ligada, `alteracoesPendentes` fala
+    // dos combos, não dos itens da categoria.
+    property bool modoCombos: false
+    property var combos: []
+    property var disponiveisHoje: []
+    // Ligada só durante a nossa própria gravação: salvarCombos() emite
+    // cardapioAlterado("combos") na hora, e sem isto o aviso de "mudou em
+    // outra máquina" disparava contra a edição que acabamos de gravar.
+    property bool gravandoCombos: false
+    readonly property color corDestaque: modoCombos ? Estilo.category.pizza.base : (categoriaAtual ? telaCardapio.corDaCategoria(categoriaAtual.chave) : Estilo.global.text)
 
     // A cor de cada categoria é resolvida aqui pela chave, e não lida do
     // "cor" que services/cardapioService.py devolve junto: cor é decisão de
@@ -90,9 +102,53 @@ Page {
         if (!aplicarAlteracoes())
             return;
 
+        modoCombos = false;
         indiceCategoria = indice;
         campoBusca.text = "";
         carregarItens();
+    }
+
+    function abrirCombos() {
+        // Mesmo motivo de selecionarCategoria: não deixar uma edição
+        // pendente da categoria atual sumir ao trocar de aba.
+        if (!aplicarAlteracoes())
+            return;
+
+        modoCombos = true;
+        carregarCombos();
+    }
+
+    function carregarCombos() {
+        combos = cardapioController.listarCombos();
+        disponiveisHoje = cardapioController.disponibilidadeCombosHoje(combos);
+    }
+
+    function _editarCombos(lista, mensagem) {
+        combos = lista;
+        disponiveisHoje = cardapioController.disponibilidadeCombosHoje(lista);
+        alteracoesPendentes = true;
+        filaNotificacoes.notificar(mensagem, true);
+    }
+
+    function aplicarCombo(indice, combo) {
+        var lista = combos.slice();
+        if (indice < 0)
+            lista.push(combo);
+        else
+            lista[indice] = combo;
+        _editarCombos(lista, indice < 0 ? "Combo adicionado — falta aplicar." : "Combo atualizado — falta aplicar.");
+    }
+
+    function removerCombo(indice) {
+        var lista = combos.slice();
+        lista.splice(indice, 1);
+        _editarCombos(lista, "Combo removido — falta aplicar.");
+    }
+
+    function alternarComboAtivo(indice) {
+        var lista = combos.slice();
+        lista[indice] = Object.assign({}, lista[indice], {"ativo": !lista[indice].ativo});
+        _editarCombos(lista, lista[indice].ativo ? "Combo ativado — falta aplicar." : "Combo desativado — falta aplicar.");
     }
 
     function carregarItens() {
@@ -186,6 +242,26 @@ Page {
     // pendência CONTINUA e nada se perde — quem chama usa o retorno pra
     // decidir se pode seguir (trocar de categoria, sair da tela).
     function aplicarAlteracoes() {
+        if (modoCombos) {
+            if (!alteracoesPendentes)
+                return true;
+
+            gravandoCombos = true;
+            var erroCombos = cardapioController.salvarCombos(combos);
+            gravandoCombos = false;
+            if (erroCombos) {
+                filaNotificacoes.notificar(erroCombos, false);
+                return false;
+            }
+
+            alteracoesPendentes = false;
+            // Relê do disco: o Python normaliza (preço "69.9" vira "69,90",
+            // ids novos) e a tela deve mostrar o que ficou gravado.
+            carregarCombos();
+            filaNotificacoes.notificar("Combos aplicados!", true);
+            return true;
+        }
+
         if (!categoriaAtual || !alteracoesPendentes)
             return true;
 
@@ -207,7 +283,7 @@ Page {
     // Mesmo atalho das telas de pedido: digitar qualquer caractere
     // "imprimível" já foca a barra de busca e entra com o que foi digitado.
     Keys.onPressed: function (event) {
-        if (!campoBusca.activeFocus && event.key >= Qt.Key_Space && event.key <= Qt.Key_ydiaeresis) {
+        if (!telaCardapio.modoCombos && !campoBusca.activeFocus && event.key >= Qt.Key_Space && event.key <= Qt.Key_ydiaeresis) {
             campoBusca.forceActiveFocus();
             campoBusca.text += event.text;
             event.accepted = true;
@@ -222,7 +298,19 @@ Page {
     // está aberta agora, não precisa recarregar — ela já vai vir certa da
     // próxima vez que for selecionada.
     function aoCardapioAlterado(chaveCategoria) {
-        if (!telaCardapio.categoriaAtual || telaCardapio.categoriaAtual.chave !== chaveCategoria)
+        if (chaveCategoria === "combos") {
+            if (!telaCardapio.modoCombos || telaCardapio.gravandoCombos)
+                return;
+
+            if (telaCardapio.alteracoesPendentes) {
+                filaNotificacoes.notificar("Os combos mudaram em outra máquina — aplique suas alterações para ver o que chegou.", false);
+                return;
+            }
+            carregarCombos();
+            return;
+        }
+
+        if (telaCardapio.modoCombos || !telaCardapio.categoriaAtual || telaCardapio.categoriaAtual.chave !== chaveCategoria)
             return;
 
         // Recarregar por cima de uma edição não aplicada apagaria o que o dono
@@ -305,7 +393,7 @@ Page {
             }
 
             Text {
-                text: telaCardapio.itens.length === 1 ? "1 item nesta categoria" : telaCardapio.itens.length + " itens nesta categoria"
+                text: telaCardapio.modoCombos ? (telaCardapio.combos.length === 1 ? "1 combo" : telaCardapio.combos.length + " combos") : (telaCardapio.itens.length === 1 ? "1 item nesta categoria" : telaCardapio.itens.length + " itens nesta categoria")
                 font.pixelSize: Estilo.global.fontSize.md
                 color: Estilo.global.textSecondary
             }
@@ -330,7 +418,7 @@ Page {
                     // direto lá dentro) porque contentItem e background são
                     // outro escopo, onde o modelo do Repeater não chega.
                     readonly property var categoria: modelData
-                    readonly property bool ativa: telaCardapio.indiceCategoria === index
+                    readonly property bool ativa: telaCardapio.indiceCategoria === index && !telaCardapio.modoCombos
 
                     height: 42
                     padding: 14
@@ -369,6 +457,44 @@ Page {
                     }
                 }
             }
+
+            // A aba de combos fica depois das categorias de propósito: não é
+            // um tipo de item do cardápio (ver modoCombos).
+            Button {
+                id: btnAbaCombos
+
+                readonly property bool ativa: telaCardapio.modoCombos
+
+                height: 42
+                padding: 14
+                onClicked: telaCardapio.abrirCombos()
+
+                contentItem: Row {
+                    spacing: Estilo.global.spacing.sm
+
+                    Icone {
+                        nome: "fa6s.tags"
+                        cor: btnAbaCombos.ativa ? Estilo.global.textOnAccent : Estilo.category.pizza.base
+                        tamanho: Estilo.global.fontSize.lg
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
+
+                    Text {
+                        text: "Combos"
+                        font.pixelSize: Estilo.global.fontSize.lg
+                        font.family: Estilo.global.fontFamily.title
+                        color: btnAbaCombos.ativa ? Estilo.global.textOnAccent : Estilo.global.text
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
+                }
+
+                background: Rectangle {
+                    radius: Estilo.global.radius.pill
+                    color: btnAbaCombos.ativa ? Estilo.category.pizza.base : (btnAbaCombos.hovered ? Estilo.global.surfaceHover : Estilo.global.surface)
+                    border.color: btnAbaCombos.ativa ? Estilo.category.pizza.base : Estilo.global.border
+                    border.width: btnAbaCombos.ativa ? 2 : 1
+                }
+            }
         }
 
         // --- BUSCA + ADICIONAR ---
@@ -381,6 +507,8 @@ Page {
         // proporcionalmente diferente do resto do app.
         Row {
             id: linhaBusca
+
+            visible: !telaCardapio.modoCombos
 
             // Sem "height:" explícito aqui — dentro de um ColumnLayout,
             // isso levaria o mesmo aviso do qmllint que motivou trocar o
@@ -433,9 +561,30 @@ Page {
         }
 
         // --- LISTA DE ITENS ---
+        // --- ABA COMBOS ---
+        SecaoCombos {
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            visible: telaCardapio.modoCombos
+            combos: telaCardapio.combos
+            disponiveisHoje: telaCardapio.disponiveisHoje
+            corDestaque: telaCardapio.corDestaque
+            onNovo: popupCombo.abrirPara(-1, null)
+            onEditar: function (indice) {
+                popupCombo.abrirPara(indice, telaCardapio.combos[indice]);
+            }
+            onRemover: function (indice) {
+                popupRemocaoCombo.abrirPara(indice, telaCardapio.combos[indice].nome);
+            }
+            onAlternarAtivo: function (indice) {
+                telaCardapio.alternarComboAtivo(indice);
+            }
+        }
+
         ListView {
             id: listaItens
 
+            visible: !telaCardapio.modoCombos
             Layout.fillWidth: true
             Layout.fillHeight: true
             model: modeloVisiveis
@@ -680,6 +829,27 @@ Page {
 
         onConfirmada: function (indice) {
             telaCardapio.removerItem(indice);
+        }
+    }
+
+    // --- FORMULÁRIO DE COMBO ---
+    PopupCombo {
+        id: popupCombo
+
+        corDestaque: telaCardapio.corDestaque
+        onConfirmado: function (indice, combo) {
+            telaCardapio.aplicarCombo(indice, combo);
+        }
+    }
+
+    PopupConfirmarRemocaoItem {
+        id: popupRemocaoCombo
+
+        titulo: "Remover este combo?"
+        aviso: "Ele deixa de dar desconto nos pedidos novos. Comandas já feitas não mudam."
+
+        onConfirmada: function (indice) {
+            telaCardapio.removerCombo(indice);
         }
     }
 
